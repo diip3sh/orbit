@@ -1,0 +1,43 @@
+//
+//  EditorProject.swift
+//  BetterCapture
+//
+//  Created by Diip3sh on 26.09.26.
+//
+
+import Foundation
+
+/// The edit applied to one recording, saved as `<name>.edit.json` next to it. Deleting the file
+/// resets the edit; the recording and its telemetry are never modified.
+///
+/// All times are seconds on the source video's timeline, the one the telemetry uses.
+nonisolated struct EditorProject: Codable, Equatable, Sendable {
+
+    /// Bumped whenever the file layout changes incompatibly.
+    static let currentVersion = 1
+
+    var version = currentVersion
+
+    /// Source ranges left out of the output, sorted and non-overlapping. Trimming is a cut at either end.
+    var cuts: [Range<Double>] = []
+
+    /// The project file for a recording: same folder and base name, `.edit.json` extension.
+    static func fileURL(for videoURL: URL) -> URL {
+        videoURL.deletingPathExtension().appendingPathExtension("edit").appendingPathExtension("json")
+    }
+}
+
+// MARK: - Decoding
+
+extension EditorProject {
+
+    /// Decodes a file, rejecting any version but ``currentVersion`` with ``UnsupportedVersionError``.
+    nonisolated init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        guard version == Self.currentVersion else {
+            throw UnsupportedVersionError(version: version)
+        }
+        cuts = try container.decode([Range<Double>].self, forKey: .cuts)
+    }
+}

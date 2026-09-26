@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "keystrokesAvailable": true,
+  "capture": { "kind": "display", "videoSize": [3024, 1964] },
+  "geometry": [
+    { "time": 0, "screenRect": [[0, 0], [1512, 982]], "contentRect": [[0, 0], [1512, 982]], "contentScale": 1, "scaleFactor": 2 }
+  ],
+  "cursor": [
+    { "time": 0, "location": [400, 300] },
+    { "time": 0.5, "location": [420, 310] }
+  ],
+  "clicks": [
+    { "time": 1, "location": [420, 310], "button": "left", "isDown": true, "clickCount": 1 },
+    { "time": 1.1, "location": [420, 310], "button": "left", "isDown": false, "clickCount": 1 }
+  ],
+  "scrolls": [
+    { "time": 1.5, "location": [420, 310], "delta": [0, -4] }
+  ],
+  "keys": [
+    { "time": 2, "keyCode": 8, "modifiers": ["command"], "isRepeat": false }
+  ]
+}
