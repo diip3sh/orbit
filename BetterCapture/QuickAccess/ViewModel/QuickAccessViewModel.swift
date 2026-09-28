@@ -17,13 +17,11 @@ final class QuickAccessViewModel {
 
     /// A short confirmation shown on the card
     enum Feedback {
-        case copied
         case textCopied
         case noTextFound
 
         var message: String {
             switch self {
-            case .copied: "Copied"
             case .textCopied: "Text Copied"
             case .noTextFound: "No Text Found"
             }
@@ -67,12 +65,12 @@ final class QuickAccessViewModel {
         onClose?()
     }
 
-    /// Copies the full image as PNG; the card stays open
+    /// Copies the full image as PNG, then closes
     func copy() async {
         do {
             let png = try await ScreenshotService.pngData(of: screenshot.image)
             ImagePasteboard.copy(png: png, to: pasteboard)
-            show(.copied)
+            onClose?()
         } catch {
             logger.error("Couldn't encode the screenshot to copy: \(error.localizedDescription)")
         }

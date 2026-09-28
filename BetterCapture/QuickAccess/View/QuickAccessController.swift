@@ -75,6 +75,16 @@ final class QuickAccessController {
         panel = nil
     }
 
+    /// Takes the card off screen at once, keeping it for `restore()`
+    func hide() {
+        panel?.orderOut(nil)
+    }
+
+    /// Brings back a card taken away by `hide()`, where it was
+    func restore() {
+        panel?.orderFront(nil)
+    }
+
     /// Bottom-left of `visibleFrame`, inset by `margin`.
     nonisolated static func panelFrame(in visibleFrame: CGRect) -> CGRect {
         CGRect(origin: CGPoint(x: visibleFrame.minX + margin, y: visibleFrame.minY + margin), size: cardSize)

@@ -17,8 +17,8 @@ final class ScreenshotController {
     /// Called as a screenshot starts, before anything is selected or captured
     @ObservationIgnored var onWillCapture: (@MainActor () -> Void)?
 
-    /// Called with each captured screenshot; nothing is written until `save(_:)`
-    @ObservationIgnored var onCaptured: (@MainActor (Screenshot) -> Void)?
+    /// Called as a screenshot ends, with nil when it was cancelled or failed; nothing is written until `save(_:)`
+    @ObservationIgnored var onDidCapture: (@MainActor (Screenshot?) -> Void)?
 
     /// Whether a screenshot is being selected or captured
     private(set) var isCapturing = false
@@ -93,8 +93,12 @@ final class ScreenshotController {
     private func capture(_ select: () async throws -> (filter: SCContentFilter, sourceRect: CGRect?)?) async {
         guard !isCapturing else { return }
         isCapturing = true
-        defer { isCapturing = false }
         onWillCapture?()
+        var screenshot: Screenshot?
+        defer {
+            isCapturing = false
+            onDidCapture?(screenshot)
+        }
 
         do {
             try service.verifyPermission()
@@ -102,9 +106,9 @@ final class ScreenshotController {
                 logger.info("Screenshot cancelled")
                 return
             }
-            let screenshot = try await service.capture(target.filter, sourceRect: target.sourceRect, settings: settings)
-            logger.info("Screenshot captured: \(screenshot.image.width)×\(screenshot.image.height) px")
-            onCaptured?(screenshot)
+            let captured = try await service.capture(target.filter, sourceRect: target.sourceRect, settings: settings)
+            logger.info("Screenshot captured: \(captured.image.width)×\(captured.image.height) px")
+            screenshot = captured
         } catch {
             logger.error("Screenshot failed: \(error.localizedDescription)")
             notificationService.sendScreenshotFailedNotification(error: error)

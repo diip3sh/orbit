@@ -13,7 +13,7 @@ import Testing
 @MainActor
 struct QuickAccessViewModelTests {
 
-    @Test func copyPutsThePNGOnThePasteboardAndKeepsTheCardOpen() async throws {
+    @Test func copyPutsThePNGOnThePasteboardAndClosesTheCard() async throws {
         let pasteboard = NSPasteboard(name: .init("QuickAccessViewModelTests-\(UUID())"))
         defer { pasteboard.releaseGlobally() }
         let probe = CardProbe()
@@ -25,8 +25,7 @@ struct QuickAccessViewModelTests {
         let png = try #require(pasteboard.data(forType: .png))
         let source = try #require(CGImageSourceCreateWithData(png as CFData, nil))
         #expect(CGImageSourceCreateImageAtIndex(source, 0, nil)?.width == 40)
-        #expect(model.feedback == .copied)
-        #expect(probe.closed == 0)
+        #expect(probe.closed == 1)
     }
 
     @Test func saveClosesTheCardOnceSaved() async throws {

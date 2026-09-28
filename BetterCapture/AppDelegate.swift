@@ -34,9 +34,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerKeyboardShortcuts()
         viewModel.notificationService.editRecording = editorWindows.open
 
-        // Hidden first so the last card never lands in the next shot, even with Show BetterCapture on; its unsaved shot is discarded
-        screenshots.onWillCapture = { [quickAccess] in quickAccess.dismiss() }
-        screenshots.onCaptured = { [quickAccess] screenshot in quickAccess.show(screenshot) }
+        // Hidden first so the last card never lands in the next shot, even with Show BetterCapture on;
+        // a new shot replaces it, a cancelled or failed one brings it back
+        screenshots.onWillCapture = { [quickAccess] in quickAccess.hide() }
+        screenshots.onDidCapture = { [quickAccess] screenshot in
+            if let screenshot {
+                quickAccess.show(screenshot)
+            } else {
+                quickAccess.restore()
+            }
+        }
     }
 
     /// Opens the last recording saved since launch in the editor.

@@ -199,14 +199,14 @@ A CleanShot-style card for each screenshot in the bottom-left corner of the scre
 of notifications and the menu bar popover, top-right): close, a grab handle, the preview, and **Copy**,
 **Save**, **Recognize Text** and **Pin**. Drag the card by its handle or background; drag the preview into
 any app to drop the image. Nothing is written to the output folder until **Save**. The card stays until
-closed, saved, pinned, or the next capture: `AppDelegate` wires `ScreenshotController.onCaptured` to
-`show(_:)`, and `onWillCapture` to `dismiss()` so the card never lands in the next shot (its unsaved
-screenshot is discarded).
+closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate` wires
+`ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and `onDidCapture` to
+`show(_:)` for a new screenshot or `restore()` (same card, same place) when the capture is cancelled or fails.
 
-- **Copy** (C14): PNG data only; the card stays. **Save**: writes to the output folder, then closes; on
+- **Copy** (C14): PNG data only, then closes. **Save**: writes to the output folder, then closes; on
   failure the card stays and the Screenshot Failed notification is sent. **Recognize Text** (C7): the
-  image's text to the clipboard. **Pin** (C8): the image in its own panel, then closes. Copy and Recognize
-  Text confirm on the card for 1.5 s.
+  image's text to the clipboard. **Pin** (C8): the image in its own panel, then closes. Recognize Text
+  confirms on the card for 1.5 s.
 
 | File | Role |
 |---|---|
@@ -284,14 +284,14 @@ so a shortcut pressed while recording, counting down or capturing is ignored and
 Capture Area shoots as soon as the drag ends (`AreaSelectionOverlay.present(confirmsOnRelease:)`); a click or a
 drag under 24 pt keeps the overlay up, Esc cancels. Recording keeps drag, adjust and Confirm.
 Captures at native pixels with the recording visibility settings into memory (`Screenshot`: image, scale,
-capture time) and hands it to `ScreenshotController.onCaptured` (the Quick Access card, C2). Nothing is
+capture time) and hands it to `ScreenshotController.onDidCapture` (the Quick Access card, C2). Nothing is
 written until the card's **Save**: `ScreenshotController.save(_:)` writes
 `BetterCapture_Screenshot_<capture time>.png` into the recordings' output folder.
 
 | File | Role |
 |---|---|
 | `Screenshot/Model/Screenshot.swift` | The captured `CGImage`, its scale and capture time; `filename`, `pointSize` |
-| `Screenshot/ViewModel/ScreenshotController.swift` | Owned by `AppDelegate` (which registers the shortcuts); permission check, selection, `isCapturing`, `canCapture`, `onCaptured`, `save(_:)` with the failure notification |
+| `Screenshot/ViewModel/ScreenshotController.swift` | Owned by `AppDelegate` (which registers the shortcuts); permission check, selection, `isCapturing`, `canCapture`, `onWillCapture`/`onDidCapture`, `save(_:)` with the failure notification |
 | `Screenshot/Service/ScreenshotService.swift` | Display lookup, `SCScreenshotManager.captureImage`, save inside the output folder's security scope, PNG via ImageIO (`@concurrent`) |
 | `Screenshot/Service/WindowPicker.swift` | System `SCContentSharingPicker` in `.window` mode, observed only while picking |
 | `Screenshot/View/ScreenshotButtons.swift` | The three popover rows |
