@@ -34,7 +34,7 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   && { pkill -x BetterCapture; open /tmp/bc-build/dd/Build/Products/Debug/BetterCapture.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 245 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 252 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -193,6 +193,27 @@ Key facts:
   the countdown, so it swallows Esc system-wide only then. If another app holds a global Esc hotkey,
   registration fails silently; the menu/shortcut still cancel.
 
+### C2 / C14 — Quick Access thumbnail and image clipboard (`feat/quick-access`)
+
+A CleanShot-style thumbnail of a captured image in the bottom-left corner of the screen under the
+mouse (clear of notifications and the menu bar popover, top-right). Hover shows **Copy**, **Show in
+Finder** and close; drag the thumbnail into any app to drop the file. Hides after 6 s; hovering
+pauses it and leaving restarts the full 6 s. A new capture replaces the thumbnail. For now only
+`bettercapture://debug-quick-access` (Debug builds) shows it, with the newest PNG in the output folder.
+
+| File | Role |
+|---|---|
+| `QuickAccess/View/QuickAccessController.swift` | Non-activating borderless `.floating` panel (never key, `hidesOnDeactivate = false`), fade in/out, placement (`panelFrame(in:)`), hide timer (a `RecordingCountdown`), intents |
+| `QuickAccess/View/QuickAccessView.swift` | Thumbnail card, hover controls, `.onDrag` with the file URL |
+| `QuickAccess/Service/ImageDownsampler.swift` | ImageIO thumbnail off the main actor; the full image is never held |
+| `Service/ImagePasteboard.swift` | One pasteboard item with PNG data (Slack, Messages, Figma) and the file URL (Finder) |
+
+Key facts:
+- The panel holds the output folder's security scope while it shows: drag and copy hand out the file
+  URL, and sandboxed receivers get access only if we have it when the URL is written.
+- The thumbnail is decoded at 2× of the 240×150 pt card (`kCGImageSourceShouldCacheImmediately`),
+  not from the full-size image; Copy reads the PNG from disk only when clicked.
+
 ### S1 — Editor, phase 1: shell and playback (`feat/editor-shell`, spec 0003)
 
 Opens a recording in its own window with the preview, transport controls and a timeline (filmstrip,
@@ -279,6 +300,8 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | F6 audio robustness (mic hot-swap #208, gain #209, level meters #153) | Todo |
 | F7 remember last selection (#172) | Todo |
 | F8 Swift 6 language mode | Done (`chore/swift-6-mode`); needs one real recording to rule out runtime isolation crashes |
+| C2 Quick Access thumbnail | Done; shown via `bettercapture://debug-quick-access` (Debug) until the screenshot controller's `onCaptured` calls `show(fileURL:)` |
+| C14 copy image to clipboard (PNG + file URL) | Done (`ImagePasteboard`) |
 | S1 editor phase 1: shell and playback | Done; open/scrub/close still need a check on a real 10-min 4K recording (see spec 0003) |
 | S1 editor phase 2: render pipeline, click highlights, keystrokes, export | Done; highlight placement still needs checking on real recordings of each capture kind. 4K render measured at the 8 ms p95 budget on an M1 (see spec 0003) |
 | S1 editor phases 3–6 (cuts, zoom, cursor, canvas and export polish) | Todo, spec 0003 |
