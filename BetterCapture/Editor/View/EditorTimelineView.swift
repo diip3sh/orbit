@@ -22,7 +22,7 @@ struct EditorTimelineView: View {
     private static let rulerHeight: CGFloat = 16
     private static let filmstripHeight: CGFloat = 52
     private static let lanesHeight: CGFloat = 22
-    private static let spacing: CGFloat = 6
+    private static let spacing = EditorTheme.smallSpacing
 
     /// Where the filmstrip starts, under the ruler.
     private static let filmstripTop = rulerHeight + spacing
@@ -73,11 +73,11 @@ struct EditorTimelineView: View {
                     for lane in [clickLane, keyLane] {
                         context.fill(Path(roundedRect: lane, cornerRadius: 2), with: .color(.white.opacity(0.03)))
                     }
-                    context.fill(Self.ticks(at: markers.clicks, duration: duration, in: clickLane), with: .color(EditorTheme.clicks))
-                    context.fill(Self.ticks(at: markers.keys, duration: duration, in: keyLane), with: .color(EditorTheme.keys))
+                    context.fill(Self.ticks(at: markers.clicks, duration: duration, in: clickLane), with: .color(.white.opacity(0.7)))
+                    context.fill(Self.ticks(at: markers.keys, duration: duration, in: keyLane), with: .color(.white.opacity(0.4)))
                 }
                 .frame(height: Self.lanesHeight)
-                .help("Clicks (amber) and keystrokes (teal)")
+                .help("Clicks (top) and keystrokes (bottom)")
             } else if let reason = viewModel.source?.telemetryError {
                 Text(reason.localizedDescription)
                     .font(.caption)

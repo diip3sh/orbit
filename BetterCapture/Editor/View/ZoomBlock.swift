@@ -19,12 +19,9 @@ struct ZoomBlock: View {
         let shape = RoundedRectangle(cornerRadius: 6)
 
         shape
-            .fill(LinearGradient(
-                colors: [EditorTheme.zoom.opacity(0.95), EditorTheme.zoom.opacity(0.7)], startPoint: .top, endPoint: .bottom
-            ))
-            .brightness(isHovered || isDragged ? 0.08 : 0)
+            .fill(.white.opacity(isHovered || isDragged ? 0.2 : 0.14))
             .overlay {
-                shape.strokeBorder(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.18)), lineWidth: isSelected ? 2 : 1)
+                shape.strokeBorder(isSelected ? EditorTheme.accent : EditorTheme.hairline, lineWidth: isSelected ? 2 : 1)
             }
             .overlay {
                 Label {
@@ -33,9 +30,8 @@ struct ZoomBlock: View {
                     Image(systemName: zoom.followsCursor ? "cursorarrow" : "scope")
                 }
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white)
                 .lineLimit(1)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, EditorTheme.smallSpacing)
             }
             .clipShape(shape)
             .shadow(color: .black.opacity(isDragged ? 0.5 : 0), radius: 6, y: 2)

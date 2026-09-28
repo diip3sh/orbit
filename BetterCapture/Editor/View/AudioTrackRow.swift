@@ -13,7 +13,7 @@ struct AudioTrackRow: View {
     @Binding var settings: AudioMixSettings.Track
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: EditorTheme.tightSpacing) {
             HStack {
                 Text(name)
                 Spacer()

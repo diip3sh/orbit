@@ -20,12 +20,9 @@ struct InspectorSection<Content: View, Footer: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: EditorTheme.mediumSpacing) {
             Text(title)
-                .font(.caption.weight(.semibold))
-                .textCase(.uppercase)
-                .tracking(0.8)
-                .foregroundStyle(.secondary)
+                .font(.headline)
             content
             footer
                 .font(.caption)

@@ -20,15 +20,19 @@ enum EditorTheme {
     /// Thin lines between areas and around pictures.
     static let hairline = Color.white.opacity(0.08)
 
-    /// The signal color: the playhead, the selection and the main button.
+    /// The signal color: the playhead, the selection and Export. Nothing else is colored.
     static let accent = Color(red: 1, green: 0.373, blue: 0.122)
 
     /// The edges of the kept parts and their handles.
     static let trim = Color.white.opacity(0.92)
 
-    static let clicks = Color(red: 1, green: 0.76, blue: 0.28)
-    static let keys = Color(red: 0.31, green: 0.82, blue: 0.77)
-    static let zoom = Color(red: 0.55, green: 0.47, blue: 1)
+    // Space on a 4-point grid: inside a control, between a title and its control, between
+    // controls, around panels, and around the stage and sheets
+    static let tightSpacing: CGFloat = 4
+    static let smallSpacing: CGFloat = 8
+    static let mediumSpacing: CGFloat = 12
+    static let spacing: CGFloat = 16
+    static let largeSpacing: CGFloat = 24
 
     /// Every state change, so the editor moves one way.
     static let motion = Animation.snappy(duration: 0.28)

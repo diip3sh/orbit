@@ -22,8 +22,8 @@ struct EditorView: View {
                     EditorStage(viewModel: viewModel)
 
                     EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 14)
+                        .padding(.horizontal, EditorTheme.largeSpacing)
+                        .padding(.vertical, EditorTheme.spacing)
                         .background(EditorTheme.panel)
                         .overlay(alignment: .top) {
                             Rectangle()

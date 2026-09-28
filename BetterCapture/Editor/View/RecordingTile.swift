@@ -7,8 +7,8 @@
 
 import SwiftUI
 
-/// A recording's picture, name and date, as a button. Under the pointer it lifts and shows what
-/// clicking does.
+/// A recording's picture, name and date, as a button that opens it. Under the pointer the picture
+/// lightens and its edge lights up.
 struct RecordingTile: View {
     let recording: Recording
     let thumbnail: CGImage?
@@ -20,7 +20,7 @@ struct RecordingTile: View {
         let shape = RoundedRectangle(cornerRadius: 10)
 
         Button(action: open) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
                 Color.white.opacity(0.05)
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .overlay {
@@ -31,23 +31,13 @@ struct RecordingTile: View {
                                 .transition(.opacity)
                         }
                     }
-                    .overlay {
-                        if isHovered {
-                            Label("Edit", systemImage: "slider.horizontal.3")
-                                .font(.callout.weight(.semibold))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .editorGlass(in: .capsule)
-                                .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                        }
-                    }
+                    .overlay(.white.opacity(isHovered ? 0.06 : 0))
                     .clipShape(shape)
                     .overlay {
-                        shape.strokeBorder(isHovered ? .white.opacity(0.25) : EditorTheme.hairline)
+                        shape.strokeBorder(isHovered ? .white.opacity(0.4) : EditorTheme.hairline, lineWidth: isHovered ? 1.5 : 1)
                     }
-                    .shadow(color: .black.opacity(isHovered ? 0.5 : 0.25), radius: isHovered ? 16 : 6, y: isHovered ? 8 : 3)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: EditorTheme.tightSpacing) {
                     Text(recording.name)
                         .font(.callout.weight(.medium))
                         .lineLimit(1)

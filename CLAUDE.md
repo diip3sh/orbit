@@ -384,22 +384,26 @@ Key facts:
 
 The editor and Recordings windows are always dark, a studio: the preview sits raised on a near-black
 stage, the transport floats on glass under it, and the timeline and inspector are neutral greys with
-one signal orange (`EditorTheme.accent`) for the playhead, the selection and Export.
+one signal orange (`EditorTheme.accent`) for the playhead, the selection and Export. Nothing else is
+colored: clicks, keys and zooms are greys, and the default canvas is a slate gradient.
 
 | File | Role |
 |---|---|
-| `Editor/View/EditorTheme.swift` | Colors and the one animation every state change uses |
+| `Editor/View/EditorTheme.swift` | Colors, spacing on a 4-point grid, and the one animation every state change uses |
 | `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `.glassProminent`, `GlassEffectContainer`), a material with a hairline before; `editorMotion(value:)` animates unless Reduce Motion is on |
 | `Editor/View/EditorWindowManager.swift` | `makeWindow`: dark appearance, content under a transparent title bar |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the glass transport |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart), the playhead's knob, the zoom blocks |
 | `Editor/View/Inspector*.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | The inspector's sections, sliders with their values, switches, and tiles whose highlight slides |
-| `Editor/View/ExportFormatCard.swift`, `ExportProgressBar.swift` | The export sheet's format cards and progress |
+| `Editor/View/ExportSheet.swift`, `ExportProgressBar.swift` | Native pickers with a line on what the format is for; progress |
 
 Key facts:
 - Glass only on controls over the stage, never on the timeline (content) or over the live video:
   each glass shape costs a sampling pass on the GPU the compositor also uses.
 - The inspector keeps the system `.inspector`, which macOS 26 draws as glass, so it has no background.
+- Avoid what reads as generated: no gradients or glows in the chrome, no second accent, no cards
+  and badges where a native control works, no all-caps titles, hover as a fill step (no lifts or
+  scaling).
 - `ImageRenderer` can't draw glass content, AppKit controls, `ScrollView`s or the player, and
   `screencapture`/`cacheDisplay` need permission or miss SwiftUI; check the look in the app.
 

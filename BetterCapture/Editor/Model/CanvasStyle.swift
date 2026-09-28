@@ -27,8 +27,8 @@ nonisolated struct CanvasStyle: Codable, Equatable, Sendable {
     var color = RGBAColor(red: 0.11, green: 0.11, blue: 0.13, alpha: 1)
 
     /// A gradient's colors, from the top-left corner to the bottom-right.
-    var gradientStart = RGBAColor(red: 0.36, green: 0.3, blue: 0.95, alpha: 1)
-    var gradientEnd = RGBAColor(red: 0.95, green: 0.4, blue: 0.62, alpha: 1)
+    var gradientStart = RGBAColor(red: 0.29, green: 0.32, blue: 0.38, alpha: 1)
+    var gradientEnd = RGBAColor(red: 0.12, green: 0.13, blue: 0.16, alpha: 1)
 
     /// A security-scoped bookmark to the picture the user chose for an ``Background/image`` background.
     var imageBookmark: Data?

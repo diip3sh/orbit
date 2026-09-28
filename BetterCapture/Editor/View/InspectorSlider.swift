@@ -24,7 +24,7 @@ struct InspectorSlider: View {
     }
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: EditorTheme.tightSpacing) {
             HStack {
                 Text(title)
                 Spacer()

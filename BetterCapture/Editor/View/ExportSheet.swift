@@ -28,8 +28,8 @@ struct ExportSheet: View {
         let frameRate = viewModel.source?.frameRate ?? 0
         let isHDR = viewModel.source.map { $0.dynamicRange != .sdr } ?? false
 
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: EditorTheme.spacing) {
+            VStack(alignment: .leading, spacing: EditorTheme.tightSpacing) {
                 Text("Export")
                     .font(.title2.weight(.semibold))
                 Text("Saved as \(settings.format.outputURL(for: viewModel.videoURL).lastPathComponent), next to the recording")
@@ -40,39 +40,43 @@ struct ExportSheet: View {
                     .contentTransition(.opacity)
             }
 
-            Group {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                    ForEach(ExportFormat.allCases) { format in
-                        ExportFormatCard(format: format, isSelected: settings.format == format, isHDR: isHDR) {
-                            settings.format = format
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: EditorTheme.mediumSpacing, verticalSpacing: EditorTheme.mediumSpacing) {
+                GridRow {
+                    Text("Format")
+                        .gridColumnAlignment(.trailing)
+                    VStack(alignment: .leading, spacing: EditorTheme.tightSpacing) {
+                        Picker("Format", selection: $settings.format) {
+                            ForEach(ExportFormat.allCases) { format in
+                                Text(format.rawValue).tag(format)
+                            }
                         }
+                        .labelsHidden()
+                        Text(Self.summary(of: settings.format, isHDR: isHDR))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .contentTransition(.opacity)
                     }
                 }
-
-                Grid(alignment: .leading, verticalSpacing: 10) {
-                    GridRow {
-                        Text("Size")
-                            .foregroundStyle(.secondary)
-                        Picker("Size", selection: $settings.resolution) {
-                            Text("Original, \(Self.dimensions(of: canvasSize))").tag(Int?.none)
-                            ForEach(ExportSettings.resolutions(below: min(canvasSize.width, canvasSize.height)), id: \.self) { resolution in
-                                Text("\(resolution, format: .number.grouping(.never))p, \(Self.dimensions(of: viewModel.exportSize(resolution: resolution)))")
-                                    .tag(Int?.some(resolution))
-                            }
+                GridRow {
+                    Text("Size")
+                    Picker("Size", selection: $settings.resolution) {
+                        Text("Original, \(Self.dimensions(of: canvasSize))").tag(Int?.none)
+                        ForEach(ExportSettings.resolutions(below: min(canvasSize.width, canvasSize.height)), id: \.self) { resolution in
+                            Text("\(resolution, format: .number.grouping(.never))p, \(Self.dimensions(of: viewModel.exportSize(resolution: resolution)))")
+                                .tag(Int?.some(resolution))
                         }
-                        .labelsHidden()
                     }
-                    GridRow {
-                        Text("Frame Rate")
-                            .foregroundStyle(.secondary)
-                        Picker("Frame Rate", selection: $settings.frameRate) {
-                            Text("Original, \(frameRate, format: .number.precision(.fractionLength(0...2))) fps").tag(Int?.none)
-                            ForEach(ExportSettings.frameRates(below: frameRate), id: \.self) { rate in
-                                Text("\(rate) fps").tag(Int?.some(rate))
-                            }
+                    .labelsHidden()
+                }
+                GridRow {
+                    Text("Frame Rate")
+                    Picker("Frame Rate", selection: $settings.frameRate) {
+                        Text("Original, \(frameRate, format: .number.precision(.fractionLength(0...2))) fps").tag(Int?.none)
+                        ForEach(ExportSettings.frameRates(below: frameRate), id: \.self) { rate in
+                            Text("\(rate) fps").tag(Int?.some(rate))
                         }
-                        .labelsHidden()
                     }
+                    .labelsHidden()
                 }
             }
             .disabled(isExporting)
@@ -111,8 +115,8 @@ struct ExportSheet: View {
             }
             .controlSize(.large)
         }
-        .padding(24)
-        .frame(width: 480)
+        .padding(EditorTheme.largeSpacing)
+        .frame(width: 440)
         .tint(EditorTheme.accent)
         .editorMotion(value: settings)
         .editorMotion(value: viewModel.exportProgress != nil)
@@ -128,6 +132,17 @@ struct ExportSheet: View {
                 self.error = error
                 isExporting = false
             }
+        }
+    }
+
+    /// What the format is for, and whether an HDR recording stays HDR.
+    private static func summary(of format: ExportFormat, isHDR: Bool) -> LocalizedStringKey {
+        switch format {
+        case .hevc: isHDR ? "Small files at high quality, in HDR." : "Small files at high quality."
+        case .h264: isHDR ? "Larger files that play everywhere, in SDR." : "Larger files that play everywhere."
+        case .proRes422: isHDR ? "Very large files for editing apps, in HDR." : "Very large files for editing apps."
+        case .proRes4444:
+            isHDR ? "Very large files for editing apps, in HDR with transparency." : "Very large files for editing apps, with transparency."
         }
     }
 

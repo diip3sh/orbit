@@ -19,7 +19,7 @@ struct TransportBar: View {
 
         EditorGlassGroup {
             HStack {
-                HStack(spacing: 2) {
+                HStack(spacing: EditorTheme.tightSpacing) {
                     Button("Split at Playhead", systemImage: "scissors") {
                         viewModel.split()
                     }
@@ -41,25 +41,25 @@ struct TransportBar: View {
                     .help(deletesZoom ? "Delete the selected zoom (⌫)" : "Cut the selected part (⌫)")
                     .disabled(!viewModel.canDeleteSelection)
                 }
-                .padding(4)
+                .padding(EditorTheme.tightSpacing)
                 .editorGlass(in: .capsule)
 
                 Spacer()
 
                 TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !playback.isPlaying)) { _ in
-                    HStack(spacing: 4) {
+                    HStack(spacing: EditorTheme.tightSpacing) {
                         Text(Self.format(playback.currentTime))
                         Text("/ \(Self.format(duration))")
                             .foregroundStyle(.secondary)
                     }
                     .monospacedDigit()
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, EditorTheme.spacing)
                 .frame(height: 38)
                 .editorGlass(in: .capsule)
             }
             .overlay {
-                HStack(spacing: 6) {
+                HStack(spacing: EditorTheme.tightSpacing) {
                     Button("Previous Frame", systemImage: "backward.frame.fill") {
                         playback.step(by: -1)
                     }
@@ -77,7 +77,7 @@ struct TransportBar: View {
                     }
                     .keyboardShortcut(.rightArrow, modifiers: [])
                 }
-                .padding(4)
+                .padding(EditorTheme.tightSpacing)
                 .editorGlass(in: .capsule)
             }
         }

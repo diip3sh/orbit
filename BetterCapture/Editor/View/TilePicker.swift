@@ -17,13 +17,13 @@ struct TilePicker<Value: Hashable, Picture: View>: View {
     @Namespace private var highlight
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: EditorTheme.tightSpacing) {
             ForEach(values, id: \.self) { value in
                 let isSelected = value == selection
                 Button {
                     selection = value
                 } label: {
-                    VStack(spacing: 6) {
+                    VStack(spacing: EditorTheme.tightSpacing) {
                         picture(value)
                             .frame(height: 22)
                         Text(name(value))
@@ -32,7 +32,7 @@ struct TilePicker<Value: Hashable, Picture: View>: View {
                             .foregroundStyle(isSelected ? .primary : .secondary)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, EditorTheme.smallSpacing)
                     .background {
                         if isSelected {
                             RoundedRectangle(cornerRadius: 8)

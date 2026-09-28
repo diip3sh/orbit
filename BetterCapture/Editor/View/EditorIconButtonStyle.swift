@@ -7,8 +7,8 @@
 
 import SwiftUI
 
-/// A round icon button that lights up under the pointer. The prominent one is filled with the
-/// accent, for the transport's play button.
+/// A round icon button that lights up under the pointer. The prominent one is filled white, for
+/// the transport's play button.
 struct EditorIconButtonStyle: ButtonStyle {
     var isProminent = false
 
@@ -35,24 +35,23 @@ private struct EditorIconButton: View {
         configuration.label
             .labelStyle(.iconOnly)
             .imageScale(isProminent ? .large : .medium)
-            .foregroundStyle(isProminent ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+            .foregroundStyle(isProminent ? AnyShapeStyle(EditorTheme.stage) : AnyShapeStyle(.primary))
             .frame(width: size, height: size)
-            .background {
-                Circle()
-                    .fill(isProminent ? AnyShapeStyle(EditorTheme.accent) : AnyShapeStyle(.white.opacity(highlight)))
-                    .brightness(isProminent ? highlight : 0)
-            }
+            .background(.white.opacity(fillOpacity), in: .circle)
             .contentShape(.circle)
             .opacity(isEnabled ? 1 : 0.35)
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
             .onHover { isHovered = $0 }
             .editorMotion(.snappy(duration: 0.18), value: isHovered)
             .editorMotion(.snappy(duration: 0.18), value: configuration.isPressed)
     }
 
-    /// How much lighter the button is, for hover and press.
-    private var highlight: Double {
-        guard isEnabled else { return 0 }
-        return configuration.isPressed ? 0.16 : isHovered ? 0.09 : 0
+    /// Lighter under the pointer; the prominent button dims while pressed, the others light up more.
+    private var fillOpacity: Double {
+        let isPressed = isEnabled && configuration.isPressed
+        let isLit = isEnabled && isHovered
+        if isProminent {
+            return isPressed ? 0.75 : isLit ? 1 : 0.9
+        }
+        return isPressed ? 0.16 : isLit ? 0.09 : 0
     }
 }

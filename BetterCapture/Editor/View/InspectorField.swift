@@ -18,7 +18,7 @@ struct InspectorField<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
             Text(title)
             content
         }

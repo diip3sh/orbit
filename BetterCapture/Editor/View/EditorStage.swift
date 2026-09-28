@@ -16,7 +16,7 @@ struct EditorStage: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Self.cornerRadius)
 
-        VStack(spacing: 20) {
+        VStack(spacing: EditorTheme.spacing) {
             PlayerLayerView(player: viewModel.playback.player, cornerRadius: Self.cornerRadius)
                 .background {
                     if viewModel.canvas.background == .transparent {
@@ -35,20 +35,16 @@ struct EditorStage: View {
 
             TransportBar(viewModel: viewModel)
         }
-        .padding([.horizontal, .top], 28)
-        .padding(.bottom, 16)
-        .background {
-            // A soft light behind the preview, so the stage and the glass on it have depth
-            RadialGradient(colors: [.white.opacity(0.05), .clear], center: .center, startRadius: 0, endRadius: 700)
-        }
+        .padding([.horizontal, .top], EditorTheme.largeSpacing)
+        .padding(.bottom, EditorTheme.spacing)
         .overlay(alignment: .top) {
             if let error = viewModel.error {
                 Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
                     .symbolRenderingMode(.multicolor)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, EditorTheme.mediumSpacing)
+                    .padding(.vertical, EditorTheme.smallSpacing)
                     .editorGlass(in: .capsule)
-                    .padding(.top, 12)
+                    .padding(.top, EditorTheme.mediumSpacing)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
