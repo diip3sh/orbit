@@ -26,6 +26,17 @@ enum StandardCursors {
         return .init(size: cursor.image.size, hotspot: cursor.hotSpot, pixels: pixels)
     }
 
+    /// A cursor's largest bitmap as PNG, or no data when its image has no bitmap.
+    static func png(of cursor: NSCursor) -> Data {
+        let bitmaps = cursor.image.representations.compactMap { $0 as? NSBitmapImageRep }
+        return bitmaps.max { $0.pixelsWide < $1.pixelsWide }?.representation(using: .png, properties: [:]) ?? Data()
+    }
+
+    /// The arrow, for an editor to draw when a recording has no cursor images.
+    static var arrowSprite: InputTelemetry.CursorSprite {
+        .init(id: 0, kind: .arrow, size: NSCursor.arrow.image.size, hotspot: NSCursor.arrow.hotSpot, png: png(of: .arrow))
+    }
+
     private static var cursors: [(CursorKind, NSCursor)] {
         let single: [(CursorKind, NSCursor)] = [
             (.arrow, .arrow),

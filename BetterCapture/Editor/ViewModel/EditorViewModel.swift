@@ -52,6 +52,9 @@ final class EditorViewModel {
     /// Labels keystrokes with the keyboard layout in use when the editor opened.
     @ObservationIgnored private var keyLabels: KeyLabelFormatter?
 
+    /// The arrow drawn when a recording made without the cursor has no cursor images.
+    @ObservationIgnored private var arrow: InputTelemetry.CursorSprite?
+
     /// The latest coalescing edit, which the next one with the same name joins if it follows soon enough.
     @ObservationIgnored private var coalescingEdit: (actionName: String, time: ContinuousClock.Instant)?
 
@@ -87,7 +90,8 @@ final class EditorViewModel {
             return
         }
         let keyLabels = KeyLabelFormatter.current()
-        let plan = await RenderPlan.build(project: project, source: source, keyLabels: keyLabels)
+        let arrow = source.telemetry?.capture.cursorInVideo == false ? StandardCursors.arrowSprite : nil
+        let plan = await RenderPlan.build(project: project, source: source, keyLabels: keyLabels, arrow: arrow)
         let composition: EditorComposition
         do {
             composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
@@ -100,6 +104,7 @@ final class EditorViewModel {
         self.source = source
         self.project = project
         self.keyLabels = keyLabels
+        self.arrow = arrow
         savedProject = project
         markers = source.telemetry.map(TimelineMarkers.init)
         updateTimeline()
@@ -148,6 +153,12 @@ final class EditorViewModel {
     var keystrokes: KeystrokeOverlayStyle {
         get { project.keystrokes }
         set { edit("Keystrokes", coalescing: true) { $0.keystrokes = newValue } }
+    }
+
+    /// The drawn cursor's style, for the inspector's controls. Each change is an edit.
+    var cursor: CursorStyle {
+        get { project.cursor }
+        set { edit("Cursor", coalescing: true) { $0.cursor = newValue } }
     }
 
     /// The audio tracks' volumes, for the inspector's controls. Each change is an edit.
@@ -234,9 +245,9 @@ final class EditorViewModel {
         guard let source else { return }
         rebuild?.cancel()
         let project = project
-        let keyLabels = keyLabels
+        let (keyLabels, arrow) = (keyLabels, arrow)
         rebuild = Task {
-            let plan = await RenderPlan.build(project: project, source: source, keyLabels: keyLabels)
+            let plan = await RenderPlan.build(project: project, source: source, keyLabels: keyLabels, arrow: arrow)
             guard !Task.isCancelled, let playing = self.plan, var composition else { return }
             guard plan.timeMap != playing.timeMap else {
                 composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan)

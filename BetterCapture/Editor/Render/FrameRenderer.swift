@@ -23,7 +23,13 @@ nonisolated enum FrameRenderer {
             image = ring(for: click, at: time, plan: plan).composited(over: image)
         }
         // Clicks are on the content, so they zoom with it; the chip stays where it is
-        image = zoomed(image, to: plan.camera.viewport(at: time), size: plan.videoSize)
+        let viewport = plan.camera.viewport(at: time)
+        image = zoomed(image, to: viewport, size: plan.videoSize)
+        // The cursor is placed after zooming, so it's drawn from its full-resolution image
+        if let path = plan.cursor, let sprite = plan.cursorShapes.sprite(at: time),
+           let drawn = cursor(sprite, path: path, at: time, viewport: viewport, size: plan.videoSize) {
+            image = drawn.composited(over: image)
+        }
         if let (chip, opacity) = KeystrokeChip.visible(in: plan.keystrokes, at: time) {
             image = keystroke(chip, opacity: opacity, plan: plan).composited(over: image)
         }
@@ -45,16 +51,36 @@ nonisolated enum FrameRenderer {
     /// it is, so frames without zoom stay pixel for pixel the source's.
     private static func zoomed(_ image: CIImage, to viewport: CameraPath.Viewport, size: CGSize) -> CIImage {
         guard viewport.scale > 1 else { return image }
+        // Clamped to the frame, so its edge pixels aren't blended with what's around it
+        let frame = CGRect(origin: .zero, size: size)
+        return image.cropped(to: frame).clampedToExtent().transformed(by: transform(to: viewport, size: size)).cropped(to: frame)
+    }
+
+    /// Maps the frame's Core Image pixels to the output's: the part in `viewport` fills it.
+    private static func transform(to viewport: CameraPath.Viewport, size: CGSize) -> CGAffineTransform {
         // The view's bottom-left corner in Core Image space
         let origin = CGPoint(
             x: (viewport.center.x - 0.5 / viewport.scale) * size.width,
             y: (1 - viewport.center.y - 0.5 / viewport.scale) * size.height
         )
-        let transform = CGAffineTransform(translationX: -origin.x, y: -origin.y)
-            .concatenating(CGAffineTransform(scaleX: viewport.scale, y: viewport.scale))
-        // Clamped to the frame, so its edge pixels aren't blended with what's around it
-        let frame = CGRect(origin: .zero, size: size)
-        return image.cropped(to: frame).clampedToExtent().transformed(by: transform).cropped(to: frame)
+        return CGAffineTransform(translationX: -origin.x, y: -origin.y).concatenating(CGAffineTransform(scaleX: viewport.scale, y: viewport.scale))
+    }
+
+    /// The cursor's image with its hot spot on the path, magnified with the view, or `nil` while
+    /// it's hidden.
+    private static func cursor(
+        _ sprite: CursorShapeTrack.Sprite, path: CursorPath, at time: Double, viewport: CameraPath.Viewport, size: CGSize
+    ) -> CIImage? {
+        let opacity = path.opacity(at: time)
+        guard opacity > 0 else { return nil }
+        let position = path.position(at: time).applying(transform(to: viewport, size: size))
+        let scale = path.scale(at: time) * viewport.scale * sprite.pointsPerPixel
+        let placement = CGAffineTransform(translationX: -sprite.hotspot.x, y: -sprite.hotspot.y)
+            .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+            .concatenating(CGAffineTransform(translationX: position.x, y: position.y))
+        // Images recorded at up to 10× are scaled down a lot, which plain sampling would alias
+        let image = sprite.image.transformed(by: placement, highQualityDownsample: true)
+        return opacity < 1 ? image.fading(to: opacity) : image
     }
 
     /// The chip, centred at the bottom of the video.

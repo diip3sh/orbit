@@ -83,6 +83,11 @@ struct EditorViewModelTests {
 
         #expect(viewModel.project.keystrokes.showsAllKeys)
         #expect(viewModel.undoManager.undoActionName == "Keystrokes")
+
+        viewModel.cursor.smoothing = .fast
+
+        #expect(viewModel.project.cursor.smoothing == .fast)
+        #expect(viewModel.undoManager.undoActionName == "Cursor")
     }
 
     @Test func splittingThenCuttingTheSelectionLeavesItOut() async throws {

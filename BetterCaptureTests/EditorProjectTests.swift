@@ -19,6 +19,8 @@ struct EditorProjectTests {
         ]
         project.clickHighlights.buttons = .left
         project.keystrokes.showsAllKeys = true
+        project.cursor.smoothing = .mellow
+        project.cursor.hidesWhenIdle = true
         project.audio[track: 1].isMuted = true
 
         let data = try JSONEncoder().encode(project)

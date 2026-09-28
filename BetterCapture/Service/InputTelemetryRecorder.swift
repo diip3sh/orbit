@@ -147,10 +147,7 @@ final class InputTelemetryRecorder {
         // Fingerprinted like the standard cursors, so a match identifies its kind
         guard let cursor = NSCursor.currentSystem, let fingerprint = StandardCursors.fingerprint(of: cursor) else { return }
 
-        cursorShapes.record(fingerprint, time: time) {
-            let bitmaps = cursor.image.representations.compactMap { $0 as? NSBitmapImageRep }
-            return bitmaps.max { $0.pixelsWide < $1.pixelsWide }?.representation(using: .png, properties: [:]) ?? Data()
-        }
+        cursorShapes.record(fingerprint, time: time) { StandardCursors.png(of: cursor) }
     }
 
     private func record(_ event: NSEvent) {

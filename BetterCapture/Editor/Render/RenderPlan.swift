@@ -21,6 +21,12 @@ nonisolated struct RenderPlan: Sendable {
     /// Where the camera looks: the zooms, integrated.
     let camera: CameraPath
 
+    /// The cursor the editor draws, or `nil` when the video shows the system's or it's off.
+    let cursor: CursorPath?
+
+    /// The drawn cursor's images. Empty without ``cursor``.
+    let cursorShapes: CursorShapeTrack
+
     /// Clicks to highlight, sorted by time. Empty when highlights are off.
     let clicks: [ClickMarker]
 
@@ -47,13 +53,27 @@ extension RenderPlan {
     nonisolated private static let signposter = OSSignposter(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "RenderPlan")
 
     /// Builds the plan off the main actor.
-    /// - Parameter keyLabels: Labels keystrokes; without it, none are shown.
+    /// - Parameters:
+    ///   - keyLabels: Labels keystrokes; without it, none are shown.
+    ///   - arrow: The cursor drawn when the telemetry has no cursor images.
     @concurrent
-    static func build(project: EditorProject, source: EditorSource, keyLabels: KeyLabelFormatter?) async -> RenderPlan {
+    static func build(
+        project: EditorProject, source: EditorSource, keyLabels: KeyLabelFormatter?, arrow: InputTelemetry.CursorSprite?
+    ) async -> RenderPlan {
         let signpost = signposter.beginInterval("Build")
         defer { signposter.endInterval("Build", signpost) }
 
         let videoSize = source.naturalSize
+        // The costliest parts, and independent, so they're built alongside the rest. For 10 minutes
+        // with 455 zooms, 3,000 clicks and 12,000 keys (M1, Debug), the camera takes 38 ms and the
+        // cursor 35; the plan builds in 42 ms instead of 105
+        async let camera = CameraPath(
+            zooms: project.zooms, cursor: source.telemetry.map { cursorPoints(for: $0, during: project.zooms) } ?? [], duration: source.duration
+        )
+        async let cursor = source.telemetry.flatMap {
+            drawnCursor(for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: arrow)
+        }
+
         var clicks: [ClickMarker] = []
         var keystrokes: [KeystrokeChip] = []
         var labels: [String] = []
@@ -71,9 +91,9 @@ extension RenderPlan {
         return RenderPlan(
             timeMap: TimeMap(cuts: project.cuts, sourceDuration: source.duration, frameRate: source.frameRate),
             videoSize: videoSize,
-            camera: CameraPath(
-                zooms: project.zooms, cursor: source.telemetry.map { cursorPoints(for: $0, during: project.zooms) } ?? [], duration: source.duration
-            ),
+            camera: await camera,
+            cursor: await cursor?.path,
+            cursorShapes: await cursor?.shapes ?? .none,
             clicks: clicks,
             clickDuration: project.clickHighlights.duration,
             clickRing: clicks.isEmpty ? .empty() : OverlayImages.ring(diameter: ringDiameter, color: project.clickHighlights.color.cgColor),
@@ -114,6 +134,16 @@ extension RenderPlan {
             return KeystrokeChip(time: key.time, image: image)
         }
         return (chips, labels)
+    }
+
+    /// The cursor to draw and its images, or `nil` when the video shows the system's or it's off.
+    nonisolated static func drawnCursor(
+        for telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, arrow: InputTelemetry.CursorSprite?
+    ) -> (path: CursorPath, shapes: CursorShapeTrack)? {
+        guard !telemetry.capture.cursorInVideo, style.isEnabled,
+              let path = CursorPath(telemetry: telemetry, style: style, duration: duration, videoHeight: videoHeight)
+        else { return nil }
+        return (path, CursorShapeTrack(telemetry: telemetry, duration: duration, arrow: arrow))
     }
 
     /// The cursor's positions in the video while a zoom follows it, from the one in effect at the

@@ -34,7 +34,7 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   && { pkill -x BetterCapture; open /tmp/bc-build/dd/Build/Products/Debug/BetterCapture.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 297 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 312 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -304,6 +304,41 @@ Key facts:
 - The soft-zoom hint shows when the recording has under 2 video pixels per screen point
   (`InputTelemetry.pixelsPerPoint`); telemetry doesn't record the Native Resolution setting itself.
 
+### S1 — Editor, phase 5: cursor (`feat/editor-shell`, spec 0003)
+
+A recording made without the cursor gets it back in the editor: drawn from its recorded images at a
+smoothed position, sharp when zoomed, with its hot spot on every click highlight. The inspector's
+Cursor section shows or hides it and sets its size, movement (Mellow, Smooth, Fast), shrinking on
+click and hiding when idle.
+
+| File | Role |
+|---|---|
+| `Editor/Render/CursorPath.swift` | Positions without jitter, smoothed by a spring at 120 Hz and eased onto each click; the size (capture's pixels per point × style × press) and the idle fade |
+| `Editor/Render/CursorShapeTrack.swift` | Shape changes without the brief ones, each image decoded once per plan; an arrow when the telemetry has none |
+| `Editor/Render/Spring.swift` | The critically damped spring the camera and the cursor share |
+| `Editor/Render/FrameRenderer.swift` | Draws the cursor after zooming, scaled in one step from its recorded resolution |
+| `Editor/Model/CursorStyle.swift` | The inspector's settings; `Smoothing.frequency` holds the presets' springs |
+| `Service/StandardCursors.swift` | `png(of:)`, shared with the recorder, and `arrowSprite`, the fallback read when the editor opens |
+
+Key facts:
+- Drawn only when `capture.cursorInVideo` is false, so the editor never draws a second cursor.
+- The path passes exactly through every click and release at its time: the offset from the smoothed
+  path to the click point eases in over 0.5 s before and out over 175 ms after, never past the
+  neighbouring clicks, and is added at lookup, so it's exact between samples too.
+- Presets are critically damped springs at 7, 12.5 and 25 rad/s, trailing a steady move by 290, 160
+  and 80 ms. Smooth is Cap's default (tension 470, mass 3) without its 0.03% overshoot. A move back
+  by less than 2 pt is jitter and dropped.
+- Shapes shown for under 150 ms are dropped. A press shrinks the cursor to 0.8× over 130 ms while
+  held. Idle hiding fades out over 0.3 s after 2 s without a move or click, and back in before the
+  next one.
+- The camera and the cursor are built in parallel (`async let`): measured on an M1, Debug, for 10
+  minutes with 455 zooms, 3,000 clicks, 12,000 keys and the cursor moving throughout at 60 Hz, the
+  plan builds in ~42 ms instead of ~105 (camera 38 ms, cursor 35 ms).
+- The cursor adds 1–1.4 ms to a 4K frame, like any overlay: Core Image composites it over the whole
+  frame, so its image's size doesn't matter (34×46 px costs the same as the 280×400 px arrow);
+  `highQualityDownsample` adds at most 0.2 ms. These were measured under load (load average 3),
+  where a frame without the cursor took 7.5 ms p50, 10.7 ms p95, against 4.2 and 7.4 in phase 4.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -344,7 +379,8 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | S1 editor phase 2: render pipeline, click highlights, keystrokes, export | Done; highlight placement still needs checking on real recordings of each capture kind. 4K render measured at the 8 ms p95 budget on an M1 (see spec 0003) |
 | S1 editor phase 3: trim, split and cut, audio volume | Done; trimming, cutting and clicks at cuts still need a check in the app on a real recording |
 | S1 editor phase 4: auto-zoom, zoom lane, camera | Done; auto-zoom placement, full-frame-rate transitions and editing zooms on the timeline still need a check in the app on real recordings |
-| S1 editor phases 5–6 (cursor, canvas and export polish) | Todo, spec 0003 |
+| S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
+| S1 editor phase 6: canvas and export polish | Todo, spec 0003 |
 
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0
 (portable with attribution). `lzhgus/Capso` (BSL, bans screen-capture use) and

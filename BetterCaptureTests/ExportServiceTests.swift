@@ -39,7 +39,7 @@ struct ExportServiceTests {
         var project = EditorProject()
         project.clickHighlights.size = 100
         project.clickHighlights.color = RGBAColor(red: 1, green: 0, blue: 0, alpha: 1)
-        let plan = await RenderPlan.build(project: project, source: source, keyLabels: nil)
+        let plan = await RenderPlan.build(project: project, source: source, keyLabels: nil, arrow: nil)
         let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
         let output = ExportFormat.h264.outputURL(for: video)
 

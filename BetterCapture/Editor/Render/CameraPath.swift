@@ -49,9 +49,9 @@ nonisolated struct CameraPath: Sendable {
             samples = []
             return
         }
-        var centerX = Spring(position: 0.5)
-        var centerY = Spring(position: 0.5)
-        var logScale = Spring(position: 0)
+        var centerX = Spring(position: 0.5, frequency: Self.stiffness, rate: Self.sampleRate)
+        var centerY = Spring(position: 0.5, frequency: Self.stiffness, rate: Self.sampleRate)
+        var logScale = Spring(position: 0, frequency: Self.stiffness, rate: Self.sampleRate)
         var zoomIndex = 0
         var cursorIndex = 0
         var followed: CGPoint?
@@ -99,27 +99,6 @@ nonisolated struct CameraPath: Sendable {
             ),
             scale: before.scale + (after.scale - before.scale) * fraction
         )
-    }
-
-    /// One axis of a critically damped spring, stepped exactly.
-    private struct Spring {
-        var position: Double
-        var velocity = 0.0
-
-        private static let step = 1 / CameraPath.sampleRate
-        private static let decay = exp(-CameraPath.stiffness * step)
-
-        /// Moves one sample towards `goal`, and stops there once within 0.04 px at 4K.
-        mutating func advance(to goal: Double) {
-            let offset = position - goal
-            let blend = (velocity + CameraPath.stiffness * offset) * Self.step
-            position = goal + (offset + blend) * Self.decay
-            velocity = (velocity - CameraPath.stiffness * blend) * Self.decay
-            if abs(position - goal) < 1e-5, abs(velocity) < 1e-4 {
-                position = goal
-                velocity = 0
-            }
-        }
     }
 
     /// Where `zoom` looks: at its fixed focus, or following `cursor` from `followed`, which it

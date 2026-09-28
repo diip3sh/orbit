@@ -169,6 +169,7 @@ nonisolated struct RenderPlan: Sendable {
     let videoSize: CGSize
     let camera: CameraPath           // sampled viewport track, O(1) lookup
     let cursor: CursorPath?          // nil when the cursor is baked into the video
+    let cursorShapes: CursorShapeTrack  // which image it shows, decoded once
     let clicks: [ClickMarker]        // in Core Image pixel space, sorted by time
     let keystrokes: [KeystrokeChip]  // labels pre-rendered into images
     let canvas: CanvasLayout
@@ -245,7 +246,7 @@ Phases 0–4 are the first shippable editor. Each phase ends in a working, merge
 | 2 - Render pipeline, overlays, export v1 | Done | Highlight placement for each capture kind; redraw on a style change; render budget in Instruments |
 | 3 - Trim and cut | Done | Trimming, splitting and cutting; no clicks at cuts |
 | 4 - Zoom | Done | Where auto-zoom lands; transitions at full frame rate; moving and resizing zooms on the timeline |
-| 5 - Cursor | Todo | |
+| 5 - Cursor | Done | How the smoothing looks; shapes and idle hiding; the render budget on a quiet machine |
 | 6 - Canvas and export polish | Todo | |
 
 ### Phase 0 - Recording prerequisites (S)
@@ -410,6 +411,18 @@ Needs Phase 0 data and recordings made with the cursor hidden (`cursorInVideo ==
 - Tests: smoothing lag is bounded, the path hits every click exactly, brief shape changes are dropped, v2 files fall back to an arrow, and idle detection works.
 - The cursor is sharp at 2× zoom and its hot spot sits on click highlights at every zoom level.
 
+**Status:** Built and tested, including the "Done when" tests above: at 2× the cursor is drawn pixel for pixel from its recorded image, and its hot spot lands on the click at 1× and 2×. Still to check in the app on real recordings: how the smoothing looks, the shapes, idle hiding, and the render budget on a quiet machine. Where the build differs from the plan:
+
+- The springs are critically damped: the camera's, now a shared `Spring`. Cap's friction of 70 overshoots by 0.03%, which doesn't show. The presets are 7, 12.5 and 25 rad/s, trailing a steady move by 290, 160 and 80 ms; Smooth is Cap's default (tension 470, mass 3).
+- Clicks are hit exactly without a stiffer spring. The offset from the smoothed path to each click point eases in over 0.5 s before the click and out over 175 ms after, never past the neighbouring clicks. It's added at lookup, so the path is exact between samples too. Releases count as clicks, so a drag ends where the button was let go.
+- Jitter is a move back against the previous one by less than 2 pt.
+- `CursorSprites` became part of `CursorShapeTrack`, which decodes each image once per plan and drops shapes shown for under 150 ms (shapes are sampled at 15 Hz).
+- The cursor is drawn after zooming, scaled in one step from its recorded resolution with `highQualityDownsample`, so it's sharp when zoomed and doesn't alias at 1×.
+- The fallback arrow is `NSCursor.arrow`'s largest image (`StandardCursors.arrowSprite`), read when the editor opens. It's for recordings whose system reported no cursor images, or images that can't be read. Version 2 files have the cursor in the video, so the editor draws none for them.
+- The press animation holds 0.8× while the button is down. Idle hiding fades out over 0.3 s, and fades back in so the cursor is fully shown when it next moves or clicks.
+- The camera and the cursor are built in parallel. Measured on an M1 in Debug, for 10 minutes with 455 zooms, 3,000 clicks, 12,000 keys and the cursor moving throughout at 60 Hz: the plan builds in about 42 ms instead of 105 (38 ms camera, 35 ms cursor).
+- The cursor adds 1 to 1.4 ms to a 4K frame, like any overlay: Core Image composites it over the whole frame, so the image's size doesn't matter, and `highQualityDownsample` adds at most 0.2 ms. The machine was under load then (load average 3): a frame without the cursor took 7.5 ms p50 and 10.7 ms p95, against 4.2 and 7.4 in Phase 4, so the budget is to be re-checked in Instruments.
+
 ### Phase 6 - Canvas and export polish (L)
 
 **Build**
@@ -435,7 +448,7 @@ BetterCapture/Editor/
   Model/      EditorProject, EditorSource, EditorError, EditorSelection, FrameGrid, TimelineMarkers,
               ZoomSegment, ClickHighlightStyle, KeystrokeOverlayStyle, RGBAColor, ExportFormat,
               CursorStyle, CanvasStyle, AudioMixSettings
-  Render/     RenderPlan, TimeMap, CameraPath, CursorPath, CursorShapeTrack, CursorSprites, ClickMarker,
+  Render/     RenderPlan, TimeMap, Spring, CameraPath, CursorPath, CursorShapeTrack, ClickMarker,
               KeystrokeChip, OverlayImages, CanvasLayout, FrameRenderer, EditorCompositor, EditorInstruction,
               CompositionBuilder, EditorComposition
   Service/    EditorSourceLoader, ProjectStore, ThumbnailProvider, ExportService,
@@ -447,7 +460,7 @@ BetterCapture/Editor/
 
 `EditorTimelineView` is named so that it doesn't collide with SwiftUI's `TimelineView`.
 
-Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry types, in `BetterCapture/Model` and `BetterCapture/Service`, because the recorder writes that data. Phase 1 added `UnsupportedVersionError` to `BetterCapture/Model`, because `InputTelemetry` throws it too. Phase 2 added `PartitioningIndex` there, because `InputTelemetry.geometry(at:)` uses it. Phase 4 added `InputTelemetry.normalizedVideoPoint(for:at:)` and `pixelsPerPoint`.
+Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry types, in `BetterCapture/Model` and `BetterCapture/Service`, because the recorder writes that data. Phase 1 added `UnsupportedVersionError` to `BetterCapture/Model`, because `InputTelemetry` throws it too. Phase 2 added `PartitioningIndex` there, because `InputTelemetry.geometry(at:)` uses it. Phase 4 added `InputTelemetry.normalizedVideoPoint(for:at:)` and `pixelsPerPoint`. Phase 5 added `StandardCursors.png(of:)`, which the recorder now uses too, and `StandardCursors.arrowSprite`.
 
 ## Risks
 

@@ -29,6 +29,7 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
 
     var clickHighlights = ClickHighlightStyle()
     var keystrokes = KeystrokeOverlayStyle()
+    var cursor = CursorStyle()
     var audio = AudioMixSettings()
 
     /// The project file for a recording: same folder and base name, `.edit.json` extension.
@@ -54,6 +55,7 @@ extension EditorProject {
         zooms = try container.decodeIfPresent([ZoomSegment].self, forKey: .zooms) ?? []
         clickHighlights = try container.decodeIfPresent(ClickHighlightStyle.self, forKey: .clickHighlights) ?? ClickHighlightStyle()
         keystrokes = try container.decodeIfPresent(KeystrokeOverlayStyle.self, forKey: .keystrokes) ?? KeystrokeOverlayStyle()
+        cursor = try container.decodeIfPresent(CursorStyle.self, forKey: .cursor) ?? CursorStyle()
         audio = try container.decodeIfPresent(AudioMixSettings.self, forKey: .audio) ?? AudioMixSettings()
     }
 }

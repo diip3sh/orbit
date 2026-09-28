@@ -93,10 +93,31 @@ struct RenderPlanTests {
     @Test func buildsTheCameraFromTheZooms() async {
         let project = EditorProject(zooms: [ZoomSegment(range: 1..<9, focus: .fixed(center: CGPoint(x: 0.25, y: 0.25)))])
 
-        let plan = await RenderPlan.build(project: project, source: source(telemetry: nil), keyLabels: nil)
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: nil), keyLabels: nil, arrow: nil)
 
         #expect(plan.camera.viewport(at: 0) == .whole)
         #expect(plan.camera.viewport(at: 5).scale > 1.99)
+    }
+
+    @Test func drawsTheCursorOnlyWhenTheVideoHasNone() async {
+        var telemetry = telemetry
+        telemetry.cursor = [.init(time: 0, location: CGPoint(x: 500, y: 380))]
+        var project = EditorProject()
+        let arrow = StandardCursors.arrowSprite
+
+        let withCursor = await RenderPlan.build(project: project, source: source(telemetry: telemetry), keyLabels: nil, arrow: arrow)
+        #expect(withCursor.cursor == nil)
+
+        telemetry.capture.cursorInVideo = false
+        let withoutCursor = await RenderPlan.build(project: project, source: source(telemetry: telemetry), keyLabels: nil, arrow: arrow)
+        // 800 px from the left and 600 from the top, of 1200, before gliding onto the click at 1 s
+        #expect(withoutCursor.cursor?.position(at: 0.3) == CGPoint(x: 800, y: 600))
+        #expect(withoutCursor.cursorShapes.sprite(at: 1) != nil)
+
+        project.cursor.isEnabled = false
+        let hidden = await RenderPlan.build(project: project, source: source(telemetry: telemetry), keyLabels: nil, arrow: arrow)
+        #expect(hidden.cursor == nil)
+        #expect(hidden.cursorShapes.sprite(at: 1) == nil)
     }
 
     @Test func highlightsOnlyTheChosenButton() {
@@ -120,7 +141,7 @@ struct RenderPlanTests {
         project.clickHighlights.isEnabled = false
         project.keystrokes.isEnabled = false
 
-        let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), keyLabels: KeyLabelFormatter.current())
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), keyLabels: KeyLabelFormatter.current(), arrow: nil)
 
         #expect(plan.clicks.isEmpty)
         #expect(plan.keystrokes.isEmpty)
@@ -128,7 +149,7 @@ struct RenderPlanTests {
     }
 
     @Test func buildsNoOverlaysWithoutTelemetry() async {
-        let plan = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), keyLabels: KeyLabelFormatter.current())
+        let plan = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), keyLabels: KeyLabelFormatter.current(), arrow: nil)
 
         #expect(plan.clicks.isEmpty)
         #expect(plan.keystrokes.isEmpty)
@@ -137,7 +158,7 @@ struct RenderPlanTests {
 
     @Test func buildsOneChipImagePerLabel() async {
         let plan = await RenderPlan.build(
-            project: EditorProject(), source: source(telemetry: telemetry), keyLabels: KeyLabelFormatter.layout(id: "com.apple.keylayout.US")
+            project: EditorProject(), source: source(telemetry: telemetry), keyLabels: KeyLabelFormatter.layout(id: "com.apple.keylayout.US"), arrow: nil
         )
 
         #expect(plan.clicks.count == 3)

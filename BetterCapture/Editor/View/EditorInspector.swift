@@ -7,8 +7,8 @@
 
 import SwiftUI
 
-/// The selected zoom, style controls for the overlays drawn from input telemetry (click highlights
-/// and keystrokes), and the audio tracks' volumes.
+/// The selected zoom, style controls for what's drawn from input telemetry (cursor, click
+/// highlights and keystrokes), and the audio tracks' volumes.
 struct EditorInspector: View {
     @Bindable var viewModel: EditorViewModel
 
@@ -52,6 +52,30 @@ struct EditorInspector: View {
                         """)
                 }
             }
+
+            Section {
+                Toggle("Show Cursor", isOn: $viewModel.cursor.isEnabled)
+                LabeledContent("Size") {
+                    Slider(value: $viewModel.cursor.size, in: 0.5...3)
+                }
+                Picker("Movement", selection: $viewModel.cursor.smoothing) {
+                    Text("Mellow").tag(CursorStyle.Smoothing.mellow)
+                    Text("Smooth").tag(CursorStyle.Smoothing.smooth)
+                    Text("Fast").tag(CursorStyle.Smoothing.fast)
+                }
+                Toggle("Shrink on Click", isOn: $viewModel.cursor.animatesClicks)
+                Toggle("Hide When Idle", isOn: $viewModel.cursor.hidesWhenIdle)
+            } header: {
+                Text("Cursor")
+            } footer: {
+                if telemetry?.capture.cursorInVideo == true {
+                    Text("""
+                        This recording shows the system cursor, so it can't be changed. For new recordings, \
+                        turn off Keep System Cursor in Video in Settings → Video → Advanced.
+                        """)
+                }
+            }
+            .disabled(telemetry?.capture.cursorInVideo != false)
 
             Section {
                 Toggle("Highlight Clicks", isOn: $viewModel.clickHighlights.isEnabled)
