@@ -46,7 +46,7 @@ final class ScreenshotController {
 
     func captureArea() async {
         await capture {
-            guard let selection = await areaSelectionOverlay.present() else { return nil }
+            guard let selection = await areaSelectionOverlay.present(confirmsOnRelease: true) else { return nil }
             let display = try await service.display(for: selection.screen)
             let sourceRect = CaptureSizeCalculator.sourceRect(
                 for: selection.screenRect,

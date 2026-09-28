@@ -281,6 +281,8 @@ Key facts:
 Menu bar **Capture Area / Capture Window / Capture Screen** and global shortcuts of the same names
 (Settings → Shortcuts → Screenshots, no defaults; no URLs yet). Both follow `canCapture(alongside:)`: idle only,
 so a shortcut pressed while recording, counting down or capturing is ignored and logged.
+Capture Area shoots as soon as the drag ends (`AreaSelectionOverlay.present(confirmsOnRelease:)`); a click or a
+drag under 24 pt keeps the overlay up, Esc cancels. Recording keeps drag, adjust and Confirm.
 Captures at native pixels with the recording visibility settings into memory (`Screenshot`: image, scale,
 capture time) and hands it to `ScreenshotController.onCaptured` (the Quick Access card, C2). Nothing is
 written until the card's **Save**: `ScreenshotController.save(_:)` writes

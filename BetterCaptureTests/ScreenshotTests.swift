@@ -69,6 +69,18 @@ struct ScreenshotTests {
         #expect(!ScreenshotController.canCapture(recorderState: .idle, isCountingDown: false, isCapturing: true))
     }
 
+    // MARK: - Area selection size
+
+    @Test func areaSelectionAtTheMinimumSizeIsValid() {
+        #expect(AreaSelectionView.isValidSelection(CGRect(x: 10, y: 10, width: 24, height: 24)))
+    }
+
+    @Test func plainClickOrNarrowDragIsNotASelection() {
+        #expect(!AreaSelectionView.isValidSelection(.zero))
+        #expect(!AreaSelectionView.isValidSelection(CGRect(x: 0, y: 0, width: 23, height: 400)))
+        #expect(!AreaSelectionView.isValidSelection(CGRect(x: 0, y: 0, width: 400, height: 23)))
+    }
+
     // MARK: - configuration
 
     @Test func configurationUsesThePixelSizeAndSourceRect() {
