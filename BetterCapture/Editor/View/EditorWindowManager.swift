@@ -45,6 +45,8 @@ final class EditorWindowManager: NSObject {
         let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel))
         // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
         hostingController.sizingOptions = .minSize
+        // The export and inspector buttons are SwiftUI toolbar items
+        hostingController.sceneBridgingOptions = [.toolbars]
         let window = NSWindow(contentViewController: hostingController)
         window.title = videoURL.deletingPathExtension().lastPathComponent
         window.representedURL = videoURL

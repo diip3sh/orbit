@@ -232,6 +232,20 @@ struct InputTelemetryTests {
 
     // MARK: - CaptureGeometryTracker
 
+    @Test func geometryAtATimeIsTheLastEntryAtOrBeforeItOrElseTheFirst() {
+        var moved = geometry
+        moved.time = 5
+        var telemetry = InputTelemetry(capture: .init(kind: .display, videoSize: .zero), keystrokesAvailable: false)
+        #expect(telemetry.geometry(at: 1) == nil)
+
+        telemetry.geometry = [geometry, moved]
+
+        #expect(telemetry.geometry(at: 0)?.time == 1)
+        #expect(telemetry.geometry(at: 4.9)?.time == 1)
+        #expect(telemetry.geometry(at: 5)?.time == 5)
+        #expect(telemetry.geometry(at: 100)?.time == 5)
+    }
+
     @Test func geometryIsReadOnlyFromCompleteFrames() throws {
         let screenRect = CGRect(x: -56, y: -2, width: 1892, height: 1188)
         let contentRect = CGRect(x: 0, y: 0, width: 1710, height: 1074)

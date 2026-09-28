@@ -34,7 +34,7 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   && { pkill -x BetterCapture; open /tmp/bc-build/dd/Build/Products/Debug/BetterCapture.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 189 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 245 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -45,6 +45,11 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   macOS forgets the Screen Recording permission and prompts forever. If a permission gets stuck:
   `tccutil reset ScreenCapture com.sattlerjoshua.BetterCapture`, then relaunch.
 - New `.swift` files need no pbxproj edit (file-system synchronized groups).
+- Don't call an ObjC API whose completion handler is `() -> Void` through Swift's async import
+  (`await writer.finishWriting()`). `AVAssetExportSession.export(to:as:)` is back-deployed below
+  macOS 26, so its body is compiled into the app with a same-named but incompatible thunk, and the
+  linker may keep that copy: `AssetWriter` crashed on every stop. Use an explicit continuation, as
+  `AVAssetWriter.finishWritingWithoutAsyncImport()` does.
 - App target defaults to MainActor isolation (`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`), Swift 6
   language mode. Types used off the main actor must be marked `nonisolated`: Swift 6 checks
   isolation at runtime too, so main-actor code called from a capture queue crashes instead of racing.
@@ -213,6 +218,31 @@ Key facts:
   keyframe, up to 2 s back) unless a seek is still in flight.
 - Phase 1 plays the source asset directly; output time equals source time until phase 3's composition.
 
+### S1 — Editor, phase 2: render pipeline, overlays, export (`feat/editor-shell`, spec 0003)
+
+Click highlights (a ring that grows and fades) and a keystroke chip, drawn live in the preview and
+into exports by one custom compositor. An inspector (toolbar toggle) holds their styles; **Export…**
+writes `<name>-edited.mp4` (HEVC, H.264) or `.mov` (ProRes 422) next to the recording and reveals it.
+
+| File | Role |
+|---|---|
+| `Editor/Render/RenderPlan.swift` | `Sendable` snapshot built off the main actor on every edit: click markers already in Core Image pixels, keystroke chips, and images drawn once (`OverlayImages`) |
+| `Editor/Render/FrameRenderer.swift` | `(source frame, source time, plan) -> CIImage`; the only place pixels are decided |
+| `Editor/Render/EditorCompositor.swift`, `EditorInstruction.swift`, `CompositionBuilder.swift` | `AVVideoCompositing` with one shared `CIContext`; the instruction carries the plan; the same video composition feeds `AVPlayerItem` and `AVAssetExportSession` |
+| `Editor/Service/KeyLabelFormatter.swift` | Key code + modifiers → "⇧⌘K" with the current layout (`UCKeyTranslate`); TIS is read on the main actor only |
+| `Editor/Service/ExportService.swift` | `AVAssetExportSession.export(to:as:)` + `states(updateInterval:)`; cancelling the task cancels it |
+| `Editor/View/EditorInspector.swift`, `ExportSheet.swift` | Style controls (bound through `EditorViewModel.clickHighlights`/`keystrokes`), format + progress |
+
+Key facts:
+- **Privacy:** keystrokes show only shortcuts (⌘/⌃/⌥) and special keys unless "Show All Keys" is on.
+- Inspector changes are coalescing edits: the same control changed again within 1 s joins its undo step.
+- A new plan swaps the player item's video composition; while paused, the frame is re-seeked to redraw.
+- The compositor's `CIContext` has color management off: frames stay in the source's encoding (its
+  tags are copied to the output) and overlays blend in it. Measured on an M1, Debug, 4K with a ring
+  and a chip: ~5 ms p50 / 8 ms p95 per frame, versus 10 / 13 ms with linear-light compositing. A
+  10-min plan (3,000 clicks, 12,000 keys) builds in ~24 ms.
+- `InputTelemetry.geometry(at:)` and `RandomAccessCollection.partitioningIndex` are the shared lookups.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -250,7 +280,8 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | F7 remember last selection (#172) | Todo |
 | F8 Swift 6 language mode | Done (`chore/swift-6-mode`); needs one real recording to rule out runtime isolation crashes |
 | S1 editor phase 1: shell and playback | Done; open/scrub/close still need a check on a real 10-min 4K recording (see spec 0003) |
-| S1 editor phases 2–6 (render pipeline, cuts, zoom, cursor, canvas, export) | Todo, spec 0003 |
+| S1 editor phase 2: render pipeline, click highlights, keystrokes, export | Done; highlight placement still needs checking on real recordings of each capture kind. 4K render measured at the 8 ms p95 budget on an M1 (see spec 0003) |
+| S1 editor phases 3–6 (cuts, zoom, cursor, canvas and export polish) | Todo, spec 0003 |
 
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0
 (portable with attribution). `lzhgus/Capso` (BSL, bans screen-capture use) and

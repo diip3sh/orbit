@@ -25,7 +25,8 @@ nonisolated enum EditorSourceLoader {
 
             return EditorSource(
                 asset: asset,
-                duration: duration.seconds,
+                timeRange: CMTimeRange(start: .zero, duration: duration),
+                videoTrackID: track.trackID,
                 naturalSize: naturalSize,
                 frameRate: Double(frameRate),
                 timescale: timescale,

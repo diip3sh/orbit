@@ -5,11 +5,12 @@
 //  Created by Diip3sh on 26.09.26.
 //
 
+import AppKit
 import CoreGraphics
 import Foundation
 import OSLog
 
-/// State and intents of one editor window: the recording, its project and playback.
+/// State and intents of one editor window: the recording, its project, playback and export.
 @MainActor
 @Observable
 final class EditorViewModel {
@@ -34,12 +35,28 @@ final class EditorViewModel {
     /// Why the recording couldn't be opened, while ``source`` is `nil`, or why edits weren't saved.
     private(set) var error: EditorError?
 
+    /// How far an export is, from 0 to 1, or `nil` when none is running.
+    private(set) var exportProgress: Double?
+
     /// The project as last read from or written to disk.
     @ObservationIgnored private var savedProject = EditorProject()
     @ObservationIgnored private var autosave: Task<Void, Never>?
 
+    /// What the player shows and export writes, for the latest project.
+    @ObservationIgnored private var plan: RenderPlan?
+    @ObservationIgnored private var planBuild: Task<Void, Never>?
+
+    /// Labels keystrokes with the keyboard layout in use when the editor opened.
+    @ObservationIgnored private var keyLabels: KeyLabelFormatter?
+
+    /// The latest coalescing edit, which the next one with the same name joins if it follows soon enough.
+    @ObservationIgnored private var coalescingEdit: (actionName: String, time: ContinuousClock.Instant)?
+
     /// How long edits must settle before they are saved.
     private static let autosaveDelay = Duration.seconds(1)
+
+    /// How soon a coalescing edit must follow the previous one to join its undo step.
+    private static let coalescingInterval = Duration.seconds(1)
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "EditorViewModel")
 
@@ -64,12 +81,16 @@ final class EditorViewModel {
             fail(.unreadableProject(error))
             return
         }
+        let keyLabels = KeyLabelFormatter.current()
+        let plan = await RenderPlan.build(project: project, source: source, keyLabels: keyLabels)
         guard !Task.isCancelled else { return }
 
         self.source = source
         self.project = project
+        self.keyLabels = keyLabels
+        self.plan = plan
         savedProject = project
-        playback.load(source)
+        playback.load(source, videoComposition: CompositionBuilder.videoComposition(for: source, plan: plan))
         updateTimeline()
         logger.info("Opened \(self.videoURL.lastPathComponent)")
     }
@@ -86,14 +107,62 @@ final class EditorViewModel {
     }
 
     /// Applies an edit as one undo step named `actionName`, then saves once edits settle.
-    func edit(_ actionName: String, _ change: (inout EditorProject) -> Void) {
+    ///
+    /// With `coalescing`, an edit with the same name within a second of the previous one joins its
+    /// undo step, so dragging a slider or a color is undone at once.
+    func edit(_ actionName: String, coalescing: Bool = false, _ change: (inout EditorProject) -> Void) {
         var edited = project
         change(&edited)
-        setProject(edited, actionName: actionName)
+        guard edited != project else { return }
+
+        let now = ContinuousClock.now
+        if coalescing, let last = coalescingEdit, last.actionName == actionName, now - last.time < Self.coalescingInterval {
+            // The undo step the first of these edits registered restores the project from before all of them
+            project = edited
+            projectChanged()
+        } else {
+            setProject(edited, actionName: actionName)
+        }
+        coalescingEdit = coalescing ? (actionName, now) : nil
+    }
+
+    /// The click highlight style, for the inspector's controls. Each change is an edit.
+    var clickHighlights: ClickHighlightStyle {
+        get { project.clickHighlights }
+        set { edit("Click Highlights", coalescing: true) { $0.clickHighlights = newValue } }
+    }
+
+    /// The keystroke overlay style, for the inspector's controls. Each change is an edit.
+    var keystrokes: KeystrokeOverlayStyle {
+        get { project.keystrokes }
+        set { edit("Keystrokes", coalescing: true) { $0.keystrokes = newValue } }
+    }
+
+    /// Exports the edited video as `<name>-edited` next to the recording and reveals it in Finder.
+    /// Cancelling the calling task cancels the export.
+    func export(as format: ExportFormat) async throws {
+        guard let source, let plan else { return }
+        let url = format.outputURL(for: videoURL)
+        exportProgress = 0
+        defer { exportProgress = nil }
+
+        do {
+            let videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan)
+            try await ExportService.export(source.asset, videoComposition: videoComposition, to: url, as: format) { [weak self] in
+                self?.exportProgress = $0
+            }
+        } catch {
+            guard !Task.isCancelled else { throw CancellationError() }
+            logger.error("Export of \(self.videoURL.lastPathComponent) failed: \(error.localizedDescription)")
+            throw EditorError.exportFailed(error)
+        }
+        logger.info("Exported \(url.lastPathComponent)")
+        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
     /// Releases the player and filmstrip and saves pending edits. Called when the window closes.
     func close() async {
+        planBuild?.cancel()
         playback.release()
         thumbnails = []
         autosave?.cancel()
@@ -108,11 +177,17 @@ final class EditorViewModel {
         guard newProject != project else { return }
         let previous = project
         project = newProject
+        coalescingEdit = nil
         undoManager.registerUndo(withTarget: self) { viewModel in
             viewModel.setProject(previous, actionName: actionName)
         }
         undoManager.setActionName(actionName)
+        projectChanged()
+    }
+
+    private func projectChanged() {
         updateTimeline()
+        rebuildPlan()
         scheduleAutosave()
     }
 
@@ -120,6 +195,20 @@ final class EditorViewModel {
         guard let source else { return }
         timeMap = TimeMap(cuts: project.cuts, sourceDuration: source.duration)
         markers = source.telemetry.map { TimelineMarkers(telemetry: $0, timeMap: timeMap) }
+    }
+
+    /// Builds a plan for the project off the main actor, replacing a build still running, and shows it.
+    private func rebuildPlan() {
+        guard let source else { return }
+        planBuild?.cancel()
+        let project = project
+        let keyLabels = keyLabels
+        planBuild = Task {
+            let plan = await RenderPlan.build(project: project, source: source, keyLabels: keyLabels)
+            guard !Task.isCancelled else { return }
+            self.plan = plan
+            playback.setVideoComposition(CompositionBuilder.videoComposition(for: source, plan: plan))
+        }
     }
 
     private func scheduleAutosave() {

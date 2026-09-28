@@ -7,9 +7,12 @@
 
 import SwiftUI
 
-/// An editor window's content: the preview, transport controls and timeline.
+/// An editor window's content: the preview, transport controls, timeline and inspector.
 struct EditorView: View {
     let viewModel: EditorViewModel
+
+    @State private var showsInspector = true
+    @State private var showsExport = false
 
     var body: some View {
         Group {
@@ -27,6 +30,21 @@ struct EditorView: View {
                             .foregroundStyle(.red)
                             .padding([.horizontal, .bottom])
                     }
+                }
+                .inspector(isPresented: $showsInspector) {
+                    EditorInspector(viewModel: viewModel)
+                        .inspectorColumnWidth(min: 240, ideal: 280)
+                }
+                .toolbar {
+                    Button("Export…", systemImage: "square.and.arrow.up") {
+                        showsExport = true
+                    }
+                    Button("Inspector", systemImage: "sidebar.trailing") {
+                        showsInspector.toggle()
+                    }
+                }
+                .sheet(isPresented: $showsExport) {
+                    ExportSheet(viewModel: viewModel)
                 }
             } else if let error = viewModel.error {
                 ContentUnavailableView(

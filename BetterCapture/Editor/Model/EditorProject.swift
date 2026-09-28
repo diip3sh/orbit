@@ -21,6 +21,9 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     /// Source ranges left out of the output, sorted and non-overlapping. Trimming is a cut at either end.
     var cuts: [Range<Double>] = []
 
+    var clickHighlights = ClickHighlightStyle()
+    var keystrokes = KeystrokeOverlayStyle()
+
     /// The project file for a recording: same folder and base name, `.edit.json` extension.
     static func fileURL(for videoURL: URL) -> URL {
         videoURL.deletingPathExtension().appendingPathExtension("edit").appendingPathExtension("json")
@@ -32,6 +35,7 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
 extension EditorProject {
 
     /// Decodes a file, rejecting any version but ``currentVersion`` with ``UnsupportedVersionError``.
+    /// Settings added after version 1 was first written take their defaults when missing.
     nonisolated init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decode(Int.self, forKey: .version)
@@ -39,5 +43,7 @@ extension EditorProject {
             throw UnsupportedVersionError(version: version)
         }
         cuts = try container.decode([Range<Double>].self, forKey: .cuts)
+        clickHighlights = try container.decodeIfPresent(ClickHighlightStyle.self, forKey: .clickHighlights) ?? ClickHighlightStyle()
+        keystrokes = try container.decodeIfPresent(KeystrokeOverlayStyle.self, forKey: .keystrokes) ?? KeystrokeOverlayStyle()
     }
 }

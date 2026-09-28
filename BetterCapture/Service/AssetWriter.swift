@@ -608,7 +608,7 @@ nonisolated final class AssetWriter: CaptureEngineSampleBufferDelegate, @uncheck
         }
 
         // Finish writing (outside lock since it's async)
-        await writerToFinish.finishWriting()
+        await writerToFinish.finishWritingWithoutAsyncImport()
 
         // Second critical section: check final status and cleanup
         return try lock.withLockUnchecked {

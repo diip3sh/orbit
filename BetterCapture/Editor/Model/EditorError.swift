@@ -15,6 +15,7 @@ nonisolated enum EditorError: LocalizedError {
     case unreadableTelemetry(any Error)
     case unreadableProject(any Error)
     case projectNotSaved(any Error)
+    case exportFailed(any Error)
 
     var errorDescription: String? {
         switch self {
@@ -30,6 +31,8 @@ nonisolated enum EditorError: LocalizedError {
             "The recording's edits couldn't be read. \(error.localizedDescription)"
         case .projectNotSaved(let error):
             "Edits couldn't be saved. \(error.localizedDescription)"
+        case .exportFailed(let error):
+            "The video couldn't be exported. \(error.localizedDescription)"
         }
     }
 }

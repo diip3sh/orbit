@@ -213,7 +213,7 @@ These apply to every phase, on top of `AGENTS.md`.
 **Performance**
 
 - The frame path allocates nothing proportional to the recording's length. Lookups into sorted tracks are binary searches (a small `partitioningIndex` helper); sampled tracks (camera, cursor) are O(1) index plus lerp.
-- One Metal-backed `CIContext` is shared by all compositor instances (it is thread-safe), created with `cacheIntermediates: false`, as recommended for video.
+- One Metal-backed `CIContext` is shared by all compositor instances (it is thread-safe), created with `cacheIntermediates: false`, as recommended for video, and with color management off, so frames stay in the source's encoding (measured in Phase 2: half the render time at 4K).
 - Source frames are requested in the decoder's native format (`420v`/`420f` for H.264/HEVC) so Core Image reads YUV directly without an extra conversion.
 - Static images (cursor sprites, keycap labels, backgrounds) are created once per plan, never per frame.
 - Main actor: high-frequency playback time is kept out of the view model's observed state. Only the playhead view reads it, through `TimelineView(.animation)` while playing, so a tick redraws the playhead and nothing else.
@@ -304,6 +304,19 @@ The core of the editor. After this phase, adding an effect means adding a precom
 - An exported frame matches the previewed frame at the same time: a test renders a synthetic source through `FrameRenderer` and checks the highlight's pixel location.
 - Tests: mapping to Core Image space, key label formatting (US layout fixture), chip timing.
 
+**Status:** Built and tested, including an end-to-end export of a synthetic recording whose exported frame shows the highlight at the click. Still to check on real recordings: highlight placement for each capture kind (then `docs/SMOKE_TESTING.md`), redraw on a style change, and the render budget in Instruments. Where the build differs from the plan:
+
+- `RenderPlan` holds what Phase 2 draws: `timeMap`, `videoSize`, `clicks` plus one ring image (`clickRing`, `clickDuration`), and `keystrokes` plus `chipImages`. Camera, cursor and canvas come with their phases. Images are drawn once per plan by `OverlayImages`.
+- The video composition wraps the source asset; the `AVMutableComposition` with kept ranges and the audio mix come in Phase 3. The compositor already maps output to source time through the plan's `TimeMap`.
+- Click size is in screen points, converted with each click's geometry, so a ring has the same size next to the cursor on any display. "Left/right only" is a `buttons` choice: all, left or right.
+- One chip shows at a time: the latest press, held 1.5 s and fading over the last 0.3 s, or until the next press. Auto-repeats are skipped. The chip is 6% of the video's shorter side, centred at the bottom.
+- `KeyLabelFormatter` reads the layout on the main actor when the editor opens (Text Input Sources aren't safe off it); tests use the installed US layout (`com.apple.keylayout.US`) rather than a fixture file.
+- Inspector edits coalesce: the same control changed again within 1 s joins its undo step, which covers slider drags and the color panel alike.
+- HEVC and H.264 export to MP4, ProRes 422 to MOV. An earlier export with the same name is replaced; a cancelled or failed one leaves no file.
+- Measured on an M1 (Debug build, synthetic 4K source with a ring and a chip): a frame renders in about 5 ms p50 and 8 ms p95, right at the budget, with color management off; converting every pixel to linear light and back took 10 and 13 ms. A plan for a 10-minute recording with 3,000 clicks and 12,000 keys builds in about 24 ms.
+- `AVAssetExportSession.export(to:as:)` is back-deployed below macOS 26, and its fallback body brought in a completion-handler thunk that collided with the one `AssetWriter`'s `await finishWriting()` used, crashing every stop. `AssetWriter` now finishes through an explicit continuation.
+- New shared helpers: `InputTelemetry.geometry(at:)` (the geometry entry in effect at a time) and `RandomAccessCollection.partitioningIndex(where:)`, the binary search every sorted-track lookup uses.
+
 ### Phase 3 - Trim and cut (M)
 
 **Build**
@@ -386,9 +399,11 @@ Needs Phase 0 data and recordings made with the cursor hidden (`cursorInVideo ==
 ```text
 BetterCapture/Editor/
   Model/      EditorProject, EditorSource, EditorError, FrameGrid, TimelineMarkers, ZoomSegment,
-              ClickHighlightStyle, KeystrokeOverlayStyle, CursorStyle, CanvasStyle, AudioMixSettings
+              ClickHighlightStyle, KeystrokeOverlayStyle, RGBAColor, ExportFormat, CursorStyle,
+              CanvasStyle, AudioMixSettings
   Render/     RenderPlan, TimeMap, CameraPath, CursorPath, CursorShapeTrack, CursorSprites, ClickMarker,
-              KeystrokeChip, CanvasLayout, FrameRenderer, EditorCompositor, EditorInstruction, CompositionBuilder
+              KeystrokeChip, OverlayImages, CanvasLayout, FrameRenderer, EditorCompositor, EditorInstruction,
+              CompositionBuilder
   Service/    EditorSourceLoader, ProjectStore, ThumbnailProvider, ExportService,
               AutoZoomGenerator, KeyLabelFormatter
   ViewModel/  EditorViewModel, PlaybackController
@@ -398,7 +413,7 @@ BetterCapture/Editor/
 
 `EditorTimelineView` is named so that it doesn't collide with SwiftUI's `TimelineView`.
 
-Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry types, in `BetterCapture/Model` and `BetterCapture/Service`, because the recorder writes that data. Phase 1 added `UnsupportedVersionError` to `BetterCapture/Model`, because `InputTelemetry` throws it too.
+Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry types, in `BetterCapture/Model` and `BetterCapture/Service`, because the recorder writes that data. Phase 1 added `UnsupportedVersionError` to `BetterCapture/Model`, because `InputTelemetry` throws it too. Phase 2 added `PartitioningIndex` there, because `InputTelemetry.geometry(at:)` uses it.
 
 ## Risks
 

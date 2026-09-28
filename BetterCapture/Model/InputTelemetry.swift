@@ -176,6 +176,12 @@ nonisolated struct InputTelemetry: Codable, Equatable, Sendable {
         )
     }
 
+    /// The ``geometry`` entry in effect at `time`: the last one at or before it, or the first.
+    func geometry(at time: Double) -> Geometry? {
+        guard !geometry.isEmpty else { return nil }
+        return geometry[max(geometry.partitioningIndex { $0.time > time } - 1, 0)]
+    }
+
     /// Converts a host-clock time into video time, or `nil` when it falls outside the video.
     /// - Parameters:
     ///   - hostTime: Seconds on the host clock, which ScreenCaptureKit sample timestamps and

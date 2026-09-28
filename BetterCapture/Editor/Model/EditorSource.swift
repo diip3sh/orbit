@@ -11,8 +11,10 @@ import AVFoundation
 nonisolated struct EditorSource: Sendable {
     let asset: AVURLAsset
 
-    /// The video's length in seconds.
-    let duration: Double
+    /// The asset's exact extent, which the video composition must cover.
+    let timeRange: CMTimeRange
+
+    let videoTrackID: CMPersistentTrackID
 
     /// The video's dimensions in pixels.
     let naturalSize: CGSize
@@ -27,4 +29,9 @@ nonisolated struct EditorSource: Sendable {
 
     /// Why ``telemetry`` is `nil`.
     let telemetryError: EditorError?
+
+    /// The video's length in seconds.
+    var duration: Double {
+        timeRange.duration.seconds
+    }
 }

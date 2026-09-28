@@ -33,11 +33,14 @@ final class PlaybackController {
         isPlaying ? player.currentTime().seconds : pausedTime
     }
 
-    func load(_ source: EditorSource) {
+    func load(_ source: EditorSource, videoComposition: AVVideoComposition) {
         frames = FrameGrid(frameRate: source.frameRate, duration: source.duration)
         timescale = source.timescale
 
         let item = AVPlayerItem(asset: source.asset)
+        item.videoComposition = videoComposition
+        // A seek completes once its frame is drawn, so scrubbing never shows a bare source frame
+        item.seekingWaitsForVideoCompositionRendering = true
         player.replaceCurrentItem(with: item)
         endObserver = NotificationCenter.default.addObserver(
             forName: AVPlayerItem.didPlayToEndTimeNotification, object: item, queue: .main
@@ -91,6 +94,14 @@ final class PlaybackController {
         } else {
             player.currentItem?.step(byCount: target - current)
             pausedTime = frames.time(ofFrame: target)
+        }
+    }
+
+    /// Draws frames with a new render plan. While paused, the frame on screen is redrawn.
+    func setVideoComposition(_ videoComposition: AVVideoComposition) {
+        player.currentItem?.videoComposition = videoComposition
+        if !isPlaying {
+            seek(toFrame: frames.frame(at: pausedTime))
         }
     }
 

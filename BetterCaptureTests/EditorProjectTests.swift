@@ -12,13 +12,23 @@ import Testing
 struct EditorProjectTests {
 
     @Test func roundTripsThroughJSON() throws {
-        let project = EditorProject(cuts: [0..<1.5, 10..<12.25])
+        var project = EditorProject(cuts: [0..<1.5, 10..<12.25])
+        project.clickHighlights.buttons = .left
+        project.keystrokes.showsAllKeys = true
 
         let data = try JSONEncoder().encode(project)
         let json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         #expect(json["version"] as? Int == 1)
         #expect(try JSONDecoder().decode(EditorProject.self, from: data) == project)
+    }
+
+    @Test func readsAVersion1FileWrittenBeforeStylesWithDefaults() throws {
+        let json = #"{ "version": 1, "cuts": [[1, 2]] }"#
+
+        let project = try JSONDecoder().decode(EditorProject.self, from: Data(json.utf8))
+
+        #expect(project == EditorProject(cuts: [1..<2]))
     }
 
     @Test func rejectsAnUnknownVersion() {
