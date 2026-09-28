@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// The timeline: the whole recording as a filmstrip with click and keystroke lanes, cut parts
+/// The timeline: the whole recording as a filmstrip with click, keystroke and zoom lanes, cut parts
 /// dimmed, and the playhead. Dragging scrubs, clicking selects a segment, and the handles on each
 /// kept part's edges trim it.
 struct EditorTimelineView: View {
@@ -68,6 +68,8 @@ struct EditorTimelineView: View {
                     .foregroundStyle(.secondary)
                     .frame(height: Self.lanesHeight)
             }
+
+            ZoomLane(viewModel: viewModel, width: width)
         }
         .overlay {
             // Cuts dimmed, splits across the filmstrip (handles cover the kept parts' starts), the selection outlined
@@ -82,7 +84,7 @@ struct EditorTimelineView: View {
                 for segment in viewModel.segments {
                     context.fill(Path(span(segment, Self.filmstripHeight).divided(atDistance: 1, from: .minXEdge).slice), with: .color(.white))
                 }
-                if let selection = viewModel.selection {
+                if case .segment(let selection) = viewModel.selection {
                     context.stroke(Path(roundedRect: span(selection, size.height).insetBy(dx: 1, dy: 1), cornerRadius: 4), with: .color(.accentColor), lineWidth: 2)
                 }
             }

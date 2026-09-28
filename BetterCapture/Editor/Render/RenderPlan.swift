@@ -18,6 +18,9 @@ nonisolated struct RenderPlan: Sendable {
     let timeMap: TimeMap
     let videoSize: CGSize
 
+    /// Where the camera looks: the zooms, integrated.
+    let camera: CameraPath
+
     /// Clicks to highlight, sorted by time. Empty when highlights are off.
     let clicks: [ClickMarker]
 
@@ -68,6 +71,9 @@ extension RenderPlan {
         return RenderPlan(
             timeMap: TimeMap(cuts: project.cuts, sourceDuration: source.duration, frameRate: source.frameRate),
             videoSize: videoSize,
+            camera: CameraPath(
+                zooms: project.zooms, cursor: source.telemetry.map { cursorPoints(for: $0, during: project.zooms) } ?? [], duration: source.duration
+            ),
             clicks: clicks,
             clickDuration: project.clickHighlights.duration,
             clickRing: clicks.isEmpty ? .empty() : OverlayImages.ring(diameter: ringDiameter, color: project.clickHighlights.color.cgColor),
@@ -108,6 +114,20 @@ extension RenderPlan {
             return KeystrokeChip(time: key.time, image: image)
         }
         return (chips, labels)
+    }
+
+    /// The cursor's positions in the video while a zoom follows it, from the one in effect at the
+    /// zoom's start, each placed with the capture geometry in effect at its time. The camera needs
+    /// no others, and each costs a geometry lookup: 9 ms for half of a 10-minute recording's 60 Hz
+    /// samples (M1, Debug).
+    nonisolated static func cursorPoints(for telemetry: InputTelemetry, during zooms: [ZoomSegment]) -> [(time: Double, point: CGPoint)] {
+        zooms.filter(\.followsCursor).flatMap { zoom in
+            let first = max(telemetry.cursor.partitioningIndex { $0.time > zoom.range.lowerBound } - 1, 0)
+            let end = min(max(telemetry.cursor.partitioningIndex { $0.time >= zoom.range.upperBound }, first + 1), telemetry.cursor.count)
+            return telemetry.cursor[first..<end].compactMap { sample in
+                telemetry.normalizedVideoPoint(for: sample.location, at: sample.time).map { (sample.time, $0) }
+            }
+        }
     }
 
     /// Flips a video pixel (top-left origin, as telemetry maps it) into Core Image space

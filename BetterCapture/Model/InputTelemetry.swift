@@ -182,6 +182,20 @@ nonisolated struct InputTelemetry: Codable, Equatable, Sendable {
         return geometry[max(geometry.partitioningIndex { $0.time > time } - 1, 0)]
     }
 
+    /// Where `location` was in the video at `time`, as fractions of its width and height from the
+    /// top-left corner, or `nil` without geometry.
+    func normalizedVideoPoint(for location: CGPoint, at time: Double) -> CGPoint? {
+        guard let geometry = geometry(at: time) else { return nil }
+        let pixel = Self.videoPixel(for: location, geometry: geometry)
+        return CGPoint(x: pixel.x / capture.videoSize.width, y: pixel.y / capture.videoSize.height)
+    }
+
+    /// Video pixels per screen point, at the lowest it was during the recording: 2 for a Retina
+    /// display recorded at native resolution. `nil` without geometry.
+    var pixelsPerPoint: CGFloat? {
+        geometry.map { $0.contentScale * $0.scaleFactor }.min()
+    }
+
     /// Converts a host-clock time into video time, or `nil` when it falls outside the video.
     /// - Parameters:
     ///   - hostTime: Seconds on the host clock, which ScreenCaptureKit sample timestamps and

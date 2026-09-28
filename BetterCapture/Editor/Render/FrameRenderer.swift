@@ -22,6 +22,8 @@ nonisolated enum FrameRenderer {
         for click in ClickMarker.active(in: plan.clicks, at: time, duration: plan.clickDuration) {
             image = ring(for: click, at: time, plan: plan).composited(over: image)
         }
+        // Clicks are on the content, so they zoom with it; the chip stays where it is
+        image = zoomed(image, to: plan.camera.viewport(at: time), size: plan.videoSize)
         if let (chip, opacity) = KeystrokeChip.visible(in: plan.keystrokes, at: time) {
             image = keystroke(chip, opacity: opacity, plan: plan).composited(over: image)
         }
@@ -37,6 +39,22 @@ nonisolated enum FrameRenderer {
         let placement = CGAffineTransform(scaleX: scale, y: scale)
             .concatenating(CGAffineTransform(translationX: click.position.x - diameter / 2, y: click.position.y - diameter / 2))
         return plan.clickRing.transformed(by: placement).fading(to: 1 - progress)
+    }
+
+    /// The part of `image` in `viewport`, magnified to fill the frame. The whole frame is left as
+    /// it is, so frames without zoom stay pixel for pixel the source's.
+    private static func zoomed(_ image: CIImage, to viewport: CameraPath.Viewport, size: CGSize) -> CIImage {
+        guard viewport.scale > 1 else { return image }
+        // The view's bottom-left corner in Core Image space
+        let origin = CGPoint(
+            x: (viewport.center.x - 0.5 / viewport.scale) * size.width,
+            y: (1 - viewport.center.y - 0.5 / viewport.scale) * size.height
+        )
+        let transform = CGAffineTransform(translationX: -origin.x, y: -origin.y)
+            .concatenating(CGAffineTransform(scaleX: viewport.scale, y: viewport.scale))
+        // Clamped to the frame, so its edge pixels aren't blended with what's around it
+        let frame = CGRect(origin: .zero, size: size)
+        return image.cropped(to: frame).clampedToExtent().transformed(by: transform).cropped(to: frame)
     }
 
     /// The chip, centred at the bottom of the video.

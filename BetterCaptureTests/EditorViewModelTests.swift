@@ -5,6 +5,7 @@
 //  Created by Diip3sh on 26.09.26.
 //
 
+import CoreGraphics
 import Foundation
 import Testing
 @testable import BetterCapture
@@ -94,11 +95,11 @@ struct EditorViewModelTests {
         viewModel.split()
         #expect(viewModel.project.splits == [0.5])
         #expect(viewModel.undoManager.undoActionName == "Split")
-        #expect(!viewModel.canCutSelection)
+        #expect(!viewModel.canDeleteSelection)
 
         viewModel.select(at: 0.7)
-        #expect(viewModel.selection == 0.5..<1)
-        viewModel.cutSelection()
+        #expect(viewModel.selection == .segment(0.5..<1))
+        viewModel.deleteSelection()
         #expect(viewModel.project.cuts == [0.5..<1])
         #expect(viewModel.undoManager.undoActionName == "Cut")
         #expect(viewModel.timeMap.outputDuration == 0.5)
@@ -112,9 +113,9 @@ struct EditorViewModelTests {
         await viewModel.load()
 
         viewModel.select(at: 0.5)
-        #expect(viewModel.selection == 0..<1)
-        #expect(!viewModel.canCutSelection)
-        viewModel.cutSelection()
+        #expect(viewModel.selection == .segment(0..<1))
+        #expect(!viewModel.canDeleteSelection)
+        viewModel.deleteSelection()
         #expect(viewModel.project.cuts.isEmpty)
     }
 
@@ -139,6 +140,53 @@ struct EditorViewModelTests {
 
         #expect(viewModel.project.cuts == [0..<0.2, 0.9..<1])
         #expect(viewModel.undoManager.undoActionName == "Trim")
+    }
+
+    @Test func aNewProjectStartsWithAutomaticZoomsSavedOnlyAfterAnEdit() async throws {
+        let video = try await writeRecording()
+        defer { try? FileManager.default.removeItem(at: video.deletingLastPathComponent()) }
+        // A click in the middle of a 32×24 pt display, recorded at 64×48 px
+        var telemetry = InputTelemetry(capture: .init(kind: .display, videoSize: CGSize(width: 64, height: 48)), keystrokesAvailable: false)
+        telemetry.geometry = [
+            .init(time: 0, screenRect: CGRect(x: 0, y: 0, width: 32, height: 24), contentRect: CGRect(x: 0, y: 0, width: 32, height: 24), contentScale: 1, scaleFactor: 2)
+        ]
+        telemetry.clicks = [.init(time: 0.3, location: CGPoint(x: 16, y: 12), button: .left, isDown: true, clickCount: 1)]
+        try JSONEncoder().encode(telemetry).write(to: InputTelemetry.sidecarURL(for: video))
+        let viewModel = EditorViewModel(videoURL: video)
+
+        await viewModel.load()
+
+        #expect(viewModel.project.zooms.map(\.range) == [0..<1])
+        #expect(viewModel.project.zooms.map(\.isAutomatic) == [true])
+        await viewModel.close()
+        #expect(!FileManager.default.fileExists(atPath: EditorProject.fileURL(for: video).path()))
+    }
+
+    @Test func addsAZoomAtThePlayheadThenChangesAndDeletesIt() async throws {
+        let video = try await writeRecording()
+        defer { try? FileManager.default.removeItem(at: video.deletingLastPathComponent()) }
+        let viewModel = EditorViewModel(videoURL: video)
+        await viewModel.load()
+        #expect(viewModel.project.zooms.isEmpty)
+
+        viewModel.playback.seek(to: 0.2)
+        viewModel.addZoom()
+        let zoom = try #require(viewModel.selectedZoom)
+        #expect(viewModel.undoManager.undoActionName == "Add Zoom")
+        // Up to the end, and on the centre without a cursor to follow
+        #expect(zoom.range == 0.2..<1)
+        #expect(zoom.focus == .fixed(center: CGPoint(x: 0.5, y: 0.5)))
+        #expect(!viewModel.canAddZoom)
+
+        viewModel.selectedZoom?.scale = 3
+        #expect(viewModel.project.zooms.map(\.scale) == [3])
+        #expect(viewModel.undoManager.undoActionName == "Zoom")
+        #expect(viewModel.selection == .zoom(zoom.id))
+
+        viewModel.deleteSelection()
+        #expect(viewModel.project.zooms.isEmpty)
+        #expect(viewModel.undoManager.undoActionName == "Delete Zoom")
+        #expect(viewModel.selection == nil)
     }
 
     /// A 1 s recording at 30 fps in a folder of its own.

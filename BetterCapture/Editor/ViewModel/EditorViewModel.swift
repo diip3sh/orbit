@@ -26,8 +26,7 @@ final class EditorViewModel {
     private(set) var project = EditorProject()
     private(set) var timeMap = TimeMap(cuts: [], sourceDuration: 0, frameRate: 60)
 
-    /// The part of the timeline that ⌫ cuts, in source seconds: a segment between splits and cuts.
-    private(set) var selection: Range<Double>?
+    private(set) var selection: EditorSelection?
 
     /// Clicks and keystrokes on the timeline, or `nil` without telemetry.
     private(set) var markers: TimelineMarkers?
@@ -80,7 +79,9 @@ final class EditorViewModel {
             return
         }
         do {
-            project = try await ProjectStore.read(for: videoURL) ?? EditorProject()
+            // A new project starts with the automatic zooms
+            project = try await ProjectStore.read(for: videoURL)
+                ?? EditorProject(zooms: source.telemetry.map { AutoZoomGenerator.segments(for: $0, duration: source.duration) } ?? [])
         } catch {
             fail(.unreadableProject(error))
             return
@@ -203,7 +204,10 @@ final class EditorViewModel {
     }
 
     private func projectChanged(from previous: EditorProject) {
-        selection = nil
+        // A zoom stays selected while it's being changed
+        if selectedZoom == nil {
+            selection = nil
+        }
         updateTimeline()
         // Splits and volumes aren't drawn; anything else is
         var drawn = project
@@ -305,8 +309,12 @@ extension EditorViewModel {
     }
 
     /// Something must stay, so the only segment left can't be cut.
-    var canCutSelection: Bool {
-        selection != nil && segments.count > 1
+    var canDeleteSelection: Bool {
+        switch selection {
+        case .segment: segments.count > 1
+        case .zoom: true
+        case nil: false
+        }
     }
 
     /// Shows the frame at source time `time`, or the first one after it inside a cut.
@@ -316,7 +324,7 @@ extension EditorViewModel {
 
     /// Selects the segment at source time `time`; inside a cut, nothing.
     func select(at time: Double) {
-        selection = segments.first { $0.contains(time) }
+        selection = segments.first { $0.contains(time) }.map(EditorSelection.segment)
     }
 
     /// Divides the segment under the playhead in two, at the frame shown.
@@ -326,9 +334,15 @@ extension EditorViewModel {
         edit("Split") { $0.splits = splits }
     }
 
-    func cutSelection() {
-        guard let selection, canCutSelection else { return }
-        edit("Cut") { $0.cuts = timeMap.cuts(adding: selection) }
+    /// Cuts the selected segment or deletes the selected zoom.
+    func deleteSelection() {
+        guard let selection, canDeleteSelection else { return }
+        switch selection {
+        case .segment(let range):
+            edit("Cut") { $0.cuts = timeMap.cuts(adding: range) }
+        case .zoom(let id):
+            edit("Delete Zoom") { $0.zooms = $0.zooms.removing(id) }
+        }
     }
 
     /// Moves kept range `index`'s start to source time `time`, cutting or restoring the recording there.
@@ -339,5 +353,79 @@ extension EditorViewModel {
     /// Moves kept range `index`'s end to source time `time`, cutting or restoring the recording there.
     func moveEnd(ofKeptRange index: Int, to time: Double) {
         edit("Trim") { $0.cuts = timeMap.cuts(movingEndOf: index, to: time) }
+    }
+}
+
+// MARK: - Zooming
+
+extension EditorViewModel {
+
+    /// The selected zoom, for the inspector's controls. Each change is an edit, which makes it manual.
+    var selectedZoom: ZoomSegment? {
+        get {
+            guard case .zoom(let id) = selection else { return nil }
+            return project.zooms.first { $0.id == id }
+        }
+        set {
+            guard let newValue else { return }
+            edit("Zoom", coalescing: true) { $0.zooms = $0.zooms.replacing(newValue) }
+        }
+    }
+
+    /// Whether a zoom can start at the playhead: it's outside the others, with room for the shortest.
+    var canAddZoom: Bool {
+        newZoomAtPlayhead != nil
+    }
+
+    func selectZoom(_ id: ZoomSegment.ID) {
+        selection = .zoom(id)
+    }
+
+    /// Adds a zoom at the playhead and selects it. It follows the cursor when there is one to follow.
+    func addZoom() {
+        guard let zoom = newZoomAtPlayhead else { return }
+        edit("Add Zoom") { $0.zooms = $0.zooms.inserting(zoom) }
+        selection = .zoom(zoom.id)
+    }
+
+    /// Moves a zoom by `offset` seconds, up to its neighbours and the recording's ends.
+    func moveZoom(_ id: ZoomSegment.ID, by offset: Double) {
+        guard let source else { return }
+        edit("Move Zoom") { $0.zooms = $0.zooms.moving(id, by: offset, duration: source.duration) }
+    }
+
+    func moveZoomStart(_ id: ZoomSegment.ID, to time: Double) {
+        edit("Resize Zoom") { $0.zooms = $0.zooms.movingStart(of: id, to: time) }
+    }
+
+    func moveZoomEnd(_ id: ZoomSegment.ID, to time: Double) {
+        guard let source else { return }
+        edit("Resize Zoom") { $0.zooms = $0.zooms.movingEnd(of: id, to: time, duration: source.duration) }
+    }
+
+    /// Replaces the automatic zooms with new ones from the telemetry, keeping the manual ones.
+    func regenerateZooms() {
+        guard let source, let telemetry = source.telemetry else { return }
+        let generated = AutoZoomGenerator.segments(for: telemetry, duration: source.duration)
+        edit("Regenerate Zooms") { $0.zooms = $0.zooms.regenerated(with: generated) }
+    }
+
+    /// Whether zoomed parts look soft: the recording has fewer than 2 video pixels per screen
+    /// point, e.g. a Retina display recorded without Native Resolution.
+    var zoomsLookSoft: Bool {
+        (source?.telemetry?.pixelsPerPoint ?? 2) < 2
+    }
+
+    /// The filmstrip's picture nearest source time `time`, once loaded.
+    func thumbnail(at time: Double) -> CGImage? {
+        guard !thumbnails.isEmpty, timeMap.sourceDuration > 0 else { return nil }
+        let index = Int(time / timeMap.sourceDuration * Double(thumbnails.count))
+        return thumbnails[min(max(index, 0), thumbnails.count - 1)]
+    }
+
+    private var newZoomAtPlayhead: ZoomSegment? {
+        guard let source else { return nil }
+        let focus: ZoomSegment.Focus = source.telemetry?.cursor.isEmpty == false ? .followCursor : .fixed(center: CGPoint(x: 0.5, y: 0.5))
+        return project.zooms.newZoom(at: timeMap.snapped(playheadSourceTime), focus: focus, duration: source.duration)
     }
 }

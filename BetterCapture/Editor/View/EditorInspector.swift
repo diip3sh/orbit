@@ -7,8 +7,8 @@
 
 import SwiftUI
 
-/// Style controls for the overlays drawn from input telemetry (click highlights and keystrokes),
-/// and the audio tracks' volumes.
+/// The selected zoom, style controls for the overlays drawn from input telemetry (click highlights
+/// and keystrokes), and the audio tracks' volumes.
 struct EditorInspector: View {
     @Bindable var viewModel: EditorViewModel
 
@@ -16,6 +16,43 @@ struct EditorInspector: View {
         let telemetry = viewModel.source?.telemetry
 
         Form {
+            Section {
+                if let zoom = Binding($viewModel.selectedZoom) {
+                    LabeledContent("Scale") {
+                        Slider(value: zoom.scale, in: 1.25...4)
+                    }
+                    Picker("Focus", selection: zoom.followsCursor) {
+                        Text("Follow Cursor").tag(true)
+                        Text("Fixed").tag(false)
+                    }
+                    .disabled(telemetry == nil)
+                    if let center = Binding(zoom.fixedCenter), let videoSize = viewModel.source?.naturalSize {
+                        ZoomFocusPad(
+                            image: viewModel.thumbnail(at: zoom.wrappedValue.range.lowerBound),
+                            videoSize: videoSize,
+                            scale: zoom.wrappedValue.scale,
+                            center: center
+                        )
+                    }
+                } else {
+                    Text("Select a zoom on the timeline to change it.")
+                        .foregroundStyle(.secondary)
+                }
+                Button("Regenerate Automatic Zooms") {
+                    viewModel.regenerateZooms()
+                }
+                .disabled(telemetry == nil)
+            } header: {
+                Text("Zoom")
+            } footer: {
+                if viewModel.zoomsLookSoft {
+                    Text("""
+                        Zoomed parts look soft: this recording has fewer than 2 pixels per screen point. \
+                        On a Retina display, turn on Native Resolution in Settings → Video → Advanced.
+                        """)
+                }
+            }
+
             Section {
                 Toggle("Highlight Clicks", isOn: $viewModel.clickHighlights.isEnabled)
                 ColorPicker("Color", selection: $viewModel.clickHighlights.color.cgColor)

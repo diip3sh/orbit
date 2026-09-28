@@ -13,6 +13,10 @@ struct EditorProjectTests {
 
     @Test func roundTripsThroughJSON() throws {
         var project = EditorProject(cuts: [0..<1.5, 10..<12.25], splits: [5])
+        project.zooms = [
+            ZoomSegment(range: 2..<4, focus: .followCursor),
+            ZoomSegment(range: 5..<7, scale: 1.5, focus: .fixed(center: CGPoint(x: 0.25, y: 0.75)), isAutomatic: true)
+        ]
         project.clickHighlights.buttons = .left
         project.keystrokes.showsAllKeys = true
         project.audio[track: 1].isMuted = true

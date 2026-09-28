@@ -34,7 +34,7 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   && { pkill -x BetterCapture; open /tmp/bc-build/dd/Build/Products/Debug/BetterCapture.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 264 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 297 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -253,7 +253,7 @@ Audio section sets each track's volume and mute.
 |---|---|
 | `Editor/Render/TimeMap.swift` | Output ↔ source time by binary search, and every cut operation: normalize, add, restore, move a kept range's edge, divide at splits |
 | `Editor/Render/CompositionBuilder.swift`, `EditorComposition.swift` | `AVMutableComposition` of the kept ranges (every track, source track IDs), the video composition, and the `AVAudioMix` with volumes and fades |
-| `Editor/ViewModel/EditorViewModel.swift` | `// MARK: - Cutting` extension: `split()`, `select(at:)`, `cutSelection()`, `moveStart`/`moveEnd(ofKeptRange:to:)`; rebuilds swap only what changed |
+| `Editor/ViewModel/EditorViewModel.swift` | `// MARK: - Cutting` extension: `split()`, `select(at:)`, `deleteSelection()`, `moveStart`/`moveEnd(ofKeptRange:to:)`; rebuilds swap only what changed |
 | `Editor/View/EditorTimelineView.swift`, `TrimHandle.swift` | Source-time timeline: dimmed cuts, splits, selection, handles |
 | `Editor/Model/AudioMixSettings.swift` | Volume and mute per audio track, by the recording's track order |
 
@@ -271,6 +271,38 @@ Key facts:
   left 57% of the volume, 20 ms 20%, 25 ms 2%.
 - Audio tracks are named by the writer's order: two tracks are system audio then microphone; one
   track is just "Audio" since it could be either.
+
+### S1 — Editor, phase 4: zoom (`feat/editor-shell`, spec 0003)
+
+A recording with telemetry opens with automatic zooms on its clicks and typing. The zoom lane
+under the timeline shows every zoom: click to select, drag to move, handles to resize, **Z** adds
+one at the playhead, **⌫** deletes the selected one. The inspector's Zoom section sets its scale
+and focus (follow the cursor, or a fixed point dragged on a picture of the frame) and regenerates
+the automatic zooms.
+
+| File | Role |
+|---|---|
+| `Editor/Model/ZoomSegment.swift` | Source range, scale, focus (fractions of the video, top-left origin), `isAutomatic`; every edit of the zoom list, which keeps it sorted and apart and makes the zoom it changes manual |
+| `Editor/Service/AutoZoomGenerator.swift` | Pure: groups presses (clicks, and keys at the last click) that are close in time and fit one view; `Configuration` holds the constants |
+| `Editor/Render/CameraPath.swift` | The view over time, sampled at 120 Hz: a critically damped spring per axis, scale in log space, follow-cursor with a dead zone |
+| `Editor/Render/FrameRenderer.swift` | Draws clicks, magnifies the frame to the view, then draws the keystroke chip unmagnified |
+| `Editor/View/ZoomLane.swift`, `ZoomFocusPad.swift` | The timeline's zoom lane; the inspector's fixed-focus picker |
+| `Editor/ViewModel/EditorViewModel.swift` | `// MARK: - Zooming` extension; `selection` is an `EditorSelection` (a segment or a zoom), and ⌫ removes either |
+
+Key facts:
+- A new project (no `.edit.json`) gets the automatic zooms; they're saved with the first edit.
+  Regenerating replaces automatic zooms and keeps manual ones; editing a zoom makes it manual.
+- Zooms closer than 1 s merge when their presses fit one view; otherwise the first ends where the
+  second starts, so the view pans across instead of zooming out and in. Presses outside the video
+  (e.g. beside a recorded window) are ignored.
+- The spring (10 rad/s) finishes 96% of a move in 0.5 s and stops within 0.04 px at 4K after
+  about 1.4 s, so frames with no zoom are the source's pixels exactly.
+- Only cursor samples inside follow-cursor zooms are placed. Measured on an M1, Debug, 10 min with
+  455 zooms (half following the cursor): the plan builds in ~45 ms (camera 36 ms, cursor 9 ms);
+  0.1 ms without zooms. A zoomed 4K frame with a ring and a chip renders in 4.7 ms p50 / 8.1 ms p95
+  (4.2 / 7.4 unzoomed).
+- The soft-zoom hint shows when the recording has under 2 video pixels per screen point
+  (`InputTelemetry.pixelsPerPoint`); telemetry doesn't record the Native Resolution setting itself.
 
 ### Telemetry JSON (version 3)
 
@@ -311,7 +343,8 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | S1 editor phase 1: shell and playback | Done; open/scrub/close still need a check on a real 10-min 4K recording (see spec 0003) |
 | S1 editor phase 2: render pipeline, click highlights, keystrokes, export | Done; highlight placement still needs checking on real recordings of each capture kind. 4K render measured at the 8 ms p95 budget on an M1 (see spec 0003) |
 | S1 editor phase 3: trim, split and cut, audio volume | Done; trimming, cutting and clicks at cuts still need a check in the app on a real recording |
-| S1 editor phases 4–6 (zoom, cursor, canvas and export polish) | Todo, spec 0003 |
+| S1 editor phase 4: auto-zoom, zoom lane, camera | Done; auto-zoom placement, full-frame-rate transitions and editing zooms on the timeline still need a check in the app on real recordings |
+| S1 editor phases 5–6 (cursor, canvas and export polish) | Todo, spec 0003 |
 
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0
 (portable with attribution). `lzhgus/Capso` (BSL, bans screen-capture use) and

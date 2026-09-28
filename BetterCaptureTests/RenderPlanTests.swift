@@ -74,6 +74,31 @@ struct RenderPlanTests {
         #expect(markers[0].diameter == 88)
     }
 
+    @Test func placesCursorPositionsWhileAZoomFollowsItWithTheGeometryInEffect() {
+        var telemetry = telemetry
+        telemetry.cursor = [1, 3, 6, 9].map { InputTelemetry.CursorSample(time: $0, location: CGPoint(x: 500, y: 380)) }
+        let zooms = [
+            ZoomSegment(range: 4..<7, focus: .followCursor),
+            ZoomSegment(range: 8..<10, focus: .fixed(center: CGPoint(x: 0.5, y: 0.5)))
+        ]
+
+        let points = RenderPlan.cursorPoints(for: telemetry, during: zooms)
+
+        // From the position at the zoom's start
+        #expect(points.map(\.time) == [3, 6])
+        // 800 of 1600 px from the left and 600 of 1200 from the top; after the move, 600 px from the left
+        #expect(points.map(\.point) == [CGPoint(x: 0.5, y: 0.5), CGPoint(x: 0.375, y: 0.5)])
+    }
+
+    @Test func buildsTheCameraFromTheZooms() async {
+        let project = EditorProject(zooms: [ZoomSegment(range: 1..<9, focus: .fixed(center: CGPoint(x: 0.25, y: 0.25)))])
+
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: nil), keyLabels: nil)
+
+        #expect(plan.camera.viewport(at: 0) == .whole)
+        #expect(plan.camera.viewport(at: 5).scale > 1.99)
+    }
+
     @Test func highlightsOnlyTheChosenButton() {
         var style = ClickHighlightStyle()
         style.buttons = .right

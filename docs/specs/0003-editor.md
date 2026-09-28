@@ -149,6 +149,7 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
 
     /// Source ranges left out of the output, sorted and non-overlapping. Trimming is a cut at either end.
     var cuts: [Range<Double>] = []
+    var splits: [Double] = []
     var zooms: [ZoomSegment] = []
     var clickHighlights = ClickHighlightStyle()
     var keystrokes = KeystrokeOverlayStyle()
@@ -236,6 +237,16 @@ These apply to every phase, on top of `AGENTS.md`.
 ## Phases
 
 Phases 0–4 are the first shippable editor. Each phase ends in a working, mergeable state.
+
+| Phase | Status | Left to check in the app, on real recordings |
+| ----- | ------ | -------------------------------------------- |
+| 0 - Recording prerequisites | Done | Cursor kinds (arrow → I-beam → pointing hand) in a v3 recording made without the cursor |
+| 1 - Editor shell and playback | Done | Scrubbing a 10-minute 4K recording; releases on close (Memory Graph) |
+| 2 - Render pipeline, overlays, export v1 | Done | Highlight placement for each capture kind; redraw on a style change; render budget in Instruments |
+| 3 - Trim and cut | Done | Trimming, splitting and cutting; no clicks at cuts |
+| 4 - Zoom | Done | Where auto-zoom lands; transitions at full frame rate; moving and resizing zooms on the timeline |
+| 5 - Cursor | Todo | |
+| 6 - Canvas and export polish | Todo | |
 
 ### Phase 0 - Recording prerequisites (S)
 
@@ -364,6 +375,19 @@ The core of the editor. After this phase, adding an effect means adding a precom
 - Tests: the generator is deterministic on fixtures, produces no overlapping segments and keeps segments within the duration; the camera path has no jumps between samples beyond a threshold, keeps the viewport inside the frame, and reaches 1× between segments.
 - Zoom transitions play at full frame rate in preview.
 
+**Status:** Built and tested, including the "Done when" tests above and a render of a zoomed frame whose click ring lands at the frame's centre at twice its size, while the keystroke chip keeps its size and place. Still to check in the app on real recordings: where auto-zoom lands, that transitions play at full frame rate, and moving and resizing zooms on the timeline. Where the build differs from the plan:
+
+- Automatic zooms are made when a project is created (the recording has no `.edit.json` yet), and saved with the first edit. Editing an automatic zoom makes it manual, so "Regenerate" keeps it.
+- Focus points are fractions of the video's width and height from its top-left corner, so they don't depend on its resolution.
+- Presses outside the video, such as clicks beside a recorded window, are ignored, and so is typing after them. Keys pressed before any click are ignored too.
+- Zooms closer than 1 s merge only when all their presses fit one view. Otherwise the first ends where the second starts (halfway between their presses when they'd overlap), so the camera pans across without zooming out.
+- `CameraPath` uses the exact step of a critically damped spring at 10 rad/s, for each of centre x, centre y and log scale. A move is 96% done after 0.5 s, and each axis stops within 0.04 px at 4K, about 1.4 s after a 2× zoom starts or ends. Frames without zoom are then the source's pixels exactly. The follow-cursor dead zone is the middle half of the view.
+- Clicks are drawn before the frame is magnified, so their rings zoom with the content; the keystroke chip is drawn after.
+- Only the cursor samples inside zooms that follow the cursor are placed. Measured on an M1 in Debug, for a 10-minute recording with 455 zooms, half of them following the cursor: the plan builds in about 45 ms (36 ms camera, 9 ms cursor), and 0.1 ms without zooms. A zoomed 4K frame with a ring and a chip renders in 4.7 ms p50 and 8.1 ms p95, against 4.2 and 7.4 ms unzoomed.
+- The timeline has one selection (`EditorSelection`): a segment or a zoom. ⌫ cuts the segment or deletes the zoom, and Z adds a zoom at the playhead: 3 s long, or up to the next zoom, and at least 0.5 s. A zoom added by hand follows the cursor when the telemetry has one to follow; otherwise it's fixed on the frame's centre.
+- The inspector sets a fixed focus by dragging the view's outline on a picture of the frame (`ZoomFocusPad`), which uses the filmstrip's thumbnails.
+- Telemetry doesn't record the Native Resolution setting, so the hint shows when the recording has fewer than 2 video pixels per screen point (`InputTelemetry.pixelsPerPoint`), whatever the reason.
+
 ### Phase 5 - Cursor (M)
 
 Needs Phase 0 data and recordings made with the cursor hidden (`cursorInVideo == false`). Otherwise the inspector explains why cursor options are unavailable.
@@ -408,9 +432,9 @@ Needs Phase 0 data and recordings made with the cursor hidden (`cursorInVideo ==
 
 ```text
 BetterCapture/Editor/
-  Model/      EditorProject, EditorSource, EditorError, FrameGrid, TimelineMarkers, ZoomSegment,
-              ClickHighlightStyle, KeystrokeOverlayStyle, RGBAColor, ExportFormat, CursorStyle,
-              CanvasStyle, AudioMixSettings
+  Model/      EditorProject, EditorSource, EditorError, EditorSelection, FrameGrid, TimelineMarkers,
+              ZoomSegment, ClickHighlightStyle, KeystrokeOverlayStyle, RGBAColor, ExportFormat,
+              CursorStyle, CanvasStyle, AudioMixSettings
   Render/     RenderPlan, TimeMap, CameraPath, CursorPath, CursorShapeTrack, CursorSprites, ClickMarker,
               KeystrokeChip, OverlayImages, CanvasLayout, FrameRenderer, EditorCompositor, EditorInstruction,
               CompositionBuilder, EditorComposition
@@ -418,12 +442,12 @@ BetterCapture/Editor/
               AutoZoomGenerator, KeyLabelFormatter
   ViewModel/  EditorViewModel, PlaybackController
   View/       EditorWindowManager, EditorView, PlayerLayerView, EditorTimelineView, TrimHandle,
-              TransportBar, EditorInspector, ExportSheet
+              ZoomLane, ZoomFocusPad, TransportBar, EditorInspector, ExportSheet
 ```
 
 `EditorTimelineView` is named so that it doesn't collide with SwiftUI's `TimelineView`.
 
-Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry types, in `BetterCapture/Model` and `BetterCapture/Service`, because the recorder writes that data. Phase 1 added `UnsupportedVersionError` to `BetterCapture/Model`, because `InputTelemetry` throws it too. Phase 2 added `PartitioningIndex` there, because `InputTelemetry.geometry(at:)` uses it.
+Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry types, in `BetterCapture/Model` and `BetterCapture/Service`, because the recorder writes that data. Phase 1 added `UnsupportedVersionError` to `BetterCapture/Model`, because `InputTelemetry` throws it too. Phase 2 added `PartitioningIndex` there, because `InputTelemetry.geometry(at:)` uses it. Phase 4 added `InputTelemetry.normalizedVideoPoint(for:at:)` and `pixelsPerPoint`.
 
 ## Risks
 

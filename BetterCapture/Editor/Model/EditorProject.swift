@@ -24,6 +24,9 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     /// Where the timeline is divided, so the part between two splits can be selected and cut.
     var splits: [Double] = []
 
+    /// Sorted and apart.
+    var zooms: [ZoomSegment] = []
+
     var clickHighlights = ClickHighlightStyle()
     var keystrokes = KeystrokeOverlayStyle()
     var audio = AudioMixSettings()
@@ -48,6 +51,7 @@ extension EditorProject {
         }
         cuts = try container.decode([Range<Double>].self, forKey: .cuts)
         splits = try container.decodeIfPresent([Double].self, forKey: .splits) ?? []
+        zooms = try container.decodeIfPresent([ZoomSegment].self, forKey: .zooms) ?? []
         clickHighlights = try container.decodeIfPresent(ClickHighlightStyle.self, forKey: .clickHighlights) ?? ClickHighlightStyle()
         keystrokes = try container.decodeIfPresent(KeystrokeOverlayStyle.self, forKey: .keystrokes) ?? KeystrokeOverlayStyle()
         audio = try container.decodeIfPresent(AudioMixSettings.self, forKey: .audio) ?? AudioMixSettings()

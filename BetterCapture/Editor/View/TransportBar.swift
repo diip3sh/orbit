@@ -7,8 +7,8 @@
 
 import SwiftUI
 
-/// Play/pause, frame stepping, the playhead's time, and cutting. Space plays and pauses, ← and →
-/// step a frame, S splits at the playhead and ⌫ cuts the selection.
+/// Play/pause, frame stepping, the playhead's time, cutting and zooming. Space plays and pauses,
+/// ← and → step a frame, S splits at the playhead, Z adds a zoom there and ⌫ removes the selection.
 struct TransportBar: View {
     let viewModel: EditorViewModel
 
@@ -46,12 +46,20 @@ struct TransportBar: View {
             .keyboardShortcut("s", modifiers: [])
             .help("Split at the playhead (S)")
 
-            Button("Cut Selection", systemImage: "trash") {
-                viewModel.cutSelection()
+            Button("Add Zoom", systemImage: "plus.magnifyingglass") {
+                viewModel.addZoom()
+            }
+            .keyboardShortcut("z", modifiers: [])
+            .help("Add a zoom at the playhead (Z)")
+            .disabled(!viewModel.canAddZoom)
+
+            let deletesZoom = viewModel.selectedZoom != nil
+            Button(deletesZoom ? "Delete Zoom" : "Cut Selection", systemImage: "trash") {
+                viewModel.deleteSelection()
             }
             .keyboardShortcut(.delete, modifiers: [])
-            .help("Cut the selected part (⌫)")
-            .disabled(!viewModel.canCutSelection)
+            .help(deletesZoom ? "Delete the selected zoom (⌫)" : "Cut the selected part (⌫)")
+            .disabled(!viewModel.canDeleteSelection)
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.borderless)
