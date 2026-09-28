@@ -243,6 +243,31 @@ Key facts:
   10-min plan (3,000 clicks, 12,000 keys) builds in ~24 ms.
 - `InputTelemetry.geometry(at:)` and `RandomAccessCollection.partitioningIndex` are the shared lookups.
 
+### C1 — Screenshots
+
+Menu bar **Capture Area / Capture Window / Capture Screen** (idle state only; no shortcuts or URLs yet).
+Saves `BetterCapture_Screenshot_<timestamp>.png` into the recordings' output folder at native pixels,
+with the recording visibility settings, then calls `ScreenshotController.onCaptured` (hand-off for C2).
+
+| File | Role |
+|---|---|
+| `Screenshot/ViewModel/ScreenshotController.swift` | Owned by `AppDelegate`; permission check, selection, `isCapturing`, `canCapture`, failure notification, `onCaptured` |
+| `Screenshot/Service/ScreenshotService.swift` | Display lookup, `SCScreenshotManager.captureImage`, PNG via ImageIO (`@concurrent`) |
+| `Screenshot/Service/WindowPicker.swift` | System `SCContentSharingPicker` in `.window` mode, observed only while picking |
+| `Screenshot/View/ScreenshotButtons.swift` | The three popover rows |
+| `Service/SCContentFilter+CaptureScale.swift` | Window-scale fix shared with recording (moved from `RecorderViewModel`) |
+
+Key facts:
+- Shared with recording: `CaptureSizeCalculator.sourceRect` (area → display rect), `filter.captureScale`,
+  `SettingsStore.filename(prefix:fileExtension:date:)`, `ContentFilterService.applySettings`.
+- `SCContentSharingPicker.shared` reports results to every observer. `CaptureEngine.isPickingContent`
+  makes the recording selection ignore picks it didn't ask for.
+- Cursor follows `showCursor`, not `capturesCursor`: there's no editor to redraw it.
+- Capture Screen waits 250 ms for the popover's close animation (only matters with Show BetterCapture on).
+- Window shots use the window recording config: SCK fits window + shadow into the window's frame, so
+  shadow padding is uneven (same as recordings).
+- Verified on an M2 (1710×1112 pt, 2×): screen 3420×2224, window and area at 2×, sRGB, no BetterCapture UI.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -282,6 +307,7 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | S1 editor phase 1: shell and playback | Done; open/scrub/close still need a check on a real 10-min 4K recording (see spec 0003) |
 | S1 editor phase 2: render pipeline, click highlights, keystrokes, export | Done; highlight placement still needs checking on real recordings of each capture kind. 4K render measured at the 8 ms p95 budget on an M1 (see spec 0003) |
 | S1 editor phases 3–6 (cuts, zoom, cursor, canvas and export polish) | Todo, spec 0003 |
+| C1 screenshots (area, window, screen) | Done, verified on real captures; Quick Access hand-off via `onCaptured` still to wire (C2) |
 
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0
 (portable with attribution). `lzhgus/Capso` (BSL, bans screen-capture use) and

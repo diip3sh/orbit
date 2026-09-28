@@ -768,10 +768,7 @@ final class SettingsStore {
 
     /// Generates a filename based on the current timestamp
     func generateFilename() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd-HH.mm.ss"
-        let timestamp = formatter.string(from: Date())
-        return "BetterCapture_\(timestamp).\(containerFormat.fileExtension)"
+        Self.filename(prefix: "BetterCapture", fileExtension: containerFormat.fileExtension, date: Date())
     }
 
     /// Returns the full output URL for a new recording

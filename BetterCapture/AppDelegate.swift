@@ -22,6 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let viewModel = RecorderViewModel()
 
+    /// Shares the recorder's settings and notifications
+    lazy var screenshots = ScreenshotController(settings: viewModel.settings, notificationService: viewModel.notificationService)
+
     private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "AppDelegate")

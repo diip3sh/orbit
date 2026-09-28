@@ -49,4 +49,25 @@ enum CaptureSizeCalculator {
         guard useNativeResolution else { return contentRect.size }
         return CGSize(width: contentRect.width * scale, height: contentRect.height * scale)
     }
+
+    /// Converts an area selection to a display capture's `sourceRect`.
+    ///
+    /// Flips from global screen points (bottom-left origin) to display points with a top-left
+    /// origin, and grows the size to even pixel counts for codec compatibility.
+    /// - Parameters:
+    ///   - screenRect: The selection, in global screen points.
+    ///   - screenFrame: The frame of the screen it was made on, same space.
+    ///   - scale: That screen's backing scale factor.
+    static func sourceRect(for screenRect: CGRect, in screenFrame: CGRect, scale: CGFloat) -> CGRect {
+        let localX = screenRect.minX - screenFrame.minX
+        let localY = screenRect.minY - screenFrame.minY
+        let evenPixelWidth = ceil(screenRect.width * scale / 2) * 2
+        let evenPixelHeight = ceil(screenRect.height * scale / 2) * 2
+        return CGRect(
+            x: localX,
+            y: screenFrame.height - localY - screenRect.height,
+            width: evenPixelWidth / scale,
+            height: evenPixelHeight / scale
+        )
+    }
 }

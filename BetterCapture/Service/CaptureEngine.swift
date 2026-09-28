@@ -50,6 +50,10 @@ final class CaptureEngine: NSObject {
     private let picker = SCContentSharingPicker.shared
     private let contentFilterService = ContentFilterService()
 
+    /// Whether the picker is open for a recording selection. `SCContentSharingPicker.shared` reports
+    /// every result to every observer, and screenshots present it too.
+    private var isPickingContent = false
+
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "CaptureEngine")
 
     // Queues for sample buffer handling
@@ -91,6 +95,7 @@ final class CaptureEngine: NSObject {
     ///         appear behind the menu bar popover depending on window levels. If this occurs,
     ///         the user can click outside the menu bar to dismiss it before presenting the picker.
     func presentPicker() {
+        isPickingContent = true
         // Activate picker when it's actually needed
         picker.isActive = true
         picker.present()
@@ -353,6 +358,9 @@ extension CaptureEngine: SCContentSharingPickerObserver {
 
     nonisolated func contentSharingPicker(_ picker: SCContentSharingPicker, didUpdateWith filter: SCContentFilter, for stream: SCStream?) {
         Task { @MainActor in
+            guard self.isPickingContent else { return }
+            self.isPickingContent = false
+
             self.contentFilter = filter
             self.delegate?.captureEngine(self, didUpdateFilter: filter)
             logger.info("Content filter updated from picker")
@@ -364,6 +372,9 @@ extension CaptureEngine: SCContentSharingPickerObserver {
 
     nonisolated func contentSharingPicker(_ picker: SCContentSharingPicker, didCancelFor stream: SCStream?) {
         Task { @MainActor in
+            guard self.isPickingContent else { return }
+            self.isPickingContent = false
+
             // Clear the content filter when picker is cancelled or "Stop Sharing" is clicked
             self.contentFilter = nil
 
@@ -377,6 +388,7 @@ extension CaptureEngine: SCContentSharingPickerObserver {
 
     nonisolated func contentSharingPickerStartDidFailWithError(_ error: any Error) {
         Task { @MainActor in
+            self.isPickingContent = false
             logger.error("Picker failed to start: \(error.localizedDescription)")
         }
     }

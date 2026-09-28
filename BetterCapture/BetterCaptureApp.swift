@@ -21,7 +21,7 @@ struct BetterCaptureApp: App {
         // Menu bar extra - the primary interface
         // Using .window style to support custom toggle switches
         MenuBarExtra {
-            MenuBarView(viewModel: viewModel, editLastRecording: appDelegate.editLastRecording)
+            MenuBarView(viewModel: viewModel, screenshots: appDelegate.screenshots, editLastRecording: appDelegate.editLastRecording)
                 .task {
                     await viewModel.requestPermissionsOnLaunch()
                 }

@@ -155,4 +155,52 @@ struct CaptureSizeCalculatorTests {
 
         #expect(size == CGSize(width: 1512, height: 949))
     }
+
+    // MARK: - sourceRect
+
+    @Test func sourceRectOnA2xDisplayAtTheOrigin() {
+        let rect = CaptureSizeCalculator.sourceRect(
+            for: CGRect(x: 100, y: 200, width: 301, height: 150),
+            in: CGRect(x: 0, y: 0, width: 1512, height: 982),
+            scale: 2
+        )
+
+        #expect(rect == CGRect(x: 100, y: 632, width: 301, height: 150))
+    }
+
+    @Test func sourceRectRoundsWidthUpToAnEvenPixelCount() {
+        let oneX = CaptureSizeCalculator.sourceRect(
+            for: CGRect(x: 0, y: 0, width: 301, height: 100),
+            in: CGRect(x: 0, y: 0, width: 1512, height: 982),
+            scale: 1
+        )
+        #expect(oneX.width == 302)
+
+        let twoX = CaptureSizeCalculator.sourceRect(
+            for: CGRect(x: 0, y: 0, width: 100.25, height: 100),
+            in: CGRect(x: 0, y: 0, width: 1512, height: 982),
+            scale: 2
+        )
+        #expect(twoX.width == 101)
+    }
+
+    @Test func sourceRectOnAScreenToTheRightOfThePrimary() {
+        let rect = CaptureSizeCalculator.sourceRect(
+            for: CGRect(x: 1612, y: 100, width: 400, height: 300),
+            in: CGRect(x: 1512, y: 0, width: 2560, height: 1440),
+            scale: 1
+        )
+
+        #expect(rect == CGRect(x: 100, y: 1040, width: 400, height: 300))
+    }
+
+    @Test func sourceRectOnAScreenAboveThePrimary() {
+        let rect = CaptureSizeCalculator.sourceRect(
+            for: CGRect(x: 10, y: 1000, width: 200, height: 100),
+            in: CGRect(x: 0, y: 982, width: 2560, height: 1440),
+            scale: 1
+        )
+
+        #expect(rect.origin.y == 1322)
+    }
 }

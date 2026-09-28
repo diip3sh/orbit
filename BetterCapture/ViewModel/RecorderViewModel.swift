@@ -197,28 +197,11 @@ final class RecorderViewModel {
             let filter = SCContentFilter(display: display, excludingWindows: [])
 
             // Convert screen rect (NSScreen coordinates, bottom-left origin) to
-            // sourceRect (display coordinates, top-left origin)
-            let displayHeight = CGFloat(display.height)
-            let screenOrigin = result.screen.frame.origin
-
-            let localX = result.screenRect.origin.x - screenOrigin.x
-            let localY = result.screenRect.origin.y - screenOrigin.y
-
-            // Flip Y: NSScreen has origin at bottom-left, sourceRect uses top-left
-            let flippedY = displayHeight - localY - result.screenRect.height
-
-            // Snap dimensions to even pixel counts for codec compatibility
-            let scale = result.screen.backingScaleFactor
-            let pixelWidth = result.screenRect.width * scale
-            let pixelHeight = result.screenRect.height * scale
-            let evenPixelWidth = ceil(pixelWidth / 2) * 2
-            let evenPixelHeight = ceil(pixelHeight / 2) * 2
-
-            let sourceRect = CGRect(
-                x: localX,
-                y: flippedY,
-                width: evenPixelWidth / scale,
-                height: evenPixelHeight / scale
+            // sourceRect (display coordinates, top-left origin), snapped to even pixel counts
+            let sourceRect = CaptureSizeCalculator.sourceRect(
+                for: result.screenRect,
+                in: result.screen.frame,
+                scale: result.screen.backingScaleFactor
             )
 
             // Clear any existing picker selection (mutually exclusive)
@@ -475,7 +458,7 @@ final class RecorderViewModel {
         if rect.width > 0 && rect.height > 0 {
             return CaptureSizeCalculator.videoSize(
                 contentRect: rect,
-                scale: pointPixelScale(for: filter),
+                scale: filter.captureScale,
                 useNativeResolution: applyScale
             )
         }
@@ -489,36 +472,6 @@ final class RecorderViewModel {
         }
 
         return CGSize(width: 1920, height: 1080)
-    }
-
-    /// The point-to-pixel scale to size the capture with.
-    ///
-    /// Window captures cannot trust `SCContentFilter.pointPixelScale`: it reports the main
-    /// display's scale for a window on a display arranged above the primary one, which sizes the
-    /// video larger than ScreenCaptureKit renders and pads the output. Resolve the scale from the
-    /// display the window actually occupies instead.
-    private func pointPixelScale(for filter: SCContentFilter) -> CGFloat {
-        let reported = CGFloat(filter.pointPixelScale)
-
-        guard filter.style == .window, let window = filter.includedWindows.first else {
-            return reported
-        }
-
-        return CaptureSizeCalculator.windowScale(
-            windowFrame: window.frame,
-            displays: Self.connectedDisplays(),
-            fallback: reported
-        )
-    }
-
-    /// The connected displays in the global CoreGraphics space that `SCWindow.frame` uses.
-    private static func connectedDisplays() -> [DisplayGeometry] {
-        NSScreen.screens.compactMap { screen in
-            guard let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID else {
-                return nil
-            }
-            return DisplayGeometry(frame: CGDisplayBounds(displayID), scaleFactor: screen.backingScaleFactor)
-        }
     }
 }
 

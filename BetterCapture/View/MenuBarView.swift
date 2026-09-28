@@ -11,6 +11,7 @@ import ScreenCaptureKit
 /// The main menu bar interface for BetterCapture
 struct MenuBarView: View {
     @Bindable var viewModel: RecorderViewModel
+    let screenshots: ScreenshotController
     let editLastRecording: () -> Void
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
@@ -73,6 +74,7 @@ struct MenuBarView: View {
                     }
                 }
                 .padding(.top, 8)
+                ScreenshotButtons(controller: screenshots, recorder: viewModel)
             }
 
             MenuBarDivider()
@@ -494,5 +496,5 @@ struct PermissionRow: View {
 // MARK: - Preview
 
 #Preview {
-    MenuBarView(viewModel: RecorderViewModel()) {}
+    MenuBarView(viewModel: RecorderViewModel(), screenshots: .init(settings: SettingsStore(), notificationService: .init(settings: SettingsStore()))) {}
 }
