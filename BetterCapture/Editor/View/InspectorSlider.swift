@@ -29,8 +29,9 @@ struct InspectorSlider: View {
                 Text(title)
                 Spacer()
                 label(value)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                    .monospaced()
+                    .foregroundStyle(EditorTheme.dim)
             }
             Slider(value: $value, in: range)
                 .labelsHidden()

@@ -12,9 +12,13 @@ import Testing
 
 struct AutoZoomGeneratorTests {
 
-    /// A 1000×500 pt display recorded at 2000×1000 px, with clicks at the given fractions of the
-    /// video's width and height.
-    private func telemetry(clicks: [(time: Double, point: CGPoint)], keys: [(time: Double, isRepeat: Bool)] = []) -> InputTelemetry {
+    /// A 1000×500 pt display recorded at 2000×1000 px, with clicks and cursor samples at the given
+    /// fractions of the video's width and height.
+    private func telemetry(
+        clicks: [(time: Double, point: CGPoint)] = [],
+        keys: [(time: Double, isRepeat: Bool)] = [],
+        cursor: [(time: Double, point: CGPoint)] = []
+    ) -> InputTelemetry {
         var telemetry = InputTelemetry(capture: .init(kind: .display, videoSize: CGSize(width: 2000, height: 1000)), keystrokesAvailable: true)
         telemetry.geometry = [
             .init(time: 0, screenRect: CGRect(x: 0, y: 0, width: 1000, height: 500), contentRect: CGRect(x: 0, y: 0, width: 1000, height: 500), contentScale: 1, scaleFactor: 2)
@@ -27,6 +31,7 @@ struct AutoZoomGeneratorTests {
             ]
         }
         telemetry.keys = keys.map { .init(time: $0.time, keyCode: kVK_ANSI_A, modifiers: [], isRepeat: $0.isRepeat) }
+        telemetry.cursor = cursor.map { .init(time: $0.time, location: CGPoint(x: $0.point.x * 1000, y: $0.point.y * 500)) }
         return telemetry
     }
 
@@ -79,6 +84,35 @@ struct AutoZoomGeneratorTests {
         #expect(zooms(telemetry(clicks: [(0.25, CGPoint(x: 0.5, y: 0.5)), (9.9, CGPoint(x: 0.5, y: 0.5))]), duration: 10).map(\.range) == [0..<1.75, 8.5..<10])
         #expect(zooms(telemetry(clicks: [(0.5, CGPoint(x: 0.5, y: 0.5))]), duration: 1).map(\.range) == [0..<1])
         #expect(zooms(telemetry(clicks: [(0.5, CGPoint(x: 0.5, y: 0.5))]), duration: 0).isEmpty)
+    }
+
+    @Test func zoomsWhereTheCursorRestsAfterMovingThere() throws {
+        // From the corner to the middle in 0.75 s, then still
+        let move = (0...3).map { step in
+            (time: 1 + 0.25 * Double(step), point: CGPoint(x: 0.1 + 0.15 * Double(step), y: 0.1 + 0.1 * Double(step)))
+        }
+        let zooms = zooms(telemetry(cursor: [(0, CGPoint(x: 0.1, y: 0.1))] + move))
+
+        #expect(zooms.map(\.range) == [1.25..<3.25])
+        let center = try #require(zooms.first?.fixedCenter)
+        #expect(abs(center.x - 0.55) < 1e-9 && abs(center.y - 0.4) < 1e-9)
+    }
+
+    @Test func aCursorPassingThroughNudgedOrOutsideTheVideoDoesNotZoom() {
+        // Moving steadily, a rest a nudge away from the last one, and a rest beside the video
+        let moving = (0..<20).map { (time: 0.1 * Double($0), point: CGPoint(x: 0.05 * Double($0), y: 0.5)) }
+        let nudged = [(time: 0.0, point: CGPoint(x: 0.5, y: 0.5)), (1, CGPoint(x: 0.6, y: 0.55))]
+        let outside = [(time: 0.0, point: CGPoint(x: 0.5, y: 0.5)), (1, CGPoint(x: 1.3, y: 0.5))]
+
+        #expect(zooms(telemetry(cursor: moving), duration: 1.95).isEmpty)
+        #expect(zooms(telemetry(cursor: nudged)).isEmpty)
+        #expect(zooms(telemetry(cursor: outside)).isEmpty)
+    }
+
+    @Test func aRestBeforeAClickThereJoinsItsZoom() {
+        let telemetry = telemetry(clicks: [(2, CGPoint(x: 0.6, y: 0.5))], cursor: [(0, CGPoint(x: 0.1, y: 0.1)), (1, CGPoint(x: 0.6, y: 0.5))])
+
+        #expect(zooms(telemetry).map(\.range) == [0.5..<3.5])
     }
 
     @Test func isDeterministicWithZoomsSortedApartAndInsideTheRecording() {

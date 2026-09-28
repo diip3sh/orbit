@@ -44,7 +44,7 @@ struct RecordingsView: View {
             }
         }
         .frame(minWidth: 520, minHeight: 360)
-        .background(EditorTheme.stage)
+        .editorWindowBackground()
         .tint(EditorTheme.accent)
     }
 }

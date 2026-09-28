@@ -34,7 +34,7 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   && { pkill -x BetterCapture; open /tmp/bc-build/dd/Build/Products/Debug/BetterCapture.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 333 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 336 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -117,22 +117,24 @@ keystrokes (key code + modifiers only, never characters), all on the video timel
 | File | Role |
 |---|---|
 | `Model/InputTelemetry.swift` | Codable file format, pure conversion helpers (`videoTime`, `rebased`, `videoPixel`, `topLeft`, `modifierNames`) |
-| `Service/InputTelemetryRecorder.swift` | Cursor polling (≤60 Hz), global mouse/scroll monitor, listen-only key `CGEventTap`, writes the sidecar |
+| `Service/InputTelemetryRecorder.swift` | Cursor polling (≤60 Hz), a listen-only `CGEventTap` for clicks, scrolls and keys (a global mouse monitor without it), writes the sidecar |
 | `Service/CaptureGeometryTracker.swift` | Per-frame `SCStreamFrameInfo` geometry on the capture queue, stored only on change |
 | `Service/AssetWriter.swift` | `sessionStartTime` (host time of file time 0) |
 | `ViewModel/RecorderViewModel.swift` | Starts telemetry after the last `try` in `startRecording`, writes the sidecar in `stopRecording` while the output folder's security scope is held |
 
 Key facts:
-- **Time:** events are stored as host-clock seconds while recording (`NSEvent.timestamp`,
-  `CMClockGetHostTimeClock`, SCStream PTS all share it) and rebased at stop by `sessionStartTime`.
+- **Time:** events are stored as host-clock seconds while recording (tap events are stamped on
+  arrival; `NSEvent.timestamp`, `CMClockGetHostTimeClock`, SCStream PTS all share it) and rebased at
+  stop by `sessionStartTime`.
 - **Position:** locations are global CG points, top-left origin. Map to video pixels with
   `InputTelemetry.videoPixel(for:geometry:)` using the `geometry` entry in effect at that time.
   Verified against real frames for display and window captures.
 - **Window shadows:** with "Show Window Shadows" on, SCK draws window + shadow scaled into the frame.
   SCK reports only the shadow's total size, so the top/bottom split uses the measured
   `InputTelemetry.shadowTopFraction = 0.35` (macOS 27). Re-measure if Apple changes shadows.
-- **Keystrokes** need Input Monitoring (requested when the toggle is turned on; effective after
-  relaunch). Without it `keystrokesAvailable` is false and `keys` is empty.
+- **Clicks, scrolls and keystrokes** need Input Monitoring (requested when the toggle is turned on;
+  effective after relaunch). Without it `keystrokesAvailable` is false, `keys` is empty, and clicks
+  and scrolls come from a global `NSEvent` monitor, which the sandbox feeds only with Accessibility.
 
 ### F2 — Cursor sprites (`feat/cursor-sprites`)
 
@@ -274,7 +276,8 @@ Key facts:
 
 ### S1 — Editor, phase 4: zoom (`feat/editor-shell`, spec 0003)
 
-A recording with telemetry opens with automatic zooms on its clicks and typing. The zoom lane
+A recording with telemetry opens with automatic zooms on its clicks, typing and where the cursor
+rested. The zoom lane
 under the timeline shows every zoom: click to select, drag to move, handles to resize, **Z** adds
 one at the playhead, **⌫** deletes the selected one. The inspector's Zoom section sets its scale
 and focus (follow the cursor, or a fixed point dragged on a picture of the frame) and regenerates
@@ -283,7 +286,7 @@ the automatic zooms.
 | File | Role |
 |---|---|
 | `Editor/Model/ZoomSegment.swift` | Source range, scale, focus (fractions of the video, top-left origin), `isAutomatic`; every edit of the zoom list, which keeps it sorted and apart and makes the zoom it changes manual |
-| `Editor/Service/AutoZoomGenerator.swift` | Pure: groups presses (clicks, and keys at the last click) that are close in time and fit one view; `Configuration` holds the constants |
+| `Editor/Service/AutoZoomGenerator.swift` | Pure: groups presses (clicks, and keys at the last click) and cursor rests that are close in time and fit one view; `Configuration` holds the constants |
 | `Editor/Render/CameraPath.swift` | The view over time, sampled at 120 Hz: a critically damped spring per axis, scale in log space, follow-cursor with a dead zone |
 | `Editor/Render/FrameRenderer.swift` | Draws clicks, magnifies the frame to the view, then draws the keystroke chip unmagnified |
 | `Editor/View/ZoomLane.swift`, `ZoomFocusPad.swift` | The timeline's zoom lane; the inspector's fixed-focus picker |
@@ -295,6 +298,9 @@ Key facts:
 - Zooms closer than 1 s merge when their presses fit one view; otherwise the first ends where the
   second starts, so the view pans across instead of zooming out and in. Presses outside the video
   (e.g. beside a recorded window) are ignored.
+- The cursor rests where it stays within 2% of the video for 0.5 s, at least 15% from where it last
+  rested; the rest counts when it arrived. Recordings without clicks still zoom: two real 13 s
+  window recordings got 2 and 3 zooms.
 - The spring (10 rad/s) finishes 96% of a move in 0.5 s and stops within 0.04 px at 4K after
   about 1.4 s, so frames with no zoom are the source's pixels exactly.
 - Only cursor samples inside follow-cursor zooms are placed. Measured on an M1, Debug, 10 min with
@@ -382,25 +388,29 @@ Key facts:
 
 ### S1 — Editor design (`feat/editor-shell`)
 
-The editor and Recordings windows are always dark, a studio: the preview sits raised on a near-black
-stage, the transport floats on glass under it, and the timeline and inspector are neutral greys with
-one signal orange (`EditorTheme.accent`) for the playhead, the selection and Export. Nothing else is
+The editor and Recordings windows are always dark, after zeron.sh: a violet-black ground (80%) the
+desktop frosts through, text in three tones (ink, dim, faint), hairlines instead of boxes, an
+off-white Export button, and one purple (`EditorTheme.accent`) for the playhead and the selection.
+The preview sits on a faint dot grid, the transport floats on glass under it. Nothing else is
 colored: clicks, keys and zooms are greys, and the default canvas is a slate gradient.
 
 | File | Role |
 |---|---|
 | `Editor/View/EditorTheme.swift` | Colors, spacing on a 4-point grid, and the one animation every state change uses |
-| `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `.glassProminent`, `GlassEffectContainer`), a material with a hairline before; `editorMotion(value:)` animates unless Reduce Motion is on |
+| `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `GlassEffectContainer`), a material with a hairline before; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on |
+| `Editor/View/EditorBackdrop.swift`, `StageDotGrid.swift` | The frosted desktop behind the window; the dot grid behind the preview, fading out before the stage's edges |
+| `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white) and `.editorGhost` (hairline) text buttons |
 | `Editor/View/EditorWindowManager.swift` | `makeWindow`: dark appearance, content under a transparent title bar |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the glass transport |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart), the playhead's knob, the zoom blocks |
-| `Editor/View/Inspector*.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | The inspector's sections, sliders with their values, switches, and tiles whose highlight slides |
-| `Editor/View/ExportSheet.swift`, `ExportProgressBar.swift` | Native pickers with a line on what the format is for; progress |
+| `Editor/View/Inspector*.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | Sections that fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides; a notice on top when the telemetry is missing |
+| `Editor/View/ExportSheet.swift`, `ExportProgressBar.swift` | Native pickers in a grid with a line on what the format is for; progress |
 
 Key facts:
 - Glass only on controls over the stage, never on the timeline (content) or over the live video:
   each glass shape costs a sampling pass on the GPU the compositor also uses.
 - The inspector keeps the system `.inspector`, which macOS 26 draws as glass, so it has no background.
+- Text is ink by default, so it doesn't dim when disabled: `InspectorSection` fades disabled content.
 - Avoid what reads as generated: no gradients or glows in the chrome, no second accent, no cards
   and badges where a native control works, no all-caps titles, hover as a fill step (no lifts or
   scaling).
@@ -425,10 +435,12 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 
 ## Sandbox findings (measured, keep the app sandboxed)
 
-- `NSEvent.mouseLocation` polling and global mouse/scroll monitors work without any permission.
+- `NSEvent.mouseLocation` polling works without any permission. Global mouse/scroll monitors need
+  Accessibility (Apple DTS, developer.apple.com/forums/thread/811443): on macOS 26.3 two recordings
+  made while clicking got no clicks or scrolls.
 - Global `NSEvent` **key** monitors never fire in the sandbox (need Accessibility) — don't use them.
 - Listen-only `CGEvent.tapCreate(.cgSessionEventTap, …, .listenOnly)` works once Input Monitoring is
-  granted; no entitlement or Info.plist key needed.
+  granted; no entitlement or Info.plist key needed. It records keys, clicks and scrolls.
 - `NSCursor.currentSystem` works in the sandbox.
 
 ## Roadmap status

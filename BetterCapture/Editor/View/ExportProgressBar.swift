@@ -19,9 +19,9 @@ struct ExportProgressBar: View {
                 Text("Exporting…")
                 Spacer()
                 Text(progress, format: .percent.precision(.fractionLength(0)))
-                    .monospacedDigit()
+                    .monospaced()
                     .contentTransition(.numericText(value: progress))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(EditorTheme.dim)
             }
             .font(.callout)
             ProgressView(value: progress)

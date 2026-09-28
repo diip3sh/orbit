@@ -34,15 +34,15 @@ struct TimelineRuler: View {
                 let height = index.isMultiple(of: minorPerMajor) ? size.height * 0.45 : size.height * 0.2
                 ticks.addRect(CGRect(x: Double(index) * scale.minor * pointsPerSecond, y: size.height - height, width: 1, height: height))
             }
-            context.fill(ticks, with: .color(.white.opacity(0.22)))
+            context.fill(ticks, with: .color(EditorTheme.faint))
 
             for index in 0...Int(duration / scale.major) {
                 let time = Double(index) * scale.major
                 let label = context.resolve(
                     Text(Self.label(for: time, major: scale.major))
                         .font(.caption2)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .monospaced()
+                        .foregroundStyle(EditorTheme.dim)
                 )
                 let origin = CGPoint(x: time * pointsPerSecond + 4, y: 0)
                 // The last label only when it fits

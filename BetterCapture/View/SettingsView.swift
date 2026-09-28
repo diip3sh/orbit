@@ -150,10 +150,10 @@ struct VideoSettingsView: View {
 
                 Toggle(isOn: $settings.recordInputTelemetry) {
                     Text("Record Input Telemetry")
-                    Text("Saves cursor, clicks, scrolls and keystrokes next to each recording. Keystrokes need Input Monitoring permission (relaunch after granting).")
+                    Text("Saves cursor, clicks, scrolls and keystrokes next to each recording. All but the cursor need Input Monitoring permission (relaunch after granting).")
                 }
                 .onChange(of: settings.recordInputTelemetry) { _, isEnabled in
-                    // Ask up front; without Input Monitoring keystrokes are simply skipped
+                    // Ask up front; without Input Monitoring clicks, scrolls and keystrokes are simply skipped
                     if isEnabled && !CGPreflightListenEventAccess() {
                         _ = CGRequestListenEventAccess()
                     }

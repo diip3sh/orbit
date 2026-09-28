@@ -7,8 +7,8 @@
 
 import SwiftUI
 
-/// A recording's picture, name and date, as a button that opens it. Under the pointer the picture
-/// lightens and its edge lights up.
+/// A recording's picture, name and date, as a button that opens it. Under the pointer the
+/// picture's edge turns purple.
 struct RecordingTile: View {
     let recording: Recording
     let thumbnail: CGImage?
@@ -17,11 +17,11 @@ struct RecordingTile: View {
     @State private var isHovered = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 10)
+        let shape = RoundedRectangle(cornerRadius: 6)
 
         Button(action: open) {
             VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
-                Color.white.opacity(0.05)
+                EditorTheme.softHairline
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .overlay {
                         if let thumbnail {
@@ -31,10 +31,9 @@ struct RecordingTile: View {
                                 .transition(.opacity)
                         }
                     }
-                    .overlay(.white.opacity(isHovered ? 0.06 : 0))
                     .clipShape(shape)
                     .overlay {
-                        shape.strokeBorder(isHovered ? .white.opacity(0.4) : EditorTheme.hairline, lineWidth: isHovered ? 1.5 : 1)
+                        shape.strokeBorder(isHovered ? EditorTheme.accent.opacity(0.6) : EditorTheme.softHairline)
                     }
 
                 VStack(alignment: .leading, spacing: EditorTheme.tightSpacing) {
@@ -44,7 +43,8 @@ struct RecordingTile: View {
                         .truncationMode(.middle)
                     Text(recording.date, format: .dateTime.day().month().year().hour().minute())
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .monospaced()
+                        .foregroundStyle(EditorTheme.dim)
                 }
             }
             .contentShape(.rect)

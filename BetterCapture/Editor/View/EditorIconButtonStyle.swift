@@ -7,8 +7,8 @@
 
 import SwiftUI
 
-/// A round icon button that lights up under the pointer. The prominent one is filled white, for
-/// the transport's play button.
+/// A round icon button whose icon brightens from dim to ink under the pointer. The prominent one
+/// is filled off-white, for the transport's play button.
 struct EditorIconButtonStyle: ButtonStyle {
     var isProminent = false
 
@@ -35,9 +35,9 @@ private struct EditorIconButton: View {
         configuration.label
             .labelStyle(.iconOnly)
             .imageScale(isProminent ? .large : .medium)
-            .foregroundStyle(isProminent ? AnyShapeStyle(EditorTheme.stage) : AnyShapeStyle(.primary))
+            .foregroundStyle(isProminent ? EditorTheme.primaryInk : isLit ? EditorTheme.ink : EditorTheme.dim)
             .frame(width: size, height: size)
-            .background(.white.opacity(fillOpacity), in: .circle)
+            .background(fill, in: .circle)
             .contentShape(.circle)
             .opacity(isEnabled ? 1 : 0.35)
             .onHover { isHovered = $0 }
@@ -45,13 +45,15 @@ private struct EditorIconButton: View {
             .editorMotion(.snappy(duration: 0.18), value: configuration.isPressed)
     }
 
-    /// Lighter under the pointer; the prominent button dims while pressed, the others light up more.
-    private var fillOpacity: Double {
-        let isPressed = isEnabled && configuration.isPressed
-        let isLit = isEnabled && isHovered
+    private var isLit: Bool {
+        isEnabled && (isHovered || configuration.isPressed)
+    }
+
+    /// The prominent button dims a little under the pointer; the others light up, more while pressed.
+    private var fill: Color {
         if isProminent {
-            return isPressed ? 0.75 : isLit ? 1 : 0.9
+            return isLit ? EditorTheme.primaryHover : EditorTheme.primary
         }
-        return isPressed ? 0.16 : isLit ? 0.09 : 0
+        return .white.opacity(isEnabled && configuration.isPressed ? 0.12 : isLit ? 0.06 : 0)
     }
 }

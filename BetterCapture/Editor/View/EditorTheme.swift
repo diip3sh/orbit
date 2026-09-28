@@ -7,24 +7,40 @@
 
 import SwiftUI
 
-/// The editor's look: always dark, neutral greys and one signal color, so the recording is the
-/// brightest thing in the window.
+/// The editor's look, after zeron.sh: a violet-black ground the desktop frosts through, text in
+/// three tones (ink, dim, faint), hairlines instead of boxes, an off-white main button, and one
+/// purple for the playhead and the selection.
 enum EditorTheme {
 
-    /// Behind the preview.
-    static let stage = Color(red: 0.055, green: 0.055, blue: 0.063)
+    /// The ground, laid over the desktop at 80% like the app's shell. #06040a
+    static let stage = Color(red: 0.024, green: 0.016, blue: 0.039)
 
-    /// Under the timeline and the inspector.
-    static let panel = Color(red: 0.086, green: 0.086, blue: 0.094)
+    /// Under the timeline. #0c0913
+    static let panel = Color(red: 0.047, green: 0.035, blue: 0.075)
 
-    /// Thin lines between areas and around pictures.
-    static let hairline = Color.white.opacity(0.08)
+    /// Text. #ece7f7
+    static let ink = Color(red: 0.925, green: 0.906, blue: 0.969)
 
-    /// The signal color: the playhead, the selection and Export. Nothing else is colored.
-    static let accent = Color(red: 1, green: 0.373, blue: 0.122)
+    /// Values, notes and the other text under the main one. #9c92b5
+    static let dim = Color(red: 0.612, green: 0.573, blue: 0.71)
 
-    /// The edges of the kept parts and their handles.
-    static let trim = Color.white.opacity(0.92)
+    /// Marks that only structure, like ruler ticks and section titles' chevrons. #5d5178
+    static let faint = Color(red: 0.365, green: 0.318, blue: 0.471)
+
+    /// Lines between areas and around pictures. #241c36
+    static let hairline = Color(red: 0.141, green: 0.11, blue: 0.212)
+
+    /// Lanes and quieter edges. #1a1428
+    static let softHairline = Color(red: 0.102, green: 0.078, blue: 0.157)
+
+    /// The playhead and the selection. Nothing else is purple. #8b5cf6
+    static let accent = Color(red: 0.545, green: 0.361, blue: 0.965)
+
+    /// The main button (Export, play) and the trim handles, with its hover and its text.
+    /// #f7f4ee, #ddd6ea, #17141d
+    static let primary = Color(red: 0.969, green: 0.957, blue: 0.933)
+    static let primaryHover = Color(red: 0.867, green: 0.839, blue: 0.918)
+    static let primaryInk = Color(red: 0.09, green: 0.078, blue: 0.114)
 
     // Space on a 4-point grid: inside a control, between a title and its control, between
     // controls, around panels, and around the stage and sheets

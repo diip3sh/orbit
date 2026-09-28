@@ -26,9 +26,13 @@ struct EditorStage: View {
                         shape.fill(.black)
                     }
                 }
-                .shadow(color: .black.opacity(0.6), radius: 28, y: 14)
+                // A rim of light inside, a dark ring outside and a deep shadow, like a window on the desktop
+                .shadow(color: .black.opacity(0.7), radius: 24, y: 24)
                 .overlay {
-                    shape.strokeBorder(EditorTheme.hairline)
+                    shape.strokeBorder(.white.opacity(0.1))
+                }
+                .overlay {
+                    shape.stroke(.black.opacity(0.9), lineWidth: 1)
                 }
                 .aspectRatio(viewModel.exportSize(resolution: nil), contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -37,6 +41,9 @@ struct EditorStage: View {
         }
         .padding([.horizontal, .top], EditorTheme.largeSpacing)
         .padding(.bottom, EditorTheme.spacing)
+        .background {
+            StageDotGrid()
+        }
         .overlay(alignment: .top) {
             if let error = viewModel.error {
                 Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")

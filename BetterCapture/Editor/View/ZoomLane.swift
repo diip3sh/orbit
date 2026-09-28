@@ -59,7 +59,7 @@ struct ZoomLane: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height, alignment: .leading)
-        .background(.white.opacity(0.03), in: .rect(cornerRadius: 6))
+        .background(EditorTheme.softHairline.opacity(0.6), in: .rect(cornerRadius: 6))
         .editorMotion(value: viewModel.project.zooms)
         .editorMotion(value: selected)
         .help("Zooms: Z adds one at the playhead, ⌫ deletes the selected one")

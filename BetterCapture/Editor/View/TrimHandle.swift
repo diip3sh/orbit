@@ -30,7 +30,7 @@ struct TrimHandle: View {
         let isActive = isHovered || dragPosition != nil
 
         RoundedRectangle(cornerRadius: 3)
-            .fill(isActive ? EditorTheme.accent : EditorTheme.trim)
+            .fill(isActive ? EditorTheme.accent : EditorTheme.primary)
             .overlay {
                 Capsule()
                     .fill(.black.opacity(0.45))

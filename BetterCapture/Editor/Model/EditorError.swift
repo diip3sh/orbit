@@ -25,9 +25,15 @@ nonisolated enum EditorError: LocalizedError {
         case .noVideoTrack:
             "The recording has no video."
         case .noTelemetry:
-            "Recorded without input telemetry, so clicks and keystrokes aren't available."
+            """
+            Recorded without input telemetry, so there's no auto-zoom, smooth cursor, click highlights or keystrokes. \
+            Turn on Record Input Telemetry in Settings → Video → Advanced, then record again.
+            """
         case .unreadableTelemetry(let error):
-            "The input telemetry couldn't be read, so clicks and keystrokes aren't available. \(error.localizedDescription)"
+            """
+            The input telemetry couldn't be read, so there's no auto-zoom, smooth cursor, click highlights or \
+            keystrokes. \(error.localizedDescription)
+            """
         case .unreadableProject(let error):
             "The recording's edits couldn't be read. \(error.localizedDescription)"
         case .projectNotSaved(let error):

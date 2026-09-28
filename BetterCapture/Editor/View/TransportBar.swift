@@ -50,9 +50,10 @@ struct TransportBar: View {
                     HStack(spacing: EditorTheme.tightSpacing) {
                         Text(Self.format(playback.currentTime))
                         Text("/ \(Self.format(duration))")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(EditorTheme.dim)
                     }
-                    .monospacedDigit()
+                    .font(.callout)
+                    .monospaced()
                 }
                 .padding(.horizontal, EditorTheme.spacing)
                 .frame(height: 38)

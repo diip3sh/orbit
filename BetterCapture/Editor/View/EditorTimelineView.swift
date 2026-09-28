@@ -49,7 +49,7 @@ struct EditorTimelineView: View {
                                 .scaledToFill()
                                 .transition(.opacity)
                         } else {
-                            Color.white.opacity(0.05)
+                            EditorTheme.softHairline
                         }
                     }
                     .frame(width: width / CGFloat(viewModel.thumbnails.count), height: Self.filmstripHeight)
@@ -57,11 +57,11 @@ struct EditorTimelineView: View {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: Self.filmstripHeight, maxHeight: Self.filmstripHeight, alignment: .leading)
-            .background(.white.opacity(0.05))
+            .background(EditorTheme.softHairline)
             .clipShape(.rect(cornerRadius: 6))
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(EditorTheme.hairline)
+                    .strokeBorder(EditorTheme.softHairline)
             }
 
             if let markers = viewModel.markers {
@@ -71,17 +71,17 @@ struct EditorTimelineView: View {
                     let clickLane = CGRect(x: 0, y: 0, width: size.width, height: laneHeight)
                     let keyLane = CGRect(x: 0, y: laneHeight + 2, width: size.width, height: laneHeight)
                     for lane in [clickLane, keyLane] {
-                        context.fill(Path(roundedRect: lane, cornerRadius: 2), with: .color(.white.opacity(0.03)))
+                        context.fill(Path(roundedRect: lane, cornerRadius: 2), with: .color(EditorTheme.softHairline))
                     }
-                    context.fill(Self.ticks(at: markers.clicks, duration: duration, in: clickLane), with: .color(.white.opacity(0.7)))
-                    context.fill(Self.ticks(at: markers.keys, duration: duration, in: keyLane), with: .color(.white.opacity(0.4)))
+                    context.fill(Self.ticks(at: markers.clicks, duration: duration, in: clickLane), with: .color(EditorTheme.ink.opacity(0.8)))
+                    context.fill(Self.ticks(at: markers.keys, duration: duration, in: keyLane), with: .color(EditorTheme.dim))
                 }
                 .frame(height: Self.lanesHeight)
                 .help("Clicks (top) and keystrokes (bottom)")
-            } else if let reason = viewModel.source?.telemetryError {
-                Text(reason.localizedDescription)
+            } else if viewModel.source?.telemetryError != nil {
+                Text("No clicks or keystrokes: recorded without input telemetry")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(EditorTheme.dim)
                     .frame(height: Self.lanesHeight)
             }
 
@@ -102,7 +102,7 @@ struct EditorTimelineView: View {
                 }
                 for segment in viewModel.segments {
                     let line = span(segment, Self.filmstripTop, Self.filmstripHeight).divided(atDistance: 1, from: .minXEdge).slice
-                    context.fill(Path(line), with: .color(.white.opacity(0.8)))
+                    context.fill(Path(line), with: .color(EditorTheme.ink.opacity(0.8)))
                 }
             }
             .allowsHitTesting(false)

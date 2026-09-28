@@ -7,7 +7,8 @@
 
 import SwiftUI
 
-/// A zoom on the timeline's zoom lane: its span, with its scale when there's room.
+/// A zoom on the timeline's zoom lane: its span, with its scale when there's room. At rest a dark
+/// chip on a hairline; selected, purple.
 struct ZoomBlock: View {
     let zoom: ZoomSegment
     let isSelected: Bool
@@ -19,9 +20,12 @@ struct ZoomBlock: View {
         let shape = RoundedRectangle(cornerRadius: 6)
 
         shape
-            .fill(.white.opacity(isHovered || isDragged ? 0.2 : 0.14))
+            .fill(isSelected ? EditorTheme.accent.opacity(0.2) : EditorTheme.panel)
             .overlay {
-                shape.strokeBorder(isSelected ? EditorTheme.accent : EditorTheme.hairline, lineWidth: isSelected ? 2 : 1)
+                shape.strokeBorder(
+                    isSelected ? EditorTheme.accent : isHovered || isDragged ? EditorTheme.faint : EditorTheme.hairline,
+                    lineWidth: isSelected ? 1.5 : 1
+                )
             }
             .overlay {
                 Label {
@@ -29,7 +33,9 @@ struct ZoomBlock: View {
                 } icon: {
                     Image(systemName: zoom.followsCursor ? "cursorarrow" : "scope")
                 }
-                .font(.caption2.weight(.semibold))
+                .font(.caption2)
+                .monospaced()
+                .foregroundStyle(isSelected || isHovered ? EditorTheme.ink : EditorTheme.dim)
                 .lineLimit(1)
                 .padding(.horizontal, EditorTheme.smallSpacing)
             }

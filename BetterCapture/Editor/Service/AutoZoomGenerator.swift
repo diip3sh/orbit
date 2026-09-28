@@ -8,8 +8,8 @@
 import CoreGraphics
 import Foundation
 
-/// Zooms in where the user was working: on bursts of clicks and typing close together in time and
-/// on screen. A pure function of the telemetry.
+/// Zooms in where the user was working: on bursts of clicks, typing and places the cursor moved to
+/// and rested at, close together in time and on screen. A pure function of the telemetry.
 nonisolated enum AutoZoomGenerator {
 
     nonisolated struct Configuration: Sendable {
@@ -32,6 +32,17 @@ nonisolated enum AutoZoomGenerator {
 
         /// The share of the magnified view a zoom's events must fit in, so none sits at its edge.
         var usableFraction = 0.8
+
+        /// How long, in seconds, the cursor must stay put after moving for its stop to count; it
+        /// passes through places faster.
+        var restDuration = 0.5
+
+        /// How far the cursor may drift while it rests, as a share of the video.
+        var restRadius = 0.02
+
+        /// How far from where it last rested the cursor must stop for the stop to count, as a
+        /// share of the video, so nudges and a resting cursor don't zoom.
+        var restTravel = 0.15
     }
 
     /// The automatic zooms for a recording, sorted and apart.
@@ -41,7 +52,9 @@ nonisolated enum AutoZoomGenerator {
         let fits = { (group: Group) in group.bounds.width <= reach && group.bounds.height <= reach }
 
         var groups: [Group] = []
-        for event in activity(in: telemetry) {
+        let events = (activity(in: telemetry) + rests(in: telemetry, duration: duration, configuration: configuration))
+            .sorted { $0.time < $1.time }
+        for event in events {
             if let last = groups.last, event.time - last.end < configuration.maximumGap, fits(last.adding(event)) {
                 groups[groups.count - 1] = last.adding(event)
             } else {
@@ -95,6 +108,36 @@ nonisolated enum AutoZoomGenerator {
             }
         }
         return activity
+    }
+
+    /// Where the cursor came to rest inside the video after moving there: the user is about to
+    /// click or is pointing something out. Timed when it arrived.
+    static func rests(in telemetry: InputTelemetry, duration: Double, configuration: Configuration = Configuration()) -> [(time: Double, point: CGPoint)] {
+        let samples = telemetry.cursor.compactMap { sample in
+            telemetry.normalizedVideoPoint(for: sample.location, at: sample.time).map { (time: sample.time, point: $0) }
+        }
+        let distance = { (start: CGPoint, end: CGPoint) in hypot(start.x - end.x, start.y - end.y) }
+
+        var rests: [(time: Double, point: CGPoint)] = []
+        var lastRest = samples.first?.point
+        var index = samples.startIndex
+        while index < samples.endIndex {
+            let arrival = samples[index]
+            // Samples are stored only on change, so the cursor stays until one leaves the radius
+            let departure = samples[(index + 1)...].firstIndex { distance($0.point, arrival.point) > configuration.restRadius } ?? samples.endIndex
+            let leaves = departure < samples.endIndex ? samples[departure].time : duration
+            guard leaves - arrival.time >= configuration.restDuration else {
+                index += 1
+                continue
+            }
+            if let lastRest, distance(arrival.point, lastRest) >= configuration.restTravel,
+               (0...1).contains(arrival.point.x), (0...1).contains(arrival.point.y) {
+                rests.append(arrival)
+            }
+            lastRest = arrival.point
+            index = departure
+        }
+        return rests
     }
 
     // MARK: - Private

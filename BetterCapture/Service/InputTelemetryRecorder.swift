@@ -22,8 +22,8 @@ final class InputTelemetryRecorder {
     private var primaryScreenHeight: CGFloat = 0
     private var cursorTask: Task<Void, Never>?
     private var mouseMonitor: Any?
-    private var keyTap: CFMachPort?
-    private var keyTapSource: CFRunLoopSource?
+    private var eventTap: CFMachPort?
+    private var eventTapSource: CFRunLoopSource?
     private var cursorShapes = CursorShapeTracker()
     private var nextShapeSampleTime: Double = 0
 
@@ -42,16 +42,20 @@ final class InputTelemetryRecorder {
         // AppKit locations have a bottom-left origin on the primary display, so flip against it
         primaryScreenHeight = CGDisplayBounds(CGMainDisplayID()).height
 
-        let keystrokesAvailable = startKeyTap()
+        let keystrokesAvailable = startEventTap()
         telemetry = InputTelemetry(
             capture: .init(kind: Self.kind(filter: filter, sourceRect: sourceRect), videoSize: videoSize, cursorInVideo: cursorInVideo),
             keystrokesAvailable: keystrokesAvailable
         )
 
-        mouseMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .scrollWheel]
-        ) { [weak self] event in
-            self?.record(event)
+        // The tap records clicks and scrolls too; without it, a global monitor still gets them
+        // where Accessibility is granted
+        if !keystrokesAvailable {
+            mouseMonitor = NSEvent.addGlobalMonitorForEvents(
+                matching: [.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .scrollWheel]
+            ) { [weak self] event in
+                self?.record(event, at: event.timestamp)
+            }
         }
 
         cursorShapes = CursorShapeTracker(standardCursors: StandardCursors.fingerprints)
@@ -78,15 +82,15 @@ final class InputTelemetryRecorder {
             self.mouseMonitor = nil
         }
 
-        if let keyTap {
-            CGEvent.tapEnable(tap: keyTap, enable: false)
-            CFMachPortInvalidate(keyTap)
-            self.keyTap = nil
+        if let eventTap {
+            CGEvent.tapEnable(tap: eventTap, enable: false)
+            CFMachPortInvalidate(eventTap)
+            self.eventTap = nil
         }
 
-        if let keyTapSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), keyTapSource, .commonModes)
-            self.keyTapSource = nil
+        if let eventTapSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), eventTapSource, .commonModes)
+            self.eventTapSource = nil
         }
     }
 
@@ -150,24 +154,25 @@ final class InputTelemetryRecorder {
         cursorShapes.record(fingerprint, time: time) { StandardCursors.png(of: cursor) }
     }
 
-    private func record(_ event: NSEvent) {
-        // Global monitor events have no window, so this is a screen location
+    /// Records a mouse event that happened at `time` on the host clock.
+    private func record(_ event: NSEvent, at time: Double) {
+        // Events from the tap or a global monitor have no window, so this is a screen location
         let location = InputTelemetry.topLeft(event.locationInWindow, primaryScreenHeight: primaryScreenHeight)
 
         switch event.type {
         case .scrollWheel:
             let delta = CGVector(dx: event.scrollingDeltaX, dy: event.scrollingDeltaY)
-            telemetry?.scrolls.append(.init(time: event.timestamp, location: location, delta: delta))
+            telemetry?.scrolls.append(.init(time: time, location: location, delta: delta))
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
-            recordClick(event, at: location, isDown: true)
+            recordClick(event, at: location, time: time, isDown: true)
         case .leftMouseUp, .rightMouseUp, .otherMouseUp:
-            recordClick(event, at: location, isDown: false)
+            recordClick(event, at: location, time: time, isDown: false)
         default:
             break
         }
     }
 
-    private func recordClick(_ event: NSEvent, at location: CGPoint, isDown: Bool) {
+    private func recordClick(_ event: NSEvent, at location: CGPoint, time: Double, isDown: Bool) {
         let button: InputTelemetry.MouseButton = switch event.buttonNumber {
         case 0: .left
         case 1: .right
@@ -175,7 +180,7 @@ final class InputTelemetryRecorder {
         }
 
         telemetry?.clicks.append(.init(
-            time: event.timestamp,
+            time: time,
             location: location,
             button: button,
             isDown: isDown,
@@ -183,34 +188,56 @@ final class InputTelemetryRecorder {
         ))
     }
 
-    /// Handles the key tap callback, which runs on the main thread.
-    fileprivate func handleKeyTap(type: CGEventType, key: InputTelemetry.Key?) {
-        if let key {
-            telemetry?.keys.append(key)
-        } else if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput, let keyTap {
+    /// Handles the event tap callback, which runs on the main thread.
+    ///
+    /// Reads only the key code, modifier flags and repeat flag of a key press - never the typed
+    /// characters.
+    /// ponytail: stamped with the host clock on arrival rather than converting `CGEvent.timestamp`;
+    /// main-thread latency is well under a frame.
+    fileprivate func handleEventTap(type: CGEventType, event: CGEvent) {
+        let time = currentHostTime()
+
+        switch type {
+        case .keyDown:
+            telemetry?.keys.append(.init(
+                time: time,
+                keyCode: Int(event.getIntegerValueField(.keyboardEventKeycode)),
+                modifiers: InputTelemetry.modifierNames(event.flags),
+                isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+            ))
+        case .tapDisabledByTimeout, .tapDisabledByUserInput:
             // The system disables taps that are slow or interrupted; keep listening
-            CGEvent.tapEnable(tap: keyTap, enable: true)
+            if let eventTap {
+                CGEvent.tapEnable(tap: eventTap, enable: true)
+            }
+        default:
+            if let event = NSEvent(cgEvent: event) {
+                record(event, at: time)
+            }
         }
     }
 
     // MARK: - Setup
 
-    /// Starts a listen-only tap for key presses and returns whether keystrokes will be recorded.
+    /// Starts a listen-only tap for key presses, clicks and scrolls, and returns whether keystrokes
+    /// will be recorded.
     ///
-    /// `NSEvent` global monitors never receive key events in the sandbox, so this needs Input
-    /// Monitoring. A permission granted during this launch only takes effect after a relaunch.
-    private func startKeyTap() -> Bool {
+    /// In the sandbox, `NSEvent` global monitors never receive key events and receive mouse events
+    /// only with Accessibility, so this needs Input Monitoring. A permission granted during this
+    /// launch only takes effect after a relaunch.
+    private func startEventTap() -> Bool {
         guard CGPreflightListenEventAccess() else { return false }
 
+        let types: [CGEventType] = [.keyDown, .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .scrollWheel]
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
             options: .listenOnly,
-            eventsOfInterest: CGEventMask(1) << CGEventType.keyDown.rawValue,
-            callback: keyTapCallback,
+            eventsOfInterest: types.reduce(0) { $0 | CGEventMask(1) << $1.rawValue },
+            callback: eventTapCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            logger.warning("Could not create key event tap; keystrokes will not be recorded")
+            logger.warning("Could not create event tap; clicks, scrolls and keystrokes will not be recorded")
             return false
         }
 
@@ -219,11 +246,11 @@ final class InputTelemetryRecorder {
             return false
         }
 
-        // keyTapCallback relies on running on the main thread
+        // eventTapCallback relies on running on the main thread
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        keyTap = tap
-        keyTapSource = source
+        eventTap = tap
+        eventTapSource = source
         return true
     }
 
@@ -241,14 +268,10 @@ nonisolated private func currentHostTime() -> Double {
     CMClockGetTime(CMClockGetHostTimeClock()).seconds
 }
 
-// MARK: - Key Tap Callback
+// MARK: - Event Tap Callback
 
-/// C callback for the key event tap. Runs on the main thread, where the tap's run loop source lives.
-///
-/// Reads only the key code, modifier flags and repeat flag - never the typed characters.
-/// ponytail: stamped with the host clock on arrival rather than converting `CGEvent.timestamp`;
-/// main-thread latency is well under a frame.
-nonisolated private func keyTapCallback(
+/// C callback for the event tap. Runs on the main thread, where the tap's run loop source lives.
+nonisolated private func eventTapCallback(
     _ proxy: CGEventTapProxy,
     _ type: CGEventType,
     _ event: CGEvent,
@@ -257,17 +280,10 @@ nonisolated private func keyTapCallback(
     guard let userInfo else { return Unmanaged.passUnretained(event) }
 
     let recorder = Unmanaged<InputTelemetryRecorder>.fromOpaque(userInfo).takeUnretainedValue()
-    let key = type == .keyDown
-        ? InputTelemetry.Key(
-            time: currentHostTime(),
-            keyCode: Int(event.getIntegerValueField(.keyboardEventKeycode)),
-            modifiers: InputTelemetry.modifierNames(event.flags),
-            isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0
-        )
-        : nil
-
+    // Handled right here on the main thread, so the event never crosses threads
+    nonisolated(unsafe) let event = event
     MainActor.assumeIsolated {
-        recorder.handleKeyTap(type: type, key: key)
+        recorder.handleEventTap(type: type, event: event)
     }
     return Unmanaged.passUnretained(event)
 }

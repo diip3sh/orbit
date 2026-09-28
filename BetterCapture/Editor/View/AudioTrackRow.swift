@@ -18,8 +18,9 @@ struct AudioTrackRow: View {
                 Text(name)
                 Spacer()
                 Text(settings.isMuted ? 0 : settings.volume, format: .percent.precision(.fractionLength(0)))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                    .monospaced()
+                    .foregroundStyle(EditorTheme.dim)
                 Toggle(
                     "Mute \(name)",
                     systemImage: settings.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",

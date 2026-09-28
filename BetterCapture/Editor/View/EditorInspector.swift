@@ -17,6 +17,16 @@ struct EditorInspector: View {
 
         ScrollView {
             VStack(spacing: 0) {
+                if let reason = viewModel.source?.telemetryError {
+                    Label(reason.localizedDescription, systemImage: "info.circle")
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(EditorTheme.mediumSpacing)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.white.opacity(0.06), in: .rect(cornerRadius: 8))
+                        .padding([.horizontal, .top])
+                }
+
                 CanvasInspectorSection(viewModel: viewModel)
 
                 InspectorSection("Zoom") {
@@ -44,7 +54,7 @@ struct EditorInspector: View {
                         }
                     } else {
                         Label("Select a zoom on the timeline to change it.", systemImage: "cursorarrow.click")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(EditorTheme.dim)
                     }
                     Button {
                         viewModel.regenerateZooms()
@@ -54,6 +64,9 @@ struct EditorInspector: View {
                     }
                     .disabled(telemetry == nil)
                 } footer: {
+                    if telemetry?.clicks.isEmpty == true {
+                        Text("No clicks were recorded (they need Input Monitoring), so automatic zooms come only from where the cursor rested. Press Z to add one at the playhead.")
+                    }
                     if viewModel.zoomsLookSoft {
                         Text("""
                             Zoomed parts look soft: this recording has fewer than 2 pixels per screen point. \
@@ -106,10 +119,6 @@ struct EditorInspector: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                    }
-                } footer: {
-                    if let reason = viewModel.source?.telemetryError {
-                        Text(reason.localizedDescription)
                     }
                 }
                 .disabled(telemetry == nil)

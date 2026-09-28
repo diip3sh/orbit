@@ -20,14 +20,14 @@ extension View {
         }
     }
 
-    /// The window's one main action: tinted glass on macOS 26, a filled button before.
-    @ViewBuilder
-    func prominentEditorButton() -> some View {
-        if #available(macOS 26, *) {
-            buttonStyle(.glassProminent)
-        } else {
-            buttonStyle(.borderedProminent)
-        }
+    /// The window's ground: the desktop frosted through at the shell's 80%, in ink.
+    func editorWindowBackground() -> some View {
+        foregroundStyle(EditorTheme.ink)
+            .background {
+                EditorTheme.stage.opacity(0.8)
+                    .background(EditorBackdrop())
+                    .ignoresSafeArea()
+            }
     }
 
     /// `animation` for changes of `value`, or none with Reduce Motion on.
@@ -44,5 +44,18 @@ private struct EditorMotion<Value: Equatable>: ViewModifier {
 
     func body(content: Content) -> some View {
         content.animation(reducesMotion ? nil : animation, value: value)
+    }
+}
+
+extension ToolbarContent {
+
+    /// Without the glass macOS 26 puts behind toolbar items, for a button that draws its own.
+    @ToolbarContentBuilder
+    func hidingSharedBackground() -> some ToolbarContent {
+        if #available(macOS 26, *) {
+            sharedBackgroundVisibility(.hidden)
+        } else {
+            self
+        }
     }
 }

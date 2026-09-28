@@ -32,9 +32,9 @@ struct ExportSheet: View {
             VStack(alignment: .leading, spacing: EditorTheme.tightSpacing) {
                 Text("Export")
                     .font(.title2.weight(.semibold))
-                Text("Saved as \(settings.format.outputURL(for: viewModel.videoURL).lastPathComponent), next to the recording")
+                Text("Saved next to the recording as \(Text(settings.format.outputURL(for: viewModel.videoURL).lastPathComponent).monospaced())")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(EditorTheme.dim)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .contentTransition(.opacity)
@@ -43,6 +43,7 @@ struct ExportSheet: View {
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: EditorTheme.mediumSpacing, verticalSpacing: EditorTheme.mediumSpacing) {
                 GridRow {
                     Text("Format")
+                        .foregroundStyle(EditorTheme.dim)
                         .gridColumnAlignment(.trailing)
                     VStack(alignment: .leading, spacing: EditorTheme.tightSpacing) {
                         Picker("Format", selection: $settings.format) {
@@ -53,12 +54,13 @@ struct ExportSheet: View {
                         .labelsHidden()
                         Text(Self.summary(of: settings.format, isHDR: isHDR))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(EditorTheme.dim)
                             .contentTransition(.opacity)
                     }
                 }
                 GridRow {
                     Text("Size")
+                        .foregroundStyle(EditorTheme.dim)
                     Picker("Size", selection: $settings.resolution) {
                         Text("Original, \(Self.dimensions(of: canvasSize))").tag(Int?.none)
                         ForEach(ExportSettings.resolutions(below: min(canvasSize.width, canvasSize.height)), id: \.self) { resolution in
@@ -70,6 +72,7 @@ struct ExportSheet: View {
                 }
                 GridRow {
                     Text("Frame Rate")
+                        .foregroundStyle(EditorTheme.dim)
                     Picker("Frame Rate", selection: $settings.frameRate) {
                         Text("Original, \(frameRate, format: .number.precision(.fractionLength(0...2))) fps").tag(Int?.none)
                         ForEach(ExportSettings.frameRates(below: frameRate), id: \.self) { rate in
@@ -84,7 +87,7 @@ struct ExportSheet: View {
             if viewModel.canvas.background == .transparent, !settings.format.keepsTransparency {
                 Label("The transparent background exports black. ProRes 4444 keeps it.", systemImage: "info.circle")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(EditorTheme.dim)
                     .transition(.opacity)
             }
 
@@ -105,18 +108,19 @@ struct ExportSheet: View {
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
+                .buttonStyle(.editorGhost)
                 Button("Export") {
                     error = nil
                     isExporting = true
                 }
                 .keyboardShortcut(.defaultAction)
-                .prominentEditorButton()
+                .buttonStyle(.editorPrimary)
                 .disabled(isExporting)
             }
-            .controlSize(.large)
         }
         .padding(EditorTheme.largeSpacing)
         .frame(width: 440)
+        .foregroundStyle(EditorTheme.ink)
         .tint(EditorTheme.accent)
         .editorMotion(value: settings)
         .editorMotion(value: viewModel.exportProgress != nil)

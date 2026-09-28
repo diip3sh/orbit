@@ -24,7 +24,7 @@ struct EditorView: View {
                     EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
                         .padding(.horizontal, EditorTheme.largeSpacing)
                         .padding(.vertical, EditorTheme.spacing)
-                        .background(EditorTheme.panel)
+                        .background(EditorTheme.panel.opacity(0.6))
                         .overlay(alignment: .top) {
                             Rectangle()
                                 .fill(EditorTheme.hairline)
@@ -41,9 +41,10 @@ struct EditorView: View {
                             showsExport = true
                         }
                         .labelStyle(.titleAndIcon)
-                        .prominentEditorButton()
+                        .buttonStyle(.editorPrimary)
                         .help("Export the edited video")
                     }
+                    .hidingSharedBackground()
                     if #available(macOS 26, *) {
                         ToolbarSpacer(.fixed, placement: .primaryAction)
                     }
@@ -70,7 +71,7 @@ struct EditorView: View {
             }
         }
         .frame(minWidth: 560, minHeight: 440)
-        .background(EditorTheme.stage)
+        .editorWindowBackground()
         .tint(EditorTheme.accent)
         .editorMotion(.smooth, value: viewModel.source == nil)
         .task {
