@@ -9,91 +9,58 @@ import AppKit
 import OSLog
 import SwiftUI
 
-/// CleanShot-style floating thumbnail of a capture: copy, reveal, drag out, close.
+/// Shows the Quick Access card for the last screenshot in a floating panel, and owns the pins made from it.
 ///
-/// Holds the output folder's security scope while shown, since drag and copy hand out the file URL
-/// and sandboxed receivers only get access to it if we still have it when the URL is written.
+/// The card stays until it's closed, saved or pinned, or the next screenshot replaces it.
 @MainActor
 final class QuickAccessController {
 
-    nonisolated static let cardSize = CGSize(width: 240, height: 150)
+    nonisolated static let cardSize = CGSize(width: 230, height: 210)
     nonisolated static let margin: CGFloat = 16
 
-    private let settings: SettingsStore
-    private let hideCountdown = RecordingCountdown()
+    private let save: @MainActor (Screenshot) async -> Bool
+    private let pins = PinController()
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "QuickAccess")
 
     private var panel: NSPanel?
-    private var fileURL: URL?
+    private var model: QuickAccessViewModel?
     private var loadTask: Task<Void, Never>?
-    private var accessesOutputDirectory = false
 
-    init(settings: SettingsStore) {
-        self.settings = settings
+    /// - Parameter save: Saves a screenshot into the output folder, returning whether it did
+    init(save: @escaping @MainActor (Screenshot) async -> Bool) {
+        self.save = save
     }
 
-    /// Replaces any thumbnail showing.
-    func show(fileURL: URL) {
+    /// Replaces any card showing.
+    func show(_ screenshot: Screenshot) {
         dismiss()
 
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main else {
             return
         }
 
-        self.fileURL = fileURL
-        accessesOutputDirectory = settings.startAccessingOutputDirectory()
-
+        // 2× the card, so the preview stays sharp without another full-size copy
         let maxPixelSize = max(Self.cardSize.width, Self.cardSize.height) * screen.backingScaleFactor
         loadTask = Task {
-            let image = await ImageDownsampler.thumbnail(of: fileURL, maxPixelSize: maxPixelSize)
+            let preview = await ImageDownsampler.thumbnail(of: screenshot.image, maxPixelSize: maxPixelSize)
             guard !Task.isCancelled else { return }
-            guard let image else {
-                logger.error("Couldn't decode a thumbnail for \(fileURL.lastPathComponent)")
-                dismiss()
+            guard let preview else {
+                logger.error("Couldn't draw a preview of the screenshot")
                 return
             }
-            present(image: image, fileURL: fileURL, on: screen)
-        }
-    }
-
-    /// Copies the full image (PNG + file URL) to the pasteboard, then dismisses.
-    func copy() {
-        guard let fileURL else { return }
-        do {
-            let png = try Data(contentsOf: fileURL)
-            ImagePasteboard.copy(png: png, fileURL: fileURL)
-            dismiss()
-        } catch {
-            logger.error("Couldn't read \(fileURL.lastPathComponent) to copy: \(error.localizedDescription)")
-        }
-    }
-
-    func showInFinder() {
-        guard let fileURL else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-        dismiss()
-    }
-
-    /// Hovering pauses the hide timer; leaving restarts the full 6 s.
-    ///
-    /// ponytail: a drag held more than 6 s after the mouse leaves the panel closes it and releases
-    /// the scope mid-drag; add drag-session tracking if that's reported.
-    func setHovering(_ isHovering: Bool) {
-        // A fading panel still reports the mouse leaving; that must not restart the timer
-        guard panel != nil else { return }
-        if isHovering {
-            hideCountdown.cancel()
-        } else {
-            hideCountdown.start(seconds: 6) { [weak self] in
-                self?.dismiss()
-            }
+            present(QuickAccessViewModel(screenshot: screenshot, preview: preview, save: save), on: screen)
         }
     }
 
     func dismiss() {
         loadTask?.cancel()
         loadTask = nil
-        hideCountdown.cancel()
+
+        // A save finishing after its card went away must not close the next card
+        model?.onClose = nil
+        model?.onPin = nil
+        model?.removeDragFile()
+        model = nil
 
         if let panel {
             panel.ignoresMouseEvents = true
@@ -106,12 +73,6 @@ final class QuickAccessController {
             }
         }
         panel = nil
-        fileURL = nil
-
-        if accessesOutputDirectory {
-            settings.stopAccessingOutputDirectory()
-            accessesOutputDirectory = false
-        }
     }
 
     /// Bottom-left of `visibleFrame`, inset by `margin`.
@@ -119,7 +80,10 @@ final class QuickAccessController {
         CGRect(origin: CGPoint(x: visibleFrame.minX + margin, y: visibleFrame.minY + margin), size: cardSize)
     }
 
-    private func present(image: CGImage, fileURL: URL, on screen: NSScreen) {
+    private func present(_ model: QuickAccessViewModel, on screen: NSScreen) {
+        model.onClose = { [weak self] in self?.dismiss() }
+        model.onPin = { [weak self] in self?.pin() }
+
         let panel = NSPanel(
             contentRect: Self.panelFrame(in: screen.visibleFrame),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -133,17 +97,22 @@ final class QuickAccessController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
-        panel.contentView = NSHostingView(rootView: QuickAccessView(image: image, fileURL: fileURL, controller: self))
+        // Dark translucent card in either system appearance
+        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.contentView = NSHostingView(rootView: QuickAccessView(model: model))
         panel.alphaValue = 0
         panel.orderFront(nil)
         self.panel = panel
+        self.model = model
 
         NSAnimationContext.runAnimationGroup { _ in
             panel.animator().alphaValue = 1
         }
+    }
 
-        hideCountdown.start(seconds: 6) { [weak self] in
-            self?.dismiss()
-        }
+    /// Pins the screenshot with its bottom-left where the card is
+    private func pin() {
+        guard let model, let panel, let screen = panel.screen ?? NSScreen.main else { return }
+        pins.pin(model.screenshot, at: panel.frame.origin, on: screen)
     }
 }

@@ -34,7 +34,7 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   && { pkill -x BetterCapture; open /tmp/bc-build/dd/Build/Products/Debug/BetterCapture.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 252 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 283 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -193,27 +193,38 @@ Key facts:
   the countdown, so it swallows Esc system-wide only then. If another app holds a global Esc hotkey,
   registration fails silently; the menu/shortcut still cancel.
 
-### C2 / C14 — Quick Access thumbnail and image clipboard (`feat/quick-access`)
+### C2 / C7 / C8 / C14 — Quick Access card, text recognition, pins, clipboard (`feat/screenshot-card`)
 
-A CleanShot-style thumbnail of a captured image in the bottom-left corner of the screen under the
-mouse (clear of notifications and the menu bar popover, top-right). Hover shows **Copy**, **Show in
-Finder** and close; drag the thumbnail into any app to drop the file. Hides after 6 s; hovering
-pauses it and leaving restarts the full 6 s. A new capture replaces the thumbnail. Every saved screenshot shows it: `AppDelegate` wires
-`ScreenshotController.onCaptured` to `show(fileURL:)`, and `onWillCapture` to `dismiss()` so the last
-thumbnail never lands in the next shot.
+A CleanShot-style card for each screenshot in the bottom-left corner of the screen under the mouse (clear
+of notifications and the menu bar popover, top-right): close, a grab handle, the preview, and **Copy**,
+**Save**, **Recognize Text** and **Pin**. Drag the card by its handle or background; drag the preview into
+any app to drop the image. Nothing is written to the output folder until **Save**. The card stays until
+closed, saved, pinned, or the next capture: `AppDelegate` wires `ScreenshotController.onCaptured` to
+`show(_:)`, and `onWillCapture` to `dismiss()` so the card never lands in the next shot (its unsaved
+screenshot is discarded).
+
+- **Copy** (C14): PNG data only; the card stays. **Save**: writes to the output folder, then closes; on
+  failure the card stays and the Screenshot Failed notification is sent. **Recognize Text** (C7): the
+  image's text to the clipboard. **Pin** (C8): the image in its own panel, then closes. Copy and Recognize
+  Text confirm on the card for 1.5 s.
 
 | File | Role |
 |---|---|
-| `QuickAccess/View/QuickAccessController.swift` | Non-activating borderless `.floating` panel (never key, `hidesOnDeactivate = false`), fade in/out, placement (`panelFrame(in:)`), hide timer (a `RecordingCountdown`), intents |
-| `QuickAccess/View/QuickAccessView.swift` | Thumbnail card, hover controls, `.onDrag` with the file URL |
-| `QuickAccess/Service/ImageDownsampler.swift` | ImageIO thumbnail off the main actor; the full image is never held |
-| `Service/ImagePasteboard.swift` | One pasteboard item with PNG data (Slack, Messages, Figma) and the file URL (Finder) |
+| `QuickAccess/View/QuickAccessController.swift` | Non-activating borderless `.floating` dark panel (never key, `hidesOnDeactivate = false`), fade in/out, placement (`panelFrame(in:)`), owns the card's view model and the pins |
+| `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin` |
+| `QuickAccess/View/QuickAccessView.swift` | Card layout; `WindowDragGesture` on the background, `.onDrag` on the preview. Annotate goes first in the toolbar once it exists (one line) |
+| `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, close on hover |
+| `QuickAccess/Service/ImageDownsampler.swift` | Card preview drawn from the captured `CGImage` off the main actor |
+| `Screenshot/Service/TextRecognizer.swift` | Vision `RecognizeTextRequest` (accurate, automatic language) off the main actor; `joined(_:)` orders lines top to bottom |
+| `Service/ImagePasteboard.swift` | PNG data on the pasteboard (Slack, Messages, Figma, Preview) |
 
 Key facts:
-- The panel holds the output folder's security scope while it shows: drag and copy hand out the file
-  URL, and sandboxed receivers get access only if we have it when the URL is written.
-- The thumbnail is decoded at 2× of the 240×150 pt card (`kCGImageSourceShouldCacheImmediately`),
-  not from the full-size image; Copy reads the PNG from disk only when clicked.
+- The full-size `CGImage` is held only by the card and pins; the card shows a preview drawn at 2× of its
+  230×210 pt size.
+- Drag-out offers the file URL and PNG data. The file is written in the background to
+  `temporaryDirectory/<UUID>/<save name>` when the card appears (a drop reads the URL at once, so it must
+  exist first) and deleted when the card closes.
+- The card and pins are BetterCapture windows, so captures leave them out unless Show BetterCapture is on.
 
 ### S1 — Editor, phase 1: shell and playback (`feat/editor-shell`, spec 0003)
 
@@ -268,13 +279,16 @@ Key facts:
 ### C1 — Screenshots
 
 Menu bar **Capture Area / Capture Window / Capture Screen** (idle state only; no shortcuts or URLs yet).
-Saves `BetterCapture_Screenshot_<timestamp>.png` into the recordings' output folder at native pixels,
-with the recording visibility settings, then calls `ScreenshotController.onCaptured` (hand-off for C2).
+Captures at native pixels with the recording visibility settings into memory (`Screenshot`: image, scale,
+capture time) and hands it to `ScreenshotController.onCaptured` (the Quick Access card, C2). Nothing is
+written until the card's **Save**: `ScreenshotController.save(_:)` writes
+`BetterCapture_Screenshot_<capture time>.png` into the recordings' output folder.
 
 | File | Role |
 |---|---|
-| `Screenshot/ViewModel/ScreenshotController.swift` | Owned by `AppDelegate`; permission check, selection, `isCapturing`, `canCapture`, failure notification, `onCaptured` |
-| `Screenshot/Service/ScreenshotService.swift` | Display lookup, `SCScreenshotManager.captureImage`, PNG via ImageIO (`@concurrent`) |
+| `Screenshot/Model/Screenshot.swift` | The captured `CGImage`, its scale and capture time; `filename`, `pointSize` |
+| `Screenshot/ViewModel/ScreenshotController.swift` | Owned by `AppDelegate`; permission check, selection, `isCapturing`, `canCapture`, `onCaptured`, `save(_:)` with the failure notification |
+| `Screenshot/Service/ScreenshotService.swift` | Display lookup, `SCScreenshotManager.captureImage`, save inside the output folder's security scope, PNG via ImageIO (`@concurrent`) |
 | `Screenshot/Service/WindowPicker.swift` | System `SCContentSharingPicker` in `.window` mode, observed only while picking |
 | `Screenshot/View/ScreenshotButtons.swift` | The three popover rows |
 | `Service/SCContentFilter+CaptureScale.swift` | Window-scale fix shared with recording (moved from `RecorderViewModel`) |
@@ -326,12 +340,14 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | F6 audio robustness (mic hot-swap #208, gain #209, level meters #153) | Todo |
 | F7 remember last selection (#172) | Todo |
 | F8 Swift 6 language mode | Done (`chore/swift-6-mode`); needs one real recording to rule out runtime isolation crashes |
-| C2 Quick Access thumbnail | Done; shown after every screenshot. Hover/copy/drag/Finder still need a hands-on check |
-| C14 copy image to clipboard (PNG + file URL) | Done (`ImagePasteboard`) |
+| C2 Quick Access card | Done; buttons, card drag, drag-out and pins still need a hands-on check |
+| C7 recognize text (OCR) | Done, from the card |
+| C8 pin screenshot | Done, from the card |
+| C14 copy image to clipboard (PNG) | Done (`ImagePasteboard`) |
 | S1 editor phase 1: shell and playback | Done; open/scrub/close still need a check on a real 10-min 4K recording (see spec 0003) |
 | S1 editor phase 2: render pipeline, click highlights, keystrokes, export | Done; highlight placement still needs checking on real recordings of each capture kind. 4K render measured at the 8 ms p95 budget on an M1 (see spec 0003) |
 | S1 editor phases 3–6 (cuts, zoom, cursor, canvas and export polish) | Todo, spec 0003 |
-| C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access thumbnail |
+| C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0
 (portable with attribution). `lzhgus/Capso` (BSL, bans screen-capture use) and

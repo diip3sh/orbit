@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import ImageIO
 @preconcurrency import ScreenCaptureKit
 import Testing
 @testable import BetterCapture
@@ -20,13 +21,30 @@ struct ScreenshotTests {
         return SettingsStore(defaults: defaults)
     }
 
-    // MARK: - outputURL
+    // MARK: - Screenshot
 
-    @Test func outputURLUsesTheSharedFilenameFormatWithAScreenshotPrefix() {
+    @Test func filenameUsesTheSharedFormatWithAScreenshotPrefixAndTheCaptureTime() throws {
         let date = Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 28, hour: 14, minute: 5, second: 9))!
-        let url = ScreenshotService.outputURL(in: URL(filePath: "/tmp/out"), date: date)
+        let screenshot = try Screenshot(image: .filled(width: 4, height: 4), scale: 2, date: date)
 
-        #expect(url.path() == "/tmp/out/BetterCapture_Screenshot_2026-09-28-14.05.09.png")
+        #expect(screenshot.filename == "BetterCapture_Screenshot_2026-09-28-14.05.09.png")
+    }
+
+    @Test func pointSizeIsThePixelSizeOverTheScale() throws {
+        let screenshot = try Screenshot(image: .filled(width: 600, height: 400), scale: 2, date: .now)
+
+        #expect(screenshot.pointSize == CGSize(width: 300, height: 200))
+    }
+
+    // MARK: - PNG
+
+    @Test func pngDataDecodesToTheSamePixelSize() async throws {
+        let data = try await ScreenshotService.pngData(of: .filled(width: 30, height: 20))
+
+        let source = try #require(CGImageSourceCreateWithData(data as CFData, nil))
+        let decoded = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        #expect(decoded.width == 30)
+        #expect(decoded.height == 20)
     }
 
     // MARK: - canCapture

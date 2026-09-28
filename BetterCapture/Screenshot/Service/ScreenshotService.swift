@@ -10,7 +10,7 @@ import ImageIO
 @preconcurrency import ScreenCaptureKit
 import UniformTypeIdentifiers
 
-/// Captures one still with ScreenCaptureKit and saves it as PNG into the recordings' output folder
+/// Captures one still with ScreenCaptureKit, and writes screenshots as PNG
 @MainActor
 final class ScreenshotService {
 
@@ -34,14 +34,14 @@ final class ScreenshotService {
         return display
     }
 
-    /// Captures at native resolution with the user's visibility settings and saves a PNG.
+    /// Captures at native resolution with the user's visibility settings. Nothing is written.
     /// - Parameter sourceRect: The area to capture (display points, top-left origin), or nil for the whole filter
-    /// - Returns: The saved file
-    func capture(_ filter: SCContentFilter, sourceRect: CGRect?, settings: SettingsStore) async throws -> URL {
+    func capture(_ filter: SCContentFilter, sourceRect: CGRect?, settings: SettingsStore) async throws -> Screenshot {
         let filter = try await contentFilterService.applySettings(to: filter, settings: settings)
+        let scale = filter.captureScale
         let pixelSize = CaptureSizeCalculator.videoSize(
             contentRect: sourceRect ?? filter.contentRect,
-            scale: filter.captureScale,
+            scale: scale,
             useNativeResolution: true
         )
         let configuration = Self.configuration(
@@ -51,13 +51,18 @@ final class ScreenshotService {
             settings: settings
         )
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+        return Screenshot(image: image, scale: scale, date: .now)
+    }
 
+    /// Writes the screenshot into the output folder, inside its security scope
+    /// - Returns: The saved file, `BetterCapture_Screenshot_<capture time>.png`
+    func save(_ screenshot: Screenshot, settings: SettingsStore) async throws -> URL {
         let didStart = settings.startAccessingOutputDirectory()
         defer {
             if didStart { settings.stopAccessingOutputDirectory() }
         }
-        let url = Self.outputURL(in: settings.outputDirectory, date: .now)
-        try await Self.writePNG(image, to: url)
+        let url = settings.outputDirectory.appending(path: screenshot.filename)
+        try await Self.writePNG(screenshot.image, to: url)
         return url
     }
 
@@ -78,21 +83,25 @@ final class ScreenshotService {
         return config
     }
 
-    /// `BetterCapture_Screenshot_<timestamp>.png`
-    static func outputURL(in directory: URL, date: Date) -> URL {
-        directory.appending(path: SettingsStore.filename(prefix: "BetterCapture_Screenshot", fileExtension: "png", date: date))
+    /// Encodes and writes off the main actor, creating the folder
+    @concurrent
+    nonisolated static func writePNG(_ image: CGImage, to url: URL) async throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try encodePNG(image, into: CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
     }
 
-    /// Encodes off the main actor. ImageIO embeds the image's colour space as an ICC profile.
+    /// Encodes off the main actor, for the clipboard
     @concurrent
-    nonisolated private static func writePNG(_ image: CGImage, to url: URL) async throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
-            throw CocoaError(.fileWriteUnknown)
-        }
+    nonisolated static func pngData(of image: CGImage) async throws -> Data {
+        let data = NSMutableData()
+        try encodePNG(image, into: CGImageDestinationCreateWithData(data as CFMutableData, UTType.png.identifier as CFString, 1, nil))
+        return data as Data
+    }
+
+    /// ImageIO embeds the image's colour space as an ICC profile
+    nonisolated private static func encodePNG(_ image: CGImage, into destination: CGImageDestination?) throws {
+        guard let destination else { throw CocoaError(.fileWriteUnknown) }
         CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else {
-            throw CocoaError(.fileWriteUnknown)
-        }
+        guard CGImageDestinationFinalize(destination) else { throw CocoaError(.fileWriteUnknown) }
     }
 }

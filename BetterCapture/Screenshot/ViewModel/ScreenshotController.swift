@@ -9,7 +9,7 @@ import AppKit
 import OSLog
 @preconcurrency import ScreenCaptureKit
 
-/// Screenshots of an area, a window or the screen under the cursor, saved as PNG next to recordings
+/// Screenshots of an area, a window or the screen under the cursor, kept in memory until saved as PNG next to recordings
 @MainActor
 @Observable
 final class ScreenshotController {
@@ -17,10 +17,10 @@ final class ScreenshotController {
     /// Called as a screenshot starts, before anything is selected or captured
     @ObservationIgnored var onWillCapture: (@MainActor () -> Void)?
 
-    /// Called with each saved screenshot
-    @ObservationIgnored var onCaptured: (@MainActor (URL) -> Void)?
+    /// Called with each captured screenshot; nothing is written until `save(_:)`
+    @ObservationIgnored var onCaptured: (@MainActor (Screenshot) -> Void)?
 
-    /// Whether a screenshot is being selected, captured or saved
+    /// Whether a screenshot is being selected or captured
     private(set) var isCapturing = false
 
     private let settings: SettingsStore
@@ -71,7 +71,21 @@ final class ScreenshotController {
         }
     }
 
-    /// Checks permission, lets the user select (nil = cancelled), then captures and saves
+    /// Writes the screenshot into the output folder; logs and notifies when that fails
+    /// - Returns: Whether it was saved
+    func save(_ screenshot: Screenshot) async -> Bool {
+        do {
+            let url = try await service.save(screenshot, settings: settings)
+            logger.info("Screenshot saved: \(url.lastPathComponent)")
+            return true
+        } catch {
+            logger.error("Screenshot save failed: \(error.localizedDescription)")
+            notificationService.sendScreenshotFailedNotification(error: error)
+            return false
+        }
+    }
+
+    /// Checks permission, lets the user select (nil = cancelled), then captures
     private func capture(_ select: () async throws -> (filter: SCContentFilter, sourceRect: CGRect?)?) async {
         guard !isCapturing else { return }
         isCapturing = true
@@ -84,9 +98,9 @@ final class ScreenshotController {
                 logger.info("Screenshot cancelled")
                 return
             }
-            let url = try await service.capture(target.filter, sourceRect: target.sourceRect, settings: settings)
-            logger.info("Screenshot saved: \(url.lastPathComponent)")
-            onCaptured?(url)
+            let screenshot = try await service.capture(target.filter, sourceRect: target.sourceRect, settings: settings)
+            logger.info("Screenshot captured: \(screenshot.image.width)×\(screenshot.image.height) px")
+            onCaptured?(screenshot)
         } catch {
             logger.error("Screenshot failed: \(error.localizedDescription)")
             notificationService.sendScreenshotFailedNotification(error: error)

@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var screenshots = ScreenshotController(settings: viewModel.settings, notificationService: viewModel.notificationService)
 
     private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
-    private lazy var quickAccess = QuickAccessController(settings: viewModel.settings)
+    private lazy var quickAccess = QuickAccessController { [screenshots] screenshot in await screenshots.save(screenshot) }
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "AppDelegate")
 
@@ -34,9 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerKeyboardShortcuts()
         viewModel.notificationService.editRecording = editorWindows.open
 
-        // Hidden first so the last thumbnail never lands in the next shot, even with Show BetterCapture on
+        // Hidden first so the last card never lands in the next shot, even with Show BetterCapture on; its unsaved shot is discarded
         screenshots.onWillCapture = { [quickAccess] in quickAccess.dismiss() }
-        screenshots.onCaptured = { [quickAccess] url in quickAccess.show(fileURL: url) }
+        screenshots.onCaptured = { [quickAccess] screenshot in quickAccess.show(screenshot) }
     }
 
     /// Opens the last recording saved since launch in the editor.

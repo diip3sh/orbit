@@ -12,17 +12,16 @@ import Testing
 @MainActor
 struct ImagePasteboardTests {
 
-    @Test func copiesThePNGAndTheFileURLAsOneItem() {
+    @Test func copiesOnlyThePNGAsOneItem() {
         let pasteboard = NSPasteboard(name: .init("ImagePasteboardTests-\(UUID())"))
         defer { pasteboard.releaseGlobally() }
         let png = Data([0x89, 0x50, 0x4E, 0x47])
-        let url = URL(fileURLWithPath: "/tmp/example.png")
 
-        ImagePasteboard.copy(png: png, fileURL: url, to: pasteboard)
+        ImagePasteboard.copy(png: png, to: pasteboard)
 
         #expect(pasteboard.pasteboardItems?.count == 1)
         #expect(pasteboard.data(forType: .png) == png)
-        #expect(pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] == [url])
+        #expect(pasteboard.availableType(from: [.fileURL]) == nil)
     }
 
     @Test func replacesPreviousContents() {
@@ -31,7 +30,7 @@ struct ImagePasteboardTests {
         pasteboard.clearContents()
         pasteboard.setString("previous", forType: .string)
 
-        ImagePasteboard.copy(png: Data(), fileURL: URL(fileURLWithPath: "/tmp/example.png"), to: pasteboard)
+        ImagePasteboard.copy(png: Data(), to: pasteboard)
 
         #expect(pasteboard.string(forType: .string) == nil)
     }

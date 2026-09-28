@@ -7,16 +7,11 @@
 
 import AppKit
 
-/// Puts an image file on the pasteboard as one item: PNG data for apps that paste images
-/// (Slack, Messages, Figma, Preview) and the file URL for Finder.
+/// Puts PNG data on the pasteboard, for apps that paste images (Slack, Messages, Figma, Preview).
 enum ImagePasteboard {
 
-    static func copy(png: Data, fileURL: URL, to pasteboard: NSPasteboard = .general) {
-        let item = NSPasteboardItem()
-        item.setData(png, forType: .png)
-        item.setString(fileURL.absoluteString, forType: .fileURL)
-
+    static func copy(png: Data, to pasteboard: NSPasteboard = .general) {
         pasteboard.clearContents()
-        pasteboard.writeObjects([item])
+        pasteboard.setData(png, forType: .png)
     }
 }

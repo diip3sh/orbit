@@ -6,25 +6,28 @@
 //
 
 import CoreGraphics
-import Foundation
-import ImageIO
 
-/// Decodes a thumbnail of an image file, off the main actor, without ever holding the full-size image.
+/// Draws a smaller copy of an image off the main actor, for previews.
 nonisolated enum ImageDownsampler {
 
-    /// The image at `url` with its longer side at most `maxPixelSize`, decoded now, or `nil` if unreadable.
+    /// `image` with its longer side at most `maxPixelSize` (never enlarged), or `nil` if it can't be drawn.
     @concurrent
-    static func thumbnail(of url: URL, maxPixelSize: CGFloat) async -> CGImage? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else {
+    static func thumbnail(of image: CGImage, maxPixelSize: CGFloat) async -> CGImage? {
+        let scale = maxPixelSize / CGFloat(max(image.width, image.height))
+        guard scale < 1 else { return image }
+
+        let width = max(1, Int((CGFloat(image.width) * scale).rounded()))
+        let height = max(1, Int((CGFloat(image.height) * scale).rounded()))
+        // Keeps the capture's colour space (sRGB or Display P3); anything else is drawn in sRGB
+        let colorSpace = image.colorSpace?.model == .rgb ? image.colorSpace : CGColorSpace(name: CGColorSpace.sRGB)
+        guard let colorSpace, let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        ) else {
             return nil
         }
-
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
-        ]
-        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
     }
 }
