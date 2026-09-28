@@ -81,6 +81,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        let captures: [(KeyboardShortcuts.Name, @MainActor (ScreenshotController) async -> Void)] = [
+            (.captureArea, { await $0.captureArea() }),
+            (.captureWindow, { await $0.captureWindow() }),
+            (.captureScreen, { await $0.captureScreen() })
+        ]
+        for (name, capture) in captures {
+            KeyboardShortcuts.onKeyUp(for: name) { [viewModel, screenshots, logger] in
+                Task { @MainActor in
+                    guard screenshots.canCapture(alongside: viewModel) else {
+                        logger.info("Ignored \(name.rawValue) shortcut: recording, counting down or capturing")
+                        return
+                    }
+                    await capture(screenshots)
+                }
+            }
+        }
+
         logger.info("Registered global keyboard shortcuts")
     }
 

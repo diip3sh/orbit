@@ -14,11 +14,7 @@ struct ScreenshotButtons: View {
     @Environment(\.dismiss) private var dismiss
 
     private var isDisabled: Bool {
-        !ScreenshotController.canCapture(
-            recorderState: recorder.state,
-            isCountingDown: recorder.countdown.isRunning,
-            isCapturing: controller.isCapturing
-        )
+        !controller.canCapture(alongside: recorder)
     }
 
     var body: some View {

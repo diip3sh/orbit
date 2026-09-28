@@ -278,7 +278,9 @@ Key facts:
 
 ### C1 — Screenshots
 
-Menu bar **Capture Area / Capture Window / Capture Screen** (idle state only; no shortcuts or URLs yet).
+Menu bar **Capture Area / Capture Window / Capture Screen** and global shortcuts of the same names
+(Settings → Shortcuts → Screenshots, no defaults; no URLs yet). Both follow `canCapture(alongside:)`: idle only,
+so a shortcut pressed while recording, counting down or capturing is ignored and logged.
 Captures at native pixels with the recording visibility settings into memory (`Screenshot`: image, scale,
 capture time) and hands it to `ScreenshotController.onCaptured` (the Quick Access card, C2). Nothing is
 written until the card's **Save**: `ScreenshotController.save(_:)` writes
@@ -287,7 +289,7 @@ written until the card's **Save**: `ScreenshotController.save(_:)` writes
 | File | Role |
 |---|---|
 | `Screenshot/Model/Screenshot.swift` | The captured `CGImage`, its scale and capture time; `filename`, `pointSize` |
-| `Screenshot/ViewModel/ScreenshotController.swift` | Owned by `AppDelegate`; permission check, selection, `isCapturing`, `canCapture`, `onCaptured`, `save(_:)` with the failure notification |
+| `Screenshot/ViewModel/ScreenshotController.swift` | Owned by `AppDelegate` (which registers the shortcuts); permission check, selection, `isCapturing`, `canCapture`, `onCaptured`, `save(_:)` with the failure notification |
 | `Screenshot/Service/ScreenshotService.swift` | Display lookup, `SCScreenshotManager.captureImage`, save inside the output folder's security scope, PNG via ImageIO (`@concurrent`) |
 | `Screenshot/Service/WindowPicker.swift` | System `SCContentSharingPicker` in `.window` mode, observed only while picking |
 | `Screenshot/View/ScreenshotButtons.swift` | The three popover rows |

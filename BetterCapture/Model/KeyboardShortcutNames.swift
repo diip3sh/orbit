@@ -12,4 +12,7 @@ extension KeyboardShortcuts.Name {
     static let pauseRecording = Self("pauseRecording")
     static let selectContent = Self("selectContent")
     static let selectArea = Self("selectArea")
+    static let captureArea = Self("captureArea")
+    static let captureWindow = Self("captureWindow")
+    static let captureScreen = Self("captureScreen")
 }

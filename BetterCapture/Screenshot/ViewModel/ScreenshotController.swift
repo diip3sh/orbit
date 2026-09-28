@@ -40,6 +40,10 @@ final class ScreenshotController {
         recorderState == .idle && !isCountingDown && !isCapturing
     }
 
+    func canCapture(alongside recorder: RecorderViewModel) -> Bool {
+        Self.canCapture(recorderState: recorder.state, isCountingDown: recorder.countdown.isRunning, isCapturing: isCapturing)
+    }
+
     func captureArea() async {
         await capture {
             guard let selection = await areaSelectionOverlay.present() else { return nil }
