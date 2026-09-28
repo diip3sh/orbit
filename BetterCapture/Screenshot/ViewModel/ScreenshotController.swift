@@ -14,7 +14,10 @@ import OSLog
 @Observable
 final class ScreenshotController {
 
-    /// Called with each saved screenshot. Unset for now; Quick Access (C2) hooks in here.
+    /// Called as a screenshot starts, before anything is selected or captured
+    @ObservationIgnored var onWillCapture: (@MainActor () -> Void)?
+
+    /// Called with each saved screenshot
     @ObservationIgnored var onCaptured: (@MainActor (URL) -> Void)?
 
     /// Whether a screenshot is being selected, captured or saved
@@ -73,6 +76,7 @@ final class ScreenshotController {
         guard !isCapturing else { return }
         isCapturing = true
         defer { isCapturing = false }
+        onWillCapture?()
 
         do {
             try service.verifyPermission()

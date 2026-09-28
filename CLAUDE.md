@@ -198,8 +198,9 @@ Key facts:
 A CleanShot-style thumbnail of a captured image in the bottom-left corner of the screen under the
 mouse (clear of notifications and the menu bar popover, top-right). Hover shows **Copy**, **Show in
 Finder** and close; drag the thumbnail into any app to drop the file. Hides after 6 s; hovering
-pauses it and leaving restarts the full 6 s. A new capture replaces the thumbnail. For now only
-`bettercapture://debug-quick-access` (Debug builds) shows it, with the newest PNG in the output folder.
+pauses it and leaving restarts the full 6 s. A new capture replaces the thumbnail. Every saved screenshot shows it: `AppDelegate` wires
+`ScreenshotController.onCaptured` to `show(fileURL:)`, and `onWillCapture` to `dismiss()` so the last
+thumbnail never lands in the next shot.
 
 | File | Role |
 |---|---|
@@ -325,12 +326,12 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | F6 audio robustness (mic hot-swap #208, gain #209, level meters #153) | Todo |
 | F7 remember last selection (#172) | Todo |
 | F8 Swift 6 language mode | Done (`chore/swift-6-mode`); needs one real recording to rule out runtime isolation crashes |
-| C2 Quick Access thumbnail | Done; shown via `bettercapture://debug-quick-access` (Debug) until the screenshot controller's `onCaptured` calls `show(fileURL:)` |
+| C2 Quick Access thumbnail | Done; shown after every screenshot. Hover/copy/drag/Finder still need a hands-on check |
 | C14 copy image to clipboard (PNG + file URL) | Done (`ImagePasteboard`) |
 | S1 editor phase 1: shell and playback | Done; open/scrub/close still need a check on a real 10-min 4K recording (see spec 0003) |
 | S1 editor phase 2: render pipeline, click highlights, keystrokes, export | Done; highlight placement still needs checking on real recordings of each capture kind. 4K render measured at the 8 ms p95 budget on an M1 (see spec 0003) |
 | S1 editor phases 3–6 (cuts, zoom, cursor, canvas and export polish) | Todo, spec 0003 |
-| C1 screenshots (area, window, screen) | Done, verified on real captures; Quick Access hand-off via `onCaptured` still to wire (C2) |
+| C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access thumbnail |
 
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0
 (portable with attribution). `lzhgus/Capso` (BSL, bans screen-capture use) and

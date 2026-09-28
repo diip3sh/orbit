@@ -33,6 +33,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerKeyboardShortcuts()
         viewModel.notificationService.editRecording = editorWindows.open
+
+        // Hidden first so the last thumbnail never lands in the next shot, even with Show BetterCapture on
+        screenshots.onWillCapture = { [quickAccess] in quickAccess.dismiss() }
+        screenshots.onCaptured = { [quickAccess] url in quickAccess.show(fileURL: url) }
     }
 
     /// Opens the last recording saved since launch in the editor.
@@ -109,45 +113,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: settings.outputDirectory.path)
-#if DEBUG
-        case "debug-quick-access":
-            showNewestPNGInQuickAccess()
-#endif
         default:
             logger.warning("Unhandled URL host: \(url.host ?? "nil")")
         }
     }
 }
-
-#if DEBUG
-extension AppDelegate {
-
-    /// Shows the newest PNG in the output folder: `open -g -a <app> "bettercapture://debug-quick-access"`
-    func showNewestPNGInQuickAccess() {
-        let settings = viewModel.settings
-        let didStart = settings.startAccessingOutputDirectory()
-        defer {
-            if didStart {
-                settings.stopAccessingOutputDirectory()
-            }
-        }
-
-        let pngs = (try? FileManager.default.contentsOfDirectory(
-            at: settings.outputDirectory, includingPropertiesForKeys: [.contentModificationDateKey]
-        )) ?? []
-        let newest = pngs
-            .filter { $0.pathExtension.lowercased() == "png" }
-            .max { lhs, rhs in
-                let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                return lhsDate < rhsDate
-            }
-
-        guard let newest else {
-            logger.info("No PNG in the output folder")
-            return
-        }
-        quickAccess.show(fileURL: newest)
-    }
-}
-#endif
