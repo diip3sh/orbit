@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Counts down the seconds before a recording starts.
+/// Counts down seconds: before a recording starts, and before the Quick Access thumbnail hides.
 ///
 /// `remaining` drives the on-screen number and the menu bar. The one-second wait is injectable
 /// so tests don't wait whole seconds.

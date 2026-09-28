@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var screenshots = ScreenshotController(settings: viewModel.settings, notificationService: viewModel.notificationService)
 
     private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
+    private lazy var quickAccess = QuickAccessController(settings: viewModel.settings)
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "AppDelegate")
 
@@ -108,8 +109,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: settings.outputDirectory.path)
+#if DEBUG
+        case "debug-quick-access":
+            showNewestPNGInQuickAccess()
+#endif
         default:
             logger.warning("Unhandled URL host: \(url.host ?? "nil")")
         }
     }
 }
+
+#if DEBUG
+extension AppDelegate {
+
+    /// Shows the newest PNG in the output folder: `open -g -a <app> "bettercapture://debug-quick-access"`
+    func showNewestPNGInQuickAccess() {
+        let settings = viewModel.settings
+        let didStart = settings.startAccessingOutputDirectory()
+        defer {
+            if didStart {
+                settings.stopAccessingOutputDirectory()
+            }
+        }
+
+        let pngs = (try? FileManager.default.contentsOfDirectory(
+            at: settings.outputDirectory, includingPropertiesForKeys: [.contentModificationDateKey]
+        )) ?? []
+        let newest = pngs
+            .filter { $0.pathExtension.lowercased() == "png" }
+            .max { lhs, rhs in
+                let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                return lhsDate < rhsDate
+            }
+
+        guard let newest else {
+            logger.info("No PNG in the output folder")
+            return
+        }
+        quickAccess.show(fileURL: newest)
+    }
+}
+#endif
