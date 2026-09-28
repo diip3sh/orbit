@@ -15,15 +15,15 @@ import CoreVideo
 nonisolated enum FrameRenderer {
 
     /// Draws the output frame for source time `time` into `buffer`, region by region, each from
-    /// only what shows there (see ``CanvasLayout/regions``). SDR is drawn without color
-    /// management, so `context` must have none; HDR in the plan's color space.
+    /// only what shows there (see ``CanvasLayout/regions``), without color management: `context`
+    /// must have none. HDR plans' overlays are already in the video's encoding.
     /// - Parameters:
     ///   - frame: The recording's frame at `time`.
     ///   - time: Source time, in seconds.
     static func draw(_ frame: CIImage, at time: Double, plan: RenderPlan, into buffer: CVPixelBuffer, context: CIContext) throws {
         let video = video(frame, at: time, plan: plan)
         let destination = CIRenderDestination(pixelBuffer: buffer)
-        destination.colorSpace = plan.dynamicRange.colorSpace
+        destination.colorSpace = nil
         let tasks = try plan.canvas.regions.map { region in
             let image = switch region {
             case .background: plan.canvas.backdrop ?? .empty()

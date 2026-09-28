@@ -26,7 +26,7 @@ nonisolated struct CanvasLayout: Sendable {
     let videoMask: CIImage?
 
     /// The background with the video's shadow, drawn once, or `nil` when the video covers the frame.
-    let backdrop: CIImage?
+    private(set) var backdrop: CIImage?
 
     /// The frame divided by what shows where, so each part is drawn from only that.
     let regions: [Region]
@@ -94,6 +94,13 @@ extension CanvasLayout {
             ? nil
             : Self.backdrop(style: style, size: size, videoFrame: videoFrame, cornerRadius: cornerRadius, image: background)
         regions = Self.regions(of: size, videoFrame: videoFrame, cornerRadius: cornerRadius)
+    }
+
+    /// The layout with its backdrop in `range`'s encoding (see ``OverlayImages/encoded(_:in:)``).
+    nonisolated func encoded(in range: DynamicRange) -> CanvasLayout {
+        var layout = self
+        layout.backdrop = backdrop.map { OverlayImages.encoded($0, in: range) }
+        return layout
     }
 
     /// The padding around the video, the video's rounded corners, and the rest of it in
@@ -182,7 +189,7 @@ extension CanvasLayout {
         )
         guard let buffer else { return backdrop.cropped(to: bounds) }
         context.render(backdrop, to: buffer, bounds: bounds, colorSpace: nil)
-        // In sRGB like the other overlays, which matters only when HDR frames are color managed
+        // In sRGB like the other overlays, which HDR plans convert from
         return CIImage(cvPixelBuffer: buffer, options: [.colorSpace: CGColorSpace(name: CGColorSpace.sRGB) as Any])
     }
 

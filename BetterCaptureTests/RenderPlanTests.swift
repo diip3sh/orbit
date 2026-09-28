@@ -45,7 +45,7 @@ struct RenderPlanTests {
         return telemetry
     }
 
-    private func source(telemetry: InputTelemetry?) -> EditorSource {
+    private func source(telemetry: InputTelemetry?, dynamicRange: DynamicRange = .sdr) -> EditorSource {
         EditorSource(
             asset: AVURLAsset(url: URL(filePath: "/dev/null")),
             timeRange: CMTimeRange(start: .zero, duration: CMTime(value: 10, timescale: 1)),
@@ -54,7 +54,7 @@ struct RenderPlanTests {
             naturalSize: CGSize(width: 1600, height: 1200),
             frameRate: 60,
             timescale: 600,
-            dynamicRange: .sdr,
+            dynamicRange: dynamicRange,
             telemetry: telemetry,
             telemetryError: nil
         )
@@ -177,5 +177,28 @@ struct RenderPlanTests {
         // 6% of the shorter side of the video on the canvas: 1,200 px less 8% padding at the top and bottom
         #expect(plan.canvas.videoFrame.height == 1008)
         #expect(plan.chipImages.allSatisfy { $0.extent.height == 61 })
+    }
+
+    @Test func drawsHDROverlaysInTheRecordingsEncodingAtSDRWhite() async {
+        let white = RGBAColor(red: 1, green: 1, blue: 1, alpha: 1)
+        var project = EditorProject()
+        project.clickHighlights.color = white
+        project.canvas.background = .color
+        project.canvas.color = white
+        var telemetry = telemetry
+        telemetry.capture.cursorInVideo = false
+        telemetry.cursor = [.init(time: 0, location: CGPoint(x: 500, y: 380))]
+        let resources = RenderResources(keyLabels: KeyLabelFormatter.layout(id: "com.apple.keylayout.US"), arrow: StandardCursors.arrowSprite)
+        let source = source(telemetry: telemetry, dynamicRange: .pq)
+
+        let hdr = await RenderPlan.build(project: project, source: source, resources: resources)
+        let sdr = await RenderPlan.build(project: project, source: source, resources: resources, target: RenderTarget(keepsHDR: false))
+
+        #expect(hdr.dynamicRange == .pq && sdr.dynamicRange == .sdr)
+        // SDR white is 203 nits in PQ, BT.2408's reference white
+        for (plan, white) in [(hdr, Float(0.58)), (sdr, 1)] {
+            let images = [plan.clickRing, plan.chipImages.first, plan.canvas.backdrop, plan.cursorShapes.sprite(at: 1)?.image]
+            #expect(images.allSatisfy { $0.map { abs($0.brightestRed - white) < 0.001 } ?? false })
+        }
     }
 }

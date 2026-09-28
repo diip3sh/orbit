@@ -34,7 +34,7 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   && { pkill -x BetterCapture; open /tmp/bc-build/dd/Build/Products/Debug/BetterCapture.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 328 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 330 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -353,7 +353,7 @@ bar lists the output folder's recordings with pictures; a click opens one in the
 | `Editor/Render/CanvasLayout.swift` | Output size, the video's frame and rounded mask, the backdrop (background and shadow) drawn once into an IOSurface, and the regions frames are drawn in |
 | `Editor/Render/FrameRenderer.swift` | `draw(_:at:plan:into:context:)`: the frame region by region, for the compositor and the tests alike |
 | `Editor/Render/RenderResources.swift`, `RenderTarget.swift` | What plans draw with from the system (key labels, arrow, background picture); what a plan is for (the preview, or an export's size and dynamic range) |
-| `Editor/Render/HDREditorCompositor.swift`, `Editor/Model/DynamicRange.swift` | 10-bit or half-float frames in, half-float out, color managed; SDR, PQ or HLG from the track's transfer function |
+| `Editor/Render/HDREditorCompositor.swift`, `Editor/Model/DynamicRange.swift` | 10-bit or half-float frames in, half-float out; SDR, PQ or HLG from the track's transfer function |
 | `Editor/Service/BackgroundImageLoader.swift` | Security-scoped bookmark to the chosen picture, read upright, in sRGB, at most 4096 px |
 | `Editor/Model/ExportSettings.swift`, `Editor/View/ExportSheet.swift` | Format, size (a shorter side) and frame rate; only smaller ones are offered |
 | `Editor/Service/RecordingLibrary.swift`, `Editor/ViewModel/RecordingsViewModel.swift`, `Editor/View/RecordingsView.swift` | The Recordings window, opened by `EditorWindowManager.showRecordings()` |
@@ -369,11 +369,14 @@ Key facts:
   Debug, 4K with a ring and a chip, load average 4–6: 3 ms p50 plain (7 drawn whole), 3.7–5 ms on
   the default canvas (9 whole), p95 under 7.5 ms. The backdrop takes 4 ms to draw (17 the first time).
 - A transparent background keeps its alpha only in ProRes 4444; other formats export it black.
-- HDR frames are composited in linear light by a second, color-managed context, so overlays keep
-  SDR brightness; the composition is tagged BT.2020 and the recording's PQ or HLG. H.264 exports
-  are SDR. A 4K HDR frame takes about 9 ms p50 plain and 7 ms on the default canvas, over the
-  budget; converting overlays into PQ when the plan is built would let HDR skip color management
-  like SDR.
+- HDR frames are drawn without color management too: the plan draws its overlays once in the
+  recording's encoding (`OverlayImages.encoded`), SDR white at 203 nits (BT.2408). Their
+  semi-transparent parts (the chip's backing, the cursor's shadow, a fading ring) blend in PQ's
+  encoding, so over HDR they look a little darker than in SDR. Measured on an M1, Debug, 4K with a
+  ring and a chip, load average 2–3: 4–4.6 ms p50 and 5–8 ms p95, against 6.7–8.1 and 10–13 with
+  a color-managed context; SDR took 3–3.5 in the same runs. Converting the backdrop costs 9–11 ms
+  more per HDR plan (20 the first time), alongside the camera and cursor. The composition is
+  tagged BT.2020 and the recording's PQ or HLG; H.264 exports are SDR.
 - The Recordings window lists movies in the output folder, newest first, without `-edited`
   exports, reads the list whenever it comes forward, and holds the folder's scope while open.
 
@@ -418,7 +421,7 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | S1 editor phase 3: trim, split and cut, audio volume | Done; trimming, cutting and clicks at cuts still need a check in the app on a real recording |
 | S1 editor phase 4: auto-zoom, zoom lane, camera | Done; auto-zoom placement, full-frame-rate transitions and editing zooms on the timeline still need a check in the app on real recordings |
 | S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
-| S1 editor phase 6: canvas and export polish | Done; the canvas, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags), transparent exports and the Recordings window still need a check in the app. 4K HDR frames are over the 8 ms budget (see spec 0003) |
+| S1 editor phase 6: canvas and export polish | Done; the canvas, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags), transparent exports and the Recordings window still need a check in the app |
 
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0
 (portable with attribution). `lzhgus/Capso` (BSL, bans screen-capture use) and

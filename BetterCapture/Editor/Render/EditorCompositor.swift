@@ -21,13 +21,10 @@ nonisolated class EditorCompositor: NSObject, AVVideoCompositing, @unchecked Sen
     /// Shared by every compositor: a context is thread-safe and costly to create. Intermediates
     /// aren't cached, as recommended for video, where every frame differs.
     ///
-    /// Color management is off, so frames are composited in the source's own encoding: its pixels
-    /// pass through untouched, and a 4K frame with a ring and a chip renders in about 5 ms p50,
-    /// 8 ms p95 on an M1 instead of 10 and 13 ms converting every pixel to linear and back.
+    /// Color management is off, so frames are composited in the source's own encoding, HDR too:
+    /// its pixels pass through untouched, and a 4K frame with a ring and a chip renders in about
+    /// 5 ms p50, 8 ms p95 on an M1 instead of 10 and 13 ms converting every pixel to linear and back.
     private static let context = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull()])
-
-    /// For HDR, composited in linear light, so the overlays' SDR colors keep SDR brightness.
-    private static let hdrContext = CIContext(options: [.cacheIntermediates: false])
 
     private static let signposter = OSSignposter(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "EditorCompositor")
 
@@ -64,7 +61,7 @@ nonisolated class EditorCompositor: NSObject, AVVideoCompositing, @unchecked Sen
 
         let time = plan.timeMap.sourceTime(atOutput: request.compositionTime.seconds)
         do {
-            try FrameRenderer.draw(frame, at: time, plan: plan, into: output, context: plan.dynamicRange == .sdr ? Self.context : Self.hdrContext)
+            try FrameRenderer.draw(frame, at: time, plan: plan, into: output, context: Self.context)
             request.finish(withComposedVideoFrame: output)
         } catch {
             request.finish(with: error)

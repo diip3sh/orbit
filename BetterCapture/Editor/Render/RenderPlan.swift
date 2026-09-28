@@ -45,7 +45,8 @@ nonisolated struct RenderPlan: Sendable {
     /// The output frame, and where the video sits on it.
     let canvas: CanvasLayout
 
-    /// What frames are drawn in: the recording's dynamic range, or SDR for a target that doesn't keep HDR.
+    /// What frames are drawn in: the recording's dynamic range, or SDR for a target that doesn't keep
+    /// HDR. The overlays' images are already in its encoding.
     let dynamicRange: DynamicRange
 }
 
@@ -65,6 +66,7 @@ extension RenderPlan {
         defer { signposter.endInterval("Build", signpost) }
 
         let videoSize = source.naturalSize
+        let dynamicRange = target.keepsHDR ? source.dynamicRange : .sdr
         // The costliest parts, and independent, so they're built alongside the rest. For 10 minutes
         // with 455 zooms, 3,000 clicks and 12,000 keys (M1, Debug), the camera takes 38 ms and the
         // cursor 35; the plan builds in 42 ms instead of 105
@@ -75,6 +77,7 @@ extension RenderPlan {
             drawnCursor(for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: resources.arrow)
         }
         let canvas = CanvasLayout(style: project.canvas, videoSize: videoSize, shorterSide: target.shorterSide, background: resources.background)
+            .encoded(in: dynamicRange)
 
         var clicks: [ClickMarker] = []
         var keystrokes: [KeystrokeChip] = []
@@ -95,14 +98,16 @@ extension RenderPlan {
             videoSize: videoSize,
             camera: await camera,
             cursor: await cursor?.path,
-            cursorShapes: await cursor?.shapes ?? .none,
+            cursorShapes: await cursor?.shapes.encoded(in: dynamicRange) ?? .none,
             clicks: clicks,
             clickDuration: project.clickHighlights.duration,
-            clickRing: clicks.isEmpty ? .empty() : OverlayImages.ring(diameter: ringDiameter, color: project.clickHighlights.color.cgColor),
+            clickRing: clicks.isEmpty
+                ? .empty()
+                : OverlayImages.encoded(OverlayImages.ring(diameter: ringDiameter, color: project.clickHighlights.color.cgColor), in: dynamicRange),
             keystrokes: keystrokes,
-            chipImages: labels.map { OverlayImages.chip(label: $0, height: chipHeight) },
+            chipImages: labels.map { OverlayImages.encoded(OverlayImages.chip(label: $0, height: chipHeight), in: dynamicRange) },
             canvas: canvas,
-            dynamicRange: target.keepsHDR ? source.dynamicRange : .sdr
+            dynamicRange: dynamicRange
         )
     }
 

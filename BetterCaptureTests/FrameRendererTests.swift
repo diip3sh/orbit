@@ -17,11 +17,12 @@ struct FrameRendererTests {
     /// Like the compositor's.
     private static let context = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull()])
 
-    /// Draws the frame as the compositor does, into a buffer the canvas's size.
+    /// Draws the frame as the compositor does, into a buffer the canvas's size, with half floats for HDR.
     private func render(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CIImage {
         var buffer: CVPixelBuffer?
         CVPixelBufferCreate(
-            nil, Int(plan.canvas.size.width), Int(plan.canvas.size.height), kCVPixelFormatType_32BGRA,
+            nil, Int(plan.canvas.size.width), Int(plan.canvas.size.height),
+            plan.dynamicRange == .sdr ? kCVPixelFormatType_32BGRA : kCVPixelFormatType_64RGBAHalf,
             [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer
         )
         guard let buffer, (try? FrameRenderer.draw(frame, at: time, plan: plan, into: buffer, context: Self.context)) != nil else {
@@ -35,23 +36,25 @@ struct FrameRendererTests {
     }
 
     /// A click at (100, 200) with a red ring 100 px wide when grown, and a "⌘C" chip, both at `time`.
-    /// The cursor, when given, rests on the click. The video fills the canvas unless `canvas` says otherwise.
+    /// The cursor, when given, rests on the click. The video fills the canvas unless `canvas` says
+    /// otherwise. The overlays are drawn in `dynamicRange`, as plans draw them.
     private func plan(
-        at time: Double, zooms: [ZoomSegment] = [], cursor: InputTelemetry.CursorSprite? = nil, canvas: CanvasStyle = .plain
+        at time: Double, zooms: [ZoomSegment] = [], cursor: InputTelemetry.CursorSprite? = nil, canvas: CanvasStyle = .plain,
+        dynamicRange: DynamicRange = .sdr
     ) -> RenderPlan {
         RenderPlan(
             timeMap: TimeMap(cuts: [], sourceDuration: 10, frameRate: 60),
             videoSize: bounds.size,
             camera: CameraPath(zooms: zooms, cursor: [], duration: 10),
             cursor: cursor.flatMap { _ in CursorPath(telemetry: cursorTelemetry, style: CursorStyle(), duration: 10, videoHeight: bounds.height) },
-            cursorShapes: cursor.map { CursorShapeTrack(telemetry: cursorTelemetry, duration: 10, arrow: $0) } ?? .none,
+            cursorShapes: cursor.map { CursorShapeTrack(telemetry: cursorTelemetry, duration: 10, arrow: $0).encoded(in: dynamicRange) } ?? .none,
             clicks: [ClickMarker(time: time, position: CGPoint(x: 100, y: 200), diameter: 100)],
             clickDuration: 0.5,
-            clickRing: OverlayImages.ring(diameter: 100, color: CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)),
+            clickRing: OverlayImages.encoded(OverlayImages.ring(diameter: 100, color: CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)), in: dynamicRange),
             keystrokes: [KeystrokeChip(time: time, image: 0)],
-            chipImages: [OverlayImages.chip(label: "⌘C", height: 30)],
-            canvas: CanvasLayout(style: canvas, videoSize: bounds.size, shorterSide: nil, background: nil),
-            dynamicRange: .sdr
+            chipImages: [OverlayImages.encoded(OverlayImages.chip(label: "⌘C", height: 30), in: dynamicRange)],
+            canvas: CanvasLayout(style: canvas, videoSize: bounds.size, shorterSide: nil, background: nil).encoded(in: dynamicRange),
+            dynamicRange: dynamicRange
         )
     }
 
@@ -203,6 +206,17 @@ struct FrameRendererTests {
         let chip = render(white, at: 1.2, plan: plan(at: 1, canvas: whiteFrame))
             .pixel(at: CGPoint(x: (200 - chipWidth / 2).rounded() + 4, y: 30 + 24 + 15))
         #expect(chip[0] < 200 && chip[0] == chip[2])
+    }
+
+    @Test func drawsHDRFramesAsTheyAreOnABackgroundAtSDRWhite() {
+        let frame = CIImage(color: CIColor(red: 0.3, green: 0.3, blue: 0.3)).cropped(to: bounds)
+        let image = render(frame, at: 5, plan: plan(at: 0, canvas: whiteFrame, dynamicRange: .pq))
+
+        // Without color management, the frame's PQ values stay as they are
+        let video = image.values(at: CGPoint(x: 200, y: 150))
+        #expect(abs(video[0] - 0.3) < 0.001 && video[3] == 1)
+        // The white background at 203 nits, BT.2408's reference white
+        #expect(abs(image.values(at: CGPoint(x: 10, y: 10))[0] - 0.58) < 0.001)
     }
 
     @Test func aTransparentBackgroundStaysClearBesideTheShadow() {

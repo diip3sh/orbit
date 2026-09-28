@@ -35,7 +35,7 @@ nonisolated enum DynamicRange: Sendable {
         }
     }
 
-    /// The color space HDR frames are drawn into; `nil` for SDR, drawn without color management.
+    /// The color space HDR overlays are drawn in, the video's; `nil` for SDR, where they're drawn as they are.
     var colorSpace: CGColorSpace? {
         switch self {
         case .sdr: nil

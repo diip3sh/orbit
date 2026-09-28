@@ -71,6 +71,12 @@ nonisolated struct CursorShapeTrack: Sendable {
         return sprites[changes[max(changes.partitioningIndex { $0.time > time } - 1, 0)].sprite]
     }
 
+    /// The track with its images in `range`'s encoding (see ``OverlayImages/encoded(_:in:)``).
+    func encoded(in range: DynamicRange) -> CursorShapeTrack {
+        let sprites = sprites.map { Sprite(image: OverlayImages.encoded($0.image, in: range), hotspot: $0.hotspot, pointsPerPixel: $0.pointsPerPixel) }
+        return CursorShapeTrack(sprites: sprites, changes: changes)
+    }
+
     /// `shapes` without those shown for less than ``minimumDuration`` and the repeats that leaves.
     /// A recording that only ever shows brief shapes keeps its first.
     static func steadyShapes(_ shapes: [InputTelemetry.CursorShape], duration: Double) -> [InputTelemetry.CursorShape] {
