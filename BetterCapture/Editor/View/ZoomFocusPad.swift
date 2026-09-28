@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// The frame with a zoom's view outlined on it. Dragging moves the view's centre.
+/// The frame with a zoom's view outlined on it and the rest dimmed. Dragging moves the view's centre.
 struct ZoomFocusPad: View {
 
     /// The frame, or `nil` while the filmstrip loads.
@@ -23,23 +23,36 @@ struct ZoomFocusPad: View {
 
     var body: some View {
         let shown = ZoomSegment.clamped(center, scale: scale)
-        let viewSize = CGSize(width: size.width / scale, height: size.height / scale)
+        let view = CGRect(
+            x: shown.x * size.width - size.width / scale / 2, y: shown.y * size.height - size.height / scale / 2,
+            width: size.width / scale, height: size.height / scale
+        )
 
         ZStack(alignment: .topLeading) {
             if let image {
                 Image(decorative: image, scale: 1)
                     .resizable()
             } else {
-                Color.black
+                Color.white.opacity(0.05)
             }
-            Rectangle()
-                .strokeBorder(.yellow, lineWidth: 2)
-                .frame(width: viewSize.width, height: viewSize.height)
-                .offset(x: shown.x * size.width - viewSize.width / 2, y: shown.y * size.height - viewSize.height / 2)
+            Canvas { context, size in
+                context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black.opacity(0.5)))
+                context.blendMode = .clear
+                context.fill(Path(view), with: .color(.black))
+            }
+            RoundedRectangle(cornerRadius: 3)
+                .strokeBorder(EditorTheme.accent, lineWidth: 2)
+                .frame(width: view.width, height: view.height)
+                .offset(x: view.minX, y: view.minY)
         }
         .aspectRatio(videoSize, contentMode: .fit)
-        .clipShape(.rect(cornerRadius: 4))
+        .clipShape(.rect(cornerRadius: 6))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(EditorTheme.hairline)
+        }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+        .pointerStyle(.grabIdle)
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in

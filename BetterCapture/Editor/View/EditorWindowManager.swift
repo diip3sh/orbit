@@ -55,14 +55,8 @@ final class EditorWindowManager: NSObject {
         hostingController.sizingOptions = .minSize
         // The export and inspector buttons are SwiftUI toolbar items
         hostingController.sceneBridgingOptions = [.toolbars]
-        let window = NSWindow(contentViewController: hostingController)
-        window.title = videoURL.deletingPathExtension().lastPathComponent
+        let window = makeWindow(hostingController, title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1280, height: 800))
         window.representedURL = videoURL
-        window.tabbingMode = .disallowed
-        window.isReleasedWhenClosed = false
-        window.delegate = self
-        window.setContentSize(NSSize(width: 1100, height: 720))
-        window.center()
         editors[videoURL] = Editor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
 
         // A regular app gets a Dock icon, ⌘-Tab and the main menu with Undo and Redo
@@ -84,17 +78,29 @@ final class EditorWindowManager: NSObject {
         }
         let hostingController = NSHostingController(rootView: RecordingsView(viewModel: viewModel))
         hostingController.sizingOptions = .minSize
-        let window = NSWindow(contentViewController: hostingController)
-        window.title = "Recordings"
-        window.tabbingMode = .disallowed
-        window.isReleasedWhenClosed = false
-        window.delegate = self
-        window.setContentSize(NSSize(width: 760, height: 520))
-        window.center()
+        let window = makeWindow(hostingController, title: "Recordings", size: NSSize(width: 860, height: 600))
         recordings = Recordings(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
 
         NSApp.setActivationPolicy(.regular)
         activate(window)
+    }
+
+    /// A centred window in the editor's look: always dark, the content running under a transparent
+    /// title bar and toolbar.
+    private func makeWindow(_ contentViewController: NSViewController, title: String, size: NSSize) -> NSWindow {
+        let window = NSWindow(contentViewController: contentViewController)
+        window.title = title
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.styleMask.insert(.fullSizeContentView)
+        window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
+        window.backgroundColor = NSColor(EditorTheme.stage)
+        window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.setContentSize(size)
+        window.center()
+        return window
     }
 
     private func activate(_ window: NSWindow) {

@@ -26,59 +26,97 @@ struct ExportSheet: View {
     var body: some View {
         let canvasSize = viewModel.exportSize(resolution: nil)
         let frameRate = viewModel.source?.frameRate ?? 0
+        let isHDR = viewModel.source.map { $0.dynamicRange != .sdr } ?? false
 
-        Form {
-            Section {
-                Picker("Format", selection: $settings.format) {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Export")
+                    .font(.title2.weight(.semibold))
+                Text("Saved as \(settings.format.outputURL(for: viewModel.videoURL).lastPathComponent), next to the recording")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .contentTransition(.opacity)
+            }
+
+            Group {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
                     ForEach(ExportFormat.allCases) { format in
-                        Text(format.rawValue).tag(format)
+                        ExportFormatCard(format: format, isSelected: settings.format == format, isHDR: isHDR) {
+                            settings.format = format
+                        }
                     }
                 }
-                Picker("Size", selection: $settings.resolution) {
-                    Text("Original, \(Self.dimensions(of: canvasSize))").tag(Int?.none)
-                    ForEach(ExportSettings.resolutions(below: min(canvasSize.width, canvasSize.height)), id: \.self) { resolution in
-                        Text("\(resolution, format: .number.grouping(.never))p, \(Self.dimensions(of: viewModel.exportSize(resolution: resolution)))")
-                            .tag(Int?.some(resolution))
+
+                Grid(alignment: .leading, verticalSpacing: 10) {
+                    GridRow {
+                        Text("Size")
+                            .foregroundStyle(.secondary)
+                        Picker("Size", selection: $settings.resolution) {
+                            Text("Original, \(Self.dimensions(of: canvasSize))").tag(Int?.none)
+                            ForEach(ExportSettings.resolutions(below: min(canvasSize.width, canvasSize.height)), id: \.self) { resolution in
+                                Text("\(resolution, format: .number.grouping(.never))p, \(Self.dimensions(of: viewModel.exportSize(resolution: resolution)))")
+                                    .tag(Int?.some(resolution))
+                            }
+                        }
+                        .labelsHidden()
                     }
-                }
-                Picker("Frame Rate", selection: $settings.frameRate) {
-                    Text("Original, \(frameRate, format: .number.precision(.fractionLength(0...2))) fps").tag(Int?.none)
-                    ForEach(ExportSettings.frameRates(below: frameRate), id: \.self) { rate in
-                        Text("\(rate) fps").tag(Int?.some(rate))
+                    GridRow {
+                        Text("Frame Rate")
+                            .foregroundStyle(.secondary)
+                        Picker("Frame Rate", selection: $settings.frameRate) {
+                            Text("Original, \(frameRate, format: .number.precision(.fractionLength(0...2))) fps").tag(Int?.none)
+                            ForEach(ExportSettings.frameRates(below: frameRate), id: \.self) { rate in
+                                Text("\(rate) fps").tag(Int?.some(rate))
+                            }
+                        }
+                        .labelsHidden()
                     }
-                }
-            } footer: {
-                if viewModel.canvas.background == .transparent, !settings.format.keepsTransparency {
-                    Text("The transparent background exports black. ProRes 4444 keeps it.")
                 }
             }
             .disabled(isExporting)
 
+            if viewModel.canvas.background == .transparent, !settings.format.keepsTransparency {
+                Label("The transparent background exports black. ProRes 4444 keeps it.", systemImage: "info.circle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
+            }
+
             if let progress = viewModel.exportProgress {
-                ProgressView(value: progress)
+                ExportProgressBar(progress: progress)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
             if let error {
                 Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
+                    .transition(.opacity)
             }
-        }
-        .formStyle(.grouped)
-        .frame(minWidth: 360)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
+
+            HStack {
+                Spacer()
                 Button("Cancel") {
                     dismiss()
                 }
-            }
-            ToolbarItem(placement: .confirmationAction) {
+                .keyboardShortcut(.cancelAction)
                 Button("Export") {
                     error = nil
                     isExporting = true
                 }
+                .keyboardShortcut(.defaultAction)
+                .prominentEditorButton()
                 .disabled(isExporting)
             }
+            .controlSize(.large)
         }
+        .padding(24)
+        .frame(width: 480)
+        .tint(EditorTheme.accent)
+        .editorMotion(value: settings)
+        .editorMotion(value: viewModel.exportProgress != nil)
+        .editorMotion(value: error?.localizedDescription)
         // Dismissing the sheet cancels the task, and with it the export
         .task(id: isExporting) {
             guard isExporting else { return }

@@ -25,7 +25,7 @@ struct RecordingsView: View {
                     )
                 } else {
                     ScrollView {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200))]) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 24)], spacing: 28) {
                             ForEach(recordings) { recording in
                                 RecordingTile(recording: recording, thumbnail: viewModel.thumbnails[recording.url]) {
                                     viewModel.open(recording)
@@ -35,13 +35,16 @@ struct RecordingsView: View {
                                 }
                             }
                         }
-                        .padding()
+                        .padding(28)
                     }
                 }
             } else {
                 ProgressView()
+                    .controlSize(.small)
             }
         }
-        .frame(minWidth: 480, minHeight: 320)
+        .frame(minWidth: 520, minHeight: 360)
+        .background(EditorTheme.stage)
+        .tint(EditorTheme.accent)
     }
 }

@@ -7,9 +7,9 @@
 
 import SwiftUI
 
-/// The timeline: the whole recording as a filmstrip with click, keystroke and zoom lanes, cut parts
-/// dimmed, and the playhead. Dragging scrubs, clicking selects a segment, and the handles on each
-/// kept part's edges trim it.
+/// The timeline: a time ruler over the whole recording as a filmstrip, with click, keystroke and
+/// zoom lanes, cut parts dimmed, and the playhead. Dragging scrubs, clicking selects a segment, and
+/// the handles on each kept part's edges trim it.
 struct EditorTimelineView: View {
     let viewModel: EditorViewModel
 
@@ -19,8 +19,13 @@ struct EditorTimelineView: View {
     @Environment(\.displayScale) private var displayScale
     @State private var width: CGFloat = 0
 
-    private static let filmstripHeight: CGFloat = 48
-    private static let lanesHeight: CGFloat = 20
+    private static let rulerHeight: CGFloat = 16
+    private static let filmstripHeight: CGFloat = 52
+    private static let lanesHeight: CGFloat = 22
+    private static let spacing: CGFloat = 6
+
+    /// Where the filmstrip starts, under the ruler.
+    private static let filmstripTop = rulerHeight + spacing
 
     /// How far the pointer may move for a press to still count as a click.
     private static let clickTolerance: CGFloat = 3
@@ -31,7 +36,10 @@ struct EditorTimelineView: View {
         let tileWidth = Self.filmstripHeight * videoSize.width / max(videoSize.height, 1)
         let tileCount = Int((width / tileWidth).rounded(.up))
 
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: Self.spacing) {
+            TimelineRuler(duration: duration)
+                .frame(height: Self.rulerHeight)
+
             HStack(spacing: 0) {
                 ForEach(viewModel.thumbnails.indices, id: \.self) { index in
                     Group {
@@ -39,8 +47,9 @@ struct EditorTimelineView: View {
                             Image(decorative: image, scale: displayScale)
                                 .resizable()
                                 .scaledToFill()
+                                .transition(.opacity)
                         } else {
-                            Color.black
+                            Color.white.opacity(0.05)
                         }
                     }
                     .frame(width: width / CGFloat(viewModel.thumbnails.count), height: Self.filmstripHeight)
@@ -48,20 +57,27 @@ struct EditorTimelineView: View {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: Self.filmstripHeight, maxHeight: Self.filmstripHeight, alignment: .leading)
-            .background(.black)
-            .clipShape(.rect(cornerRadius: 4))
+            .background(.white.opacity(0.05))
+            .clipShape(.rect(cornerRadius: 6))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(EditorTheme.hairline)
+            }
 
             if let markers = viewModel.markers {
                 Canvas { context, size in
                     guard duration > 0 else { return }
-                    let laneHeight = size.height / 2
-                    let clickLane = CGRect(x: 0, y: 0, width: size.width, height: laneHeight - 1)
-                    let keyLane = CGRect(x: 0, y: laneHeight + 1, width: size.width, height: laneHeight - 1)
-                    context.fill(Self.ticks(at: markers.clicks, duration: duration, in: clickLane), with: .color(.orange))
-                    context.fill(Self.ticks(at: markers.keys, duration: duration, in: keyLane), with: .color(.teal))
+                    let laneHeight = (size.height - 2) / 2
+                    let clickLane = CGRect(x: 0, y: 0, width: size.width, height: laneHeight)
+                    let keyLane = CGRect(x: 0, y: laneHeight + 2, width: size.width, height: laneHeight)
+                    for lane in [clickLane, keyLane] {
+                        context.fill(Path(roundedRect: lane, cornerRadius: 2), with: .color(.white.opacity(0.03)))
+                    }
+                    context.fill(Self.ticks(at: markers.clicks, duration: duration, in: clickLane), with: .color(EditorTheme.clicks))
+                    context.fill(Self.ticks(at: markers.keys, duration: duration, in: keyLane), with: .color(EditorTheme.keys))
                 }
                 .frame(height: Self.lanesHeight)
-                .help("Clicks (orange) and keystrokes (teal)")
+                .help("Clicks (amber) and keystrokes (teal)")
             } else if let reason = viewModel.source?.telemetryError {
                 Text(reason.localizedDescription)
                     .font(.caption)
@@ -71,25 +87,40 @@ struct EditorTimelineView: View {
 
             ZoomLane(viewModel: viewModel, width: width)
         }
+        .editorMotion(.smooth, value: viewModel.thumbnails.count { $0 != nil })
         .overlay {
-            // Cuts dimmed, splits across the filmstrip (handles cover the kept parts' starts), the selection outlined
+            // Cuts dimmed and hatched, and splits across the filmstrip (handles cover the kept parts' starts)
             Canvas { context, size in
                 guard duration > 0 else { return }
-                let span = { (range: Range<Double>, height: CGFloat) in
-                    CGRect(x: range.lowerBound / duration * size.width, y: 0, width: (range.upperBound - range.lowerBound) / duration * size.width, height: height)
+                let span = { (range: Range<Double>, top: CGFloat, height: CGFloat) in
+                    CGRect(x: range.lowerBound / duration * size.width, y: top, width: (range.upperBound - range.lowerBound) / duration * size.width, height: height)
                 }
                 for cut in timeMap.cuts {
-                    context.fill(Path(span(cut, size.height)), with: .color(.black.opacity(0.6)))
+                    let area = span(cut, Self.filmstripTop, size.height - Self.filmstripTop)
+                    context.fill(Path(area), with: .color(.black.opacity(0.6)))
+                    context.fill(Self.hatching(in: area), with: .color(.white.opacity(0.07)))
                 }
                 for segment in viewModel.segments {
-                    context.fill(Path(span(segment, Self.filmstripHeight).divided(atDistance: 1, from: .minXEdge).slice), with: .color(.white))
-                }
-                if case .segment(let selection) = viewModel.selection {
-                    context.stroke(Path(roundedRect: span(selection, size.height).insetBy(dx: 1, dy: 1), cornerRadius: 4), with: .color(.accentColor), lineWidth: 2)
+                    let line = span(segment, Self.filmstripTop, Self.filmstripHeight).divided(atDistance: 1, from: .minXEdge).slice
+                    context.fill(Path(line), with: .color(.white.opacity(0.8)))
                 }
             }
             .allowsHitTesting(false)
         }
+        .overlay(alignment: .topLeading) {
+            if case .segment(let selection) = viewModel.selection, duration > 0 {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(EditorTheme.accent, lineWidth: 2)
+                    .background(EditorTheme.accent.opacity(0.08), in: .rect(cornerRadius: 6))
+                    .frame(width: (selection.upperBound - selection.lowerBound) / duration * width)
+                    .frame(maxHeight: .infinity)
+                    .offset(x: selection.lowerBound / duration * width)
+                    .padding(.top, Self.filmstripTop)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+        .editorMotion(value: viewModel.selection)
         .overlay(alignment: .topLeading) {
             if duration > 0 {
                 ZStack(alignment: .leading) {
@@ -104,14 +135,13 @@ struct EditorTimelineView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, minHeight: Self.filmstripHeight, maxHeight: Self.filmstripHeight, alignment: .leading)
+                .padding(.top, Self.filmstripTop)
             }
         }
-        .overlay(alignment: .leading) {
+        .overlay(alignment: .topLeading) {
             TimelineView(.animation(paused: !viewModel.playback.isPlaying)) { _ in
-                Rectangle()
-                    .fill(.red)
-                    .frame(width: 2)
-                    .offset(x: duration > 0 ? viewModel.playheadSourceTime / duration * width - 1 : 0)
+                Playhead(knobHeight: Self.rulerHeight)
+                    .offset(x: duration > 0 ? viewModel.playheadSourceTime / duration * width - Playhead.knobWidth / 2 : 0)
             }
             .allowsHitTesting(false)
         }
@@ -135,12 +165,29 @@ struct EditorTimelineView: View {
         }
     }
 
-    /// One-point-wide ticks at `times`, spanning `lane` vertically, as a single path.
+    /// Rounded ticks at `times`, spanning `lane` vertically, as a single path.
     private static func ticks(at times: [Double], duration: Double, in lane: CGRect) -> Path {
         var path = Path()
         for time in times {
-            path.addRect(CGRect(x: lane.minX + time / duration * lane.width - 0.5, y: lane.minY, width: 1, height: lane.height))
+            let center = lane.minX + time / duration * lane.width
+            path.addRoundedRect(in: CGRect(x: center - 1, y: lane.minY + 2, width: 2, height: lane.height - 4), cornerSize: CGSize(width: 1, height: 1))
         }
         return path
+    }
+
+    /// Diagonal stripes filling `area`, the usual picture of something left out.
+    private static func hatching(in area: CGRect) -> Path {
+        var path = Path()
+        let gap: CGFloat = 6
+        var stripeStart = area.minX - area.height
+        while stripeStart < area.maxX {
+            path.move(to: CGPoint(x: stripeStart, y: area.maxY))
+            path.addLine(to: CGPoint(x: stripeStart + area.height, y: area.minY))
+            path.addLine(to: CGPoint(x: stripeStart + area.height + 1.5, y: area.minY))
+            path.addLine(to: CGPoint(x: stripeStart + 1.5, y: area.maxY))
+            path.closeSubpath()
+            stripeStart += gap
+        }
+        return path.intersection(Path(area))
     }
 }

@@ -22,15 +22,26 @@ struct TrimHandle: View {
     let onDrop: (CGFloat) -> Void
 
     @State private var dragPosition: CGFloat?
+    @State private var isHovered = false
 
-    private static let width: CGFloat = 6
+    private static let width: CGFloat = 8
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 2)
-            .fill(.yellow)
+        let isActive = isHovered || dragPosition != nil
+
+        RoundedRectangle(cornerRadius: 3)
+            .fill(isActive ? EditorTheme.accent : EditorTheme.trim)
+            .overlay {
+                Capsule()
+                    .fill(.black.opacity(0.45))
+                    .frame(width: 2, height: 14)
+            }
+            .shadow(color: .black.opacity(0.4), radius: 2)
             .frame(width: Self.width)
             .offset(x: (dragPosition ?? position) - (edge == .leading ? 0 : Self.width))
             .pointerStyle(.frameResize(position: edge == .leading ? .leading : .trailing))
+            .onHover { isHovered = $0 }
+            .editorMotion(.snappy(duration: 0.18), value: isActive)
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .named(Self.coordinateSpace))
                     .onChanged { dragPosition = $0.location.x }

@@ -34,7 +34,7 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   && { pkill -x BetterCapture; open /tmp/bc-build/dd/Build/Products/Debug/BetterCapture.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 330 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 333 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -245,7 +245,7 @@ Key facts:
 ### S1 — Editor, phase 3: trim and cut (`feat/editor-shell`, spec 0003)
 
 The timeline always spans the whole recording: cut parts are dimmed and the playhead skips them.
-Each kept part has a yellow handle on both edges; dragging one trims or restores. **S** splits at
+Each kept part has a handle on both edges; dragging one trims or restores. **S** splits at
 the playhead, clicking selects the part between splits and cuts, **⌫** cuts it. The inspector's
 Audio section sets each track's volume and mute.
 
@@ -380,6 +380,29 @@ Key facts:
 - The Recordings window lists movies in the output folder, newest first, without `-edited`
   exports, reads the list whenever it comes forward, and holds the folder's scope while open.
 
+### S1 — Editor design (`feat/editor-shell`)
+
+The editor and Recordings windows are always dark, a studio: the preview sits raised on a near-black
+stage, the transport floats on glass under it, and the timeline and inspector are neutral greys with
+one signal orange (`EditorTheme.accent`) for the playhead, the selection and Export.
+
+| File | Role |
+|---|---|
+| `Editor/View/EditorTheme.swift` | Colors and the one animation every state change uses |
+| `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `.glassProminent`, `GlassEffectContainer`), a material with a hairline before; `editorMotion(value:)` animates unless Reduce Motion is on |
+| `Editor/View/EditorWindowManager.swift` | `makeWindow`: dark appearance, content under a transparent title bar |
+| `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the glass transport |
+| `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart), the playhead's knob, the zoom blocks |
+| `Editor/View/Inspector*.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | The inspector's sections, sliders with their values, switches, and tiles whose highlight slides |
+| `Editor/View/ExportFormatCard.swift`, `ExportProgressBar.swift` | The export sheet's format cards and progress |
+
+Key facts:
+- Glass only on controls over the stage, never on the timeline (content) or over the live video:
+  each glass shape costs a sampling pass on the GPU the compositor also uses.
+- The inspector keeps the system `.inspector`, which macOS 26 draws as glass, so it has no background.
+- `ImageRenderer` can't draw glass content, AppKit controls, `ScrollView`s or the player, and
+  `screencapture`/`cacheDisplay` need permission or miss SwiftUI; check the look in the app.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -422,6 +445,7 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | S1 editor phase 4: auto-zoom, zoom lane, camera | Done; auto-zoom placement, full-frame-rate transitions and editing zooms on the timeline still need a check in the app on real recordings |
 | S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
 | S1 editor phase 6: canvas and export polish | Done; the canvas, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags), transparent exports and the Recordings window still need a check in the app |
+| S1 editor design: dark studio, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
 
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0
 (portable with attribution). `lzhgus/Capso` (BSL, bans screen-capture use) and

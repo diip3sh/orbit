@@ -17,7 +17,7 @@ struct ZoomLane: View {
     /// The zoom being dragged and how far, in points.
     @State private var drag: (id: ZoomSegment.ID, offset: CGFloat)?
 
-    static let height: CGFloat = 22
+    static let height: CGFloat = 24
 
     /// How far the pointer may move for a press to still count as a click.
     private static let clickTolerance: CGFloat = 3
@@ -33,17 +33,9 @@ struct ZoomLane: View {
                     let end = zoom.range.upperBound / duration * width
                     let dragged = drag.flatMap { $0.id == zoom.id ? $0.offset : nil } ?? 0
 
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(.purple.opacity(0.7))
-                        .strokeBorder(zoom.id == selected ? Color.accentColor : .clear, lineWidth: 2)
-                        .overlay {
-                            Text("\(zoom.scale, format: .number.precision(.fractionLength(0...2)))×")
-                                .font(.caption)
-                                .lineLimit(1)
-                        }
+                    ZoomBlock(zoom: zoom, isSelected: zoom.id == selected, isDragged: drag?.id == zoom.id)
                         .frame(width: end - start)
                         .offset(x: start + dragged)
-                        .pointerStyle(.grabIdle)
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { drag = (zoom.id, $0.translation.width) }
@@ -67,7 +59,9 @@ struct ZoomLane: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height, alignment: .leading)
-        .background(.quaternary, in: .rect(cornerRadius: 4))
+        .background(.white.opacity(0.03), in: .rect(cornerRadius: 6))
+        .editorMotion(value: viewModel.project.zooms)
+        .editorMotion(value: selected)
         .help("Zooms: Z adds one at the playhead, ⌫ deletes the selected one")
     }
 }
