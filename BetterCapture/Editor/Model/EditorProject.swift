@@ -21,8 +21,12 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     /// Source ranges left out of the output, sorted and non-overlapping. Trimming is a cut at either end.
     var cuts: [Range<Double>] = []
 
+    /// Where the timeline is divided, so the part between two splits can be selected and cut.
+    var splits: [Double] = []
+
     var clickHighlights = ClickHighlightStyle()
     var keystrokes = KeystrokeOverlayStyle()
+    var audio = AudioMixSettings()
 
     /// The project file for a recording: same folder and base name, `.edit.json` extension.
     static func fileURL(for videoURL: URL) -> URL {
@@ -43,7 +47,9 @@ extension EditorProject {
             throw UnsupportedVersionError(version: version)
         }
         cuts = try container.decode([Range<Double>].self, forKey: .cuts)
+        splits = try container.decodeIfPresent([Double].self, forKey: .splits) ?? []
         clickHighlights = try container.decodeIfPresent(ClickHighlightStyle.self, forKey: .clickHighlights) ?? ClickHighlightStyle()
         keystrokes = try container.decodeIfPresent(KeystrokeOverlayStyle.self, forKey: .keystrokes) ?? KeystrokeOverlayStyle()
+        audio = try container.decodeIfPresent(AudioMixSettings.self, forKey: .audio) ?? AudioMixSettings()
     }
 }

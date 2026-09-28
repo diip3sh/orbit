@@ -66,7 +66,7 @@ extension RenderPlan {
         let ringDiameter = clicks.map(\.diameter).max() ?? 0
         let chipHeight = min(videoSize.width, videoSize.height) * chipHeightFraction
         return RenderPlan(
-            timeMap: TimeMap(cuts: project.cuts, sourceDuration: source.duration),
+            timeMap: TimeMap(cuts: project.cuts, sourceDuration: source.duration, frameRate: source.frameRate),
             videoSize: videoSize,
             clicks: clicks,
             clickDuration: project.clickHighlights.duration,

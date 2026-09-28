@@ -50,6 +50,7 @@ struct RenderPlanTests {
             asset: AVURLAsset(url: URL(filePath: "/dev/null")),
             timeRange: CMTimeRange(start: .zero, duration: CMTime(value: 10, timescale: 1)),
             videoTrackID: 1,
+            audioTrackIDs: [],
             naturalSize: CGSize(width: 1600, height: 1200),
             frameRate: 60,
             timescale: 600,

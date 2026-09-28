@@ -24,7 +24,10 @@ final class EditorViewModel {
     /// The recording, or `nil` while it loads or when it couldn't be opened.
     private(set) var source: EditorSource?
     private(set) var project = EditorProject()
-    private(set) var timeMap = TimeMap(cuts: [], sourceDuration: 0)
+    private(set) var timeMap = TimeMap(cuts: [], sourceDuration: 0, frameRate: 60)
+
+    /// The part of the timeline that ⌫ cuts, in source seconds: a segment between splits and cuts.
+    private(set) var selection: Range<Double>?
 
     /// Clicks and keystrokes on the timeline, or `nil` without telemetry.
     private(set) var markers: TimelineMarkers?
@@ -42,9 +45,10 @@ final class EditorViewModel {
     @ObservationIgnored private var savedProject = EditorProject()
     @ObservationIgnored private var autosave: Task<Void, Never>?
 
-    /// What the player shows and export writes, for the latest project.
+    /// What the player shows and export writes. Behind the project while a rebuild runs.
     @ObservationIgnored private var plan: RenderPlan?
-    @ObservationIgnored private var planBuild: Task<Void, Never>?
+    @ObservationIgnored private var composition: EditorComposition?
+    @ObservationIgnored private var rebuild: Task<Void, Never>?
 
     /// Labels keystrokes with the keyboard layout in use when the editor opened.
     @ObservationIgnored private var keyLabels: KeyLabelFormatter?
@@ -83,15 +87,22 @@ final class EditorViewModel {
         }
         let keyLabels = KeyLabelFormatter.current()
         let plan = await RenderPlan.build(project: project, source: source, keyLabels: keyLabels)
+        let composition: EditorComposition
+        do {
+            composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
+        } catch {
+            fail(.unreadableVideo(error))
+            return
+        }
         guard !Task.isCancelled else { return }
 
         self.source = source
         self.project = project
         self.keyLabels = keyLabels
-        self.plan = plan
         savedProject = project
-        playback.load(source, videoComposition: CompositionBuilder.videoComposition(for: source, plan: plan))
+        markers = source.telemetry.map(TimelineMarkers.init)
         updateTimeline()
+        show(composition, plan: plan, atSource: 0)
         logger.info("Opened \(self.videoURL.lastPathComponent)")
     }
 
@@ -99,8 +110,7 @@ final class EditorViewModel {
     /// timeline's layout changes.
     func loadThumbnails(count: Int, maximumSize: CGSize) async {
         guard let source, count > 0 else { return }
-        let tileDuration = timeMap.outputDuration / Double(count)
-        let times = (0..<count).map { timeMap.sourceTime(atOutput: (Double($0) + 0.5) * tileDuration) }
+        let times = (0..<count).map { (Double($0) + 0.5) * source.duration / Double(count) }
         let images = await ThumbnailProvider.thumbnails(of: source, at: times, maximumSize: maximumSize)
         guard !Task.isCancelled else { return }
         thumbnails = images
@@ -118,8 +128,9 @@ final class EditorViewModel {
         let now = ContinuousClock.now
         if coalescing, let last = coalescingEdit, last.actionName == actionName, now - last.time < Self.coalescingInterval {
             // The undo step the first of these edits registered restores the project from before all of them
+            let previous = project
             project = edited
-            projectChanged()
+            projectChanged(from: previous)
         } else {
             setProject(edited, actionName: actionName)
         }
@@ -138,17 +149,23 @@ final class EditorViewModel {
         set { edit("Keystrokes", coalescing: true) { $0.keystrokes = newValue } }
     }
 
+    /// The audio tracks' volumes, for the inspector's controls. Each change is an edit.
+    var audio: AudioMixSettings {
+        get { project.audio }
+        set { edit("Audio", coalescing: true) { $0.audio = newValue } }
+    }
+
     /// Exports the edited video as `<name>-edited` next to the recording and reveals it in Finder.
     /// Cancelling the calling task cancels the export.
     func export(as format: ExportFormat) async throws {
-        guard let source, let plan else { return }
+        await rebuild?.value
+        guard let composition else { return }
         let url = format.outputURL(for: videoURL)
         exportProgress = 0
         defer { exportProgress = nil }
 
         do {
-            let videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan)
-            try await ExportService.export(source.asset, videoComposition: videoComposition, to: url, as: format) { [weak self] in
+            try await ExportService.export(composition, to: url, as: format) { [weak self] in
                 self?.exportProgress = $0
             }
         } catch {
@@ -162,7 +179,7 @@ final class EditorViewModel {
 
     /// Releases the player and filmstrip and saves pending edits. Called when the window closes.
     func close() async {
-        planBuild?.cancel()
+        rebuild?.cancel()
         playback.release()
         thumbnails = []
         autosave?.cancel()
@@ -182,33 +199,69 @@ final class EditorViewModel {
             viewModel.setProject(previous, actionName: actionName)
         }
         undoManager.setActionName(actionName)
-        projectChanged()
+        projectChanged(from: previous)
     }
 
-    private func projectChanged() {
+    private func projectChanged(from previous: EditorProject) {
+        selection = nil
         updateTimeline()
-        rebuildPlan()
+        // Splits and volumes aren't drawn; anything else is
+        var drawn = project
+        drawn.splits = previous.splits
+        drawn.audio = previous.audio
+        if drawn != previous {
+            rebuildPlan()
+        } else if project.audio != previous.audio, let source, let plan {
+            let audioMix = CompositionBuilder.audioMix(for: source, timeMap: plan.timeMap, settings: project.audio)
+            composition?.audioMix = audioMix
+            playback.setAudioMix(audioMix)
+        }
         scheduleAutosave()
     }
 
     private func updateTimeline() {
         guard let source else { return }
-        timeMap = TimeMap(cuts: project.cuts, sourceDuration: source.duration)
-        markers = source.telemetry.map { TimelineMarkers(telemetry: $0, timeMap: timeMap) }
+        timeMap = TimeMap(cuts: project.cuts, sourceDuration: source.duration, frameRate: source.frameRate)
     }
 
-    /// Builds a plan for the project off the main actor, replacing a build still running, and shows it.
+    /// Builds a plan for the project off the main actor, replacing a build still running, and shows
+    /// it. New cuts need a new player item, whose playhead stays on the same content.
     private func rebuildPlan() {
         guard let source else { return }
-        planBuild?.cancel()
+        rebuild?.cancel()
         let project = project
         let keyLabels = keyLabels
-        planBuild = Task {
+        rebuild = Task {
             let plan = await RenderPlan.build(project: project, source: source, keyLabels: keyLabels)
-            guard !Task.isCancelled else { return }
-            self.plan = plan
-            playback.setVideoComposition(CompositionBuilder.videoComposition(for: source, plan: plan))
+            guard !Task.isCancelled, let playing = self.plan, var composition else { return }
+            guard plan.timeMap != playing.timeMap else {
+                composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan)
+                composition.audioMix = CompositionBuilder.audioMix(for: source, timeMap: plan.timeMap, settings: self.project.audio)
+                self.plan = plan
+                self.composition = composition
+                playback.setVideoComposition(composition.videoComposition)
+                playback.setAudioMix(composition.audioMix)
+                return
+            }
+
+            let playhead = playing.timeMap.sourceTime(atOutput: playback.currentTime)
+            do {
+                let rebuilt = try await CompositionBuilder.composition(for: source, plan: plan, audio: self.project.audio)
+                guard !Task.isCancelled else { return }
+                show(rebuilt, plan: plan, atSource: playhead)
+            } catch {
+                fail(.unreadableVideo(error))
+            }
         }
+    }
+
+    /// Plays a new composition, paused at source time `time` or the first frame after it.
+    private func show(_ composition: EditorComposition, plan: RenderPlan, atSource time: Double) {
+        guard let source else { return }
+        self.plan = plan
+        self.composition = composition
+        let frames = FrameGrid(frameRate: source.frameRate, duration: plan.timeMap.outputDuration)
+        playback.load(composition, frames: frames, timescale: source.timescale, at: plan.timeMap.outputTime(atSource: time))
     }
 
     private func scheduleAutosave() {
@@ -234,5 +287,57 @@ final class EditorViewModel {
     private func fail(_ error: EditorError) {
         logger.error("\(self.videoURL.lastPathComponent): \(error.localizedDescription)")
         self.error = error
+    }
+}
+
+// MARK: - Cutting
+
+extension EditorViewModel {
+
+    /// The kept ranges divided at the project's splits: what can be selected.
+    var segments: [Range<Double>] {
+        timeMap.segments(splitAt: project.splits)
+    }
+
+    /// The playhead in source seconds. Not observed during playback.
+    var playheadSourceTime: Double {
+        timeMap.sourceTime(atOutput: playback.currentTime)
+    }
+
+    /// Something must stay, so the only segment left can't be cut.
+    var canCutSelection: Bool {
+        selection != nil && segments.count > 1
+    }
+
+    /// Shows the frame at source time `time`, or the first one after it inside a cut.
+    func seek(toSource time: Double) {
+        playback.seek(to: timeMap.outputTime(atSource: time))
+    }
+
+    /// Selects the segment at source time `time`; inside a cut, nothing.
+    func select(at time: Double) {
+        selection = segments.first { $0.contains(time) }
+    }
+
+    /// Divides the segment under the playhead in two, at the frame shown.
+    func split() {
+        let splits = (project.splits + [timeMap.snapped(playheadSourceTime)]).sorted()
+        guard timeMap.segments(splitAt: splits) != segments else { return }
+        edit("Split") { $0.splits = splits }
+    }
+
+    func cutSelection() {
+        guard let selection, canCutSelection else { return }
+        edit("Cut") { $0.cuts = timeMap.cuts(adding: selection) }
+    }
+
+    /// Moves kept range `index`'s start to source time `time`, cutting or restoring the recording there.
+    func moveStart(ofKeptRange index: Int, to time: Double) {
+        edit("Trim") { $0.cuts = timeMap.cuts(movingStartOf: index, to: time) }
+    }
+
+    /// Moves kept range `index`'s end to source time `time`, cutting or restoring the recording there.
+    func moveEnd(ofKeptRange index: Int, to time: Double) {
+        edit("Trim") { $0.cuts = timeMap.cuts(movingEndOf: index, to: time) }
     }
 }

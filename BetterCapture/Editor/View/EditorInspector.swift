@@ -7,7 +7,8 @@
 
 import SwiftUI
 
-/// Style controls for the overlays drawn from input telemetry: click highlights and keystrokes.
+/// Style controls for the overlays drawn from input telemetry (click highlights and keystrokes),
+/// and the audio tracks' volumes.
 struct EditorInspector: View {
     @Bindable var viewModel: EditorViewModel
 
@@ -53,6 +54,23 @@ struct EditorInspector: View {
                 }
             }
             .disabled(telemetry?.keystrokesAvailable != true)
+
+            if let names = viewModel.source?.audioTrackNames, !names.isEmpty {
+                Section("Audio") {
+                    ForEach(names.indices, id: \.self) { index in
+                        let isMuted = viewModel.audio[track: index].isMuted
+                        LabeledContent(names[index]) {
+                            HStack {
+                                Slider(value: $viewModel.audio[track: index].volume, in: 0...1)
+                                    .disabled(isMuted)
+                                Toggle("Mute", systemImage: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill", isOn: $viewModel.audio[track: index].isMuted)
+                                    .toggleStyle(.button)
+                                    .labelStyle(.iconOnly)
+                            }
+                        }
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
     }

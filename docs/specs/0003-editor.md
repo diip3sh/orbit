@@ -332,6 +332,16 @@ The core of the editor. After this phase, adding an effect means adding a precom
 - Effects stay attached to their content across cuts; they need no remapping code.
 - Tests: `TimeMap` round trips, boundaries, adjacent and overlapping cuts, cuts covering everything.
 
+**Status:** Built and tested, including an export with a cut that has the kept length and shows the right frame after the cut, and a mix measured silent at the cut and at each track's volume. Still to check in the app on a real recording: trimming, splitting and cutting, and that cuts don't click. Where the build differs from the plan:
+
+- The timeline always shows the whole recording in source time: cut parts are dimmed and the playhead skips them. The lanes, the filmstrip and Phase 4's zoom lane need no mapping, and a cut is restored by dragging its edge back. Every kept part has a handle on each edge; dragging one trims or restores up to the neighbouring kept part, and keeps at least one frame. A trim is one undo step, committed when the handle is let go.
+- Splits are saved in the project (`splits`, source seconds), so a split is an undoable edit. A segment is a kept range divided at the splits inside it; clicking selects one, and ⌫ cuts it unless it's the last one left.
+- `TimeMap` owns every cut operation (add, restore, move an edge, divide at splits). It normalizes in frame boundaries, the last being the recording's end wherever it falls, so a trailing cut never leaves a sliver.
+- The composition keeps the source's track IDs, so the video composition and the mix name tracks directly. A new player item is made only when the cuts change, with the playhead kept on its content; other edits swap the video composition, and volume changes only the mix.
+- Fades are 25 ms, not 10–20: the mix lags its volume ramps by about 10 ms. Measured at a cut, 10 ms ramps still left 57% of the volume, 20 ms 20%, and 25 ms 2%.
+- Audio tracks are named by the recorder's order: with two, system audio then the microphone; a single track is "Audio", since it could be either.
+- Recordings whose tracks end at slightly different times build and export (checked with audio 50 ms longer and 300 ms shorter than the video).
+
 ### Phase 4 - Zoom (L)
 
 **Build**
@@ -403,12 +413,12 @@ BetterCapture/Editor/
               CanvasStyle, AudioMixSettings
   Render/     RenderPlan, TimeMap, CameraPath, CursorPath, CursorShapeTrack, CursorSprites, ClickMarker,
               KeystrokeChip, OverlayImages, CanvasLayout, FrameRenderer, EditorCompositor, EditorInstruction,
-              CompositionBuilder
+              CompositionBuilder, EditorComposition
   Service/    EditorSourceLoader, ProjectStore, ThumbnailProvider, ExportService,
               AutoZoomGenerator, KeyLabelFormatter
   ViewModel/  EditorViewModel, PlaybackController
-  View/       EditorWindowManager, EditorView, PlayerLayerView, EditorTimelineView, TransportBar,
-              EditorInspector, ExportSheet
+  View/       EditorWindowManager, EditorView, PlayerLayerView, EditorTimelineView, TrimHandle,
+              TransportBar, EditorInspector, ExportSheet
 ```
 
 `EditorTimelineView` is named so that it doesn't collide with SwiftUI's `TimelineView`.

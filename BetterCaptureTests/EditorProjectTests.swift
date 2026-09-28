@@ -12,9 +12,10 @@ import Testing
 struct EditorProjectTests {
 
     @Test func roundTripsThroughJSON() throws {
-        var project = EditorProject(cuts: [0..<1.5, 10..<12.25])
+        var project = EditorProject(cuts: [0..<1.5, 10..<12.25], splits: [5])
         project.clickHighlights.buttons = .left
         project.keystrokes.showsAllKeys = true
+        project.audio[track: 1].isMuted = true
 
         let data = try JSONEncoder().encode(project)
         let json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -23,7 +24,7 @@ struct EditorProjectTests {
         #expect(try JSONDecoder().decode(EditorProject.self, from: data) == project)
     }
 
-    @Test func readsAVersion1FileWrittenBeforeStylesWithDefaults() throws {
+    @Test func readsAVersion1FileWrittenBeforeLaterSettingsWithDefaults() throws {
         let json = #"{ "version": 1, "cuts": [[1, 2]] }"#
 
         let project = try JSONDecoder().decode(EditorProject.self, from: Data(json.utf8))

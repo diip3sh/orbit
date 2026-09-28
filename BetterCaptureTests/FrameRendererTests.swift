@@ -16,7 +16,7 @@ struct FrameRendererTests {
     /// A click at (100, 200) with a red ring 100 px wide when grown, and a "⌘C" chip, both at 1 s.
     private var plan: RenderPlan {
         RenderPlan(
-            timeMap: TimeMap(cuts: [], sourceDuration: 10),
+            timeMap: TimeMap(cuts: [], sourceDuration: 10, frameRate: 60),
             videoSize: bounds.size,
             clicks: [ClickMarker(time: 1, position: CGPoint(x: 100, y: 200), diameter: 100)],
             clickDuration: 0.5,

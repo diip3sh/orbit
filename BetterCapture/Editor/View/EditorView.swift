@@ -20,7 +20,7 @@ struct EditorView: View {
                 VStack(spacing: 0) {
                     PlayerLayerView(player: viewModel.playback.player)
 
-                    TransportBar(playback: viewModel.playback, duration: viewModel.timeMap.outputDuration)
+                    TransportBar(viewModel: viewModel)
 
                     EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
                         .padding([.horizontal, .bottom])

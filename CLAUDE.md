@@ -34,7 +34,7 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   && { pkill -x BetterCapture; open /tmp/bc-build/dd/Build/Products/Debug/BetterCapture.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 245 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 264 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -216,7 +216,6 @@ Key facts:
   `currentTime` inside `TimelineView(.animation)`, so a tick redraws the playhead and time label only.
 - Frame stepping uses `AVPlayerItem.step(byCount:)` (decodes one frame; a seek decodes from the last
   keyframe, up to 2 s back) unless a seek is still in flight.
-- Phase 1 plays the source asset directly; output time equals source time until phase 3's composition.
 
 ### S1 — Editor, phase 2: render pipeline, overlays, export (`feat/editor-shell`, spec 0003)
 
@@ -242,6 +241,36 @@ Key facts:
   and a chip: ~5 ms p50 / 8 ms p95 per frame, versus 10 / 13 ms with linear-light compositing. A
   10-min plan (3,000 clicks, 12,000 keys) builds in ~24 ms.
 - `InputTelemetry.geometry(at:)` and `RandomAccessCollection.partitioningIndex` are the shared lookups.
+
+### S1 — Editor, phase 3: trim and cut (`feat/editor-shell`, spec 0003)
+
+The timeline always spans the whole recording: cut parts are dimmed and the playhead skips them.
+Each kept part has a yellow handle on both edges; dragging one trims or restores. **S** splits at
+the playhead, clicking selects the part between splits and cuts, **⌫** cuts it. The inspector's
+Audio section sets each track's volume and mute.
+
+| File | Role |
+|---|---|
+| `Editor/Render/TimeMap.swift` | Output ↔ source time by binary search, and every cut operation: normalize, add, restore, move a kept range's edge, divide at splits |
+| `Editor/Render/CompositionBuilder.swift`, `EditorComposition.swift` | `AVMutableComposition` of the kept ranges (every track, source track IDs), the video composition, and the `AVAudioMix` with volumes and fades |
+| `Editor/ViewModel/EditorViewModel.swift` | `// MARK: - Cutting` extension: `split()`, `select(at:)`, `cutSelection()`, `moveStart`/`moveEnd(ofKeptRange:to:)`; rebuilds swap only what changed |
+| `Editor/View/EditorTimelineView.swift`, `TrimHandle.swift` | Source-time timeline: dimmed cuts, splits, selection, handles |
+| `Editor/Model/AudioMixSettings.swift` | Volume and mute per audio track, by the recording's track order |
+
+Key facts:
+- Everything in the project and on the timeline is source time; only the player, the transport's
+  time label and the compositor's requests are output time. `TimeMap` is the only converter.
+- Cuts are normalized as frame boundaries (integers); the last boundary is the recording's end
+  wherever it falls, so a trailing cut never leaves a sliver. Something must stay: trims keep a
+  frame per kept part, and the last part can't be cut.
+- `splits` are saved in the project, so a split is an undoable edit. Splits inside cuts are kept
+  and come back if the cut is restored.
+- A new player item is made only when the cuts change (the playhead stays on its content); other
+  edits swap the video composition, volumes only the mix.
+- Audio fades 25 ms at every cut. The mix lags its ramps by ~10 ms: at a cut, 10 ms ramps still
+  left 57% of the volume, 20 ms 20%, 25 ms 2%.
+- Audio tracks are named by the writer's order: two tracks are system audio then microphone; one
+  track is just "Audio" since it could be either.
 
 ### Telemetry JSON (version 3)
 
@@ -281,7 +310,8 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | F8 Swift 6 language mode | Done (`chore/swift-6-mode`); needs one real recording to rule out runtime isolation crashes |
 | S1 editor phase 1: shell and playback | Done; open/scrub/close still need a check on a real 10-min 4K recording (see spec 0003) |
 | S1 editor phase 2: render pipeline, click highlights, keystrokes, export | Done; highlight placement still needs checking on real recordings of each capture kind. 4K render measured at the 8 ms p95 budget on an M1 (see spec 0003) |
-| S1 editor phases 3–6 (cuts, zoom, cursor, canvas and export polish) | Todo, spec 0003 |
+| S1 editor phase 3: trim, split and cut, audio volume | Done; trimming, cutting and clicks at cuts still need a check in the app on a real recording |
+| S1 editor phases 4–6 (zoom, cursor, canvas and export polish) | Todo, spec 0003 |
 
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0
 (portable with attribution). `lzhgus/Capso` (BSL, bans screen-capture use) and

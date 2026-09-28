@@ -7,12 +7,15 @@
 
 import SwiftUI
 
-/// Play/pause, frame stepping and the playhead's time. Space plays and pauses, ← and → step a frame.
+/// Play/pause, frame stepping, the playhead's time, and cutting. Space plays and pauses, ← and →
+/// step a frame, S splits at the playhead and ⌫ cuts the selection.
 struct TransportBar: View {
-    let playback: PlaybackController
-    let duration: Double
+    let viewModel: EditorViewModel
 
     var body: some View {
+        let playback = viewModel.playback
+        let duration = viewModel.timeMap.outputDuration
+
         HStack {
             Button("Previous Frame", systemImage: "backward.frame.fill") {
                 playback.step(by: -1)
@@ -34,6 +37,21 @@ struct TransportBar: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
+
+            Spacer()
+
+            Button("Split at Playhead", systemImage: "scissors") {
+                viewModel.split()
+            }
+            .keyboardShortcut("s", modifiers: [])
+            .help("Split at the playhead (S)")
+
+            Button("Cut Selection", systemImage: "trash") {
+                viewModel.cutSelection()
+            }
+            .keyboardShortcut(.delete, modifiers: [])
+            .help("Cut the selected part (⌫)")
+            .disabled(!viewModel.canCutSelection)
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.borderless)

@@ -21,12 +21,14 @@ nonisolated enum EditorSourceLoader {
             }
             let duration = try await asset.load(.duration)
             let (naturalSize, frameRate, timescale) = try await track.load(.naturalSize, .nominalFrameRate, .naturalTimeScale)
+            let audioTrackIDs = try await asset.loadTracks(withMediaType: .audio).map(\.trackID)
             let (telemetry, telemetryError) = loadTelemetry(for: videoURL)
 
             return EditorSource(
                 asset: asset,
                 timeRange: CMTimeRange(start: .zero, duration: duration),
                 videoTrackID: track.trackID,
+                audioTrackIDs: audioTrackIDs,
                 naturalSize: naturalSize,
                 frameRate: Double(frameRate),
                 timescale: timescale,

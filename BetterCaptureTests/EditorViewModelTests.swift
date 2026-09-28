@@ -84,6 +84,72 @@ struct EditorViewModelTests {
         #expect(viewModel.undoManager.undoActionName == "Keystrokes")
     }
 
+    @Test func splittingThenCuttingTheSelectionLeavesItOut() async throws {
+        let video = try await writeRecording()
+        defer { try? FileManager.default.removeItem(at: video.deletingLastPathComponent()) }
+        let viewModel = EditorViewModel(videoURL: video)
+        await viewModel.load()
+
+        viewModel.playback.seek(to: 0.5)
+        viewModel.split()
+        #expect(viewModel.project.splits == [0.5])
+        #expect(viewModel.undoManager.undoActionName == "Split")
+        #expect(!viewModel.canCutSelection)
+
+        viewModel.select(at: 0.7)
+        #expect(viewModel.selection == 0.5..<1)
+        viewModel.cutSelection()
+        #expect(viewModel.project.cuts == [0.5..<1])
+        #expect(viewModel.undoManager.undoActionName == "Cut")
+        #expect(viewModel.timeMap.outputDuration == 0.5)
+        #expect(viewModel.selection == nil)
+    }
+
+    @Test func theLastPartLeftCantBeCut() async throws {
+        let video = try await writeRecording()
+        defer { try? FileManager.default.removeItem(at: video.deletingLastPathComponent()) }
+        let viewModel = EditorViewModel(videoURL: video)
+        await viewModel.load()
+
+        viewModel.select(at: 0.5)
+        #expect(viewModel.selection == 0..<1)
+        #expect(!viewModel.canCutSelection)
+        viewModel.cutSelection()
+        #expect(viewModel.project.cuts.isEmpty)
+    }
+
+    @Test func splittingWhereThereIsAlreadyABoundaryDoesNothing() async throws {
+        let video = try await writeRecording()
+        defer { try? FileManager.default.removeItem(at: video.deletingLastPathComponent()) }
+        let viewModel = EditorViewModel(videoURL: video)
+        await viewModel.load()
+
+        viewModel.split()
+        #expect(!viewModel.undoManager.canUndo)
+    }
+
+    @Test func movingAnEdgeIsATrim() async throws {
+        let video = try await writeRecording()
+        defer { try? FileManager.default.removeItem(at: video.deletingLastPathComponent()) }
+        let viewModel = EditorViewModel(videoURL: video)
+        await viewModel.load()
+
+        viewModel.moveStart(ofKeptRange: 0, to: 0.2)
+        viewModel.moveEnd(ofKeptRange: 0, to: 0.9)
+
+        #expect(viewModel.project.cuts == [0..<0.2, 0.9..<1])
+        #expect(viewModel.undoManager.undoActionName == "Trim")
+    }
+
+    /// A 1 s recording at 30 fps in a folder of its own.
+    private func writeRecording() async throws -> URL {
+        let folder = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let video = folder.appending(path: "recording.mov")
+        try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30)
+        return video
+    }
+
     @Test func anEditThatChangesNothingIsNotAnUndoStep() {
         let viewModel = EditorViewModel(videoURL: videoURL)
 
