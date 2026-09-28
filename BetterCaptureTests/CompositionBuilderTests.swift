@@ -47,7 +47,7 @@ struct CompositionBuilderTests {
         let source = try await EditorSourceLoader.load(videoURL: video)
         // Frames 6 to 14 are cut
         let project = EditorProject(cuts: [0.2..<0.5])
-        let plan = await RenderPlan.build(project: project, source: source, keyLabels: nil, arrow: nil)
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
         let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
         let output = ExportFormat.h264.outputURL(for: video)
 
@@ -66,7 +66,7 @@ struct CompositionBuilderTests {
         try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30, withTone: true)
         let source = try await EditorSourceLoader.load(videoURL: video)
         var project = EditorProject(cuts: [0.2..<0.5])
-        let plan = await RenderPlan.build(project: project, source: source, keyLabels: nil, arrow: nil)
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
 
         let full = try await mixedAudio(of: try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio))
         // The cut is at 0.2 s in the output

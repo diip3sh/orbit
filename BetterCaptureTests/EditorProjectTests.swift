@@ -21,6 +21,9 @@ struct EditorProjectTests {
         project.keystrokes.showsAllKeys = true
         project.cursor.smoothing = .mellow
         project.cursor.hidesWhenIdle = true
+        project.canvas.aspect = .portrait
+        project.canvas.background = .image
+        project.canvas.imageBookmark = Data([1, 2, 3])
         project.audio[track: 1].isMuted = true
 
         let data = try JSONEncoder().encode(project)

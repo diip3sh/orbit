@@ -25,12 +25,18 @@ enum CompositionBuilder {
         )
     }
 
-    static func videoComposition(for source: EditorSource, plan: RenderPlan) -> AVVideoComposition {
+    /// Frames drawn with `plan`, at `frameRate` or the recording's.
+    static func videoComposition(for source: EditorSource, plan: RenderPlan, frameRate: Double? = nil) -> AVVideoComposition {
         let duration = timeRanges(of: plan.timeMap, in: source).reduce(.zero) { $0 + $1.duration }
         let composition = AVMutableVideoComposition()
-        composition.customVideoCompositorClass = EditorCompositor.self
-        composition.renderSize = source.naturalSize
-        composition.frameDuration = CMTime(seconds: 1 / source.frameRate, preferredTimescale: source.timescale)
+        composition.customVideoCompositorClass = plan.dynamicRange == .sdr ? EditorCompositor.self : HDREditorCompositor.self
+        if let transferFunction = plan.dynamicRange.transferFunction {
+            composition.colorPrimaries = AVVideoColorPrimaries_ITU_R_2020
+            composition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_2020
+            composition.colorTransferFunction = transferFunction
+        }
+        composition.renderSize = plan.canvas.size
+        composition.frameDuration = CMTime(seconds: 1 / (frameRate ?? source.frameRate), preferredTimescale: source.timescale)
         composition.instructions = [
             EditorInstruction(timeRange: CMTimeRange(start: .zero, duration: duration), sourceTrackID: source.videoTrackID, plan: plan)
         ]

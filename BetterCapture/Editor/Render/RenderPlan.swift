@@ -41,25 +41,26 @@ nonisolated struct RenderPlan: Sendable {
 
     /// One image per distinct label, indexed by ``KeystrokeChip/image``.
     let chipImages: [CIImage]
+
+    /// The output frame, and where the video sits on it.
+    let canvas: CanvasLayout
+
+    /// What frames are drawn in: the recording's dynamic range, or SDR for a target that doesn't keep HDR.
+    let dynamicRange: DynamicRange
 }
 
 // MARK: - Building
 
 extension RenderPlan {
 
-    /// A chip's height as a share of the video's shorter side.
+    /// A chip's height as a share of the shorter side of the video on the canvas.
     nonisolated private static let chipHeightFraction = 0.06
 
     nonisolated private static let signposter = OSSignposter(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "RenderPlan")
 
     /// Builds the plan off the main actor.
-    /// - Parameters:
-    ///   - keyLabels: Labels keystrokes; without it, none are shown.
-    ///   - arrow: The cursor drawn when the telemetry has no cursor images.
     @concurrent
-    static func build(
-        project: EditorProject, source: EditorSource, keyLabels: KeyLabelFormatter?, arrow: InputTelemetry.CursorSprite?
-    ) async -> RenderPlan {
+    static func build(project: EditorProject, source: EditorSource, resources: RenderResources, target: RenderTarget = .preview) async -> RenderPlan {
         let signpost = signposter.beginInterval("Build")
         defer { signposter.endInterval("Build", signpost) }
 
@@ -71,8 +72,9 @@ extension RenderPlan {
             zooms: project.zooms, cursor: source.telemetry.map { cursorPoints(for: $0, during: project.zooms) } ?? [], duration: source.duration
         )
         async let cursor = source.telemetry.flatMap {
-            drawnCursor(for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: arrow)
+            drawnCursor(for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: resources.arrow)
         }
+        let canvas = CanvasLayout(style: project.canvas, videoSize: videoSize, shorterSide: target.shorterSide, background: resources.background)
 
         var clicks: [ClickMarker] = []
         var keystrokes: [KeystrokeChip] = []
@@ -81,13 +83,13 @@ extension RenderPlan {
             if project.clickHighlights.isEnabled {
                 clicks = clickMarkers(for: telemetry, style: project.clickHighlights, videoHeight: videoSize.height)
             }
-            if project.keystrokes.isEnabled, let keyLabels {
+            if project.keystrokes.isEnabled, let keyLabels = resources.keyLabels {
                 (keystrokes, labels) = keystrokeChips(for: telemetry, style: project.keystrokes, keyLabels: keyLabels)
             }
         }
 
         let ringDiameter = clicks.map(\.diameter).max() ?? 0
-        let chipHeight = min(videoSize.width, videoSize.height) * chipHeightFraction
+        let chipHeight = min(canvas.videoFrame.width, canvas.videoFrame.height) * chipHeightFraction
         return RenderPlan(
             timeMap: TimeMap(cuts: project.cuts, sourceDuration: source.duration, frameRate: source.frameRate),
             videoSize: videoSize,
@@ -98,7 +100,9 @@ extension RenderPlan {
             clickDuration: project.clickHighlights.duration,
             clickRing: clicks.isEmpty ? .empty() : OverlayImages.ring(diameter: ringDiameter, color: project.clickHighlights.color.cgColor),
             keystrokes: keystrokes,
-            chipImages: labels.map { OverlayImages.chip(label: $0, height: chipHeight) }
+            chipImages: labels.map { OverlayImages.chip(label: $0, height: chipHeight) },
+            canvas: canvas,
+            dynamicRange: target.keepsHDR ? source.dynamicRange : .sdr
         )
     }
 

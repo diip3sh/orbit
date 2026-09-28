@@ -6,16 +6,68 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// The selected zoom, style controls for what's drawn from input telemetry (cursor, click
-/// highlights and keystrokes), and the audio tracks' volumes.
+/// The canvas, the selected zoom, style controls for what's drawn from input telemetry (cursor,
+/// click highlights and keystrokes), and the audio tracks' volumes.
 struct EditorInspector: View {
     @Bindable var viewModel: EditorViewModel
+
+    @State private var choosesBackgroundImage = false
 
     var body: some View {
         let telemetry = viewModel.source?.telemetry
 
         Form {
+            Section {
+                Picker("Aspect Ratio", selection: $viewModel.canvas.aspect) {
+                    Text("Original").tag(CanvasStyle.Aspect.source)
+                    Text("16:9").tag(CanvasStyle.Aspect.landscape)
+                    Text("9:16").tag(CanvasStyle.Aspect.portrait)
+                    Text("1:1").tag(CanvasStyle.Aspect.square)
+                    Text("4:3").tag(CanvasStyle.Aspect.standard)
+                }
+                Picker("Background", selection: $viewModel.canvas.background) {
+                    Text("Gradient").tag(CanvasStyle.Background.gradient)
+                    Text("Color").tag(CanvasStyle.Background.color)
+                    Text("Image").tag(CanvasStyle.Background.image)
+                    Text("Transparent").tag(CanvasStyle.Background.transparent)
+                }
+                switch viewModel.canvas.background {
+                case .gradient:
+                    ColorPicker("Start", selection: $viewModel.canvas.gradientStart.cgColor, supportsOpacity: false)
+                    ColorPicker("End", selection: $viewModel.canvas.gradientEnd.cgColor, supportsOpacity: false)
+                case .color:
+                    ColorPicker("Color", selection: $viewModel.canvas.color.cgColor, supportsOpacity: false)
+                case .image:
+                    Button("Choose Image…") {
+                        choosesBackgroundImage = true
+                    }
+                case .transparent:
+                    EmptyView()
+                }
+                LabeledContent("Padding") {
+                    Slider(value: $viewModel.canvas.padding, in: 0...0.25)
+                }
+                LabeledContent("Corners") {
+                    Slider(value: $viewModel.canvas.cornerRadius, in: 0...0.05)
+                }
+                LabeledContent("Shadow") {
+                    Slider(value: $viewModel.canvas.shadow, in: 0...1)
+                }
+            } header: {
+                Text("Canvas")
+            } footer: {
+                if viewModel.canvas.background == .transparent {
+                    Text("Only ProRes 4444 exports keep the background transparent; other formats make it black.")
+                }
+            }
+            .fileImporter(isPresented: $choosesBackgroundImage, allowedContentTypes: [.image]) { result in
+                if case .success(let url) = result {
+                    viewModel.setBackgroundImage(url)
+                }
+            }
+
             Section {
                 if let zoom = Binding($viewModel.selectedZoom) {
                     LabeledContent("Scale") {

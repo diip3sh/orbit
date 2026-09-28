@@ -7,8 +7,17 @@
 
 import AVFoundation
 
-/// Decodes the timeline's filmstrip images, off the main actor.
+/// Decodes the timeline's filmstrip images and the recordings' pictures, off the main actor.
 nonisolated enum ThumbnailProvider {
+
+    /// The first frame of the video at `url`, at most `maximumSize` pixels, or `nil` when it can't
+    /// be decoded.
+    @concurrent
+    static func thumbnail(of url: URL, maximumSize: CGSize) async -> CGImage? {
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.maximumSize = maximumSize
+        return try? await generator.image(at: .zero).image
+    }
 
     /// One image per source time, each at most `maximumSize` pixels, or `nil` where decoding failed.
     /// Stops early when the calling task is cancelled.

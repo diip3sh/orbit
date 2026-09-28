@@ -172,13 +172,14 @@ nonisolated struct RenderPlan: Sendable {
     let cursorShapes: CursorShapeTrack  // which image it shows, decoded once
     let clicks: [ClickMarker]        // in Core Image pixel space, sorted by time
     let keystrokes: [KeystrokeChip]  // labels pre-rendered into images
-    let canvas: CanvasLayout
+    let canvas: CanvasLayout         // output size, the video's frame, the backdrop drawn once
+    let dynamicRange: DynamicRange   // SDR, PQ or HLG
 }
 
 extension RenderPlan {
     /// Builds the plan off the main actor; the project's default isolation is `MainActor`.
     @concurrent
-    static func build(project: EditorProject, source: EditorSource) async -> RenderPlan { ... }
+    static func build(project: EditorProject, source: EditorSource, resources: RenderResources, target: RenderTarget) async -> RenderPlan { ... }
 }
 ```
 
@@ -215,7 +216,7 @@ These apply to every phase, on top of `AGENTS.md`.
 **Performance**
 
 - The frame path allocates nothing proportional to the recording's length. Lookups into sorted tracks are binary searches (a small `partitioningIndex` helper); sampled tracks (camera, cursor) are O(1) index plus lerp.
-- One Metal-backed `CIContext` is shared by all compositor instances (it is thread-safe), created with `cacheIntermediates: false`, as recommended for video, and with color management off, so frames stay in the source's encoding (measured in Phase 2: half the render time at 4K).
+- One Metal-backed `CIContext` is shared by all compositor instances (it is thread-safe), created with `cacheIntermediates: false`, as recommended for video, and with color management off, so frames stay in the source's encoding (measured in Phase 2: half the render time at 4K). HDR frames use a second, color-managed one (Phase 6).
 - Source frames are requested in the decoder's native format (`420v`/`420f` for H.264/HEVC) so Core Image reads YUV directly without an extra conversion.
 - Static images (cursor sprites, keycap labels, backgrounds) are created once per plan, never per frame.
 - Main actor: high-frequency playback time is kept out of the view model's observed state. Only the playhead view reads it, through `TimelineView(.animation)` while playing, so a tick redraws the playhead and nothing else.
@@ -247,7 +248,7 @@ Phases 0–4 are the first shippable editor. Each phase ends in a working, merge
 | 3 - Trim and cut | Done | Trimming, splitting and cutting; no clicks at cuts |
 | 4 - Zoom | Done | Where auto-zoom lands; transitions at full frame rate; moving and resizing zooms on the timeline |
 | 5 - Cursor | Done | How the smoothing looks; shapes and idle hiding; the render budget on a quiet machine |
-| 6 - Canvas and export polish | Todo | |
+| 6 - Canvas and export polish | Done | How canvases look; a background picture after relaunch; HDR recordings, ProRes ones too; transparent exports; the Recordings window; HDR frames against the render budget |
 
 ### Phase 0 - Recording prerequisites (S)
 
@@ -439,6 +440,19 @@ Needs Phase 0 data and recordings made with the cursor hidden (`cursorInVideo ==
 - HDR exports keep PQ/HLG metadata (checked on the track's format description).
 - The smoke test matrix is extended.
 
+**Status:** Built and tested, including exports that keep PQ in HEVC and ProRes 422 and turn it to SDR in H.264 (checked on the exported track's format description), a ProRes 4444 export whose padding reads back transparent, and an export at a chosen size and frame rate. Still to check in the app: how canvases look, a background picture after relaunch, HDR recordings (ProRes ones tag each frame, so whether their format description carries the transfer function is unconfirmed), transparent exports in an editing app, and the Recordings window; the smoke test matrix has these as tests 26 to 30. Where the build differs from the plan:
+
+- New projects get a styled canvas: a gradient, 8% padding, corners 1.5% round and a shadow, each a share of the frame's shorter side. `CanvasStyle.plain` is the recording as it is.
+- The canvas keeps the video's shorter side (9:16 from 4K is 2160×3840). Export sizes are shorter sides (2160, 1440, 1080, 720, those smaller than the canvas's) and frame rates 60, 30 or 24 below the recording's. An export is drawn at its size (its own plan, `RenderTarget`), not scaled afterwards, so at the original size it matches the preview pixel for pixel.
+- No reader/writer path: the presets take the video composition's size and frame rate. Bitrate is still the presets' (see Risks).
+- Zoom and canvas placement are one transform, so the video is resampled once, and the cursor is drawn at its final scale.
+- Frames are drawn region by region into the output buffer (`FrameRenderer.draw`, `CanvasLayout.regions`): the padding from the backdrop alone, the video in 8 bands, and its rounded corners with the mask. Core Image evaluates every overlay across the whole region it renders; in bands it skips them where they aren't. Measured on an M1 in Debug, for a 4K frame with a ring and a chip under load (load average 4 to 6): 3 ms p50 plain, against 7 drawn whole, and 3.7 to 5 ms on the default canvas, against 9; p95 stays under 7.5 ms. This also halves Phase 2's plain render time.
+- The backdrop (background and shadow) is drawn once per plan into an IOSurface-backed buffer that frames read in place: 4 ms at 4K, 17 ms the first time. The shadow is blurred at an eighth of the size. Of the backdrops measured per frame, a gradient generated per frame cost as much and a half-size bitmap more.
+- A background picture is kept as a security-scoped bookmark in the project and read upright, in sRGB, at most 4096 px on its longer side. When it can't be read, the canvas shows its color and the window says why.
+- HDR recordings go to `HDREditorCompositor`, which declares `supportsHDRSourceFrames`, takes 10-bit or half-float frames and writes half-float ones, composited in linear light by a color-managed context so overlays keep SDR brightness. The composition is tagged BT.2020 with the recording's PQ or HLG. Exports to H.264 get an SDR plan, so AVFoundation converts the frames. A 4K HDR frame takes about 9 ms p50 plain and 7 ms on the default canvas, over the budget; writing 10-bit YUV was no faster. Converting the overlays into PQ when the plan is built would let HDR skip color management, like SDR.
+- A transparent background's alpha survives only in ProRes 4444 (`AVAssetExportPresetAppleProRes4444LPCM`); the export sheet picks it for such a canvas and says other formats export black.
+- The recents list is a Recordings window, opened from the menu bar with **Recordings…**: the output folder's movies newest first, without `-edited` exports, each with its first frame. The list is read whenever the window comes forward, and the folder's security scope is held while it's open.
+
 ---
 
 ## Proposed files
@@ -447,27 +461,28 @@ Needs Phase 0 data and recordings made with the cursor hidden (`cursorInVideo ==
 BetterCapture/Editor/
   Model/      EditorProject, EditorSource, EditorError, EditorSelection, FrameGrid, TimelineMarkers,
               ZoomSegment, ClickHighlightStyle, KeystrokeOverlayStyle, RGBAColor, ExportFormat,
-              CursorStyle, CanvasStyle, AudioMixSettings
-  Render/     RenderPlan, TimeMap, Spring, CameraPath, CursorPath, CursorShapeTrack, ClickMarker,
-              KeystrokeChip, OverlayImages, CanvasLayout, FrameRenderer, EditorCompositor, EditorInstruction,
-              CompositionBuilder, EditorComposition
+              ExportSettings, CursorStyle, CanvasStyle, AudioMixSettings, DynamicRange, Recording
+  Render/     RenderPlan, RenderResources, RenderTarget, TimeMap, Spring, CameraPath, CursorPath,
+              CursorShapeTrack, ClickMarker, KeystrokeChip, OverlayImages, CanvasLayout, FrameRenderer,
+              EditorCompositor, HDREditorCompositor, EditorInstruction, CompositionBuilder, EditorComposition
   Service/    EditorSourceLoader, ProjectStore, ThumbnailProvider, ExportService,
-              AutoZoomGenerator, KeyLabelFormatter
-  ViewModel/  EditorViewModel, PlaybackController
+              AutoZoomGenerator, KeyLabelFormatter, BackgroundImageLoader, RecordingLibrary
+  ViewModel/  EditorViewModel, PlaybackController, RecordingsViewModel
   View/       EditorWindowManager, EditorView, PlayerLayerView, EditorTimelineView, TrimHandle,
-              ZoomLane, ZoomFocusPad, TransportBar, EditorInspector, ExportSheet
+              ZoomLane, ZoomFocusPad, TransportBar, EditorInspector, ExportSheet, RecordingsView,
+              RecordingTile
 ```
 
 `EditorTimelineView` is named so that it doesn't collide with SwiftUI's `TimelineView`.
 
-Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry types, in `BetterCapture/Model` and `BetterCapture/Service`, because the recorder writes that data. Phase 1 added `UnsupportedVersionError` to `BetterCapture/Model`, because `InputTelemetry` throws it too. Phase 2 added `PartitioningIndex` there, because `InputTelemetry.geometry(at:)` uses it. Phase 4 added `InputTelemetry.normalizedVideoPoint(for:at:)` and `pixelsPerPoint`. Phase 5 added `StandardCursors.png(of:)`, which the recorder now uses too, and `StandardCursors.arrowSprite`.
+Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry types, in `BetterCapture/Model` and `BetterCapture/Service`, because the recorder writes that data. Phase 1 added `UnsupportedVersionError` to `BetterCapture/Model`, because `InputTelemetry` throws it too. Phase 2 added `PartitioningIndex` there, because `InputTelemetry.geometry(at:)` uses it. Phase 4 added `InputTelemetry.normalizedVideoPoint(for:at:)` and `pixelsPerPoint`. Phase 5 added `StandardCursors.png(of:)`, which the recorder now uses too, and `StandardCursors.arrowSprite`. Phase 6 added the menu bar's **Recordings…** button and moved `MenuBarActionButton` into its own file, which kept `MenuBarView.swift` under SwiftLint's length limit.
 
 ## Risks
 
 - `NSCursor.currentSystem` **is on its way out.** It is to be deprecated (it will always be nil in a future macOS); it works in the sandbox today. The fallback is an arrow at the recorded positions, with smoothing, size and idle hiding still available. It is revisited on each macOS beta.
 - **A raw recording with the cursor hidden has no cursor.** That is intended, and the notification leads to the editor, but it has to be clear in the setting's description.
 - **Zoom quality** depends on the recording's resolution. It is mitigated by the native-resolution hint and not solved by upscaling.
-- **Export presets** don't expose bitrate. The reader/writer fallback is scoped in Phase 6.
+- **Export presets** don't expose bitrate. Phase 6 didn't need the reader/writer path; it stays the fallback if bitrate control is wanted.
 - **Keyboard layout drift:** labels use the editing Mac's layout, not the recording Mac's. This is acceptable for v1; the input source ID could be added to telemetry if it matters.
 
 ## Open questions

@@ -54,6 +54,7 @@ struct RenderPlanTests {
             naturalSize: CGSize(width: 1600, height: 1200),
             frameRate: 60,
             timescale: 600,
+            dynamicRange: .sdr,
             telemetry: telemetry,
             telemetryError: nil
         )
@@ -93,7 +94,7 @@ struct RenderPlanTests {
     @Test func buildsTheCameraFromTheZooms() async {
         let project = EditorProject(zooms: [ZoomSegment(range: 1..<9, focus: .fixed(center: CGPoint(x: 0.25, y: 0.25)))])
 
-        let plan = await RenderPlan.build(project: project, source: source(telemetry: nil), keyLabels: nil, arrow: nil)
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: nil), resources: .none)
 
         #expect(plan.camera.viewport(at: 0) == .whole)
         #expect(plan.camera.viewport(at: 5).scale > 1.99)
@@ -105,17 +106,17 @@ struct RenderPlanTests {
         var project = EditorProject()
         let arrow = StandardCursors.arrowSprite
 
-        let withCursor = await RenderPlan.build(project: project, source: source(telemetry: telemetry), keyLabels: nil, arrow: arrow)
+        let withCursor = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: RenderResources(arrow: arrow))
         #expect(withCursor.cursor == nil)
 
         telemetry.capture.cursorInVideo = false
-        let withoutCursor = await RenderPlan.build(project: project, source: source(telemetry: telemetry), keyLabels: nil, arrow: arrow)
+        let withoutCursor = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: RenderResources(arrow: arrow))
         // 800 px from the left and 600 from the top, of 1200, before gliding onto the click at 1 s
         #expect(withoutCursor.cursor?.position(at: 0.3) == CGPoint(x: 800, y: 600))
         #expect(withoutCursor.cursorShapes.sprite(at: 1) != nil)
 
         project.cursor.isEnabled = false
-        let hidden = await RenderPlan.build(project: project, source: source(telemetry: telemetry), keyLabels: nil, arrow: arrow)
+        let hidden = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: RenderResources(arrow: arrow))
         #expect(hidden.cursor == nil)
         #expect(hidden.cursorShapes.sprite(at: 1) == nil)
     }
@@ -141,7 +142,7 @@ struct RenderPlanTests {
         project.clickHighlights.isEnabled = false
         project.keystrokes.isEnabled = false
 
-        let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), keyLabels: KeyLabelFormatter.current(), arrow: nil)
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: RenderResources(keyLabels: KeyLabelFormatter.current()))
 
         #expect(plan.clicks.isEmpty)
         #expect(plan.keystrokes.isEmpty)
@@ -149,22 +150,32 @@ struct RenderPlanTests {
     }
 
     @Test func buildsNoOverlaysWithoutTelemetry() async {
-        let plan = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), keyLabels: KeyLabelFormatter.current(), arrow: nil)
+        let plan = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), resources: RenderResources(keyLabels: KeyLabelFormatter.current()))
 
         #expect(plan.clicks.isEmpty)
         #expect(plan.keystrokes.isEmpty)
         #expect(plan.videoSize == CGSize(width: 1600, height: 1200))
     }
 
+    @Test func buildsTheCanvasAtTheTargetsSize() async {
+        let preview = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), resources: .none)
+        let export = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), resources: .none, target: RenderTarget(shorterSide: 600))
+
+        #expect(preview.canvas.size == CGSize(width: 1600, height: 1200))
+        #expect(export.canvas.size == CGSize(width: 800, height: 600))
+        #expect(export.canvas.videoFrame.height == 504)
+    }
+
     @Test func buildsOneChipImagePerLabel() async {
         let plan = await RenderPlan.build(
-            project: EditorProject(), source: source(telemetry: telemetry), keyLabels: KeyLabelFormatter.layout(id: "com.apple.keylayout.US"), arrow: nil
+            project: EditorProject(), source: source(telemetry: telemetry), resources: RenderResources(keyLabels: KeyLabelFormatter.layout(id: "com.apple.keylayout.US"))
         )
 
         #expect(plan.clicks.count == 3)
         #expect(plan.clickRing.extent.width == 88)
         #expect(plan.chipImages.count == 2)
-        // 6% of the video's shorter side
-        #expect(plan.chipImages.allSatisfy { $0.extent.height == 72 })
+        // 6% of the shorter side of the video on the canvas: 1,200 px less 8% padding at the top and bottom
+        #expect(plan.canvas.videoFrame.height == 1008)
+        #expect(plan.chipImages.allSatisfy { $0.extent.height == 61 })
     }
 }

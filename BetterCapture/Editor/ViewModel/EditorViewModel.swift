@@ -49,11 +49,12 @@ final class EditorViewModel {
     @ObservationIgnored private var composition: EditorComposition?
     @ObservationIgnored private var rebuild: Task<Void, Never>?
 
-    /// Labels keystrokes with the keyboard layout in use when the editor opened.
-    @ObservationIgnored private var keyLabels: KeyLabelFormatter?
+    /// The keyboard layout in use when the editor opened, the system's arrow for recordings made
+    /// without the cursor, and the background picture.
+    @ObservationIgnored private var resources = RenderResources.none
 
-    /// The arrow drawn when a recording made without the cursor has no cursor images.
-    @ObservationIgnored private var arrow: InputTelemetry.CursorSprite?
+    /// The bookmark whose picture is in ``resources``.
+    @ObservationIgnored private var backgroundBookmark: Data?
 
     /// The latest coalescing edit, which the next one with the same name joins if it follows soon enough.
     @ObservationIgnored private var coalescingEdit: (actionName: String, time: ContinuousClock.Instant)?
@@ -89,9 +90,14 @@ final class EditorViewModel {
             fail(.unreadableProject(error))
             return
         }
-        let keyLabels = KeyLabelFormatter.current()
-        let arrow = source.telemetry?.capture.cursorInVideo == false ? StandardCursors.arrowSprite : nil
-        let plan = await RenderPlan.build(project: project, source: source, keyLabels: keyLabels, arrow: arrow)
+        var resources = RenderResources(
+            keyLabels: KeyLabelFormatter.current(),
+            arrow: source.telemetry?.capture.cursorInVideo == false ? StandardCursors.arrowSprite : nil
+        )
+        if let bookmark = project.canvas.imageBookmark {
+            resources.background = await BackgroundImageLoader.image(from: bookmark)
+        }
+        let plan = await RenderPlan.build(project: project, source: source, resources: resources)
         let composition: EditorComposition
         do {
             composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
@@ -103,12 +109,15 @@ final class EditorViewModel {
 
         self.source = source
         self.project = project
-        self.keyLabels = keyLabels
-        self.arrow = arrow
+        self.resources = resources
+        backgroundBookmark = project.canvas.imageBookmark
         savedProject = project
         markers = source.telemetry.map(TimelineMarkers.init)
         updateTimeline()
         show(composition, plan: plan, atSource: 0)
+        if project.canvas.imageBookmark != nil, resources.background == nil {
+            fail(.unreadableBackground)
+        }
         logger.info("Opened \(self.videoURL.lastPathComponent)")
     }
 
@@ -161,23 +170,53 @@ final class EditorViewModel {
         set { edit("Cursor", coalescing: true) { $0.cursor = newValue } }
     }
 
+    /// The canvas's style, for the inspector's controls. Each change is an edit.
+    var canvas: CanvasStyle {
+        get { project.canvas }
+        set { edit("Canvas", coalescing: true) { $0.canvas = newValue } }
+    }
+
+    /// Makes the picture at `url`, chosen by the user, the canvas's background.
+    func setBackgroundImage(_ url: URL) {
+        do {
+            let bookmark = try BackgroundImageLoader.bookmark(for: url)
+            edit("Background Image") {
+                $0.canvas.background = .image
+                $0.canvas.imageBookmark = bookmark
+            }
+        } catch {
+            logger.error("No bookmark for \(url.lastPathComponent): \(error.localizedDescription)")
+            fail(.unreadableBackground)
+        }
+    }
+
     /// The audio tracks' volumes, for the inspector's controls. Each change is an edit.
     var audio: AudioMixSettings {
         get { project.audio }
         set { edit("Audio", coalescing: true) { $0.audio = newValue } }
     }
 
+    /// The exported frame's size for a shorter side of `resolution` pixels, or the canvas's own.
+    func exportSize(resolution: Int?) -> CGSize {
+        guard let source else { return .zero }
+        return CanvasLayout.size(for: source.naturalSize, aspect: project.canvas.aspect, shorterSide: resolution.map { CGFloat($0) })
+    }
+
     /// Exports the edited video as `<name>-edited` next to the recording and reveals it in Finder.
     /// Cancelling the calling task cancels the export.
-    func export(as format: ExportFormat) async throws {
+    func export(_ settings: ExportSettings) async throws {
         await rebuild?.value
-        guard let composition else { return }
-        let url = format.outputURL(for: videoURL)
+        guard let source, var composition else { return }
+        // Drawn at the export's size, frame rate and dynamic range; otherwise the same as the preview
+        let target = RenderTarget(shorterSide: settings.resolution.map { CGFloat($0) }, keepsHDR: settings.format.keepsHDR)
+        let plan = await RenderPlan.build(project: project, source: source, resources: resources, target: target)
+        composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan, frameRate: settings.frameRate.map { Double($0) })
+        let url = settings.format.outputURL(for: videoURL)
         exportProgress = 0
         defer { exportProgress = nil }
 
         do {
-            try await ExportService.export(composition, to: url, as: format) { [weak self] in
+            try await ExportService.export(composition, to: url, as: settings.format) { [weak self] in
                 self?.exportProgress = $0
             }
         } catch {
@@ -245,9 +284,19 @@ final class EditorViewModel {
         guard let source else { return }
         rebuild?.cancel()
         let project = project
-        let (keyLabels, arrow) = (keyLabels, arrow)
         rebuild = Task {
-            let plan = await RenderPlan.build(project: project, source: source, keyLabels: keyLabels, arrow: arrow)
+            let bookmark = project.canvas.imageBookmark
+            if bookmark != backgroundBookmark {
+                resources.background = nil
+                if let bookmark {
+                    resources.background = await BackgroundImageLoader.image(from: bookmark)
+                    if resources.background == nil {
+                        fail(.unreadableBackground)
+                    }
+                }
+                backgroundBookmark = bookmark
+            }
+            let plan = await RenderPlan.build(project: project, source: source, resources: resources)
             guard !Task.isCancelled, let playing = self.plan, var composition else { return }
             guard plan.timeMap != playing.timeMap else {
                 composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan)

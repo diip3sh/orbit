@@ -12,8 +12,11 @@ import OSLog
 /// Draws the editor's frames with ``FrameRenderer``, for the preview and the export alike.
 ///
 /// Stateless: each request carries its plan in its ``EditorInstruction``, so AVFoundation can ask
-/// for frames in any order and in parallel. AVFoundation creates the instances.
-nonisolated final class EditorCompositor: NSObject, AVVideoCompositing {
+/// for frames in any order and in parallel. AVFoundation creates the instances. HDR recordings are
+/// drawn by ``HDREditorCompositor``.
+///
+/// `@unchecked` only because it isn't final, for that subclass; neither has stored state.
+nonisolated class EditorCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
 
     /// Shared by every compositor: a context is thread-safe and costly to create. Intermediates
     /// aren't cached, as recommended for video, where every frame differs.
@@ -23,17 +26,20 @@ nonisolated final class EditorCompositor: NSObject, AVVideoCompositing {
     /// 8 ms p95 on an M1 instead of 10 and 13 ms converting every pixel to linear and back.
     private static let context = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull()])
 
+    /// For HDR, composited in linear light, so the overlays' SDR colors keep SDR brightness.
+    private static let hdrContext = CIContext(options: [.cacheIntermediates: false])
+
     private static let signposter = OSSignposter(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "EditorCompositor")
 
     /// The decoder's own formats for H.264 and HEVC, so frames arrive without a conversion.
-    let sourcePixelBufferAttributes: [String: any Sendable]? = [
-        kCVPixelBufferPixelFormatTypeKey as String: [kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange]
-    ]
+    var sourcePixelBufferAttributes: [String: any Sendable]? {
+        [kCVPixelBufferPixelFormatTypeKey as String: [kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange]]
+    }
 
     // swiftlint:disable:next identifier_name - named by AVVideoCompositing
-    let requiredPixelBufferAttributesForRenderContext: [String: any Sendable] = [
-        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-    ]
+    var requiredPixelBufferAttributesForRenderContext: [String: any Sendable] {
+        [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+    }
 
     func renderContextChanged(_ newRenderContext: AVVideoCompositionRenderContext) {}
 
@@ -47,19 +53,21 @@ nonisolated final class EditorCompositor: NSObject, AVVideoCompositing {
             return
         }
         let plan = instruction.plan
-        let bounds = CGRect(origin: .zero, size: plan.videoSize)
 
         // Black where the video track has no frame, e.g. audio running past its end
         let source = request.sourceFrame(byTrackID: instruction.sourceTrackID)
-        let frame = source.map { CIImage(cvPixelBuffer: $0) } ?? CIImage(color: .black).cropped(to: bounds)
+        let frame = source.map { CIImage(cvPixelBuffer: $0) } ?? CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: plan.videoSize))
         if let source {
             // The output keeps the source's encoding, so it carries its color tags
             CVBufferPropagateAttachments(source, output)
         }
 
         let time = plan.timeMap.sourceTime(atOutput: request.compositionTime.seconds)
-        let image = FrameRenderer.render(frame, at: time, plan: plan)
-        Self.context.render(image, to: output, bounds: bounds, colorSpace: nil)
-        request.finish(withComposedVideoFrame: output)
+        do {
+            try FrameRenderer.draw(frame, at: time, plan: plan, into: output, context: plan.dynamicRange == .sdr ? Self.context : Self.hdrContext)
+            request.finish(withComposedVideoFrame: output)
+        } catch {
+            request.finish(with: error)
+        }
     }
 }

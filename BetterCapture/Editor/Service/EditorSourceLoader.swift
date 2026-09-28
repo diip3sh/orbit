@@ -20,7 +20,7 @@ nonisolated enum EditorSourceLoader {
                 throw EditorError.noVideoTrack
             }
             let duration = try await asset.load(.duration)
-            let (naturalSize, frameRate, timescale) = try await track.load(.naturalSize, .nominalFrameRate, .naturalTimeScale)
+            let (naturalSize, frameRate, timescale, formats) = try await track.load(.naturalSize, .nominalFrameRate, .naturalTimeScale, .formatDescriptions)
             let audioTrackIDs = try await asset.loadTracks(withMediaType: .audio).map(\.trackID)
             let (telemetry, telemetryError) = loadTelemetry(for: videoURL)
 
@@ -32,6 +32,7 @@ nonisolated enum EditorSourceLoader {
                 naturalSize: naturalSize,
                 frameRate: Double(frameRate),
                 timescale: timescale,
+                dynamicRange: DynamicRange(of: formats.first),
                 telemetry: telemetry,
                 telemetryError: telemetryError
             )

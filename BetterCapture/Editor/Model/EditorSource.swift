@@ -27,6 +27,8 @@ nonisolated struct EditorSource: Sendable {
     /// The video track's time scale, for converting seconds to `CMTime`.
     let timescale: CMTimeScale
 
+    let dynamicRange: DynamicRange
+
     /// `nil` when the recording has none or it couldn't be read; ``telemetryError`` says which.
     let telemetry: InputTelemetry?
 

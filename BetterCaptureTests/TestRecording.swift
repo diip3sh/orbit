@@ -7,6 +7,7 @@
 
 import AVFoundation
 import Testing
+import VideoToolbox
 
 /// Short synthetic recordings for editor tests.
 enum TestRecording {
@@ -17,12 +18,22 @@ enum TestRecording {
     static let toneAmplitude = 0.5
 
     /// Writes an H.264 recording of flat grey frames, frame `n` at level `level(n)` in every channel,
-    /// with a 440 Hz tone on one 16-bit PCM audio track when `withTone` is set.
+    /// with a 440 Hz tone on one 16-bit PCM audio track when `withTone` is set. With `hdr`, it's
+    /// HDR10 instead: HEVC Main 10, BT.2020 and PQ, `level` setting every byte of 10-bit samples.
     static func write(
-        to url: URL, size: CGSize, frameCount: Int, frameRate: Int32, withTone: Bool = false, level: (Int) -> UInt8 = { _ in 0 }
+        to url: URL, size: CGSize, frameCount: Int, frameRate: Int32, withTone: Bool = false, hdr: Bool = false,
+        level: (Int) -> UInt8 = { _ in 0 }
     ) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
-        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: hdr ? [
+            AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: size.width, AVVideoHeightKey: size.height,
+            AVVideoCompressionPropertiesKey: [AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main10_AutoLevel as String],
+            AVVideoColorPropertiesKey: [
+                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
+                AVVideoTransferFunctionKey: AVVideoTransferFunction_SMPTE_ST_2084_PQ,
+                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
+            ]
+        ] : [
             AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: size.width, AVVideoHeightKey: size.height
         ])
         writer.add(input)
@@ -44,7 +55,8 @@ enum TestRecording {
             while !input.isReadyForMoreMediaData {
                 try await Task.sleep(for: .milliseconds(5))
             }
-            adaptor.append(try frame(size: size, level: level(index)), withPresentationTime: CMTime(value: CMTimeValue(index), timescale: frameRate))
+            let frame = try frame(size: size, format: hdr ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange : kCVPixelFormatType_32BGRA, level: level(index))
+            adaptor.append(frame, withPresentationTime: CMTime(value: CMTimeValue(index), timescale: frameRate))
         }
         input.markAsFinished()
         writer.endSession(atSourceTime: CMTime(value: CMTimeValue(frameCount), timescale: frameRate))
@@ -52,12 +64,20 @@ enum TestRecording {
         #expect(writer.status == .completed, "\(String(describing: writer.error))")
     }
 
-    private static func frame(size: CGSize, level: UInt8) throws -> CVPixelBuffer {
+    /// A frame with every byte of every plane set to `level`.
+    private static func frame(size: CGSize, format: OSType, level: UInt8) throws -> CVPixelBuffer {
         var pixelBuffer: CVPixelBuffer?
-        CVPixelBufferCreate(nil, Int(size.width), Int(size.height), kCVPixelFormatType_32BGRA, nil, &pixelBuffer)
+        CVPixelBufferCreate(nil, Int(size.width), Int(size.height), format, nil, &pixelBuffer)
         let frame = try #require(pixelBuffer)
         CVPixelBufferLockBaseAddress(frame, [])
-        memset(CVPixelBufferGetBaseAddress(frame), Int32(level), CVPixelBufferGetDataSize(frame))
+        if CVPixelBufferIsPlanar(frame) {
+            for plane in 0..<CVPixelBufferGetPlaneCount(frame) {
+                let bytes = CVPixelBufferGetBytesPerRowOfPlane(frame, plane) * CVPixelBufferGetHeightOfPlane(frame, plane)
+                memset(CVPixelBufferGetBaseAddressOfPlane(frame, plane), Int32(level), bytes)
+            }
+        } else {
+            memset(CVPixelBufferGetBaseAddress(frame), Int32(level), CVPixelBufferGetDataSize(frame))
+        }
         CVPixelBufferUnlockBaseAddress(frame, [])
         return frame
     }

@@ -8,7 +8,8 @@
 import AppKit
 import SwiftUI
 
-/// Opens one editor window per recording, and keeps the app in the Dock while any is open.
+/// Opens one editor window per recording and the Recordings window, and keeps the app in the Dock
+/// while any is open.
 ///
 /// The app is a menu bar app (`LSUIElement`), and its entry points - notifications, URLs, the menu
 /// bar - have no SwiftUI window environment, so editor windows are AppKit windows hosting SwiftUI.
@@ -23,8 +24,15 @@ final class EditorWindowManager: NSObject {
         let accessesOutputDirectory: Bool
     }
 
+    private struct Recordings {
+        let window: NSWindow
+        let viewModel: RecordingsViewModel
+        let accessesOutputDirectory: Bool
+    }
+
     private let settings: SettingsStore
     private var editors: [URL: Editor] = [:]
+    private var recordings: Recordings?
 
     init(settings: SettingsStore) {
         self.settings = settings
@@ -62,6 +70,33 @@ final class EditorWindowManager: NSObject {
         activate(window)
     }
 
+    /// Shows the output folder's recordings, or brings their window forward.
+    func showRecordings() {
+        if let recordings {
+            activate(recordings.window)
+            return
+        }
+
+        // Held while the window is open: it lists the folder and reads the recordings' pictures
+        let accessesOutputDirectory = settings.startAccessingOutputDirectory()
+        let viewModel = RecordingsViewModel(folder: settings.outputDirectory) { [weak self] url in
+            self?.open(url)
+        }
+        let hostingController = NSHostingController(rootView: RecordingsView(viewModel: viewModel))
+        hostingController.sizingOptions = .minSize
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Recordings"
+        window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.setContentSize(NSSize(width: 760, height: 520))
+        window.center()
+        recordings = Recordings(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
+
+        NSApp.setActivationPolicy(.regular)
+        activate(window)
+    }
+
     private func activate(_ window: NSWindow) {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
@@ -80,20 +115,34 @@ extension EditorWindowManager: NSWindowDelegate {
         editor(for: window)?.editor.viewModel.undoManager
     }
 
-    func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow, let (videoURL, editor) = editor(for: window) else { return }
-        editors[videoURL] = nil
-        if editors.isEmpty {
-            NSApp.setActivationPolicy(.accessory)
-        }
-
-        let settings = settings
+    /// The list is read whenever it comes forward, so recordings saved meanwhile show.
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard let recordings, notification.object as? NSWindow === recordings.window else { return }
         Task {
-            // Saving needs the folder, so its scope is released only afterwards
-            await editor.viewModel.close()
-            if editor.accessesOutputDirectory {
+            await recordings.viewModel.reload()
+        }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        if let recordings, window === recordings.window {
+            self.recordings = nil
+            if recordings.accessesOutputDirectory {
                 settings.stopAccessingOutputDirectory()
             }
+        } else if let (videoURL, editor) = editor(for: window) {
+            editors[videoURL] = nil
+            let settings = settings
+            Task {
+                // Saving needs the folder, so its scope is released only afterwards
+                await editor.viewModel.close()
+                if editor.accessesOutputDirectory {
+                    settings.stopAccessingOutputDirectory()
+                }
+            }
+        }
+        if editors.isEmpty, recordings == nil {
+            NSApp.setActivationPolicy(.accessory)
         }
     }
 }

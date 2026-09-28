@@ -6,6 +6,7 @@
 //
 
 import CoreImage
+import CoreVideo
 
 /// Draws one output frame: the single place where the editor decides pixels, for the preview and
 /// the export alike.
@@ -13,27 +14,48 @@ import CoreImage
 /// Lookups into the plan and a small Core Image graph; nothing is simulated or allocated per frame.
 nonisolated enum FrameRenderer {
 
-    /// Draws the effects in `plan` over a source frame.
+    /// Draws the output frame for source time `time` into `buffer`, region by region, each from
+    /// only what shows there (see ``CanvasLayout/regions``). SDR is drawn without color
+    /// management, so `context` must have none; HDR in the plan's color space.
     /// - Parameters:
     ///   - frame: The recording's frame at `time`.
     ///   - time: Source time, in seconds.
-    static func render(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CIImage {
+    static func draw(_ frame: CIImage, at time: Double, plan: RenderPlan, into buffer: CVPixelBuffer, context: CIContext) throws {
+        let video = video(frame, at: time, plan: plan)
+        let destination = CIRenderDestination(pixelBuffer: buffer)
+        destination.colorSpace = plan.dynamicRange.colorSpace
+        let tasks = try plan.canvas.regions.map { region in
+            let image = switch region {
+            case .background: plan.canvas.backdrop ?? .empty()
+            case .video: video
+            case .corner: framed(video, on: plan.canvas)
+            }
+            return try context.startTask(toRender: image, from: region.rect, to: destination, at: region.rect.origin)
+        }
+        for task in tasks {
+            _ = try task.waitUntilCompleted()
+        }
+    }
+
+    /// The frame with everything on it - clicks, zoom, cursor and keystroke chip - placed on the
+    /// canvas and clipped to the video's frame, square-cornered.
+    private static func video(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CIImage {
         var image = frame
         for click in ClickMarker.active(in: plan.clicks, at: time, duration: plan.clickDuration) {
             image = ring(for: click, at: time, plan: plan).composited(over: image)
         }
-        // Clicks are on the content, so they zoom with it; the chip stays where it is
-        let viewport = plan.camera.viewport(at: time)
-        image = zoomed(image, to: viewport, size: plan.videoSize)
-        // The cursor is placed after zooming, so it's drawn from its full-resolution image
+        // Clicks are on the content, so they zoom with it and move onto the canvas; the chip doesn't zoom
+        let placement = transform(to: plan.camera.viewport(at: time), size: plan.videoSize).concatenating(plan.canvas.videoTransform)
+        image = placed(image, by: placement, plan: plan)
+        // The cursor is placed after, so it's drawn from its full-resolution image
         if let path = plan.cursor, let sprite = plan.cursorShapes.sprite(at: time),
-           let drawn = cursor(sprite, path: path, at: time, viewport: viewport, size: plan.videoSize) {
+           let drawn = cursor(sprite, path: path, at: time, placement: placement) {
             image = drawn.composited(over: image)
         }
         if let (chip, opacity) = KeystrokeChip.visible(in: plan.keystrokes, at: time) {
             image = keystroke(chip, opacity: opacity, plan: plan).composited(over: image)
         }
-        return image
+        return image.cropped(to: plan.canvas.videoFrame)
     }
 
     /// The click's ring, growing from 40% of its size with an ease-out while it fades.
@@ -47,17 +69,17 @@ nonisolated enum FrameRenderer {
         return plan.clickRing.transformed(by: placement).fading(to: 1 - progress)
     }
 
-    /// The part of `image` in `viewport`, magnified to fill the frame. The whole frame is left as
-    /// it is, so frames without zoom stay pixel for pixel the source's.
-    private static func zoomed(_ image: CIImage, to viewport: CameraPath.Viewport, size: CGSize) -> CIImage {
-        guard viewport.scale > 1 else { return image }
+    /// The frame moved by `placement`, zoomed and onto the canvas, in one resampling so it stays as
+    /// sharp as it can. A frame that fills the canvas unzoomed stays pixel for pixel the source's.
+    private static func placed(_ image: CIImage, by placement: CGAffineTransform, plan: RenderPlan) -> CIImage {
+        guard !placement.isIdentity else { return image }
         // Clamped to the frame, so its edge pixels aren't blended with what's around it
-        let frame = CGRect(origin: .zero, size: size)
-        return image.cropped(to: frame).clampedToExtent().transformed(by: transform(to: viewport, size: size)).cropped(to: frame)
+        return image.cropped(to: CGRect(origin: .zero, size: plan.videoSize)).clampedToExtent().transformed(by: placement)
     }
 
-    /// Maps the frame's Core Image pixels to the output's: the part in `viewport` fills it.
+    /// Maps the frame's Core Image pixels to the zoomed frame's: the part in `viewport` fills it.
     private static func transform(to viewport: CameraPath.Viewport, size: CGSize) -> CGAffineTransform {
+        guard viewport.scale > 1 else { return .identity }
         // The view's bottom-left corner in Core Image space
         let origin = CGPoint(
             x: (viewport.center.x - 0.5 / viewport.scale) * size.width,
@@ -66,15 +88,20 @@ nonisolated enum FrameRenderer {
         return CGAffineTransform(translationX: -origin.x, y: -origin.y).concatenating(CGAffineTransform(scaleX: viewport.scale, y: viewport.scale))
     }
 
-    /// The cursor's image with its hot spot on the path, magnified with the view, or `nil` while
-    /// it's hidden.
-    private static func cursor(
-        _ sprite: CursorShapeTrack.Sprite, path: CursorPath, at time: Double, viewport: CameraPath.Viewport, size: CGSize
-    ) -> CIImage? {
+    /// The video in its shape over the background.
+    private static func framed(_ video: CIImage, on canvas: CanvasLayout) -> CIImage {
+        guard let backdrop = canvas.backdrop else { return video }
+        guard let mask = canvas.videoMask else { return video.composited(over: backdrop) }
+        return video.applyingFilter("CIBlendWithAlphaMask", parameters: [kCIInputBackgroundImageKey: backdrop, kCIInputMaskImageKey: mask])
+    }
+
+    /// The cursor's image with its hot spot on the path, moved and magnified with the video, or
+    /// `nil` while it's hidden.
+    private static func cursor(_ sprite: CursorShapeTrack.Sprite, path: CursorPath, at time: Double, placement: CGAffineTransform) -> CIImage? {
         let opacity = path.opacity(at: time)
         guard opacity > 0 else { return nil }
-        let position = path.position(at: time).applying(transform(to: viewport, size: size))
-        let scale = path.scale(at: time) * viewport.scale * sprite.pointsPerPixel
+        let position = path.position(at: time).applying(placement)
+        let scale = path.scale(at: time) * placement.a * sprite.pointsPerPixel
         let placement = CGAffineTransform(translationX: -sprite.hotspot.x, y: -sprite.hotspot.y)
             .concatenating(CGAffineTransform(scaleX: scale, y: scale))
             .concatenating(CGAffineTransform(translationX: position.x, y: position.y))
@@ -83,11 +110,12 @@ nonisolated enum FrameRenderer {
         return opacity < 1 ? image.fading(to: opacity) : image
     }
 
-    /// The chip, centred at the bottom of the video.
+    /// The chip, centred at the bottom of the video on the canvas.
     private static func keystroke(_ chip: KeystrokeChip, opacity: Double, plan: RenderPlan) -> CIImage {
         let image = plan.chipImages[chip.image]
+        let video = plan.canvas.videoFrame
         let placement = CGAffineTransform(
-            translationX: ((plan.videoSize.width - image.extent.width) / 2).rounded(), y: (image.extent.height * 0.8).rounded()
+            translationX: (video.midX - image.extent.width / 2).rounded(), y: (video.minY + image.extent.height * 0.8).rounded()
         )
         return image.transformed(by: placement).fading(to: opacity)
     }

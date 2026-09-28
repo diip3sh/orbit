@@ -88,6 +88,33 @@ struct EditorViewModelTests {
 
         #expect(viewModel.project.cursor.smoothing == .fast)
         #expect(viewModel.undoManager.undoActionName == "Cursor")
+
+        viewModel.canvas.aspect = .square
+
+        #expect(viewModel.project.canvas.aspect == .square)
+        #expect(viewModel.undoManager.undoActionName == "Canvas")
+    }
+
+    @Test func aChosenPictureBecomesTheBackgroundThroughABookmark() async throws {
+        let folder = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let picture = folder.appending(path: "wide.png")
+        // Wider than pictures are read
+        try InputTelemetry.CursorSprite.drawn(pixels: CGSize(width: 5000, height: 10), size: .zero) {
+            $0.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
+            $0.fill(CGRect(x: 0, y: 0, width: 5000, height: 10))
+        }.png.write(to: picture)
+        let viewModel = EditorViewModel(videoURL: videoURL)
+
+        viewModel.setBackgroundImage(picture)
+
+        #expect(viewModel.project.canvas.background == .image)
+        #expect(viewModel.undoManager.undoActionName == "Background Image")
+        let bookmark = try #require(viewModel.project.canvas.imageBookmark)
+        let image = try #require(await BackgroundImageLoader.image(from: bookmark))
+        #expect(image.width == BackgroundImageLoader.maximumSize && image.height < 10)
+        #expect(image.colorSpace?.name == CGColorSpace.sRGB)
     }
 
     @Test func splittingThenCuttingTheSelectionLeavesItOut() async throws {

@@ -16,6 +16,7 @@ nonisolated enum EditorError: LocalizedError {
     case unreadableProject(any Error)
     case projectNotSaved(any Error)
     case exportFailed(any Error)
+    case unreadableBackground
 
     var errorDescription: String? {
         switch self {
@@ -33,6 +34,8 @@ nonisolated enum EditorError: LocalizedError {
             "Edits couldn't be saved. \(error.localizedDescription)"
         case .exportFailed(let error):
             "The video couldn't be exported. \(error.localizedDescription)"
+        case .unreadableBackground:
+            "The background image couldn't be opened, so its color is shown instead."
         }
     }
 }
