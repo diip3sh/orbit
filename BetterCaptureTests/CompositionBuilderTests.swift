@@ -95,8 +95,10 @@ struct CompositionBuilderTests {
 
     /// The composition's audio as its mix plays it: mono samples at the test recording's rate.
     private func mixedAudio(of composition: EditorComposition) async throws -> [Float] {
-        let reader = try AVAssetReader(asset: composition.asset)
-        let output = AVAssetReaderAudioMixOutput(audioTracks: try await composition.asset.loadTracks(withMediaType: .audio), audioSettings: [
+        // AVComposition is immutable but not Sendable-annotated, so loading its tracks off the main actor is safe
+        nonisolated(unsafe) let asset = composition.asset
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderAudioMixOutput(audioTracks: try await asset.loadTracks(withMediaType: .audio), audioSettings: [
             AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true,
             AVLinearPCMIsNonInterleaved: false, AVLinearPCMIsBigEndianKey: false,
             AVSampleRateKey: TestRecording.sampleRate, AVNumberOfChannelsKey: 1
