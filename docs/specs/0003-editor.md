@@ -149,6 +149,7 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
 
     /// Source ranges left out of the output, sorted and non-overlapping. Trimming is a cut at either end.
     var cuts: [Range<Double>] = []
+    var splits: [Double] = []
     var zooms: [ZoomSegment] = []
     var clickHighlights = ClickHighlightStyle()
     var keystrokes = KeystrokeOverlayStyle()
@@ -168,15 +169,17 @@ nonisolated struct RenderPlan: Sendable {
     let videoSize: CGSize
     let camera: CameraPath           // sampled viewport track, O(1) lookup
     let cursor: CursorPath?          // nil when the cursor is baked into the video
+    let cursorShapes: CursorShapeTrack  // which image it shows, decoded once
     let clicks: [ClickMarker]        // in Core Image pixel space, sorted by time
     let keystrokes: [KeystrokeChip]  // labels pre-rendered into images
-    let canvas: CanvasLayout
+    let canvas: CanvasLayout         // output size, the video's frame, the backdrop drawn once
+    let dynamicRange: DynamicRange   // SDR, PQ or HLG
 }
 
 extension RenderPlan {
     /// Builds the plan off the main actor; the project's default isolation is `MainActor`.
     @concurrent
-    static func build(project: EditorProject, source: EditorSource) async -> RenderPlan { ... }
+    static func build(project: EditorProject, source: EditorSource, resources: RenderResources, target: RenderTarget) async -> RenderPlan { ... }
 }
 ```
 
@@ -213,7 +216,7 @@ These apply to every phase, on top of `AGENTS.md`.
 **Performance**
 
 - The frame path allocates nothing proportional to the recording's length. Lookups into sorted tracks are binary searches (a small `partitioningIndex` helper); sampled tracks (camera, cursor) are O(1) index plus lerp.
-- One Metal-backed `CIContext` is shared by all compositor instances (it is thread-safe), created with `cacheIntermediates: false`, as recommended for video, and with color management off, so frames stay in the source's encoding (measured in Phase 2: half the render time at 4K).
+- One Metal-backed `CIContext` is shared by all compositor instances (it is thread-safe), created with `cacheIntermediates: false`, as recommended for video, and with color management off, so frames stay in the source's encoding (measured in Phase 2: half the render time at 4K). HDR frames too: their plan draws the overlays in the recording's encoding (Phase 6).
 - Source frames are requested in the decoder's native format (`420v`/`420f` for H.264/HEVC) so Core Image reads YUV directly without an extra conversion.
 - Static images (cursor sprites, keycap labels, backgrounds) are created once per plan, never per frame.
 - Main actor: high-frequency playback time is kept out of the view model's observed state. Only the playhead view reads it, through `TimelineView(.animation)` while playing, so a tick redraws the playhead and nothing else.
@@ -236,6 +239,16 @@ These apply to every phase, on top of `AGENTS.md`.
 ## Phases
 
 Phases 0–4 are the first shippable editor. Each phase ends in a working, mergeable state.
+
+| Phase | Status | Left to check in the app, on real recordings |
+| ----- | ------ | -------------------------------------------- |
+| 0 - Recording prerequisites | Done | Cursor kinds (arrow → I-beam → pointing hand) in a v3 recording made without the cursor |
+| 1 - Editor shell and playback | Done | Scrubbing a 10-minute 4K recording; releases on close (Memory Graph) |
+| 2 - Render pipeline, overlays, export v1 | Done | Highlight placement for each capture kind; redraw on a style change; render budget in Instruments |
+| 3 - Trim and cut | Done | Trimming, splitting and cutting; no clicks at cuts |
+| 4 - Zoom | Done | Where auto-zoom lands; transitions at full frame rate; moving and resizing zooms on the timeline |
+| 5 - Cursor | Done | How the smoothing looks; shapes and idle hiding; the render budget on a quiet machine |
+| 6 - Canvas and export polish | Done | How canvases look; a background picture after relaunch; HDR recordings, ProRes ones too; transparent exports; the Recordings window |
 
 ### Phase 0 - Recording prerequisites (S)
 
@@ -332,6 +345,16 @@ The core of the editor. After this phase, adding an effect means adding a precom
 - Effects stay attached to their content across cuts; they need no remapping code.
 - Tests: `TimeMap` round trips, boundaries, adjacent and overlapping cuts, cuts covering everything.
 
+**Status:** Built and tested, including an export with a cut that has the kept length and shows the right frame after the cut, and a mix measured silent at the cut and at each track's volume. Still to check in the app on a real recording: trimming, splitting and cutting, and that cuts don't click. Where the build differs from the plan:
+
+- The timeline always shows the whole recording in source time: cut parts are dimmed and the playhead skips them. The lanes, the filmstrip and Phase 4's zoom lane need no mapping, and a cut is restored by dragging its edge back. Every kept part has a handle on each edge; dragging one trims or restores up to the neighbouring kept part, and keeps at least one frame. A trim is one undo step, committed when the handle is let go.
+- Splits are saved in the project (`splits`, source seconds), so a split is an undoable edit. A segment is a kept range divided at the splits inside it; clicking selects one, and ⌫ cuts it unless it's the last one left.
+- `TimeMap` owns every cut operation (add, restore, move an edge, divide at splits). It normalizes in frame boundaries, the last being the recording's end wherever it falls, so a trailing cut never leaves a sliver.
+- The composition keeps the source's track IDs, so the video composition and the mix name tracks directly. A new player item is made only when the cuts change, with the playhead kept on its content; other edits swap the video composition, and volume changes only the mix.
+- Fades are 25 ms, not 10–20: the mix lags its volume ramps by about 10 ms. Measured at a cut, 10 ms ramps still left 57% of the volume, 20 ms 20%, and 25 ms 2%.
+- Audio tracks are named by the recorder's order: with two, system audio then the microphone; a single track is "Audio", since it could be either.
+- Recordings whose tracks end at slightly different times build and export (checked with audio 50 ms longer and 300 ms shorter than the video).
+
 ### Phase 4 - Zoom (L)
 
 **Build**
@@ -353,6 +376,19 @@ The core of the editor. After this phase, adding an effect means adding a precom
 
 - Tests: the generator is deterministic on fixtures, produces no overlapping segments and keeps segments within the duration; the camera path has no jumps between samples beyond a threshold, keeps the viewport inside the frame, and reaches 1× between segments.
 - Zoom transitions play at full frame rate in preview.
+
+**Status:** Built and tested, including the "Done when" tests above and a render of a zoomed frame whose click ring lands at the frame's centre at twice its size, while the keystroke chip keeps its size and place. Still to check in the app on real recordings: where auto-zoom lands, that transitions play at full frame rate, and moving and resizing zooms on the timeline. Where the build differs from the plan:
+
+- Automatic zooms are made when a project is created (the recording has no `.edit.json` yet), and saved with the first edit. Editing an automatic zoom makes it manual, so "Regenerate" keeps it.
+- Focus points are fractions of the video's width and height from its top-left corner, so they don't depend on its resolution.
+- Presses outside the video, such as clicks beside a recorded window, are ignored, and so is typing after them. Keys pressed before any click are ignored too.
+- Zooms closer than 1 s merge only when all their presses fit one view. Otherwise the first ends where the second starts (halfway between their presses when they'd overlap), so the camera pans across without zooming out.
+- `CameraPath` uses the exact step of a critically damped spring at 10 rad/s, for each of centre x, centre y and log scale. A move is 96% done after 0.5 s, and each axis stops within 0.04 px at 4K, about 1.4 s after a 2× zoom starts or ends. Frames without zoom are then the source's pixels exactly. The follow-cursor dead zone is the middle half of the view.
+- Clicks are drawn before the frame is magnified, so their rings zoom with the content; the keystroke chip is drawn after.
+- Only the cursor samples inside zooms that follow the cursor are placed. Measured on an M1 in Debug, for a 10-minute recording with 455 zooms, half of them following the cursor: the plan builds in about 45 ms (36 ms camera, 9 ms cursor), and 0.1 ms without zooms. A zoomed 4K frame with a ring and a chip renders in 4.7 ms p50 and 8.1 ms p95, against 4.2 and 7.4 ms unzoomed.
+- The timeline has one selection (`EditorSelection`): a segment or a zoom. ⌫ cuts the segment or deletes the zoom, and Z adds a zoom at the playhead: 3 s long, or up to the next zoom, and at least 0.5 s. A zoom added by hand follows the cursor when the telemetry has one to follow; otherwise it's fixed on the frame's centre.
+- The inspector sets a fixed focus by dragging the view's outline on a picture of the frame (`ZoomFocusPad`), which uses the filmstrip's thumbnails.
+- Telemetry doesn't record the Native Resolution setting, so the hint shows when the recording has fewer than 2 video pixels per screen point (`InputTelemetry.pixelsPerPoint`), whatever the reason.
 
 ### Phase 5 - Cursor (M)
 
@@ -376,6 +412,18 @@ Needs Phase 0 data and recordings made with the cursor hidden (`cursorInVideo ==
 - Tests: smoothing lag is bounded, the path hits every click exactly, brief shape changes are dropped, v2 files fall back to an arrow, and idle detection works.
 - The cursor is sharp at 2× zoom and its hot spot sits on click highlights at every zoom level.
 
+**Status:** Built and tested, including the "Done when" tests above: at 2× the cursor is drawn pixel for pixel from its recorded image, and its hot spot lands on the click at 1× and 2×. Still to check in the app on real recordings: how the smoothing looks, the shapes, idle hiding, and the render budget on a quiet machine. Where the build differs from the plan:
+
+- The springs are critically damped: the camera's, now a shared `Spring`. Cap's friction of 70 overshoots by 0.03%, which doesn't show. The presets are 7, 12.5 and 25 rad/s, trailing a steady move by 290, 160 and 80 ms; Smooth is Cap's default (tension 470, mass 3).
+- Clicks are hit exactly without a stiffer spring. The offset from the smoothed path to each click point eases in over 0.5 s before the click and out over 175 ms after, never past the neighbouring clicks. It's added at lookup, so the path is exact between samples too. Releases count as clicks, so a drag ends where the button was let go.
+- Jitter is a move back against the previous one by less than 2 pt.
+- `CursorSprites` became part of `CursorShapeTrack`, which decodes each image once per plan and drops shapes shown for under 150 ms (shapes are sampled at 15 Hz).
+- The cursor is drawn after zooming, scaled in one step from its recorded resolution with `highQualityDownsample`, so it's sharp when zoomed and doesn't alias at 1×.
+- The fallback arrow is `NSCursor.arrow`'s largest image (`StandardCursors.arrowSprite`), read when the editor opens. It's for recordings whose system reported no cursor images, or images that can't be read. Version 2 files have the cursor in the video, so the editor draws none for them.
+- The press animation holds 0.8× while the button is down. Idle hiding fades out over 0.3 s, and fades back in so the cursor is fully shown when it next moves or clicks.
+- The camera and the cursor are built in parallel. Measured on an M1 in Debug, for 10 minutes with 455 zooms, 3,000 clicks, 12,000 keys and the cursor moving throughout at 60 Hz: the plan builds in about 42 ms instead of 105 (38 ms camera, 35 ms cursor).
+- The cursor adds 1 to 1.4 ms to a 4K frame, like any overlay: Core Image composites it over the whole frame, so the image's size doesn't matter, and `highQualityDownsample` adds at most 0.2 ms. The machine was under load then (load average 3): a frame without the cursor took 7.5 ms p50 and 10.7 ms p95, against 4.2 and 7.4 in Phase 4, so the budget is to be re-checked in Instruments.
+
 ### Phase 6 - Canvas and export polish (L)
 
 **Build**
@@ -392,35 +440,50 @@ Needs Phase 0 data and recordings made with the cursor hidden (`cursorInVideo ==
 - HDR exports keep PQ/HLG metadata (checked on the track's format description).
 - The smoke test matrix is extended.
 
+**Status:** Built and tested, including exports that keep PQ in HEVC and ProRes 422 and turn it to SDR in H.264 (checked on the exported track's format description), a ProRes 4444 export whose padding reads back transparent, and an export at a chosen size and frame rate. Still to check in the app: how canvases look, a background picture after relaunch, HDR recordings (ProRes ones tag each frame, so whether their format description carries the transfer function is unconfirmed), transparent exports in an editing app, and the Recordings window; the smoke test matrix has these as tests 26 to 30. Where the build differs from the plan:
+
+- New projects get a styled canvas: a gradient, 8% padding, corners 1.5% round and a shadow, each a share of the frame's shorter side. `CanvasStyle.plain` is the recording as it is.
+- The canvas keeps the video's shorter side (9:16 from 4K is 2160×3840). Export sizes are shorter sides (2160, 1440, 1080, 720, those smaller than the canvas's) and frame rates 60, 30 or 24 below the recording's. An export is drawn at its size (its own plan, `RenderTarget`), not scaled afterwards, so at the original size it matches the preview pixel for pixel.
+- No reader/writer path: the presets take the video composition's size and frame rate. Bitrate is still the presets' (see Risks).
+- Zoom and canvas placement are one transform, so the video is resampled once, and the cursor is drawn at its final scale.
+- Frames are drawn region by region into the output buffer (`FrameRenderer.draw`, `CanvasLayout.regions`): the padding from the backdrop alone, the video in 8 bands, and its rounded corners with the mask. Core Image evaluates every overlay across the whole region it renders; in bands it skips them where they aren't. Measured on an M1 in Debug, for a 4K frame with a ring and a chip under load (load average 4 to 6): 3 ms p50 plain, against 7 drawn whole, and 3.7 to 5 ms on the default canvas, against 9; p95 stays under 7.5 ms. This also halves Phase 2's plain render time.
+- The backdrop (background and shadow) is drawn once per plan into an IOSurface-backed buffer that frames read in place: 4 ms at 4K, 17 ms the first time. The shadow is blurred at an eighth of the size. Of the backdrops measured per frame, a gradient generated per frame cost as much and a half-size bitmap more.
+- A background picture is kept as a security-scoped bookmark in the project and read upright, in sRGB, at most 4096 px on its longer side. When it can't be read, the canvas shows its color and the window says why.
+- HDR recordings go to `HDREditorCompositor`, which declares `supportsHDRSourceFrames`, takes 10-bit or half-float frames and writes half-float ones. The composition is tagged BT.2020 with the recording's PQ or HLG. Exports to H.264 get an SDR plan, so AVFoundation converts the frames.
+- HDR frames are drawn without color management, like SDR: the plan draws each overlay once in the recording's encoding (`OverlayImages.encoded`), with SDR white at 203 nits, BT.2408's reference white. Semi-transparent parts (the chip's backing, the cursor's shadow, a fading ring) then blend in PQ's encoding, so over HDR they look a little darker than in SDR; the backdrop's shadow is blended before, so it matches. Measured on an M1 in Debug, for a 4K frame with a ring and a chip (load average 2 to 3): 4 to 4.6 ms p50 and 5 to 8 ms p95, against 6.7 to 8.1 and 10 to 13 with a color-managed context compositing in linear light; SDR took 3 to 3.5 ms in the same runs. Converting the backdrop adds 9 to 11 ms to an HDR plan (20 the first time), built alongside the camera and cursor.
+- A transparent background's alpha survives only in ProRes 4444 (`AVAssetExportPresetAppleProRes4444LPCM`); the export sheet picks it for such a canvas and says other formats export black.
+- The recents list is a Recordings window, opened from the menu bar with **Recordings…**: the output folder's movies newest first, without `-edited` exports, each with its first frame. The list is read whenever the window comes forward, and the folder's security scope is held while it's open.
+
 ---
 
 ## Proposed files
 
 ```text
 BetterCapture/Editor/
-  Model/      EditorProject, EditorSource, EditorError, FrameGrid, TimelineMarkers, ZoomSegment,
-              ClickHighlightStyle, KeystrokeOverlayStyle, RGBAColor, ExportFormat, CursorStyle,
-              CanvasStyle, AudioMixSettings
-  Render/     RenderPlan, TimeMap, CameraPath, CursorPath, CursorShapeTrack, CursorSprites, ClickMarker,
-              KeystrokeChip, OverlayImages, CanvasLayout, FrameRenderer, EditorCompositor, EditorInstruction,
-              CompositionBuilder
+  Model/      EditorProject, EditorSource, EditorError, EditorSelection, FrameGrid, TimelineMarkers,
+              ZoomSegment, ClickHighlightStyle, KeystrokeOverlayStyle, RGBAColor, ExportFormat,
+              ExportSettings, CursorStyle, CanvasStyle, AudioMixSettings, DynamicRange, Recording
+  Render/     RenderPlan, RenderResources, RenderTarget, TimeMap, Spring, CameraPath, CursorPath,
+              CursorShapeTrack, ClickMarker, KeystrokeChip, OverlayImages, CanvasLayout, FrameRenderer,
+              EditorCompositor, HDREditorCompositor, EditorInstruction, CompositionBuilder, EditorComposition
   Service/    EditorSourceLoader, ProjectStore, ThumbnailProvider, ExportService,
-              AutoZoomGenerator, KeyLabelFormatter
-  ViewModel/  EditorViewModel, PlaybackController
-  View/       EditorWindowManager, EditorView, PlayerLayerView, EditorTimelineView, TransportBar,
-              EditorInspector, ExportSheet
+              AutoZoomGenerator, KeyLabelFormatter, BackgroundImageLoader, RecordingLibrary
+  ViewModel/  EditorViewModel, PlaybackController, RecordingsViewModel
+  View/       EditorWindowManager, EditorView, PlayerLayerView, EditorTimelineView, TrimHandle,
+              ZoomLane, ZoomFocusPad, TransportBar, EditorInspector, ExportSheet, RecordingsView,
+              RecordingTile
 ```
 
 `EditorTimelineView` is named so that it doesn't collide with SwiftUI's `TimelineView`.
 
-Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry types, in `BetterCapture/Model` and `BetterCapture/Service`, because the recorder writes that data. Phase 1 added `UnsupportedVersionError` to `BetterCapture/Model`, because `InputTelemetry` throws it too. Phase 2 added `PartitioningIndex` there, because `InputTelemetry.geometry(at:)` uses it.
+Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry types, in `BetterCapture/Model` and `BetterCapture/Service`, because the recorder writes that data. Phase 1 added `UnsupportedVersionError` to `BetterCapture/Model`, because `InputTelemetry` throws it too. Phase 2 added `PartitioningIndex` there, because `InputTelemetry.geometry(at:)` uses it. Phase 4 added `InputTelemetry.normalizedVideoPoint(for:at:)` and `pixelsPerPoint`. Phase 5 added `StandardCursors.png(of:)`, which the recorder now uses too, and `StandardCursors.arrowSprite`. Phase 6 added the menu bar's **Recordings…** button and moved `MenuBarActionButton` into its own file, which kept `MenuBarView.swift` under SwiftLint's length limit.
 
 ## Risks
 
 - `NSCursor.currentSystem` **is on its way out.** It is to be deprecated (it will always be nil in a future macOS); it works in the sandbox today. The fallback is an arrow at the recorded positions, with smoothing, size and idle hiding still available. It is revisited on each macOS beta.
 - **A raw recording with the cursor hidden has no cursor.** That is intended, and the notification leads to the editor, but it has to be clear in the setting's description.
 - **Zoom quality** depends on the recording's resolution. It is mitigated by the native-resolution hint and not solved by upscaling.
-- **Export presets** don't expose bitrate. The reader/writer fallback is scoped in Phase 6.
+- **Export presets** don't expose bitrate. Phase 6 didn't need the reader/writer path; it stays the fallback if bitrate control is wanted.
 - **Keyboard layout drift:** labels use the editing Mac's layout, not the recording Mac's. This is acceptable for v1; the input source ID could be added to telemetry if it matters.
 
 ## Open questions

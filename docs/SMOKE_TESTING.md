@@ -31,6 +31,11 @@ This document outlines the manual testing matrix for BetterCapture. These tests 
 | 23  | Window capture hears other apps     | Single window (app A)                 | H.264       | System audio only  | SDR           | App B's audio is in the recording                   | Play audio in app B throughout     |
 | 24  | Application capture hears other apps | Application group (app A)            | H.264       | System audio only  | SDR           | App B's audio is in the recording                   | Play audio in app B throughout     |
 | 25  | Window shadow toggle                | Single window (floating on desktop)   | H.264       | No audio           | SDR           | Drop shadow absent when the toggle is off, present when on | Test `showWindowShadows`     |
+| 26  | Editor export presets               | Any recording, opened in the editor   | Each export format | As recorded | SDR           | Every export plays in QuickTime at the chosen size and frame rate | Export sheet: Format, Size, Frame Rate |
+| 27  | Editor canvas                       | Any recording, opened in the editor   | HEVC export | As recorded        | SDR           | Each aspect ratio, background, padding, corner and shadow setting looks the same in the preview and the export | A background picture still shows after relaunch |
+| 28  | Editor transparent background       | Any recording, opened in the editor   | ProRes 4444 export | No audio    | Alpha (canvas) | The padding is transparent over another clip in an editing app; other formats export it black | Canvas background: Transparent |
+| 29  | Editor HDR export                   | Full display (HDR content), HEVC and ProRes 422 | HEVC, ProRes 422, H.264 exports | No audio | HDR enabled | HEVC and ProRes exports stay HDR (`ffprobe -show_entries stream=color_transfer` reports `smpte2084`); H.264 is SDR | Overlays at SDR brightness |
+| 30  | Recordings window                   | Output folder with recordings and exports | Any     | Any                | Any           | Newest first, no `-edited` exports, pictures load, a click opens the editor, a new recording shows when the window comes forward | Menu bar: Recordings… |
 
 ## Test Coverage Summary
 
@@ -63,6 +68,7 @@ This document outlines the manual testing matrix for BetterCapture. These tests 
 - **PCM Audio**: Test 17
 - **High/Native Frame Rates**: Tests 14, 15
 - **Content Filters**: Tests 16, 22, 25
+- **Editor Canvas and Export**: Tests 26–30
 - **Area Selection**: Tests 7, 19
 - **Content-Independent System Audio**: Tests 23, 24
 

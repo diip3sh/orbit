@@ -8,8 +8,8 @@
 import AVFoundation
 import OSLog
 
-/// Writes an edited video with `AVAssetExportSession`, through the same video composition the
-/// preview plays, so the file matches what the editor shows.
+/// Writes an edited video with `AVAssetExportSession`, from the same composition the preview
+/// plays, so the file matches what the editor shows.
 enum ExportService {
 
     private static let signposter = OSSignposter(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "ExportService")
@@ -17,13 +17,13 @@ enum ExportService {
     /// Exports to `url`, replacing any file there, and reports progress from 0 to 1. Cancelling the
     /// calling task stops the export. A partial file is removed.
     static func export(
-        _ asset: AVAsset, videoComposition: AVVideoComposition, to url: URL, as format: ExportFormat,
-        progress: @escaping (Double) -> Void
+        _ composition: EditorComposition, to url: URL, as format: ExportFormat, progress: @escaping (Double) -> Void
     ) async throws {
-        guard let session = AVAssetExportSession(asset: asset, presetName: format.preset) else {
+        guard let session = AVAssetExportSession(asset: composition.asset, presetName: format.preset) else {
             throw CocoaError(.featureUnsupported)
         }
-        session.videoComposition = videoComposition
+        session.videoComposition = composition.videoComposition
+        session.audioMix = composition.audioMix
 
         let signpost = signposter.beginInterval("Export")
         defer { signposter.endInterval("Export", signpost) }

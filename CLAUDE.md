@@ -34,7 +34,7 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   && { pkill -x BetterCapture; open /tmp/bc-build/dd/Build/Products/Debug/BetterCapture.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 283 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 376 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -117,22 +117,24 @@ keystrokes (key code + modifiers only, never characters), all on the video timel
 | File | Role |
 |---|---|
 | `Model/InputTelemetry.swift` | Codable file format, pure conversion helpers (`videoTime`, `rebased`, `videoPixel`, `topLeft`, `modifierNames`) |
-| `Service/InputTelemetryRecorder.swift` | Cursor polling (≤60 Hz), global mouse/scroll monitor, listen-only key `CGEventTap`, writes the sidecar |
+| `Service/InputTelemetryRecorder.swift` | Cursor polling (≤60 Hz), a listen-only `CGEventTap` for clicks, scrolls and keys (a global mouse monitor without it), writes the sidecar |
 | `Service/CaptureGeometryTracker.swift` | Per-frame `SCStreamFrameInfo` geometry on the capture queue, stored only on change |
 | `Service/AssetWriter.swift` | `sessionStartTime` (host time of file time 0) |
 | `ViewModel/RecorderViewModel.swift` | Starts telemetry after the last `try` in `startRecording`, writes the sidecar in `stopRecording` while the output folder's security scope is held |
 
 Key facts:
-- **Time:** events are stored as host-clock seconds while recording (`NSEvent.timestamp`,
-  `CMClockGetHostTimeClock`, SCStream PTS all share it) and rebased at stop by `sessionStartTime`.
+- **Time:** events are stored as host-clock seconds while recording (tap events are stamped on
+  arrival; `NSEvent.timestamp`, `CMClockGetHostTimeClock`, SCStream PTS all share it) and rebased at
+  stop by `sessionStartTime`.
 - **Position:** locations are global CG points, top-left origin. Map to video pixels with
   `InputTelemetry.videoPixel(for:geometry:)` using the `geometry` entry in effect at that time.
   Verified against real frames for display and window captures.
 - **Window shadows:** with "Show Window Shadows" on, SCK draws window + shadow scaled into the frame.
   SCK reports only the shadow's total size, so the top/bottom split uses the measured
   `InputTelemetry.shadowTopFraction = 0.35` (macOS 27). Re-measure if Apple changes shadows.
-- **Keystrokes** need Input Monitoring (requested when the toggle is turned on; effective after
-  relaunch). Without it `keystrokesAvailable` is false and `keys` is empty.
+- **Clicks, scrolls and keystrokes** need Input Monitoring (requested when the toggle is turned on;
+  effective after relaunch). Without it `keystrokesAvailable` is false, `keys` is empty, and clicks
+  and scrolls come from a global `NSEvent` monitor, which the sandbox feeds only with Accessibility.
 
 ### F2 — Cursor sprites (`feat/cursor-sprites`)
 
@@ -249,7 +251,6 @@ Key facts:
   `currentTime` inside `TimelineView(.animation)`, so a tick redraws the playhead and time label only.
 - Frame stepping uses `AVPlayerItem.step(byCount:)` (decodes one frame; a seek decodes from the last
   keyframe, up to 2 s back) unless a seek is still in flight.
-- Phase 1 plays the source asset directly; output time equals source time until phase 3's composition.
 
 ### S1 — Editor, phase 2: render pipeline, overlays, export (`feat/editor-shell`, spec 0003)
 
@@ -275,6 +276,179 @@ Key facts:
   and a chip: ~5 ms p50 / 8 ms p95 per frame, versus 10 / 13 ms with linear-light compositing. A
   10-min plan (3,000 clicks, 12,000 keys) builds in ~24 ms.
 - `InputTelemetry.geometry(at:)` and `RandomAccessCollection.partitioningIndex` are the shared lookups.
+
+### S1 — Editor, phase 3: trim and cut (`feat/editor-shell`, spec 0003)
+
+The timeline always spans the whole recording: cut parts are dimmed and the playhead skips them.
+Each kept part has a handle on both edges; dragging one trims or restores. **S** splits at
+the playhead, clicking selects the part between splits and cuts, **⌫** cuts it. The inspector's
+Audio section sets each track's volume and mute.
+
+| File | Role |
+|---|---|
+| `Editor/Render/TimeMap.swift` | Output ↔ source time by binary search, and every cut operation: normalize, add, restore, move a kept range's edge, divide at splits |
+| `Editor/Render/CompositionBuilder.swift`, `EditorComposition.swift` | `AVMutableComposition` of the kept ranges (every track, source track IDs), the video composition, and the `AVAudioMix` with volumes and fades |
+| `Editor/ViewModel/EditorViewModel.swift` | `// MARK: - Cutting` extension: `split()`, `select(at:)`, `deleteSelection()`, `moveStart`/`moveEnd(ofKeptRange:to:)`; rebuilds swap only what changed |
+| `Editor/View/EditorTimelineView.swift`, `TrimHandle.swift` | Source-time timeline: dimmed cuts, splits, selection, handles |
+| `Editor/Model/AudioMixSettings.swift` | Volume and mute per audio track, by the recording's track order |
+
+Key facts:
+- Everything in the project and on the timeline is source time; only the player, the transport's
+  time label and the compositor's requests are output time. `TimeMap` is the only converter.
+- Cuts are normalized as frame boundaries (integers); the last boundary is the recording's end
+  wherever it falls, so a trailing cut never leaves a sliver. Something must stay: trims keep a
+  frame per kept part, and the last part can't be cut.
+- `splits` are saved in the project, so a split is an undoable edit. Splits inside cuts are kept
+  and come back if the cut is restored.
+- A new player item is made only when the cuts change (the playhead stays on its content); other
+  edits swap the video composition, volumes only the mix.
+- Audio fades 25 ms at every cut. The mix lags its ramps by ~10 ms: at a cut, 10 ms ramps still
+  left 57% of the volume, 20 ms 20%, 25 ms 2%.
+- Audio tracks are named by the writer's order: two tracks are system audio then microphone; one
+  track is just "Audio" since it could be either.
+
+### S1 — Editor, phase 4: zoom (`feat/editor-shell`, spec 0003)
+
+A recording with telemetry opens with automatic zooms on its clicks, typing and where the cursor
+rested. The zoom lane
+under the timeline shows every zoom: click to select, drag to move, handles to resize, **Z** adds
+one at the playhead, **⌫** deletes the selected one. The inspector's Zoom section sets its scale
+and focus (follow the cursor, or a fixed point dragged on a picture of the frame) and regenerates
+the automatic zooms.
+
+| File | Role |
+|---|---|
+| `Editor/Model/ZoomSegment.swift` | Source range, scale, focus (fractions of the video, top-left origin), `isAutomatic`; every edit of the zoom list, which keeps it sorted and apart and makes the zoom it changes manual |
+| `Editor/Service/AutoZoomGenerator.swift` | Pure: groups presses (clicks, and keys at the last click) and cursor rests that are close in time and fit one view; `Configuration` holds the constants |
+| `Editor/Render/CameraPath.swift` | The view over time, sampled at 120 Hz: a critically damped spring per axis, scale in log space, follow-cursor with a dead zone |
+| `Editor/Render/FrameRenderer.swift` | Draws clicks, magnifies the frame to the view, then draws the keystroke chip unmagnified |
+| `Editor/View/ZoomLane.swift`, `ZoomFocusPad.swift` | The timeline's zoom lane; the inspector's fixed-focus picker |
+| `Editor/ViewModel/EditorViewModel.swift` | `// MARK: - Zooming` extension; `selection` is an `EditorSelection` (a segment or a zoom), and ⌫ removes either |
+
+Key facts:
+- A new project (no `.edit.json`) gets the automatic zooms; they're saved with the first edit.
+  Regenerating replaces automatic zooms and keeps manual ones; editing a zoom makes it manual.
+- Zooms closer than 1 s merge when their presses fit one view; otherwise the first ends where the
+  second starts, so the view pans across instead of zooming out and in. Presses outside the video
+  (e.g. beside a recorded window) are ignored.
+- The cursor rests where it stays within 2% of the video for 0.5 s, at least 15% from where it last
+  rested; the rest counts when it arrived. Recordings without clicks still zoom: two real 13 s
+  window recordings got 2 and 3 zooms.
+- The spring (10 rad/s) finishes 96% of a move in 0.5 s and stops within 0.04 px at 4K after
+  about 1.4 s, so frames with no zoom are the source's pixels exactly.
+- Only cursor samples inside follow-cursor zooms are placed. Measured on an M1, Debug, 10 min with
+  455 zooms (half following the cursor): the plan builds in ~45 ms (camera 36 ms, cursor 9 ms);
+  0.1 ms without zooms. A zoomed 4K frame with a ring and a chip renders in 4.7 ms p50 / 8.1 ms p95
+  (4.2 / 7.4 unzoomed).
+- The soft-zoom hint shows when the recording has under 2 video pixels per screen point
+  (`InputTelemetry.pixelsPerPoint`); telemetry doesn't record the Native Resolution setting itself.
+
+### S1 — Editor, phase 5: cursor (`feat/editor-shell`, spec 0003)
+
+A recording made without the cursor gets it back in the editor: drawn from its recorded images at a
+smoothed position, sharp when zoomed, with its hot spot on every click highlight. The inspector's
+Cursor section shows or hides it and sets its size, movement (Mellow, Smooth, Fast), shrinking on
+click and hiding when idle.
+
+| File | Role |
+|---|---|
+| `Editor/Render/CursorPath.swift` | Positions without jitter, smoothed by a spring at 120 Hz and eased onto each click; the size (capture's pixels per point × style × press) and the idle fade |
+| `Editor/Render/CursorShapeTrack.swift` | Shape changes without the brief ones, each image decoded once per plan; an arrow when the telemetry has none |
+| `Editor/Render/Spring.swift` | The critically damped spring the camera and the cursor share |
+| `Editor/Render/FrameRenderer.swift` | Draws the cursor after zooming, scaled in one step from its recorded resolution |
+| `Editor/Model/CursorStyle.swift` | The inspector's settings; `Smoothing.frequency` holds the presets' springs |
+| `Service/StandardCursors.swift` | `png(of:)`, shared with the recorder, and `arrowSprite`, the fallback read when the editor opens |
+
+Key facts:
+- Drawn only when `capture.cursorInVideo` is false, so the editor never draws a second cursor.
+- The path passes exactly through every click and release at its time: the offset from the smoothed
+  path to the click point eases in over 0.5 s before and out over 175 ms after, never past the
+  neighbouring clicks, and is added at lookup, so it's exact between samples too.
+- Presets are critically damped springs at 7, 12.5 and 25 rad/s, trailing a steady move by 290, 160
+  and 80 ms. Smooth is Cap's default (tension 470, mass 3) without its 0.03% overshoot. A move back
+  by less than 2 pt is jitter and dropped.
+- Shapes shown for under 150 ms are dropped. A press shrinks the cursor to 0.8× over 130 ms while
+  held. Idle hiding fades out over 0.3 s after 2 s without a move or click, and back in before the
+  next one.
+- The camera and the cursor are built in parallel (`async let`): measured on an M1, Debug, for 10
+  minutes with 455 zooms, 3,000 clicks, 12,000 keys and the cursor moving throughout at 60 Hz, the
+  plan builds in ~42 ms instead of ~105 (camera 38 ms, cursor 35 ms).
+- The cursor adds 1–1.4 ms to a 4K frame, like any overlay: Core Image composites it over the whole
+  frame, so its image's size doesn't matter (34×46 px costs the same as the 280×400 px arrow);
+  `highQualityDownsample` adds at most 0.2 ms. These were measured under load (load average 3),
+  where a frame without the cursor took 7.5 ms p50, 10.7 ms p95, against 4.2 and 7.4 in phase 4.
+
+### S1 — Editor, phase 6: canvas and export polish (`feat/editor-shell`, spec 0003)
+
+The recording sits on a canvas: a shape (original, 16:9, 9:16, 1:1, 4:3), a gradient, color,
+picture or transparent background, padding, rounded corners and a shadow. New projects get the
+styled default. Export picks a size and frame rate, and adds ProRes 4444, which keeps a
+transparent background; HDR recordings stay HDR in HEVC and ProRes. **Recordings…** in the menu
+bar lists the output folder's recordings with pictures; a click opens one in the editor.
+
+| File | Role |
+|---|---|
+| `Editor/Model/CanvasStyle.swift` | The inspector's canvas settings; `plain` is the recording as it is |
+| `Editor/Render/CanvasLayout.swift` | Output size, the video's frame and rounded mask, the backdrop (background and shadow) drawn once into an IOSurface, and the regions frames are drawn in |
+| `Editor/Render/FrameRenderer.swift` | `draw(_:at:plan:into:context:)`: the frame region by region, for the compositor and the tests alike |
+| `Editor/Render/RenderResources.swift`, `RenderTarget.swift` | What plans draw with from the system (key labels, arrow, background picture); what a plan is for (the preview, or an export's size and dynamic range) |
+| `Editor/Render/HDREditorCompositor.swift`, `Editor/Model/DynamicRange.swift` | 10-bit or half-float frames in, half-float out; SDR, PQ or HLG from the track's transfer function |
+| `Editor/Service/BackgroundImageLoader.swift` | Security-scoped bookmark to the chosen picture, read upright, in sRGB, at most 4096 px |
+| `Editor/Model/ExportSettings.swift`, `Editor/View/ExportSheet.swift` | Format, size (a shorter side) and frame rate; only smaller ones are offered |
+| `Editor/Service/RecordingLibrary.swift`, `Editor/ViewModel/RecordingsViewModel.swift`, `Editor/View/RecordingsView.swift` | The Recordings window, opened by `EditorWindowManager.showRecordings()` |
+
+Key facts:
+- The canvas keeps the video's shorter side (9:16 from 4K is 2160×3840), and padding (8%), corner
+  radius (1.5%) and the shadow's blur (3%) are shares of it. An export at another size is drawn at
+  that size, not scaled afterwards. Zoom and canvas placement are one transform, so the video is
+  resampled once; the cursor is drawn at its final scale.
+- Frames are drawn region by region (`CanvasLayout.regions`): the padding from the backdrop alone,
+  the video in 8 bands, its rounded corners with the mask. Core Image evaluates every overlay
+  across the whole region it renders; in bands it skips them where they aren't. Measured on an M1,
+  Debug, 4K with a ring and a chip, load average 4–6: 3 ms p50 plain (7 drawn whole), 3.7–5 ms on
+  the default canvas (9 whole), p95 under 7.5 ms. The backdrop takes 4 ms to draw (17 the first time).
+- A transparent background keeps its alpha only in ProRes 4444; other formats export it black.
+- HDR frames are drawn without color management too: the plan draws its overlays once in the
+  recording's encoding (`OverlayImages.encoded`), SDR white at 203 nits (BT.2408). Their
+  semi-transparent parts (the chip's backing, the cursor's shadow, a fading ring) blend in PQ's
+  encoding, so over HDR they look a little darker than in SDR. Measured on an M1, Debug, 4K with a
+  ring and a chip, load average 2–3: 4–4.6 ms p50 and 5–8 ms p95, against 6.7–8.1 and 10–13 with
+  a color-managed context; SDR took 3–3.5 in the same runs. Converting the backdrop costs 9–11 ms
+  more per HDR plan (20 the first time), alongside the camera and cursor. The composition is
+  tagged BT.2020 and the recording's PQ or HLG; H.264 exports are SDR.
+- The Recordings window lists movies in the output folder, newest first, without `-edited`
+  exports, reads the list whenever it comes forward, and holds the folder's scope while open.
+
+### S1 — Editor design (`feat/editor-shell`)
+
+The editor and Recordings windows are always dark, after zeron.sh: a violet-black ground (80%) the
+desktop frosts through, text in three tones (ink, dim, faint), hairlines instead of boxes, an
+off-white Export button, and one purple (`EditorTheme.accent`) for the playhead and the selection.
+The preview sits on a faint dot grid, the transport floats on glass under it. Nothing else is
+colored: clicks, keys and zooms are greys, and the default canvas is a slate gradient.
+
+| File | Role |
+|---|---|
+| `Editor/View/EditorTheme.swift` | Colors, spacing on a 4-point grid, and the one animation every state change uses |
+| `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `GlassEffectContainer`), a material with a hairline before; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on |
+| `Editor/View/EditorBackdrop.swift`, `StageDotGrid.swift` | The frosted desktop behind the window; the dot grid behind the preview, fading out before the stage's edges |
+| `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white) and `.editorGhost` (hairline) text buttons |
+| `Editor/View/EditorWindowManager.swift` | `makeWindow`: dark appearance, content under a transparent title bar |
+| `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the glass transport |
+| `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart), the playhead's knob, the zoom blocks |
+| `Editor/View/Inspector*.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | Sections that fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides; a notice on top when the telemetry is missing |
+| `Editor/View/ExportSheet.swift`, `ExportProgressBar.swift` | Native pickers in a grid with a line on what the format is for; progress |
+
+Key facts:
+- Glass only on controls over the stage, never on the timeline (content) or over the live video:
+  each glass shape costs a sampling pass on the GPU the compositor also uses.
+- The inspector keeps the system `.inspector`, which macOS 26 draws as glass, so it has no background.
+- Text is ink by default, so it doesn't dim when disabled: `InspectorSection` fades disabled content.
+- Avoid what reads as generated: no gradients or glows in the chrome, no second accent, no cards
+  and badges where a native control works, no all-caps titles, hover as a fill step (no lifts or
+  scaling).
+- `ImageRenderer` can't draw glass content, AppKit controls, `ScrollView`s or the player, and
+  `screencapture`/`cacheDisplay` need permission or miss SwiftUI; check the look in the app.
 
 ### C1 — Screenshots
 
@@ -326,10 +500,12 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 
 ## Sandbox findings (measured, keep the app sandboxed)
 
-- `NSEvent.mouseLocation` polling and global mouse/scroll monitors work without any permission.
+- `NSEvent.mouseLocation` polling works without any permission. Global mouse/scroll monitors need
+  Accessibility (Apple DTS, developer.apple.com/forums/thread/811443): on macOS 26.3 two recordings
+  made while clicking got no clicks or scrolls.
 - Global `NSEvent` **key** monitors never fire in the sandbox (need Accessibility) — don't use them.
 - Listen-only `CGEvent.tapCreate(.cgSessionEventTap, …, .listenOnly)` works once Input Monitoring is
-  granted; no entitlement or Info.plist key needed.
+  granted; no entitlement or Info.plist key needed. It records keys, clicks and scrolls.
 - `NSCursor.currentSystem` works in the sandbox.
 
 ## Roadmap status
@@ -350,7 +526,11 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | C14 copy image to clipboard (PNG) | Done (`ImagePasteboard`) |
 | S1 editor phase 1: shell and playback | Done; open/scrub/close still need a check on a real 10-min 4K recording (see spec 0003) |
 | S1 editor phase 2: render pipeline, click highlights, keystrokes, export | Done; highlight placement still needs checking on real recordings of each capture kind. 4K render measured at the 8 ms p95 budget on an M1 (see spec 0003) |
-| S1 editor phases 3–6 (cuts, zoom, cursor, canvas and export polish) | Todo, spec 0003 |
+| S1 editor phase 3: trim, split and cut, audio volume | Done; trimming, cutting and clicks at cuts still need a check in the app on a real recording |
+| S1 editor phase 4: auto-zoom, zoom lane, camera | Done; auto-zoom placement, full-frame-rate transitions and editing zooms on the timeline still need a check in the app on real recordings |
+| S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
+| S1 editor phase 6: canvas and export polish | Done; the canvas, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags), transparent exports and the Recordings window still need a check in the app |
+| S1 editor design: dark studio, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0

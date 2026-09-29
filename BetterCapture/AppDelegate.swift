@@ -55,6 +55,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editorWindows.open(url)
     }
 
+    /// Shows the output folder's recordings, to open one in the editor.
+    func showRecordings() {
+        editorWindows.showRecordings()
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where url.scheme == "bettercapture" {
             handle(url)

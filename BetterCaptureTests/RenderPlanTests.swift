@@ -45,14 +45,16 @@ struct RenderPlanTests {
         return telemetry
     }
 
-    private func source(telemetry: InputTelemetry?) -> EditorSource {
+    private func source(telemetry: InputTelemetry?, dynamicRange: DynamicRange = .sdr) -> EditorSource {
         EditorSource(
             asset: AVURLAsset(url: URL(filePath: "/dev/null")),
             timeRange: CMTimeRange(start: .zero, duration: CMTime(value: 10, timescale: 1)),
             videoTrackID: 1,
+            audioTrackIDs: [],
             naturalSize: CGSize(width: 1600, height: 1200),
             frameRate: 60,
             timescale: 600,
+            dynamicRange: dynamicRange,
             telemetry: telemetry,
             telemetryError: nil
         )
@@ -71,6 +73,52 @@ struct RenderPlanTests {
         // After the window moved 100 pt right, the same screen point is 200 px further left in it
         #expect(markers[2].position == CGPoint(x: 200, y: 960))
         #expect(markers[0].diameter == 88)
+    }
+
+    @Test func placesCursorPositionsWhileAZoomFollowsItWithTheGeometryInEffect() {
+        var telemetry = telemetry
+        telemetry.cursor = [1, 3, 6, 9].map { InputTelemetry.CursorSample(time: $0, location: CGPoint(x: 500, y: 380)) }
+        let zooms = [
+            ZoomSegment(range: 4..<7, focus: .followCursor),
+            ZoomSegment(range: 8..<10, focus: .fixed(center: CGPoint(x: 0.5, y: 0.5)))
+        ]
+
+        let points = RenderPlan.cursorPoints(for: telemetry, during: zooms)
+
+        // From the position at the zoom's start
+        #expect(points.map(\.time) == [3, 6])
+        // 800 of 1600 px from the left and 600 of 1200 from the top; after the move, 600 px from the left
+        #expect(points.map(\.point) == [CGPoint(x: 0.5, y: 0.5), CGPoint(x: 0.375, y: 0.5)])
+    }
+
+    @Test func buildsTheCameraFromTheZooms() async {
+        let project = EditorProject(zooms: [ZoomSegment(range: 1..<9, focus: .fixed(center: CGPoint(x: 0.25, y: 0.25)))])
+
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: nil), resources: .none)
+
+        #expect(plan.camera.viewport(at: 0) == .whole)
+        #expect(plan.camera.viewport(at: 5).scale > 1.99)
+    }
+
+    @Test func drawsTheCursorOnlyWhenTheVideoHasNone() async {
+        var telemetry = telemetry
+        telemetry.cursor = [.init(time: 0, location: CGPoint(x: 500, y: 380))]
+        var project = EditorProject()
+        let arrow = StandardCursors.arrowSprite
+
+        let withCursor = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: RenderResources(arrow: arrow))
+        #expect(withCursor.cursor == nil)
+
+        telemetry.capture.cursorInVideo = false
+        let withoutCursor = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: RenderResources(arrow: arrow))
+        // 800 px from the left and 600 from the top, of 1200, before gliding onto the click at 1 s
+        #expect(withoutCursor.cursor?.position(at: 0.3) == CGPoint(x: 800, y: 600))
+        #expect(withoutCursor.cursorShapes.sprite(at: 1) != nil)
+
+        project.cursor.isEnabled = false
+        let hidden = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: RenderResources(arrow: arrow))
+        #expect(hidden.cursor == nil)
+        #expect(hidden.cursorShapes.sprite(at: 1) == nil)
     }
 
     @Test func highlightsOnlyTheChosenButton() {
@@ -94,7 +142,7 @@ struct RenderPlanTests {
         project.clickHighlights.isEnabled = false
         project.keystrokes.isEnabled = false
 
-        let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), keyLabels: KeyLabelFormatter.current())
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: RenderResources(keyLabels: KeyLabelFormatter.current()))
 
         #expect(plan.clicks.isEmpty)
         #expect(plan.keystrokes.isEmpty)
@@ -102,22 +150,55 @@ struct RenderPlanTests {
     }
 
     @Test func buildsNoOverlaysWithoutTelemetry() async {
-        let plan = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), keyLabels: KeyLabelFormatter.current())
+        let plan = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), resources: RenderResources(keyLabels: KeyLabelFormatter.current()))
 
         #expect(plan.clicks.isEmpty)
         #expect(plan.keystrokes.isEmpty)
         #expect(plan.videoSize == CGSize(width: 1600, height: 1200))
     }
 
+    @Test func buildsTheCanvasAtTheTargetsSize() async {
+        let preview = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), resources: .none)
+        let export = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), resources: .none, target: RenderTarget(shorterSide: 600))
+
+        #expect(preview.canvas.size == CGSize(width: 1600, height: 1200))
+        #expect(export.canvas.size == CGSize(width: 800, height: 600))
+        #expect(export.canvas.videoFrame.height == 504)
+    }
+
     @Test func buildsOneChipImagePerLabel() async {
         let plan = await RenderPlan.build(
-            project: EditorProject(), source: source(telemetry: telemetry), keyLabels: KeyLabelFormatter.layout(id: "com.apple.keylayout.US")
+            project: EditorProject(), source: source(telemetry: telemetry), resources: RenderResources(keyLabels: KeyLabelFormatter.layout(id: "com.apple.keylayout.US"))
         )
 
         #expect(plan.clicks.count == 3)
         #expect(plan.clickRing.extent.width == 88)
         #expect(plan.chipImages.count == 2)
-        // 6% of the video's shorter side
-        #expect(plan.chipImages.allSatisfy { $0.extent.height == 72 })
+        // 6% of the shorter side of the video on the canvas: 1,200 px less 8% padding at the top and bottom
+        #expect(plan.canvas.videoFrame.height == 1008)
+        #expect(plan.chipImages.allSatisfy { $0.extent.height == 61 })
+    }
+
+    @Test func drawsHDROverlaysInTheRecordingsEncodingAtSDRWhite() async {
+        let white = RGBAColor(red: 1, green: 1, blue: 1, alpha: 1)
+        var project = EditorProject()
+        project.clickHighlights.color = white
+        project.canvas.background = .color
+        project.canvas.color = white
+        var telemetry = telemetry
+        telemetry.capture.cursorInVideo = false
+        telemetry.cursor = [.init(time: 0, location: CGPoint(x: 500, y: 380))]
+        let resources = RenderResources(keyLabels: KeyLabelFormatter.layout(id: "com.apple.keylayout.US"), arrow: StandardCursors.arrowSprite)
+        let source = source(telemetry: telemetry, dynamicRange: .pq)
+
+        let hdr = await RenderPlan.build(project: project, source: source, resources: resources)
+        let sdr = await RenderPlan.build(project: project, source: source, resources: resources, target: RenderTarget(keepsHDR: false))
+
+        #expect(hdr.dynamicRange == .pq && sdr.dynamicRange == .sdr)
+        // SDR white is 203 nits in PQ, BT.2408's reference white
+        for (plan, white) in [(hdr, Float(0.58)), (sdr, 1)] {
+            let images = [plan.clickRing, plan.chipImages.first, plan.canvas.backdrop, plan.cursorShapes.sprite(at: 1)?.image]
+            #expect(images.allSatisfy { $0.map { abs($0.brightestRed - white) < 0.001 } ?? false })
+        }
     }
 }

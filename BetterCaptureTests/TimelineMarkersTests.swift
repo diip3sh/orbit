@@ -28,16 +28,9 @@ struct TimelineMarkersTests {
     }
 
     @Test func marksPressesButNotReleasesOrRepeats() {
-        let markers = TimelineMarkers(telemetry: telemetry, timeMap: TimeMap(cuts: [], sourceDuration: 10))
+        let markers = TimelineMarkers(telemetry: telemetry)
 
         #expect(markers.clicks == [1, 4, 7])
         #expect(markers.keys == [2, 8])
-    }
-
-    @Test func leavesOutCutEventsAndShiftsLaterOnes() {
-        let markers = TimelineMarkers(telemetry: telemetry, timeMap: TimeMap(cuts: [3..<5], sourceDuration: 10))
-
-        #expect(markers.clicks == [1, 5])
-        #expect(markers.keys == [2, 6])
     }
 }

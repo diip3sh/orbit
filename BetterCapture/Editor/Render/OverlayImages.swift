@@ -8,6 +8,7 @@
 import CoreGraphics
 import CoreImage
 import CoreText
+import CoreVideo
 import Foundation
 
 /// The overlays' images, drawn once per render plan and reused by every frame.
@@ -50,6 +51,24 @@ nonisolated enum OverlayImages {
             context.textPosition = CGPoint(x: padding, y: (height - ascent - descent) / 2 + descent)
             CTLineDraw(line, context)
         }
+    }
+
+    /// Color managed, unlike the compositor's: it converts each HDR overlay once, so frames don't have to.
+    private static let colorManagedContext = CIContext(options: [.cacheIntermediates: false])
+
+    /// `image`, drawn once in `range`'s encoding, so frames blend it into the video without color
+    /// management and it keeps its SDR brightness in HDR. SDR's is the image itself.
+    static func encoded(_ image: CIImage, in range: DynamicRange) -> CIImage {
+        let extent = image.extent
+        guard let colorSpace = range.colorSpace, !extent.isEmpty, !extent.isInfinite else { return image }
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(
+            nil, Int(extent.width), Int(extent.height), kCVPixelFormatType_64RGBAHalf,
+            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer
+        )
+        guard let buffer else { return image }
+        colorManagedContext.render(image, to: buffer, bounds: extent, colorSpace: colorSpace)
+        return CIImage(cvPixelBuffer: buffer).transformed(by: CGAffineTransform(translationX: extent.minX, y: extent.minY))
     }
 
     /// Draws into a transparent sRGB bitmap of `size`, rounded up to whole pixels, with a

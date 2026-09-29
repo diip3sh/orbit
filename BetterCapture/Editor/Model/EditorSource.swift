@@ -16,6 +16,9 @@ nonisolated struct EditorSource: Sendable {
 
     let videoTrackID: CMPersistentTrackID
 
+    /// The recorder writes system audio before the microphone.
+    let audioTrackIDs: [CMPersistentTrackID]
+
     /// The video's dimensions in pixels.
     let naturalSize: CGSize
 
@@ -23,6 +26,8 @@ nonisolated struct EditorSource: Sendable {
 
     /// The video track's time scale, for converting seconds to `CMTime`.
     let timescale: CMTimeScale
+
+    let dynamicRange: DynamicRange
 
     /// `nil` when the recording has none or it couldn't be read; ``telemetryError`` says which.
     let telemetry: InputTelemetry?
@@ -33,5 +38,14 @@ nonisolated struct EditorSource: Sendable {
     /// The video's length in seconds.
     var duration: Double {
         timeRange.duration.seconds
+    }
+
+    /// Names for the audio tracks, in order. With a single track, which one was recorded isn't known.
+    var audioTrackNames: [String] {
+        switch audioTrackIDs.count {
+        case 1: ["Audio"]
+        case 2: ["System Audio", "Microphone"]
+        default: audioTrackIDs.indices.map { "Audio \($0 + 1)" }
+        }
     }
 }

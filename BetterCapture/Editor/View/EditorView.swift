@@ -7,7 +7,8 @@
 
 import SwiftUI
 
-/// An editor window's content: the preview, transport controls, timeline and inspector.
+/// An editor window's content: the preview and transport on a dark stage, the timeline under them,
+/// and the inspector.
 struct EditorView: View {
     let viewModel: EditorViewModel
 
@@ -18,34 +19,46 @@ struct EditorView: View {
         Group {
             if let source = viewModel.source {
                 VStack(spacing: 0) {
-                    PlayerLayerView(player: viewModel.playback.player)
-
-                    TransportBar(playback: viewModel.playback, duration: viewModel.timeMap.outputDuration)
+                    EditorStage(viewModel: viewModel)
 
                     EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
-                        .padding([.horizontal, .bottom])
-
-                    if let error = viewModel.error {
-                        Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                            .padding([.horizontal, .bottom])
-                    }
+                        .padding(.horizontal, EditorTheme.largeSpacing)
+                        .padding(.vertical, EditorTheme.spacing)
+                        .background(EditorTheme.panel.opacity(0.6))
+                        .overlay(alignment: .top) {
+                            Rectangle()
+                                .fill(EditorTheme.hairline)
+                                .frame(height: 1)
+                        }
                 }
                 .inspector(isPresented: $showsInspector) {
                     EditorInspector(viewModel: viewModel)
-                        .inspectorColumnWidth(min: 240, ideal: 280)
+                        .inspectorColumnWidth(min: 260, ideal: 300, max: 380)
                 }
                 .toolbar {
-                    Button("Export…", systemImage: "square.and.arrow.up") {
-                        showsExport = true
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Export…", systemImage: "square.and.arrow.up") {
+                            showsExport = true
+                        }
+                        .labelStyle(.titleAndIcon)
+                        .buttonStyle(.editorPrimary)
+                        .help("Export the edited video")
                     }
-                    Button("Inspector", systemImage: "sidebar.trailing") {
-                        showsInspector.toggle()
+                    .hidingSharedBackground()
+                    if #available(macOS 26, *) {
+                        ToolbarSpacer(.fixed, placement: .primaryAction)
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Inspector", systemImage: "sidebar.trailing") {
+                            showsInspector.toggle()
+                        }
+                        .help(showsInspector ? "Hide the inspector" : "Show the inspector")
                     }
                 }
                 .sheet(isPresented: $showsExport) {
                     ExportSheet(viewModel: viewModel)
                 }
+                .transition(.opacity)
             } else if let error = viewModel.error {
                 ContentUnavailableView(
                     "Can't Open Recording",
@@ -54,9 +67,13 @@ struct EditorView: View {
                 )
             } else {
                 ProgressView()
+                    .controlSize(.small)
             }
         }
-        .frame(minWidth: 640, minHeight: 400)
+        .frame(minWidth: 560, minHeight: 440)
+        .editorWindowBackground()
+        .tint(EditorTheme.accent)
+        .editorMotion(.smooth, value: viewModel.source == nil)
         .task {
             await viewModel.load()
         }

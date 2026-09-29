@@ -33,14 +33,21 @@ final class PlaybackController {
         isPlaying ? player.currentTime().seconds : pausedTime
     }
 
-    func load(_ source: EditorSource, videoComposition: AVVideoComposition) {
-        frames = FrameGrid(frameRate: source.frameRate, duration: source.duration)
-        timescale = source.timescale
+    /// Plays `composition`, paused on the frame at output time `time`. Replaces what was playing.
+    /// - Parameter frames: The output's frames.
+    func load(_ composition: EditorComposition, frames: FrameGrid, timescale: CMTimeScale, at time: Double) {
+        pause()
+        self.frames = frames
+        self.timescale = timescale
 
-        let item = AVPlayerItem(asset: source.asset)
-        item.videoComposition = videoComposition
+        let item = AVPlayerItem(asset: composition.asset)
+        item.videoComposition = composition.videoComposition
+        item.audioMix = composition.audioMix
         // A seek completes once its frame is drawn, so scrubbing never shows a bare source frame
         item.seekingWaitsForVideoCompositionRendering = true
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+        }
         player.replaceCurrentItem(with: item)
         endObserver = NotificationCenter.default.addObserver(
             forName: AVPlayerItem.didPlayToEndTimeNotification, object: item, queue: .main
@@ -49,6 +56,7 @@ final class PlaybackController {
                 self?.didPlayToEnd()
             }
         }
+        seek(toFrame: frames.frame(at: time))
     }
 
     /// Plays from the playhead, or from the start when it's on the last frame.
@@ -103,6 +111,10 @@ final class PlaybackController {
         if !isPlaying {
             seek(toFrame: frames.frame(at: pausedTime))
         }
+    }
+
+    func setAudioMix(_ audioMix: AVAudioMix) {
+        player.currentItem?.audioMix = audioMix
     }
 
     /// Releases the player item and its decoders, when the window closes.

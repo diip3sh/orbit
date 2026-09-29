@@ -33,18 +33,18 @@ struct ExportServiceTests {
 
     @Test func exportsTheRecordingWithItsOverlaysDrawn() async throws {
         defer { try? FileManager.default.removeItem(at: folder) }
-        try await writeBlackVideo(frameCount: 15, frameRate: 30)
+        try await TestRecording.write(to: video, size: videoSize, frameCount: 15, frameRate: 30)
         try writeTelemetry(clickAt: CGPoint(x: 100, y: 80), time: 0.2)
         let source = try await EditorSourceLoader.load(videoURL: video)
         var project = EditorProject()
+        project.canvas = .plain
         project.clickHighlights.size = 100
         project.clickHighlights.color = RGBAColor(red: 1, green: 0, blue: 0, alpha: 1)
-        let plan = await RenderPlan.build(project: project, source: source, keyLabels: nil)
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
+        let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
         let output = ExportFormat.h264.outputURL(for: video)
 
-        try await ExportService.export(
-            source.asset, videoComposition: CompositionBuilder.videoComposition(for: source, plan: plan), to: output, as: .h264
-        ) { _ in }
+        try await ExportService.export(composition, to: output, as: .h264) { _ in }
 
         let exported = AVURLAsset(url: output)
         #expect(abs(try await exported.load(.duration).seconds - 0.5) < 1.0 / 30)
@@ -58,34 +58,69 @@ struct ExportServiceTests {
         #expect(frame.pixel(at: CGPoint(x: 250, y: 40))[0] < 30)
     }
 
-    /// Writes an H.264 recording of black frames.
-    private func writeBlackVideo(frameCount: Int, frameRate: Int32) async throws {
-        let writer = try AVAssetWriter(outputURL: video, fileType: .mov)
-        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
-            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: videoSize.width, AVVideoHeightKey: videoSize.height
-        ])
-        writer.add(input)
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: nil)
-        #expect(writer.startWriting())
-        writer.startSession(atSourceTime: .zero)
+    @Test func exportsAtTheChosenSizeAndFrameRate() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await TestRecording.write(to: video, size: videoSize, frameCount: 15, frameRate: 30)
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        let project = EditorProject()
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none, target: RenderTarget(shorterSide: 120))
+        var composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
+        composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan, frameRate: 15)
+        let output = ExportFormat.hevc.outputURL(for: video)
 
-        var pixelBuffer: CVPixelBuffer?
-        CVPixelBufferCreate(nil, Int(videoSize.width), Int(videoSize.height), kCVPixelFormatType_32BGRA, nil, &pixelBuffer)
-        let frame = try #require(pixelBuffer)
-        CVPixelBufferLockBaseAddress(frame, [])
-        memset(CVPixelBufferGetBaseAddress(frame), 0, CVPixelBufferGetDataSize(frame))
-        CVPixelBufferUnlockBaseAddress(frame, [])
+        try await ExportService.export(composition, to: output, as: .hevc) { _ in }
 
-        for index in 0..<frameCount {
-            while !input.isReadyForMoreMediaData {
-                try await Task.sleep(for: .milliseconds(5))
-            }
-            adaptor.append(frame, withPresentationTime: CMTime(value: CMTimeValue(index), timescale: frameRate))
+        let track = try #require(try await AVURLAsset(url: output).loadTracks(withMediaType: .video).first)
+        let (size, frameRate) = try await track.load(.naturalSize, .nominalFrameRate)
+        #expect(size == CGSize(width: 160, height: 120))
+        #expect(abs(frameRate - 15) < 0.5)
+    }
+
+    @Test func keepsATransparentBackgroundInProRes4444() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await TestRecording.write(to: video, size: videoSize, frameCount: 5, frameRate: 30)
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        var project = EditorProject()
+        project.canvas = CanvasStyle(padding: 0.1, cornerRadius: 0, shadow: 0, background: .transparent)
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
+        let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
+        let output = ExportFormat.proRes4444.outputURL(for: video)
+
+        try await ExportService.export(composition, to: output, as: .proRes4444) { _ in }
+
+        let reader = try AVAssetReader(asset: AVURLAsset(url: output))
+        let track = try #require(try await reader.asset.loadTracks(withMediaType: .video).first)
+        let trackOutput = AVAssetReaderTrackOutput(track: track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        reader.add(trackOutput)
+        #expect(reader.startReading())
+        let frame = try #require(trackOutput.copyNextSampleBuffer()?.imageBuffer)
+        CVPixelBufferLockBaseAddress(frame, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(frame, .readOnly) }
+        let pixels = try #require(CVPixelBufferGetBaseAddress(frame)).assumingMemoryBound(to: UInt8.self)
+        let rowBytes = CVPixelBufferGetBytesPerRow(frame)
+        // Alpha, the fourth byte: clear in the padding, opaque in the video
+        #expect(pixels[2 * rowBytes + 2 * 4 + 3] == 0)
+        #expect(pixels[120 * rowBytes + 160 * 4 + 3] == 255)
+    }
+
+    @Test func keepsHDRUnlessTheFormatIsH264() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await TestRecording.write(to: video, size: videoSize, frameCount: 5, frameRate: 30, hdr: true) { _ in 0x80 }
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        #expect(source.dynamicRange == .pq)
+
+        for format in [ExportFormat.hevc, .proRes422, .h264] {
+            let plan = await RenderPlan.build(project: EditorProject(), source: source, resources: .none, target: RenderTarget(keepsHDR: format.keepsHDR))
+            let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: AudioMixSettings())
+            let output = format.outputURL(for: video)
+
+            try await ExportService.export(composition, to: output, as: format) { _ in }
+
+            let track = try #require(try await AVURLAsset(url: output).loadTracks(withMediaType: .video).first)
+            let description = try await track.load(.formatDescriptions).first
+            // H.264 is converted to SDR
+            #expect(DynamicRange(of: description) == (format.keepsHDR ? .pq : .sdr), "\(format.rawValue)")
         }
-        input.markAsFinished()
-        writer.endSession(atSourceTime: CMTime(value: CMTimeValue(frameCount), timescale: frameRate))
-        await writer.finishWriting()
-        #expect(writer.status == .completed)
     }
 
     /// Writes telemetry for a display recorded at 1× with one left click.

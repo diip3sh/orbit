@@ -8,7 +8,8 @@
 import AppKit
 import SwiftUI
 
-/// Opens one editor window per recording, and keeps the app in the Dock while any is open.
+/// Opens one editor window per recording and the Recordings window, and keeps the app in the Dock
+/// while any is open.
 ///
 /// The app is a menu bar app (`LSUIElement`), and its entry points - notifications, URLs, the menu
 /// bar - have no SwiftUI window environment, so editor windows are AppKit windows hosting SwiftUI.
@@ -23,8 +24,15 @@ final class EditorWindowManager: NSObject {
         let accessesOutputDirectory: Bool
     }
 
+    private struct Recordings {
+        let window: NSWindow
+        let viewModel: RecordingsViewModel
+        let accessesOutputDirectory: Bool
+    }
+
     private let settings: SettingsStore
     private var editors: [URL: Editor] = [:]
+    private var recordings: Recordings?
 
     init(settings: SettingsStore) {
         self.settings = settings
@@ -47,19 +55,52 @@ final class EditorWindowManager: NSObject {
         hostingController.sizingOptions = .minSize
         // The export and inspector buttons are SwiftUI toolbar items
         hostingController.sceneBridgingOptions = [.toolbars]
-        let window = NSWindow(contentViewController: hostingController)
-        window.title = videoURL.deletingPathExtension().lastPathComponent
+        let window = makeWindow(hostingController, title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1280, height: 800))
         window.representedURL = videoURL
-        window.tabbingMode = .disallowed
-        window.isReleasedWhenClosed = false
-        window.delegate = self
-        window.setContentSize(NSSize(width: 1100, height: 720))
-        window.center()
         editors[videoURL] = Editor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
 
         // A regular app gets a Dock icon, ⌘-Tab and the main menu with Undo and Redo
         NSApp.setActivationPolicy(.regular)
         activate(window)
+    }
+
+    /// Shows the output folder's recordings, or brings their window forward.
+    func showRecordings() {
+        if let recordings {
+            activate(recordings.window)
+            return
+        }
+
+        // Held while the window is open: it lists the folder and reads the recordings' pictures
+        let accessesOutputDirectory = settings.startAccessingOutputDirectory()
+        let viewModel = RecordingsViewModel(folder: settings.outputDirectory) { [weak self] url in
+            self?.open(url)
+        }
+        let hostingController = NSHostingController(rootView: RecordingsView(viewModel: viewModel))
+        hostingController.sizingOptions = .minSize
+        let window = makeWindow(hostingController, title: "Recordings", size: NSSize(width: 860, height: 600))
+        recordings = Recordings(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
+
+        NSApp.setActivationPolicy(.regular)
+        activate(window)
+    }
+
+    /// A centred window in the editor's look: always dark, the content running under a transparent
+    /// title bar and toolbar.
+    private func makeWindow(_ contentViewController: NSViewController, title: String, size: NSSize) -> NSWindow {
+        let window = NSWindow(contentViewController: contentViewController)
+        window.title = title
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.styleMask.insert(.fullSizeContentView)
+        window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
+        window.backgroundColor = NSColor(EditorTheme.stage)
+        window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.setContentSize(size)
+        window.center()
+        return window
     }
 
     private func activate(_ window: NSWindow) {
@@ -80,20 +121,34 @@ extension EditorWindowManager: NSWindowDelegate {
         editor(for: window)?.editor.viewModel.undoManager
     }
 
-    func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow, let (videoURL, editor) = editor(for: window) else { return }
-        editors[videoURL] = nil
-        if editors.isEmpty {
-            NSApp.setActivationPolicy(.accessory)
-        }
-
-        let settings = settings
+    /// The list is read whenever it comes forward, so recordings saved meanwhile show.
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard let recordings, notification.object as? NSWindow === recordings.window else { return }
         Task {
-            // Saving needs the folder, so its scope is released only afterwards
-            await editor.viewModel.close()
-            if editor.accessesOutputDirectory {
+            await recordings.viewModel.reload()
+        }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        if let recordings, window === recordings.window {
+            self.recordings = nil
+            if recordings.accessesOutputDirectory {
                 settings.stopAccessingOutputDirectory()
             }
+        } else if let (videoURL, editor) = editor(for: window) {
+            editors[videoURL] = nil
+            let settings = settings
+            Task {
+                // Saving needs the folder, so its scope is released only afterwards
+                await editor.viewModel.close()
+                if editor.accessesOutputDirectory {
+                    settings.stopAccessingOutputDirectory()
+                }
+            }
+        }
+        if editors.isEmpty, recordings == nil {
+            NSApp.setActivationPolicy(.accessory)
         }
     }
 }
