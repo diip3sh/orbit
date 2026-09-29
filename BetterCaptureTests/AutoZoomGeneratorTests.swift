@@ -39,6 +39,14 @@ struct AutoZoomGeneratorTests {
         AutoZoomGenerator.segments(for: telemetry, duration: duration)
     }
 
+    /// The cursor going round `center` from `start`, sampled every 1/8 s, 12.5 samples a turn.
+    private func circling(around center: CGPoint, radius: Double, from start: Double = 3, samples: Int) -> [(time: Double, point: CGPoint)] {
+        (0..<samples).map { step in
+            let angle = 2 * Double.pi * Double(step) / 12.5
+            return (start + Double(step) / 8, CGPoint(x: center.x + radius * cos(angle), y: center.y + radius * sin(angle)))
+        }
+    }
+
     @Test func zoomsOnNearbyPressesFromJustBeforeTheFirstToAWhileAfterTheLast() throws {
         let zooms = zooms(telemetry(clicks: [(1, CGPoint(x: 0.4, y: 0.4)), (2, CGPoint(x: 0.5, y: 0.5))]))
 
@@ -107,6 +115,39 @@ struct AutoZoomGeneratorTests {
         #expect(zooms(telemetry(cursor: moving), duration: 1.95).isEmpty)
         #expect(zooms(telemetry(cursor: nudged)).isEmpty)
         #expect(zooms(telemetry(cursor: outside)).isEmpty)
+    }
+
+    @Test func zoomsOnWhatTheCursorCirclesFromWhenItStartsToAWhileAfter() throws {
+        // Almost three turns, two of them whole
+        let telemetry = telemetry(cursor: circling(around: CGPoint(x: 0.6, y: 0.4), radius: 0.05, samples: 38))
+
+        #expect(AutoZoomGenerator.circles(in: telemetry).map(\.range) == [3...4.75, 4.75...6.5])
+        let zooms = zooms(telemetry)
+        #expect(zooms.map(\.range) == [2.5..<8])
+        let center = try #require(zooms.first?.fixedCenter)
+        #expect(abs(center.x - 0.6) < 0.01 && abs(center.y - 0.4) < 0.01)
+    }
+
+    @Test func circlingTooSmallTooWideNotAllTheWayRoundOrOutsideTheVideoAndShakingDoNotZoom() {
+        let center = CGPoint(x: 0.5, y: 0.5)
+        let shaking = (0...40).map { (time: 3 + 0.05 * Double($0), point: $0.isMultiple(of: 2) ? CGPoint(x: 0.4, y: 0.5) : CGPoint(x: 0.6, y: 0.51)) }
+
+        #expect(zooms(telemetry(cursor: circling(around: center, radius: 0.003, samples: 38))).isEmpty)
+        #expect(zooms(telemetry(cursor: circling(around: center, radius: 0.25, samples: 26))).isEmpty)
+        #expect(zooms(telemetry(cursor: circling(around: center, radius: 0.05, samples: 12))).isEmpty)
+        #expect(zooms(telemetry(cursor: circling(around: CGPoint(x: 1.2, y: 0.5), radius: 0.05, samples: 38))).isEmpty)
+        #expect(zooms(telemetry(cursor: shaking)).isEmpty)
+    }
+
+    @Test func theMoveIntoACircleIsLeftOutOfIt() throws {
+        // Straight from the left to where the circling starts, turning into it
+        let approach = (0..<7).map { (time: 2.125 + Double($0) / 8, point: CGPoint(x: 0.3 + 0.05 * Double($0), y: 0.4)) }
+        let telemetry = telemetry(cursor: approach + circling(around: CGPoint(x: 0.6, y: 0.4), radius: 0.05, samples: 38))
+
+        let circle = try #require(AutoZoomGenerator.circles(in: telemetry).first)
+        // At most from where the move reaches the circle's left edge
+        #expect(circle.range.lowerBound >= 2.75)
+        #expect(abs(circle.bounds.midX - 0.6) < 0.01 && abs(circle.bounds.midY - 0.4) < 0.01)
     }
 
     @Test func aRestBeforeAClickThereJoinsItsZoom() {

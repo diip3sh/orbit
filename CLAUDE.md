@@ -309,8 +309,8 @@ Key facts:
 
 ### S1 — Editor, phase 4: zoom (`feat/editor-shell`, spec 0003)
 
-A recording with telemetry opens with automatic zooms on its clicks, typing and where the cursor
-rested. The zoom lane
+A recording with telemetry opens with automatic zooms on its clicks, typing, where the cursor
+rested and what it circled. The zoom lane
 under the timeline shows every zoom: click to select, drag to move, handles to resize, **Z** adds
 one at the playhead, **⌫** deletes the selected one. The inspector's Zoom section sets its scale
 and focus (follow the cursor, or a fixed point dragged on a picture of the frame) and regenerates
@@ -319,7 +319,7 @@ the automatic zooms.
 | File | Role |
 |---|---|
 | `Editor/Model/ZoomSegment.swift` | Source range, scale, focus (fractions of the video, top-left origin), `isAutomatic`; every edit of the zoom list, which keeps it sorted and apart and makes the zoom it changes manual |
-| `Editor/Service/AutoZoomGenerator.swift` | Pure: groups presses (clicks, and keys at the last click) and cursor rests that are close in time and fit one view; `Configuration` holds the constants |
+| `Editor/Service/AutoZoomGenerator.swift` | Pure: groups presses (clicks, and keys at the last click), cursor rests and circles that are close in time and fit one view; `Configuration` holds the constants |
 | `Editor/Render/CameraPath.swift` | The view over time, sampled at 120 Hz: a critically damped spring per axis, scale in log space, follow-cursor with a dead zone |
 | `Editor/Render/FrameRenderer.swift` | Draws clicks, magnifies the frame to the view, then draws the keystroke chip unmagnified |
 | `Editor/View/ZoomLane.swift`, `ZoomFocusPad.swift` | The timeline's zoom lane; the inspector's fixed-focus picker |
@@ -334,6 +334,13 @@ Key facts:
 - The cursor rests where it stays within 2% of the video for 0.5 s, at least 15% from where it last
   rested; the rest counts when it arrived. Recordings without clicks still zoom: two real 13 s
   window recordings got 2 and 3 zooms.
+- Circling zooms from when it starts: the path, in steps of 1% of the video, turns all the way round
+  within one view, without a pause or a turn sharper than 135°, and ends within half its size of
+  where it started; the move into it is trimmed off. Real circling was 40–110 pt across, a turn
+  every 0.3–0.5 s, with oval, pointed ends. On three real recordings it found all 10 circled spots and
+  nothing else; without the closure rule, the curve leading into a circle joined it. Measured on an
+  M5, Debug, 10 min of cursor at 60 Hz: circles add 15–45 ms to the ~34 ms generation takes, once,
+  when a recording opens or zooms are regenerated.
 - The spring (10 rad/s) finishes 96% of a move in 0.5 s and stops within 0.04 px at 4K after
   about 1.4 s, so frames with no zoom are the source's pixels exactly.
 - Only cursor samples inside follow-cursor zooms are placed. Measured on an M1, Debug, 10 min with

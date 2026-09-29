@@ -8,8 +8,9 @@
 import CoreGraphics
 import Foundation
 
-/// Zooms in where the user was working: on bursts of clicks, typing and places the cursor moved to
-/// and rested at, close together in time and on screen. A pure function of the telemetry.
+/// Zooms in where the user was working: on bursts of clicks, typing, places the cursor moved to
+/// and rested at, and things it circled, close together in time and on screen. A pure function of
+/// the telemetry.
 nonisolated enum AutoZoomGenerator {
 
     nonisolated struct Configuration: Sendable {
@@ -43,6 +44,19 @@ nonisolated enum AutoZoomGenerator {
         /// How far from where it last rested the cursor must stop for the stop to count, as a
         /// share of the video, so nudges and a resting cursor don't zoom.
         var restTravel = 0.15
+
+        /// How far apart, as a share of the video, the points are that circling is followed by, so
+        /// drift doesn't turn it. Real circling measured 40–110 pt across, a turn every 0.3–0.5 s.
+        var circleStep = 0.01
+
+        /// The sharpest turn, in radians, from one step of circling to the next. The ends of real,
+        /// oval loops turn up to about 3π/4; shaking the cursor reverses it, turning by about π.
+        var sharpestCircleTurn = 0.75 * Double.pi
+
+        /// How near where it started a turn must end, as a share of its size, to be a circle rather
+        /// than a curve; real circling drifts a little each turn. At 0.75 and above, the curve
+        /// leading into real circling joined it and moved its centre; 0.25 finds the same circles.
+        var circleClosure = 0.5
     }
 
     /// The automatic zooms for a recording, sorted and apart.
@@ -52,13 +66,13 @@ nonisolated enum AutoZoomGenerator {
         let fits = { (group: Group) in group.bounds.width <= reach && group.bounds.height <= reach }
 
         var groups: [Group] = []
-        let events = (activity(in: telemetry) + rests(in: telemetry, duration: duration, configuration: configuration))
-            .sorted { $0.time < $1.time }
-        for event in events {
-            if let last = groups.last, event.time - last.end < configuration.maximumGap, fits(last.adding(event)) {
-                groups[groups.count - 1] = last.adding(event)
+        let events = (activity(in: telemetry) + rests(in: telemetry, duration: duration, configuration: configuration)).map(Group.init)
+            + circles(in: telemetry, configuration: configuration).map(Group.init)
+        for event in events.sorted(by: { $0.start < $1.start }) {
+            if let last = groups.last, event.start - last.end < configuration.maximumGap, fits(last.merging(event)) {
+                groups[groups.count - 1] = last.merging(event)
             } else {
-                groups.append(Group(event))
+                groups.append(event)
             }
         }
 
@@ -116,7 +130,6 @@ nonisolated enum AutoZoomGenerator {
         let samples = telemetry.cursor.compactMap { sample in
             telemetry.normalizedVideoPoint(for: sample.location, at: sample.time).map { (time: sample.time, point: $0) }
         }
-        let distance = { (start: CGPoint, end: CGPoint) in hypot(start.x - end.x, start.y - end.y) }
 
         var rests: [(time: Double, point: CGPoint)] = []
         var lastRest = samples.first?.point
@@ -140,7 +153,72 @@ nonisolated enum AutoZoomGenerator {
         return rests
     }
 
+    /// Where the cursor circled something inside the video: it turned all the way round within one
+    /// view, without stopping or reversing, and came back near where it started. The user is
+    /// pointing it out. Each further turn is another circle.
+    static func circles(in telemetry: InputTelemetry, configuration: Configuration = Configuration()) -> [(range: ClosedRange<Double>, bounds: CGRect)] {
+        let path = telemetry.cursor.reduce(into: [(time: Double, point: CGPoint)]()) { path, sample in
+            guard let point = telemetry.normalizedVideoPoint(for: sample.location, at: sample.time),
+                  path.last.map({ distance(point, $0.point) >= configuration.circleStep }) ?? true else { return }
+            path.append((sample.time, point))
+        }
+        let reach = configuration.usableFraction / configuration.scale
+        // How the path changes direction at each point; not at its ends
+        let turns = path.indices.map { $0 > 0 && $0 + 1 < path.count ? turn(path[$0 - 1].point, path[$0].point, path[$0 + 1].point) : 0 }
+        let bounds = { (stretch: ClosedRange<Int>) in path[stretch].reduce(CGRect.null) { $0.union(CGRect(origin: $1.point, size: .zero)) } }
+        let comesBack = { (stretch: ClosedRange<Int>, bounds: CGRect) in
+            distance(path[stretch.upperBound].point, path[stretch.lowerBound].point) <= configuration.circleClosure * max(bounds.width, bounds.height)
+        }
+
+        var circles: [(range: ClosedRange<Double>, bounds: CGRect)] = []
+        var start = path.startIndex
+        search: while start + 2 < path.endIndex {
+            var turned = 0.0
+            var extent = CGRect(origin: path[start].point, size: .zero)
+            for end in (start + 1)..<path.endIndex {
+                extent = extent.union(CGRect(origin: path[end].point, size: .zero))
+                guard path[end].time - path[end - 1].time < configuration.restDuration, extent.width <= reach, extent.height <= reach else { break }
+                if end - start >= 2 {
+                    let angle = turns[end - 1]
+                    guard abs(angle) <= configuration.sharpestCircleTurn else { break }
+                    turned += angle
+                }
+                guard abs(turned) >= 2 * .pi, comesBack(start...end, extent) else { continue }
+
+                // Without the move into it: the shortest stretch ending here that still comes full circle
+                var first = start
+                var circle = extent
+                while first + 2 < end, abs(turned - turns[first + 1]) >= 2 * .pi {
+                    let shorter = bounds((first + 1)...end)
+                    guard comesBack((first + 1)...end, shorter) else { break }
+                    turned -= turns[first + 1]
+                    first += 1
+                    circle = shorter
+                }
+                if (0...1).contains(circle.midX), (0...1).contains(circle.midY) {
+                    circles.append((path[first].time...path[end].time, circle))
+                }
+                start = end
+                continue search
+            }
+            start += 1
+        }
+        return circles
+    }
+
     // MARK: - Private
+
+    private static func distance(_ start: CGPoint, _ end: CGPoint) -> Double {
+        hypot(start.x - end.x, start.y - end.y)
+    }
+
+    /// The signed angle, in radians, by which the path from `first` through `second` to `third`
+    /// changes direction at `second`.
+    private static func turn(_ first: CGPoint, _ second: CGPoint, _ third: CGPoint) -> Double {
+        let (dx1, dy1) = (second.x - first.x, second.y - first.y)
+        let (dx2, dy2) = (third.x - second.x, third.y - second.y)
+        return atan2(dx1 * dy2 - dy1 * dx2, dx1 * dx2 + dy1 * dy2)
+    }
 
     /// A zoom's range: its events plus lead and hold time, inside the recording and at least the
     /// minimum long where the recording allows. `nil` for an empty recording.
@@ -173,12 +251,17 @@ nonisolated enum AutoZoomGenerator {
             count = 1
         }
 
-        var centroid: CGPoint {
-            CGPoint(x: total.x / CGFloat(count), y: total.y / CGFloat(count))
+        /// A circle, counted once at its middle.
+        init(_ circle: (range: ClosedRange<Double>, bounds: CGRect)) {
+            start = circle.range.lowerBound
+            end = circle.range.upperBound
+            bounds = circle.bounds
+            total = CGPoint(x: circle.bounds.midX, y: circle.bounds.midY)
+            count = 1
         }
 
-        func adding(_ event: (time: Double, point: CGPoint)) -> Group {
-            merging(Group(event))
+        var centroid: CGPoint {
+            CGPoint(x: total.x / CGFloat(count), y: total.y / CGFloat(count))
         }
 
         func merging(_ other: Group) -> Group {

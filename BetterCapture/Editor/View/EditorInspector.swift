@@ -65,7 +65,10 @@ struct EditorInspector: View {
                     .disabled(telemetry == nil)
                 } footer: {
                     if telemetry?.clicks.isEmpty == true {
-                        Text("No clicks were recorded (they need Input Monitoring), so automatic zooms come only from where the cursor rested. Press Z to add one at the playhead.")
+                        Text("""
+                            No clicks were recorded (they need Input Monitoring), so automatic zooms come only from \
+                            where the cursor rested or circled. Press Z to add one at the playhead.
+                            """)
                     }
                     if viewModel.zoomsLookSoft {
                         Text("""
