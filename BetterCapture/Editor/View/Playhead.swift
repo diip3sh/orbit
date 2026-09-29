@@ -28,7 +28,7 @@ struct Playhead: View {
     }
 
     /// Rounded at the top and pointed at the bottom.
-    private struct Knob: Shape {
+    private nonisolated struct Knob: Shape {
         func path(in rect: CGRect) -> Path {
             let point = rect.height * 0.35
             var path = Path()
