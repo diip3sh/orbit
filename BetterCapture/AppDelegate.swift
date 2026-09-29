@@ -22,13 +22,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let viewModel = RecorderViewModel()
 
+    /// Shares the recorder's settings and notifications
+    lazy var screenshots = ScreenshotController(settings: viewModel.settings, notificationService: viewModel.notificationService)
+
     private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
+    private lazy var quickAccess = QuickAccessController { [screenshots] screenshot in await screenshots.save(screenshot) }
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "AppDelegate")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerKeyboardShortcuts()
         viewModel.notificationService.editRecording = editorWindows.open
+
+        // Hidden first so the last card never lands in the next shot, even with Show BetterCapture on;
+        // a new shot replaces it, a cancelled or failed one brings it back
+        screenshots.onWillCapture = { [quickAccess] in quickAccess.hide() }
+        screenshots.onDidCapture = { [quickAccess] screenshot in
+            if let screenshot {
+                quickAccess.show(screenshot)
+            } else {
+                quickAccess.restore()
+            }
+        }
     }
 
     /// Opens the last recording saved since launch in the editor.
@@ -75,6 +90,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         KeyboardShortcuts.onKeyUp(for: .selectArea) { [viewModel] in
             Task { @MainActor in
                 await viewModel.presentAreaSelection()
+            }
+        }
+
+        let captures: [(KeyboardShortcuts.Name, @MainActor (ScreenshotController) async -> Void)] = [
+            (.captureArea, { await $0.captureArea() }),
+            (.captureWindow, { await $0.captureWindow() }),
+            (.captureScreen, { await $0.captureScreen() })
+        ]
+        for (name, capture) in captures {
+            KeyboardShortcuts.onKeyUp(for: name) { [viewModel, screenshots, logger] in
+                Task { @MainActor in
+                    guard screenshots.canCapture(alongside: viewModel) else {
+                        logger.info("Ignored \(name.rawValue) shortcut: recording, counting down or capturing")
+                        return
+                    }
+                    await capture(screenshots)
+                }
             }
         }
 

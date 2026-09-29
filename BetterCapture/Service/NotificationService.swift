@@ -194,6 +194,16 @@ final class NotificationService: NSObject {
         )
     }
 
+    /// Sends a notification for a screenshot that could not be taken or saved
+    /// - Parameter error: The error that stopped the screenshot
+    func sendScreenshotFailedNotification(error: Error) {
+        send(
+            title: "Screenshot Failed",
+            body: error.localizedDescription,
+            category: NotificationIdentifier.categoryRecordingFailed
+        )
+    }
+
     // MARK: - Private Methods
 
     /// Builds and delivers a notification request

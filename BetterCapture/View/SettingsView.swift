@@ -51,6 +51,12 @@ struct ShortcutsSettingsView: View {
                 KeyboardShortcuts.Recorder("Select Area", name: .selectArea)
             }
 
+            Section("Screenshots") {
+                KeyboardShortcuts.Recorder("Capture Area", name: .captureArea)
+                KeyboardShortcuts.Recorder("Capture Window", name: .captureWindow)
+                KeyboardShortcuts.Recorder("Capture Screen", name: .captureScreen)
+            }
+
             Section {
                 Text("Shortcuts work globally, even when BetterCapture is not focused.")
                     .font(.caption)

@@ -63,8 +63,9 @@ final class AreaSelectionOverlay {
     // MARK: - Public Methods
 
     /// Presents the area selection overlay on all connected displays
+    /// - Parameter confirmsOnRelease: Confirms as soon as a large enough drag ends, skipping adjusting and Confirm
     /// - Returns: The selected area result, or nil if cancelled
-    func present() async -> AreaSelectionResult? {
+    func present(confirmsOnRelease: Bool = false) async -> AreaSelectionResult? {
         let screens = NSScreen.screens
         guard !screens.isEmpty else {
             logger.error("No screens available")
@@ -81,7 +82,8 @@ final class AreaSelectionOverlay {
 
                 let overlayView = AreaSelectionView(
                     frame: NSRect(origin: .zero, size: screen.frame.size),
-                    screen: screen
+                    screen: screen,
+                    confirmsOnRelease: confirmsOnRelease
                 )
                 overlayView.delegate = self
 
@@ -178,15 +180,13 @@ final class AreaSelectionView: NSView {
     weak var delegate: AreaSelectionViewDelegate?
 
     private let screen: NSScreen
+    private let confirmsOnRelease: Bool
     private var selectionRect: CGRect = .zero
     private var interactionState: InteractionState = .idle
     private var trackingArea: NSTrackingArea?
 
     /// Whether the dimmed overlay should be shown (only after user starts drawing)
     private var showOverlay = false
-
-    /// Minimum selection size in points
-    private let minimumSize: CGFloat = 24
 
     /// Size of resize handles in points
     private let handleSize: CGFloat = 8
@@ -208,8 +208,9 @@ final class AreaSelectionView: NSView {
 
     // MARK: - Initialization
 
-    init(frame: NSRect, screen: NSScreen) {
+    init(frame: NSRect, screen: NSScreen, confirmsOnRelease: Bool) {
         self.screen = screen
+        self.confirmsOnRelease = confirmsOnRelease
         super.init(frame: frame)
         setupTrackingArea()
     }
@@ -345,7 +346,9 @@ final class AreaSelectionView: NSView {
     override func mouseUp(with event: NSEvent) {
         switch interactionState {
         case .drawing:
-            if selectionRect.width >= minimumSize && selectionRect.height >= minimumSize {
+            if Self.isValidSelection(selectionRect) && confirmsOnRelease {
+                confirmSelectionIfValid()
+            } else if Self.isValidSelection(selectionRect) {
                 interactionState = .adjusting
                 showActionButtons()
             } else {
@@ -650,7 +653,7 @@ final class AreaSelectionView: NSView {
 
         // Edge handles: only move the affected edge, keep perpendicular axis fixed
         case .top:
-            let newMaxY = max(selectionRect.minY + minimumSize, point.y)
+            let newMaxY = max(selectionRect.minY + Self.minimumSize, point.y)
             newRect = CGRect(
                 x: selectionRect.minX,
                 y: selectionRect.minY,
@@ -658,7 +661,7 @@ final class AreaSelectionView: NSView {
                 height: newMaxY - selectionRect.minY
             )
         case .bottom:
-            let newMinY = min(selectionRect.maxY - minimumSize, point.y)
+            let newMinY = min(selectionRect.maxY - Self.minimumSize, point.y)
             newRect = CGRect(
                 x: selectionRect.minX,
                 y: newMinY,
@@ -666,7 +669,7 @@ final class AreaSelectionView: NSView {
                 height: selectionRect.maxY - newMinY
             )
         case .left:
-            let newMinX = min(selectionRect.maxX - minimumSize, point.x)
+            let newMinX = min(selectionRect.maxX - Self.minimumSize, point.x)
             newRect = CGRect(
                 x: newMinX,
                 y: selectionRect.minY,
@@ -674,7 +677,7 @@ final class AreaSelectionView: NSView {
                 height: selectionRect.height
             )
         case .right:
-            let newMaxX = max(selectionRect.minX + minimumSize, point.x)
+            let newMaxX = max(selectionRect.minX + Self.minimumSize, point.x)
             newRect = CGRect(
                 x: selectionRect.minX,
                 y: selectionRect.minY,
@@ -748,16 +751,16 @@ final class AreaSelectionView: NSView {
     }
 
     private func enforceMinimumSize() {
-        if selectionRect.width < minimumSize {
-            selectionRect.size.width = minimumSize
+        if selectionRect.width < Self.minimumSize {
+            selectionRect.size.width = Self.minimumSize
         }
-        if selectionRect.height < minimumSize {
-            selectionRect.size.height = minimumSize
+        if selectionRect.height < Self.minimumSize {
+            selectionRect.size.height = Self.minimumSize
         }
     }
 
     private func confirmSelectionIfValid() {
-        guard selectionRect.width >= minimumSize && selectionRect.height >= minimumSize else { return }
+        guard Self.isValidSelection(selectionRect) else { return }
 
         // Convert from view coordinates to screen coordinates
         // The view fills the panel, which covers the screen frame
@@ -770,5 +773,18 @@ final class AreaSelectionView: NSView {
         )
 
         delegate?.areaSelectionView(self, didConfirmSelection: screenRect, on: screen)
+    }
+}
+
+// MARK: - Selection Size
+
+extension AreaSelectionView {
+
+    /// Minimum selection size in points
+    nonisolated static let minimumSize: CGFloat = 24
+
+    /// Whether a selection is big enough to confirm; smaller drags and plain clicks are discarded
+    nonisolated static func isValidSelection(_ rect: CGRect) -> Bool {
+        rect.width >= minimumSize && rect.height >= minimumSize
     }
 }
