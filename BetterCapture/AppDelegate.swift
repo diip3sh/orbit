@@ -60,6 +60,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editorWindows.showRecordings()
     }
 
+    /// Shows the Web Recording window, to record a web page from a script.
+    func showWebRecording() {
+        editorWindows.showWebRecording()
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where url.scheme == "bettercapture" {
             handle(url)

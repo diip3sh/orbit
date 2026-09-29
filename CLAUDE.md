@@ -489,11 +489,55 @@ Key facts:
   shadow padding is uneven (same as recordings).
 - Verified on an M2 (1710×1112 pt, 2×): screen 3420×2224, window and area at 2×, sRGB, no BetterCapture UI.
 
+### S2 — Web recordings (`feat/web-recordings`, spec 0005)
+
+**New Web Recording…** in the menu bar opens a window with a live web page at a viewport preset, a
+timeline with a Cursor lane (Hover, Click) and a Scroll lane, and an inspector. **Hover** and
+**Click** add a clip at the playhead and start pick mode: the next click in the page aims the clip at
+that element. **Scroll** adds a clip ending where the page is scrolled now. **Render** plays the
+script frame by frame into `BetterCapture_Web_<date>.mov` and its telemetry sidecar in the output
+folder, then opens it in the editor, where auto-zoom, the cursor and the canvas work as on any
+recording.
+
+| File | Role |
+|---|---|
+| `WebRecording/Model/WebScript.swift` | URL, viewport, scale, length, the two lanes; scroll offset, cursor position and presses at any time |
+| `WebRecording/Model/PointerTrack.swift` | The cursor's location frame by frame: follows its target during a clip, rests after it, travels on an arc |
+| `WebRecording/Model/WebTakeTelemetry.swift`, `CursorKind+CSS.swift` | The take's telemetry (`capture.kind` `web`); CSS `cursor` values to standard cursors |
+| `WebRecording/Service/WebClockScript.swift` | The page's own clock (rAF, timers, `Date`, `performance.now`, animations), stepped by the renderer |
+| `WebRecording/Service/WebPageRenderer.swift`, `WebMovieWriter.swift`, `OffscreenWebWindow.swift` | The take: an offscreen web view, one clock step, pointer events and snapshot per frame, HEVC out |
+| `WebRecording/Service/WebMuteScript.swift` | Silences the take's page: media elements, and Web Audio through a silent gain |
+| `WebRecording/Service/WebPreviewController.swift`, `WebPickScript.swift` | The window's live page (`pageZoom` to fit), pick mode in its own content world, scrubbing |
+| `WebRecording/ViewModel/WebRecordingViewModel.swift` | Edits with undo, picking, playhead, render; the script kept in Application Support (`WebScriptStore`) |
+| `Model/TimelineClip.swift`, `Editor/View/TimelineLane.swift`, `TimelineBlock.swift` | Lane operations and the lane and block views, shared with the zoom lane |
+| `Model/EditCoalescing.swift` | Which edits share an undo step, for the editor and this window |
+
+Key facts (measured on an M5, macOS 26.5, spec 0005):
+- **Hover:** WebKit hit-tests a plain mouse move only in an active window; otherwise it goes to
+  scrollbars alone. `WKWebView.sendPointer(.move, at:)` sends a right-button drag, which is always
+  hit-tested; the page sees `buttons: 0` and no press. Clicks are real mouse downs and ups. A move
+  is also sent when the page scrolls or changes under a resting pointer: WebKit's own move after a
+  scroll needs an active window.
+- **Visibility:** a page in an occluded or offscreen window is hidden (rAF stops, pages pause
+  media). `OffscreenWebWindow` reports its `occlusionState` as visible.
+- **Clock:** follows real time while the page loads (freezing it from the start broke linear.app),
+  then moves exactly 1/60 s per frame. A 300 ms hover transition read exactly half-way at 150 ms.
+  Animations are finished at their end so `transitionend` fires; nested timers wait ≥ 4 ms. An
+  animation the page pauses (`pause()`, CSS `animation-play-state`) holds its time.
+- **Loading:** a frame waits up to 5 s for images in view and fonts; what misses that isn't waited
+  for again (a hung image cost one frame 5 s, not every frame). The first load waits for the page's
+  `didFinish`, so a subresource that hangs from the start fails the take after a minute.
+- **Speed:** snapshots are painted on the CPU: 2880×1800 took 14 ms (simple page), 35 ms
+  (apple.com) and 310 ms (linear.app; 64 ms at 1×). A 3 s apple.com take rendered in 8.5 s.
+- The take and the preview share the default website data store, so a cookie banner dismissed in
+  the preview stays dismissed in the take.
+- App Transport Security blocks plain `http://` pages (measured on neverssl.com); `http://localhost` loads.
+
 ### Telemetry JSON (version 3)
 
 ```
 version, keystrokesAvailable,
-capture:       { kind: display|window|area, videoSize: [w,h], cursorInVideo }  // missing → true
+capture:       { kind: display|window|area|web, videoSize: [w,h], cursorInVideo }  // missing → true
 geometry:      [{ time, screenRect, contentRect, boundingRect?, contentScale, scaleFactor }]
 cursor:        [{ time, location: [x,y] }]            // only when changed
 clicks:        [{ time, location, button, isDown, clickCount }]
@@ -539,6 +583,7 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | S1 editor phase 6: canvas and export polish | Done; the canvas, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags), transparent exports and the Recordings window still need a check in the app |
 | S1 editor design: dark studio, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
+| S2 web recordings (spec 0005) | Script, clock, renderer and telemetry done and tested, incl. a real site end to end; the window (page, pick, timeline, inspector) is built but not yet tried by hand |
 
 What to build next, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
 `docs/specs/0004-next-features.md`.

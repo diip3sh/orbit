@@ -14,6 +14,7 @@ struct EditorInspector: View {
 
     var body: some View {
         let telemetry = viewModel.source?.telemetry
+        let isWebTake = telemetry?.capture.kind == .web
 
         ScrollView {
             VStack(spacing: 0) {
@@ -65,16 +66,27 @@ struct EditorInspector: View {
                     .disabled(telemetry == nil)
                 } footer: {
                     if telemetry?.clicks.isEmpty == true {
-                        Text("""
-                            No clicks were recorded (they need Input Monitoring), so automatic zooms come only from \
-                            where the cursor rested or circled. Press Z to add one at the playhead.
-                            """)
+                        if isWebTake {
+                            Text("""
+                                This take has no clicks, so automatic zooms come only from where the cursor rested. \
+                                Press Z to add one at the playhead.
+                                """)
+                        } else {
+                            Text("""
+                                No clicks were recorded (they need Input Monitoring), so automatic zooms come only from \
+                                where the cursor rested or circled. Press Z to add one at the playhead.
+                                """)
+                        }
                     }
                     if viewModel.zoomsLookSoft {
-                        Text("""
-                            Zoomed parts look soft: this recording has fewer than 2 pixels per screen point. \
-                            On a Retina display, turn on Native Resolution in Settings → Video → Advanced.
-                            """)
+                        if isWebTake {
+                            Text("Zoomed parts look soft: this take was rendered at 1×. Render it at 2× in the Web Recording window.")
+                        } else {
+                            Text("""
+                                Zoomed parts look soft: this recording has fewer than 2 pixels per screen point. \
+                                On a Retina display, turn on Native Resolution in Settings → Video → Advanced.
+                                """)
+                        }
                     }
                 }
                 .editorMotion(value: viewModel.selectedZoom)

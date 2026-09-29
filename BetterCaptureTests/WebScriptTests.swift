@@ -1,0 +1,168 @@
+//
+//  WebScriptTests.swift
+//  BetterCaptureTests
+//
+
+import CoreGraphics
+import Foundation
+import Testing
+@testable import BetterCapture
+
+struct WebScriptTests {
+
+    private let button = WebTarget(selector: "#buy", point: CGPoint(x: 100, y: 100))
+    private let link = WebTarget(selector: "a.nav", point: CGPoint(x: 500, y: 40))
+
+    @Test func easingFollowsCSSsCurves() {
+        #expect(Easing.linear(0.3) == 0.3)
+        for easing in Easing.allCases {
+            #expect(abs(easing(0)) < 1e-6)
+            #expect(abs(easing(1) - 1) < 1e-6)
+            #expect(easing(-1) == easing(0))
+            #expect(easing(2) == easing(1))
+        }
+        // Reference values of CSS's ease-in and ease-out at half time
+        #expect(abs(Easing.easeIn(0.5) - 0.3153) < 1e-3)
+        #expect(abs(Easing.easeOut(0.5) - 0.6847) < 1e-3)
+        #expect(abs(Easing.easeInOut(0.5) - 0.5) < 1e-6)
+        #expect(Easing.easeInOut(0.25) < 0.25)
+    }
+
+    @Test func scrollsFromWhereThePreviousClipEnded() {
+        var script = WebScript()
+        script.scrolls = [
+            ScrollClip(range: 1..<2, offset: CGPoint(x: 0, y: 500), easing: .linear),
+            ScrollClip(range: 3..<5, offset: CGPoint(x: 0, y: 1500), easing: .linear)
+        ]
+
+        #expect(script.scrollOffset(at: 0) == .zero)
+        #expect(script.scrollOffset(at: 1) == .zero)
+        #expect(script.scrollOffset(at: 1.5) == CGPoint(x: 0, y: 250))
+        #expect(script.scrollOffset(at: 2) == CGPoint(x: 0, y: 500))
+        #expect(script.scrollOffset(at: 2.5) == CGPoint(x: 0, y: 500))
+        #expect(script.scrollOffset(at: 4) == CGPoint(x: 0, y: 1000))
+        #expect(script.scrollOffset(at: 9) == CGPoint(x: 0, y: 1500))
+    }
+
+    @Test func scrollsEaseAlongTheClip() {
+        var script = WebScript()
+        script.scrolls = [ScrollClip(range: 0..<1, offset: CGPoint(x: 0, y: 1000), easing: .easeIn)]
+
+        #expect(abs(script.scrollOffset(at: 0.5).y - 1000 * Easing.easeIn(0.5)) < 1e-9)
+    }
+
+    @Test func theCursorFollowsRestsAndTravels() {
+        var script = WebScript()
+        #expect(script.pointerPosition(at: 1) == nil)
+
+        script.pointer = [
+            PointerClip(range: 1..<2, action: .hover, target: button),
+            PointerClip(range: 4..<5, action: .click, target: link)
+        ]
+
+        #expect(script.pointerPosition(at: 0) == .following(button))
+        #expect(script.pointerPosition(at: 1.5) == .following(button))
+        // The 2 s gap is spent resting for 1 s, then travelling for the longest travel
+        #expect(script.pointerPosition(at: 2.5) == .resting(button))
+        #expect(script.pointerPosition(at: 3) == .resting(button))
+        #expect(script.pointerPosition(at: 3.5) == .travelling(start: button, end: link, progress: Easing.easeInOut(0.5)))
+        #expect(script.pointerPosition(at: 4) == .following(link))
+        #expect(script.pointerPosition(at: 9) == .resting(link))
+    }
+
+    @Test func aShortGapIsAllTravel() {
+        var script = WebScript()
+        script.pointer = [
+            PointerClip(range: 0..<1, action: .hover, target: button),
+            PointerClip(range: 1.4..<2, action: .hover, target: link)
+        ]
+
+        #expect(script.pointerPosition(at: 1.2) == .travelling(start: button, end: link, progress: Easing.easeInOut(0.5)))
+    }
+
+    @Test func theCursorFollowsItsTargetOnlyDuringAClip() {
+        var script = WebScript()
+        script.pointer = [
+            PointerClip(range: 0..<1, action: .hover, target: button),
+            PointerClip(range: 3..<4, action: .hover, target: link)
+        ]
+        var track = PointerTrack(script: script)
+        let buttonAt = { (top: Double) in ["#buy": CGRect(x: 90, y: top, width: 20, height: 20)] }
+
+        #expect(track.selectors(at: 0.5) == ["#buy"])
+        #expect(track.location(at: 0.5, elementFrames: buttonAt(90)) == CGPoint(x: 100, y: 100))
+        #expect(track.location(at: 0.9, elementFrames: buttonAt(40)) == CGPoint(x: 100, y: 50))
+        // Resting, it stays put while the page scrolls the button away, then travels from there
+        #expect(track.selectors(at: 1.5).isEmpty)
+        #expect(track.location(at: 1.5, elementFrames: [:]) == CGPoint(x: 100, y: 50))
+        #expect(track.selectors(at: 2.5) == ["a.nav"])
+        let linkFrame = ["a.nav": CGRect(x: 490, y: 30, width: 20, height: 20)]
+        #expect(track.location(at: 2.5, elementFrames: linkFrame) == WebScript.travelPoint(
+            from: CGPoint(x: 100, y: 50), to: CGPoint(x: 500, y: 40), progress: Easing.easeInOut(0.5)
+        ))
+        #expect(track.location(at: 3.5, elementFrames: linkFrame) == CGPoint(x: 500, y: 40))
+    }
+
+    @Test func clicksPressAtTheStartAndReleaseSoonAfter() {
+        var script = WebScript()
+        script.pointer = [
+            PointerClip(range: 1..<2, action: .hover, target: button),
+            PointerClip(range: 4..<5, action: .click, target: link)
+        ]
+
+        #expect(script.presses(after: -.infinity, through: 10).map(\.time) == [4, 4.1])
+        #expect(script.presses(after: 3.99, through: 4) == [WebScript.Press(time: 4, isDown: true, target: link)])
+        #expect(script.presses(after: 4, through: 4.1) == [WebScript.Press(time: 4.1, isDown: false, target: link)])
+        #expect(script.presses(after: 4.1, through: 10).isEmpty)
+    }
+
+    @Test func travelBowsToTheLeftOfTheDirection() {
+        let start = CGPoint(x: 0, y: 0)
+        let end = CGPoint(x: 100, y: 0)
+
+        #expect(WebScript.travelPoint(from: start, to: end, progress: 0) == start)
+        #expect(WebScript.travelPoint(from: start, to: end, progress: 1) == end)
+        // Moving right, left is up: 10% of the distance at the middle
+        let middle = WebScript.travelPoint(from: start, to: end, progress: 0.5)
+        #expect(abs(middle.x - 50) < 1e-9)
+        #expect(abs(middle.y + 10) < 1e-9)
+    }
+
+    @Test func aTargetIsItsElementsAnchorOrItsPoint() {
+        var target = button
+        target.anchor = CGPoint(x: 0.25, y: 0.5)
+
+        #expect(target.location(elementFrame: CGRect(x: 10, y: 20, width: 40, height: 10)) == CGPoint(x: 20, y: 25))
+        #expect(target.location(elementFrame: nil) == CGPoint(x: 100, y: 100))
+    }
+
+    @Test func clipsFitWhereThereIsRoom() {
+        let clips = [PointerClip(range: 2..<3, action: .hover, target: button)]
+
+        #expect(clips.room(at: 0, length: PointerClip.defaultDuration, duration: 10) == 0..<1)
+        #expect(clips.room(at: 1.5, length: PointerClip.defaultDuration, duration: 10) == 1.5..<2)
+        #expect(clips.room(at: 1.9, length: PointerClip.defaultDuration, duration: 10) == nil)
+        #expect(clips.room(at: 2.5, length: PointerClip.defaultDuration, duration: 10) == nil)
+    }
+
+    @Test func sizesAndLengths() {
+        var script = WebScript()
+        script.duration = 2.5
+        script.pointer = [PointerClip(range: 2..<3.5, action: .hover, target: button)]
+
+        #expect(script.videoSize == CGSize(width: 2880, height: 1800))
+        #expect(script.frameCount == 150)
+        #expect(script.minimumAllowedDuration == 3.5)
+    }
+
+    @Test func roundTripsThroughJSON() throws {
+        var script = WebScript()
+        script.url = URL(string: "https://example.com")
+        script.pointer = [PointerClip(range: 1..<2, action: .click, target: button)]
+        script.scrolls = [ScrollClip(range: 0..<1, offset: CGPoint(x: 0, y: 900), easing: .easeOut)]
+
+        let decoded = try JSONDecoder().decode(WebScript.self, from: JSONEncoder().encode(script))
+
+        #expect(decoded == script)
+    }
+}

@@ -49,6 +49,9 @@ nonisolated struct InputTelemetry: Codable, Equatable, Sendable {
         case display
         case window
         case area
+
+        /// A web page rendered from a script (spec 0005). Locations are its viewport's CSS pixels.
+        case web
     }
 
     /// What was recorded.

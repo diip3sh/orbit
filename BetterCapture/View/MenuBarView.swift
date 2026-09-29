@@ -14,6 +14,7 @@ struct MenuBarView: View {
     let screenshots: ScreenshotController
     let editLastRecording: () -> Void
     let showRecordings: () -> Void
+    let showWebRecording: () -> Void
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
     @State private var currentPreview: NSImage?
@@ -153,6 +154,11 @@ struct MenuBarView: View {
 
             MenuBarActionButton(title: "Recordings…", systemImage: "film.stack") {
                 showRecordings()
+                dismiss()
+            }
+
+            MenuBarActionButton(title: "New Web Recording…", systemImage: "globe") {
+                showWebRecording()
                 dismiss()
             }
 
@@ -459,6 +465,7 @@ struct PermissionRow: View {
         viewModel: RecorderViewModel(),
         screenshots: .init(settings: SettingsStore(), notificationService: .init(settings: SettingsStore())),
         editLastRecording: {},
-        showRecordings: {}
+        showRecordings: {},
+        showWebRecording: {}
     )
 }
