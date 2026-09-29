@@ -540,6 +540,9 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | S1 editor design: dark studio, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 
+What to build next, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
+`docs/specs/0004-next-features.md`.
+
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0
 (portable with attribution). `lzhgus/Capso` (BSL, bans screen-capture use) and
 `lihaoyun6/QuickRecorder` (AGPL) are **ideas only — never copy code**.
