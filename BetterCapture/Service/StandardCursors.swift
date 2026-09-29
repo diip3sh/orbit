@@ -37,6 +37,12 @@ enum StandardCursors {
         .init(id: 0, kind: .arrow, size: NSCursor.arrow.image.size, hotspot: NSCursor.arrow.hotSpot, png: png(of: .arrow))
     }
 
+    /// A standard cursor as a sprite with `id`: the first of its kind, e.g. one direction of a resize.
+    static func sprite(of kind: CursorKind, id: Int) -> InputTelemetry.CursorSprite? {
+        guard let cursor = cursors.first(where: { $0.0 == kind })?.1 else { return nil }
+        return .init(id: id, kind: kind, size: cursor.image.size, hotspot: cursor.hotSpot, png: png(of: cursor))
+    }
+
     private static var cursors: [(CursorKind, NSCursor)] {
         let single: [(CursorKind, NSCursor)] = [
             (.arrow, .arrow),

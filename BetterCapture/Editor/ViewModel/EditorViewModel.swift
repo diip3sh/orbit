@@ -56,14 +56,11 @@ final class EditorViewModel {
     /// The bookmark whose picture is in ``resources``.
     @ObservationIgnored private var backgroundBookmark: Data?
 
-    /// The latest coalescing edit, which the next one with the same name joins if it follows soon enough.
-    @ObservationIgnored private var coalescingEdit: (actionName: String, time: ContinuousClock.Instant)?
+    /// Which edits share an undo step.
+    @ObservationIgnored private var coalescedEdits = EditCoalescing()
 
     /// How long edits must settle before they are saved.
     private static let autosaveDelay = Duration.seconds(1)
-
-    /// How soon a coalescing edit must follow the previous one to join its undo step.
-    private static let coalescingInterval = Duration.seconds(1)
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture", category: "EditorViewModel")
 
@@ -140,8 +137,7 @@ final class EditorViewModel {
         change(&edited)
         guard edited != project else { return }
 
-        let now = ContinuousClock.now
-        if coalescing, let last = coalescingEdit, last.actionName == actionName, now - last.time < Self.coalescingInterval {
+        if coalescedEdits.joinsPrevious(actionName, coalescing: coalescing) {
             // The undo step the first of these edits registered restores the project from before all of them
             let previous = project
             project = edited
@@ -149,7 +145,6 @@ final class EditorViewModel {
         } else {
             setProject(edited, actionName: actionName)
         }
-        coalescingEdit = coalescing ? (actionName, now) : nil
     }
 
     /// The click highlight style, for the inspector's controls. Each change is an edit.
@@ -245,8 +240,8 @@ final class EditorViewModel {
         guard newProject != project else { return }
         let previous = project
         project = newProject
-        coalescingEdit = nil
         undoManager.registerUndo(withTarget: self) { viewModel in
+            viewModel.coalescedEdits.reset()
             viewModel.setProject(previous, actionName: actionName)
         }
         undoManager.setActionName(actionName)

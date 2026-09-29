@@ -8,8 +8,8 @@
 import AppKit
 import SwiftUI
 
-/// Opens one editor window per recording and the Recordings window, and keeps the app in the Dock
-/// while any is open.
+/// Opens one editor window per recording, the Recordings window and the Web Recording window, and
+/// keeps the app in the Dock while any is open.
 ///
 /// The app is a menu bar app (`LSUIElement`), and its entry points - notifications, URLs, the menu
 /// bar - have no SwiftUI window environment, so editor windows are AppKit windows hosting SwiftUI.
@@ -30,9 +30,15 @@ final class EditorWindowManager: NSObject {
         let accessesOutputDirectory: Bool
     }
 
+    private struct WebRecording {
+        let window: NSWindow
+        let viewModel: WebRecordingViewModel
+    }
+
     private let settings: SettingsStore
     private var editors: [URL: Editor] = [:]
     private var recordings: Recordings?
+    private var webRecording: WebRecording?
 
     init(settings: SettingsStore) {
         self.settings = settings
@@ -85,6 +91,26 @@ final class EditorWindowManager: NSObject {
         activate(window)
     }
 
+    /// Shows the Web Recording window, or brings it forward. Each render opens in the editor.
+    func showWebRecording() {
+        if let webRecording {
+            activate(webRecording.window)
+            return
+        }
+
+        let viewModel = WebRecordingViewModel(settings: settings) { [weak self] url in
+            self?.open(url)
+        }
+        let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel))
+        hostingController.sizingOptions = .minSize
+        hostingController.sceneBridgingOptions = [.toolbars]
+        let window = makeWindow(hostingController, title: "Web Recording", size: NSSize(width: 1280, height: 860))
+        webRecording = WebRecording(window: window, viewModel: viewModel)
+
+        NSApp.setActivationPolicy(.regular)
+        activate(window)
+    }
+
     /// A centred window in the editor's look: always dark, the content running under a transparent
     /// title bar and toolbar.
     private func makeWindow(_ contentViewController: NSViewController, title: String, size: NSSize) -> NSWindow {
@@ -118,7 +144,10 @@ final class EditorWindowManager: NSObject {
 extension EditorWindowManager: NSWindowDelegate {
 
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
-        editor(for: window)?.editor.viewModel.undoManager
+        if let webRecording, window === webRecording.window {
+            return webRecording.viewModel.undoManager
+        }
+        return editor(for: window)?.editor.viewModel.undoManager
     }
 
     /// The list is read whenever it comes forward, so recordings saved meanwhile show.
@@ -136,6 +165,9 @@ extension EditorWindowManager: NSWindowDelegate {
             if recordings.accessesOutputDirectory {
                 settings.stopAccessingOutputDirectory()
             }
+        } else if let webRecording, window === webRecording.window {
+            self.webRecording = nil
+            webRecording.viewModel.close()
         } else if let (videoURL, editor) = editor(for: window) {
             editors[videoURL] = nil
             let settings = settings
@@ -147,7 +179,7 @@ extension EditorWindowManager: NSWindowDelegate {
                 }
             }
         }
-        if editors.isEmpty, recordings == nil {
+        if editors.isEmpty, recordings == nil, webRecording == nil {
             NSApp.setActivationPolicy(.accessory)
         }
     }

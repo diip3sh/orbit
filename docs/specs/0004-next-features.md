@@ -356,7 +356,7 @@ edges. Recording keeps the live selection.
 - **Check:** this is unverified. Confirm the icons are separate windows that SCK can exclude on
   macOS 15 and 26.
 
-### N22 — Scripted web recordings (own spec)
+### N22 — Scripted web recordings (own spec: `0005-web-recordings.md`)
 
 - **Seen in** Tino Zabinskiy's programmatic recorder
   ([post](https://x.com/0x_tino/status/2104615778817577471), 28 Sep 2026, 39 s demo). You load a
@@ -389,14 +389,15 @@ edges. Recording keeps the live selection.
     5. Append it to `AVAssetWriter`.
   - **Real hovers and clicks:** `:hover` responds only to real pointer events, so send `NSEvent`
     mouse moves, downs and ups to our own web view. That happens in-process and needs no
-    permission. Whether WKWebView honours them for hover is **unverified**.
+    permission. Plain moves reach only scrollbars in a window that isn't key; right-button drags
+    get the full hit test (measured, spec 0005).
   - **Targets:** click an element in the preview to pick it, and `elementFromPoint` builds a
     selector for it. Its rectangle is read every frame, so the cursor stays on it while the page
     scrolls.
   - **The cursor:** eased, curved moves between targets, written to the telemetry at 60 Hz along
     with the clicks. The editor draws it.
-- **Unmeasured:** snapshot time per frame at 2880×1800. At 50 ms, a 30 s video (1,800 frames) takes
-  90 s to render.
+- **Measured** (spec 0005): a 2880×1800 snapshot takes 14 ms for a simple page, 35 ms for
+  apple.com and 310 ms for linear.app, so a 30 s video takes 30 s to 9 min to render.
 - **Mac apps, later:** the same timeline could drive a native app in real time by posting `CGEvent`s
   while recording, which the sandbox allows after `CGRequestPostEventAccess`. It could only aim at
   screen points, though, because targeting an element needs Accessibility.

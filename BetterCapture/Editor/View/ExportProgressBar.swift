@@ -13,10 +13,12 @@ struct ExportProgressBar: View {
     /// From 0 to 1.
     let progress: Double
 
+    var title: LocalizedStringKey = "Exporting…"
+
     var body: some View {
         VStack(alignment: .leading, spacing: EditorTheme.tightSpacing) {
             HStack {
-                Text("Exporting…")
+                Text(title)
                 Spacer()
                 Text(progress, format: .percent.precision(.fractionLength(0)))
                     .monospaced()
