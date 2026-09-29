@@ -57,6 +57,43 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   `@preconcurrency import ScreenCaptureKit`.
 - Test suites that touch main-actor app types (most models) are marked `@MainActor`.
 
+## Release builds
+
+**Rule:** after every major change lands on `main` — a new feature, an editor phase, or anything that
+changes the roadmap table below — build a DMG and publish it as a GitHub Release on the fork
+(`diip3sh/BetterCapture`), so other Macs can install the current `main`. Small fixes wait for the next
+major change. Only release a `main` that builds, passes all tests and is pushed. Never commit the
+DMG (or any build output) to git; it only goes on the Release.
+
+```sh
+# Universal (Intel + Apple silicon) Release build, signed with your own certificate
+xcodebuild -scheme BetterCapture -configuration Release -destination 'generic/platform=macOS' \
+  -derivedDataPath /tmp/bc-build/rel \
+  CODE_SIGN_IDENTITY="Apple Development" DEVELOPMENT_TEAM=$TEAM \
+  CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER="" build -quiet
+
+# DMG with the drag-to-Applications layout
+SHA=$(git rev-parse --short HEAD); TAG="fork-$(date +%Y.%m.%d)-$SHA"
+STAGE=/tmp/bc-dmg-stage; rm -rf "$STAGE"; mkdir -p "$STAGE"
+ditto /tmp/bc-build/rel/Build/Products/Release/BetterCapture.app "$STAGE/BetterCapture.app"
+ln -s /Applications "$STAGE/Applications"
+hdiutil create -volname BetterCapture -srcfolder "$STAGE" -ov -format UDZO "/tmp/bc-build/BetterCapture-$TAG.dmg"
+hdiutil verify "/tmp/bc-build/BetterCapture-$TAG.dmg"
+
+# Publish: tag the pushed commit and attach the DMG
+gh release create "$TAG" "/tmp/bc-build/BetterCapture-$TAG.dmg" --repo diip3sh/BetterCapture \
+  --target "$(git rev-parse HEAD)" --title "BetterCapture $TAG" --notes "<what changed since the last release>"
+```
+
+- Tags are `fork-<yyyy.mm.dd>-<short sha>`, so they never collide with upstream's version tags.
+- The build is signed with an Apple Development certificate, not Developer ID, and isn't notarized:
+  on another Mac, macOS blocks the first launch until **System Settings → Privacy & Security →
+  Open Anyway** (or `xattr -dr com.apple.quarantine /Applications/BetterCapture.app`). Say so in
+  the release notes. Installing without that warning needs a Developer ID certificate and notarization.
+- Also say in the notes: turn off **Automatically check for updates** (Sparkle still points at upstream's
+  feed, and an update would replace the fork with the official app), and don't install it next to the
+  official BetterCapture (same bundle ID).
+
 ## Quality bar
 
 We are building a small, fast, polished app. Every change is minimal, clean and production quality;
