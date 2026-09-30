@@ -59,40 +59,31 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
 
 ## Release builds
 
-**Rule:** after every major change lands on `main` — a new feature, an editor phase, or anything that
-changes the roadmap table below — build a DMG and publish it as a GitHub Release on the fork
-(`diip3sh/BetterCapture`), so other Macs can install the current `main`. Small fixes wait for the next
-major change. Only release a `main` that builds, passes all tests and is pushed. Never commit the
-DMG (or any build output) to git; it only goes on the Release.
+**Rule:** every push to `main` that touches the app is released automatically.
+`.github/workflows/fork-release.yml` runs the tests, builds a universal DMG and publishes it as a GitHub
+Release on the fork (`diip3sh/BetterCapture`) together with a Sparkle `appcast.xml`, so installed copies
+offer the update. Only push a `main` that builds and passes all tests. Never commit the DMG (or any
+build output) to git; it only goes on the Release. Pushes that only touch docs or the website don't
+release; **Actions → Fork Release → Run workflow** releases the current `main` by hand.
 
-```sh
-# Universal (Intel + Apple silicon) Release build, signed with your own certificate
-xcodebuild -scheme BetterCapture -configuration Release -destination 'generic/platform=macOS' \
-  -derivedDataPath /tmp/bc-build/rel \
-  CODE_SIGN_IDENTITY="Apple Development" DEVELOPMENT_TEAM=$TEAM \
-  CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER="" build -quiet
-
-# DMG with the drag-to-Applications layout
-SHA=$(git rev-parse --short HEAD); TAG="fork-$(date +%Y.%m.%d)-$SHA"
-STAGE=/tmp/bc-dmg-stage; rm -rf "$STAGE"; mkdir -p "$STAGE"
-ditto /tmp/bc-build/rel/Build/Products/Release/BetterCapture.app "$STAGE/BetterCapture.app"
-ln -s /Applications "$STAGE/Applications"
-hdiutil create -volname BetterCapture -srcfolder "$STAGE" -ov -format UDZO "/tmp/bc-build/BetterCapture-$TAG.dmg"
-hdiutil verify "/tmp/bc-build/BetterCapture-$TAG.dmg"
-
-# Publish: tag the pushed commit and attach the DMG
-gh release create "$TAG" "/tmp/bc-build/BetterCapture-$TAG.dmg" --repo diip3sh/BetterCapture \
-  --target "$(git rev-parse HEAD)" --title "BetterCapture $TAG" --notes "<what changed since the last release>"
-```
-
-- Tags are `fork-<yyyy.mm.dd>-<short sha>`, so they never collide with upstream's version tags.
+- The version is `1.0.<commit count>` and the build number the commit count, which is what Sparkle
+  compares. Tags are `fork-<yyyy.mm.dd>-<short sha>`, so they never collide with upstream's version tags.
+- The app's feed is the fork's latest release (`SUFeedURL` in `Info.plist`). The workflow writes the
+  Sparkle public key into `Info.plist`; local builds keep the placeholder, so `UpdaterService` never
+  starts the updater in them.
+- Repository secrets, named as in upstream's `release.yml`: `APPLE_CERTIFICATE_BASE64` (the Apple
+  Development certificate and key as a base64 `.p12`), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_TEAM_ID`,
+  `SPARKLE_PUBLIC_EDDSA_KEY` and `SPARKLE_PRIVATE_EDDSA_KEY` (Sparkle's `generate_keys`). Installed
+  copies only accept updates signed with that private key: keep a backup of it.
 - The build is signed with an Apple Development certificate, not Developer ID, and isn't notarized:
   on another Mac, macOS blocks the first launch until **System Settings → Privacy & Security →
-  Open Anyway** (or `xattr -dr com.apple.quarantine /Applications/BetterCapture.app`). Say so in
-  the release notes. Installing without that warning needs a Developer ID certificate and notarization.
-- Also say in the notes: turn off **Automatically check for updates** (Sparkle still points at upstream's
-  feed, and an update would replace the fork with the official app), and don't install it next to the
-  official BetterCapture (same bundle ID).
+  Open Anyway** (or `xattr -dr com.apple.quarantine /Applications/BetterCapture.app`). The release
+  notes say so, and not to install it next to the official BetterCapture (same bundle ID). Installing
+  without that warning needs a Developer ID certificate and notarization.
+- Copies installed before this workflow (up to `fork-2026.09.29-a87a5dd`) have no Sparkle key and
+  can't update themselves; they need one manual install.
+- Checked locally: the workflow's Release build command, its version numbers, `codesign --verify --deep`
+  and the appcast script. Not yet run on GitHub, and no update has been installed through Sparkle yet.
 
 ## Quality bar
 
@@ -499,8 +490,12 @@ Key facts:
 Menu bar **Capture Area / Capture Window / Capture Screen** and global shortcuts of the same names
 (Settings → Shortcuts → Screenshots, no defaults; no URLs yet). Both follow `canCapture(alongside:)`: idle only,
 so a shortcut pressed while recording, counting down or capturing is ignored and logged.
-Capture Area shoots as soon as the drag ends (`AreaSelectionOverlay.present(confirmsOnRelease:)`); a click or a
-drag under 24 pt keeps the overlay up, Esc cancels. Recording keeps drag, adjust and Confirm.
+Capture Area shoots as soon as the drag ends (`AreaSelectionOverlay.present(confirmsOnRelease:)`); a click, a
+drag under 24 pt (`AreaSelectionView.drawingRelease`) or Esc cancels. Its overlay never activates the app or
+takes key, so a menu or dropdown open in another app stays open and lands in the shot; Esc is a temporary
+global hotkey, as in the countdown. macOS ignores cursor changes from an app that isn't frontmost, so
+`BackgroundCursor` turns on the window server's private `SetsCursorInBackground` switch while the overlay is up
+(looked up at run time; without it the pointer just stays an arrow). Not yet seen working in the app. Recording keeps drag, adjust and Confirm, and takes the keyboard for Return.
 Captures at native pixels with the recording visibility settings into memory (`Screenshot`: image, scale,
 capture time) and hands it to `ScreenshotController.onDidCapture` (the Quick Access card, C2). Nothing is
 written until the card's **Save**: `ScreenshotController.save(_:)` writes
