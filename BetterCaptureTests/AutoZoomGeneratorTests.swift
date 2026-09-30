@@ -96,8 +96,10 @@ struct AutoZoomGeneratorTests {
 
     @Test func zoomsWhereTheCursorRestsAfterMovingThere() throws {
         // From the corner to the middle in 0.75 s, then still
-        let move = (0...3).map { step in
-            (time: 1 + 0.25 * Double(step), point: CGPoint(x: 0.1 + 0.15 * Double(step), y: 0.1 + 0.1 * Double(step)))
+        // Typed out: Xcode 26.6, which the release workflow builds with, can't infer this closure
+        let move = (0...3).map { (step: Int) -> (time: Double, point: CGPoint) in
+            let offset = Double(step)
+            return (time: 1 + 0.25 * offset, point: CGPoint(x: 0.1 + 0.15 * offset, y: 0.1 + 0.1 * offset))
         }
         let zooms = zooms(telemetry(cursor: [(0, CGPoint(x: 0.1, y: 0.1))] + move))
 
