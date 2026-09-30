@@ -67,6 +67,10 @@ A command-line prototype drove a `WKWebView` in an offscreen window.
 - **End to end** (the app's renderer, in its sandbox): a 3 s take of apple.com/macbook-pro at 2×,
   180 frames, took 8.5 s. That includes about 2 s of loading and settling, so roughly 36 ms a frame.
   The editor's loader opened it with its telemetry, and auto-zoom placed a zoom on its click.
+- **Through the window's view model** (its intents, targets picked by real mouse events in the
+  preview): a 6 s take of apple.com/macbook-pro at 2×, hovering, clicking Buy (which opens the
+  store) and scrolling the store page, rendered 360 frames in 17.8 s into the output folder. The
+  editor opened it with one automatic zoom on the click, and exported it in 3.5 s.
 
 ## Approach
 
@@ -124,7 +128,10 @@ A feature folder, `BetterCapture/WebRecording/{Model,Service,ViewModel,View}`.
       current time and returns the element's CSS `cursor`.
    3. **Snapshot** at the scale, appended to the movie at `n / 60` s.
    A click that opens another page makes the next frame find the old one gone. That frame waits,
-   off the clock, for the new page to load and settle, so the movie cuts straight to it.
+   off the clock, for the new page to load and settle, so the movie cuts straight to it. No frame
+   call goes into a page that's loading, and one still in flight when a new page commits is ended:
+   WebKit fails a call into a page that went away only once it's garbage collected, 106 s after a
+   click opened the Apple Store.
    4. **Telemetry:** the cursor sample, clicks, and the cursor shape (`pointer` → pointing hand,
       `text` → I-beam, else arrow) when it changed.
 4. The movie is HEVC, SDR tagged BT.709, at the high quality setting's bitrate. `WebMovieWriter`

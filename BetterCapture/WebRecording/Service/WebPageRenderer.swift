@@ -25,6 +25,11 @@ final class WebPageRenderer: NSObject {
     /// Whether the page's web content process quit, e.g. out of memory.
     private var hasCrashed = false
 
+    /// The frame call in flight, which a new page ends: WebKit fails a call into a page that went
+    /// away only once it's garbage collected, 106 s after a click opened the Apple Store.
+    private var frameCall: (id: Int, continuation: CheckedContinuation<[String: CGRect]?, Never>)?
+    private var frameCallCount = 0
+
     /// How long a page runs in real time once loaded, before the take freezes its clock.
     static let settleTime = Duration.seconds(1)
 
@@ -142,20 +147,9 @@ final class WebPageRenderer: NSObject {
     private func advance(to time: Double, scroll: CGPoint, selectors: [String]) async throws -> [String: CGRect] {
         var reloads = 0
         while true {
-            do {
-                let result = try await webView.callAsyncJavaScript(
-                    "return await window.__betterCapture.frame(time, x, y, selectors)",
-                    arguments: ["time": time, "x": scroll.x, "y": scroll.y, "selectors": selectors],
-                    contentWorld: .page
-                )
-                if let boxes = result as? [String: Any] {
-                    return boxes.compactMapValues { value in
-                        guard let box = value as? [Double], box.count == 4 else { return nil }
-                        return CGRect(x: box[0], y: box[1], width: box[2], height: box[3])
-                    }
-                }
-            } catch {
-                logger.info("Frame at \(time) s found the page gone: \(error.localizedDescription)")
+            // Not into a page that's being replaced: the call could outlive it
+            if !webView.isLoading, let boxes = await callFrame(time: time, scroll: scroll, selectors: selectors) {
+                return boxes
             }
             guard !hasCrashed else { throw WebRenderError.pageCrashed }
             reloads += 1
@@ -163,6 +157,40 @@ final class WebPageRenderer: NSObject {
             try await waitWhileLoading()
             try await Task.sleep(for: Self.settleTime)
         }
+    }
+
+    /// Runs the clock script's frame step, returning the boxes, or `nil` when the page isn't ready
+    /// or is replaced meanwhile.
+    private func callFrame(time: Double, scroll: CGPoint, selectors: [String]) async -> [String: CGRect]? {
+        frameCallCount += 1
+        let id = frameCallCount
+        return await withCheckedContinuation { continuation in
+            frameCall = (id, continuation)
+            Task {
+                var boxes: [String: CGRect]?
+                do {
+                    let result = try await webView.callAsyncJavaScript(
+                        "return await window.__betterCapture.frame(time, x, y, selectors)",
+                        arguments: ["time": time, "x": scroll.x, "y": scroll.y, "selectors": selectors],
+                        contentWorld: .page
+                    )
+                    boxes = (result as? [String: Any])?.compactMapValues { value in
+                        guard let box = value as? [Double], box.count == 4 else { return nil }
+                        return CGRect(x: box[0], y: box[1], width: box[2], height: box[3])
+                    }
+                } catch {
+                    logger.info("Frame at \(time) s found the page gone: \(error.localizedDescription)")
+                }
+                finishFrameCall(id, boxes: boxes)
+            }
+        }
+    }
+
+    /// Ends frame call `id`, or whichever is in flight when `nil`.
+    private func finishFrameCall(_ id: Int? = nil, boxes: [String: CGRect]? = nil) {
+        guard let frameCall, id == nil || id == frameCall.id else { return }
+        self.frameCall = nil
+        frameCall.continuation.resume(returning: boxes)
     }
 
     private func waitWhileLoading() async throws {
@@ -205,6 +233,11 @@ extension WebPageRenderer: WKNavigationDelegate {
         finishLoading(.success(()))
     }
 
+    /// The page before is gone, and with it any frame call into it.
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        finishFrameCall()
+    }
+
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
         failLoading(error)
     }
@@ -216,6 +249,7 @@ extension WebPageRenderer: WKNavigationDelegate {
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         hasCrashed = true
         finishLoading(.failure(WebRenderError.pageCrashed))
+        finishFrameCall()
     }
 
     /// A load the page cancelled, e.g. by redirecting while loading, is replaced by another.

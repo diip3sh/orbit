@@ -92,6 +92,10 @@ nonisolated extension WebScript {
     /// How far a travelling cursor bows out from the straight line, as a share of the distance.
     static let travelArc = 0.1
 
+    /// How far past a time a press may be and still count as at it: a release at 0.2 + 0.1 s is
+    /// 0.30000000000000004 s, and belongs on the frame at 0.3 s.
+    static let pressTolerance = 1e-9
+
     /// Where the page is scrolled to at `time`: eased along the clip playing then, or where the last
     /// one ended.
     func scrollOffset(at time: Double) -> CGPoint {
@@ -124,14 +128,15 @@ nonisolated extension WebScript {
         return .travelling(start: clip.target, end: next.target, progress: Easing.easeInOut((time - departure) / travel))
     }
 
-    /// The presses and releases after `start` and up to and including `end`, in time order.
+    /// The presses and releases after `start` and up to and including `end`, give or take
+    /// ``pressTolerance``, in time order.
     func presses(after start: Double, through end: Double) -> [Press] {
         pointer.filter { $0.action == .click }.flatMap { clip in
             let press = clip.range.lowerBound
             let release = min(press + PointerClip.pressDuration, clip.range.upperBound)
             return [Press(time: press, isDown: true, target: clip.target), Press(time: release, isDown: false, target: clip.target)]
         }
-        .filter { $0.time > start && $0.time <= end }
+        .filter { $0.time > start + Self.pressTolerance && $0.time <= end + Self.pressTolerance }
     }
 
     /// The point `progress` of the way from `start` to `end` along a gentle arc that bows to the left
