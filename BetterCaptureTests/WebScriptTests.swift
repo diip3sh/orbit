@@ -114,6 +114,10 @@ struct WebScriptTests {
         #expect(script.presses(after: 3.99, through: 4) == [WebScript.Press(time: 4, isDown: true, target: link)])
         #expect(script.presses(after: 4, through: 4.1) == [WebScript.Press(time: 4.1, isDown: false, target: link)])
         #expect(script.presses(after: 4.1, through: 10).isEmpty)
+        // 0.2 + 0.1 is a hair past 0.3, and still lands on the frame at 0.3 s
+        script.pointer = [PointerClip(range: 0.2..<0.5, action: .click, target: link)]
+        #expect(script.presses(after: 17.0 / 60, through: 18.0 / 60).map(\.isDown) == [false])
+        #expect(script.presses(after: 18.0 / 60, through: 19.0 / 60).isEmpty)
     }
 
     @Test func travelBowsToTheLeftOfTheDirection() {

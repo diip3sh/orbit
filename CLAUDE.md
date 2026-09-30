@@ -524,6 +524,10 @@ Key facts (measured on an M5, macOS 26.5, spec 0005):
   then moves exactly 1/60 s per frame. A 300 ms hover transition read exactly half-way at 150 ms.
   Animations are finished at their end so `transitionend` fires; nested timers wait ≥ 4 ms. An
   animation the page pauses (`pause()`, CSS `animation-play-state`) holds its time.
+- **Navigation:** a scripted click that opens a page cuts to it: frames wait off the clock while it
+  loads, and a frame call still in flight when the new page commits is ended (WebKit fails it only
+  once garbage collected, 106 s measured). A 6 s 2× take of apple.com/macbook-pro that clicks Buy
+  and scrolls the store rendered in 17.8 s.
 - **Loading:** a frame waits up to 5 s for images in view and fonts; what misses that isn't waited
   for again (a hung image cost one frame 5 s, not every frame). The first load waits for the page's
   `didFinish`, so a subresource that hangs from the start fails the take after a minute.
@@ -583,7 +587,7 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | S1 editor phase 6: canvas and export polish | Done; the canvas, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags), transparent exports and the Recordings window still need a check in the app |
 | S1 editor design: dark studio, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
-| S2 web recordings (spec 0005) | Script, clock, renderer and telemetry done and tested, incl. a real site end to end; the window (page, pick, timeline, inspector) is built but not yet tried by hand |
+| S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |
 
 What to build next, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
 `docs/specs/0004-next-features.md`.
