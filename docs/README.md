@@ -29,7 +29,7 @@ How BetterCapture is built. Component structure, data flow, and implementation d
 
 ## Process
 
-- [Release Process:](RELEASE.md) Versioning scheme, release steps, Homebrew tap updates.
+- [Release Process:](RELEASE.md) Automatic releases on every push to `main`, the pre-push checklist, versions and secrets.
 - [Smoke Testing:](SMOKE_TESTING.md) Manual test matrix covering all codec/container/audio combinations.
 
 ## Decisions

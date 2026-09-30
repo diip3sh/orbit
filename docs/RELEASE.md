@@ -1,45 +1,83 @@
 # Release Process
 
-This document outlines the steps to release a new version of BetterCapture.
+How this fork (`diip3sh/reco`, formerly `diip3sh/BetterCapture`) ships. Upstream's process (a
+hand-published GitHub Release, Developer ID signing, notarization, the Homebrew tap) doesn't apply
+here: its `release.yml` and `prerelease.yml` workflows stay in the repository for merges from
+upstream, and only run when a release is published by hand.
 
-## Versioning Scheme
+## What a push does
 
-BetterCapture uses [Calendar Versioning (CalVer)](https://calver.org/) with the format `YYYY.MINOR.PATCH`.
+Every push to `main` that touches the app is released automatically by
+`.github/workflows/fork-release.yml`. It:
 
-- `YYYY`: The current year (e.g., 2026).
-- `MINOR`: Incremental release number within the year.
-- `PATCH`: Incremental number for bug fixes or small updates.
+1. Runs the tests. A failing test stops the release.
+2. Builds a universal (Intel and Apple silicon) app, signed with the Apple Development certificate.
+3. Packs it into a DMG and signs the DMG with the Sparkle key.
+4. Publishes a GitHub Release with the DMG and `appcast.xml`, Sparkle's update feed.
 
-Example versions: `v2026.1.0`, `v2026.1.1`.
+Installed copies read that feed (`SUFeedURL` in `Info.plist`) and offer the new version.
 
-## Steps to Release
+- A push releases when it changes `BetterCapture/**`, `BetterCapture.xcodeproj/**`,
+  `dist/update_appcast.py` or the workflow itself. Docs-only and website-only pushes don't.
+- **Actions → Fork Release → Run workflow** releases the current `main` by hand.
+- Never commit the DMG or any build output to git; it only goes on the Release.
 
-### 1. Create a GitHub Release
+## Before pushing to `main`
 
-1. Navigate to the **Releases** section of the repository on GitHub.
-2. Click **Draft a new release**.
-3. Click **Choose a tag** and type the new version (e.g., `v2026.1.0`).
-4. Select **Create new tag: [version] on publish**.
-5. Fill in the release title (usually the same as the version) and provide release notes.
-6. Click **Publish release**.
+A push to `main` reaches users as an update, so check first:
 
-Once the release is published, a GitHub Action will automatically:
+1. All tests pass locally (the `test` command in `CLAUDE.md`).
+2. SwiftLint is clean on the files you touched.
+3. The code compiles with **Xcode 26.6**. GitHub's `macos-26` runner has no Xcode 27, and its older
+   Swift compiler can fail to infer types that Xcode 27 accepts, such as a closure returning a labeled
+   tuple. Give such expressions explicit types.
+4. `actionlint .github/workflows/fork-release.yml` is clean if you changed the workflow.
 
-- Build the application.
-- Sign and notarize the app.
-- Create a DMG file: `BetterCapture-[version]-arm64.dmg`.
-- Update the `appcast.xml` for Sparkle updates.
-- Upload the DMG and `appcast.xml` back to the GitHub Release.
+After pushing, watch the run. A failed run publishes nothing: fix the cause and push again.
 
-### 3. Update Homebrew Tap
+```sh
+gh run list --repo diip3sh/reco --workflow fork-release.yml -L 3
+gh run watch <run id> --repo diip3sh/reco --exit-status
+gh run view <run id> --repo diip3sh/reco --log-failed
+```
 
-After the release is complete and the DMG is attached to the GitHub Release, you must manually update the Homebrew formula.
+## Versions and tags
 
-1. Go to the [jsattler/homebrew-tap](https://github.com/jsattler/homebrew-tap) repository.
-2. Update the `bettercapture.rb` formula:
-   - **Version:** Update to the new release version.
-   - **URL:** Update the download URL to point to the new DMG.
-   - **SHA256:** Calculate the SHA256 of the new DMG file.
-     - You can download the DMG and run: `shasum -a 256 BetterCapture-[version]-arm64.dmg`
-     - Or get it from the CI logs if available.
-3. Commit and push the changes to the homebrew-tap repository.
+- The version is `1.0.<commit count>`. The build number is the commit count, which is what Sparkle
+  compares, so every push to `main` is newer than the last.
+- Tags are `fork-<yyyy.mm.dd>-<short sha>`, so they never collide with upstream's version tags.
+- The release notes are the commit subjects since the previous release. Write subjects a user can read.
+
+## Secrets
+
+Repository secrets, named as in upstream's `release.yml`:
+
+| Secret | Holds |
+|---|---|
+| `APPLE_CERTIFICATE_BASE64` | The Apple Development certificate and private key as a base64 `.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | The `.p12`'s password |
+| `APPLE_TEAM_ID` | The team the certificate belongs to |
+| `SPARKLE_PUBLIC_EDDSA_KEY` | Written into `Info.plist` as `SUPublicEDKey` by the workflow |
+| `SPARKLE_PRIVATE_EDDSA_KEY` | Signs each DMG |
+
+- The Sparkle private key also lives in the login keychain of the Mac that created it ("Private key
+  for signing Sparkle updates"). Installed copies only accept updates signed with it, so keep a backup:
+  `generate_keys -x <file>` from Sparkle's `bin` folder exports it.
+- The Apple Development certificate expires after a year. Export the new one from Keychain Access
+  (**File → Export Items…**) and replace the first two secrets.
+- Local builds keep the placeholder Sparkle key, so `UpdaterService` never starts the updater in them.
+
+## Installing
+
+- The build isn't notarized. On another Mac, macOS blocks the first launch until **System Settings →
+  Privacy & Security → Open Anyway** (or `xattr -dr com.apple.quarantine /Applications/BetterCapture.app`).
+  The release notes say so. Installing without that warning needs a Developer ID certificate and
+  notarization.
+- Don't install it next to the official BetterCapture: both use the same bundle ID.
+- Copies installed before this workflow (up to `fork-2026.09.29-a87a5dd`) have no Sparkle key and
+  can't update themselves; they need one manual install.
+
+## Not yet verified
+
+- No update has been installed through Sparkle yet. After the first two releases, install the older
+  one and check that it offers the newer.

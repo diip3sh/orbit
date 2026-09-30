@@ -59,31 +59,9 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
 
 ## Release builds
 
-**Rule:** every push to `main` that touches the app is released automatically.
-`.github/workflows/fork-release.yml` runs the tests, builds a universal DMG and publishes it as a GitHub
-Release on the fork (`diip3sh/reco`, formerly `diip3sh/BetterCapture`) together with a Sparkle `appcast.xml`, so installed copies
-offer the update. Only push a `main` that builds and passes all tests. Never commit the DMG (or any
-build output) to git; it only goes on the Release. Pushes that only touch docs or the website don't
-release; **Actions → Fork Release → Run workflow** releases the current `main` by hand.
-
-- The version is `1.0.<commit count>` and the build number the commit count, which is what Sparkle
-  compares. Tags are `fork-<yyyy.mm.dd>-<short sha>`, so they never collide with upstream's version tags.
-- The app's feed is the fork's latest release (`SUFeedURL` in `Info.plist`). The workflow writes the
-  Sparkle public key into `Info.plist`; local builds keep the placeholder, so `UpdaterService` never
-  starts the updater in them.
-- Repository secrets, named as in upstream's `release.yml`: `APPLE_CERTIFICATE_BASE64` (the Apple
-  Development certificate and key as a base64 `.p12`), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_TEAM_ID`,
-  `SPARKLE_PUBLIC_EDDSA_KEY` and `SPARKLE_PRIVATE_EDDSA_KEY` (Sparkle's `generate_keys`). Installed
-  copies only accept updates signed with that private key: keep a backup of it.
-- The build is signed with an Apple Development certificate, not Developer ID, and isn't notarized:
-  on another Mac, macOS blocks the first launch until **System Settings → Privacy & Security →
-  Open Anyway** (or `xattr -dr com.apple.quarantine /Applications/BetterCapture.app`). The release
-  notes say so, and not to install it next to the official BetterCapture (same bundle ID). Installing
-  without that warning needs a Developer ID certificate and notarization.
-- Copies installed before this workflow (up to `fork-2026.09.29-a87a5dd`) have no Sparkle key and
-  can't update themselves; they need one manual install.
-- Checked locally: the workflow's Release build command, its version numbers, `codesign --verify --deep`
-  and the appcast script. Not yet run on GitHub, and no update has been installed through Sparkle yet.
+**Rule:** every push to `main` that touches the app is built, tested and published to users as an
+update by GitHub Actions. **Before pushing to `main`, read `docs/RELEASE.md` and follow its
+checklist**; it also covers the workflow, versions, secrets and installing.
 
 ## Quality bar
 
