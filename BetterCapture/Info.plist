@@ -11,7 +11,7 @@
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>BetterCapture needs access to screen recording to capture your screen content.</string>
 	<key>SUFeedURL</key>
-	<string>https://github.com/diip3sh/BetterCapture/releases/latest/download/appcast.xml</string>
+	<string>https://github.com/diip3sh/reco/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>SPARKLE_PUBLIC_KEY</string>
 	<key>SUEnableInstallerLauncherService</key>

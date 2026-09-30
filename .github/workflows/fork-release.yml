@@ -25,7 +25,6 @@ concurrency:
 env:
   APP_NAME: BetterCapture
   SCHEME: BetterCapture
-  DERIVED_DATA: ${{ runner.temp }}/dd
 
 jobs:
   release:
@@ -63,10 +62,14 @@ jobs:
         run: |
           BUILD_NUMBER=$(git rev-list --count HEAD)
           SHORT_SHA=$(git rev-parse --short HEAD)
-          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "version=1.0.$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "git_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
-          echo "tag=fork-$(date -u +%Y.%m.%d)-$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "build_number=$BUILD_NUMBER"
+            echo "version=1.0.$BUILD_NUMBER"
+            echo "git_sha=$SHORT_SHA"
+            echo "tag=fork-$(date -u +%Y.%m.%d)-$SHORT_SHA"
+          } >> "$GITHUB_OUTPUT"
+          # The runner context isn't available in the workflow's env block
+          echo "DERIVED_DATA=$RUNNER_TEMP/dd" >> "$GITHUB_ENV"
 
       - name: Import signing certificate
         env:

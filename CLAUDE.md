@@ -61,7 +61,7 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
 
 **Rule:** every push to `main` that touches the app is released automatically.
 `.github/workflows/fork-release.yml` runs the tests, builds a universal DMG and publishes it as a GitHub
-Release on the fork (`diip3sh/BetterCapture`) together with a Sparkle `appcast.xml`, so installed copies
+Release on the fork (`diip3sh/reco`, formerly `diip3sh/BetterCapture`) together with a Sparkle `appcast.xml`, so installed copies
 offer the update. Only push a `main` that builds and passes all tests. Never commit the DMG (or any
 build output) to git; it only goes on the Release. Pushes that only touch docs or the website don't
 release; **Actions → Fork Release → Run workflow** releases the current `main` by hand.
