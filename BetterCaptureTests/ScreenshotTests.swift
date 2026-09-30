@@ -81,6 +81,17 @@ struct ScreenshotTests {
         #expect(!AreaSelectionView.isValidSelection(CGRect(x: 0, y: 0, width: 400, height: 23)))
     }
 
+    @Test func releasingABigEnoughDragConfirmsAScreenshotAndAdjustsARecording() {
+        let drag = CGRect(x: 10, y: 10, width: 200, height: 100)
+        #expect(AreaSelectionView.drawingRelease(of: drag, confirmsOnRelease: true) == .confirm)
+        #expect(AreaSelectionView.drawingRelease(of: drag, confirmsOnRelease: false) == .adjust)
+    }
+
+    @Test func plainClickCancelsAScreenshotAndKeepsARecordingSelectionOpen() {
+        #expect(AreaSelectionView.drawingRelease(of: .zero, confirmsOnRelease: true) == .cancel)
+        #expect(AreaSelectionView.drawingRelease(of: .zero, confirmsOnRelease: false) == .reset)
+    }
+
     // MARK: - configuration
 
     @Test func configurationUsesThePixelSizeAndSourceRect() {

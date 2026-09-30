@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import KeyboardShortcuts
 import OSLog
 
 /// Result of an area selection operation
@@ -14,33 +15,6 @@ struct AreaSelectionResult: Sendable {
     let screenRect: CGRect
     /// The NSScreen on which the selection was made
     let screen: NSScreen
-}
-
-// MARK: - AreaSelectionPanel
-
-/// A borderless, transparent panel that covers a display for rectangle drawing
-final class AreaSelectionPanel: NSPanel {
-
-    init(screen: NSScreen) {
-        super.init(
-            contentRect: screen.frame,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-
-        isOpaque = false
-        backgroundColor = .clear
-        hasShadow = false
-        level = .screenSaver
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        ignoresMouseEvents = false
-        acceptsMouseMovedEvents = true
-        isReleasedWhenClosed = false
-    }
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
 }
 
 // MARK: - AreaSelectionOverlay
@@ -54,6 +28,7 @@ final class AreaSelectionOverlay {
     private var panels: [AreaSelectionPanel] = []
     private var overlayViews: [AreaSelectionView] = []
     private var continuation: CheckedContinuation<AreaSelectionResult?, Never>?
+    private var escapeTask: Task<Void, Never>?
 
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "BetterCapture",
@@ -74,11 +49,15 @@ final class AreaSelectionOverlay {
 
         logger.info("Presenting area selection on \(screens.count) screen(s)")
 
+        // A selection confirmed on release needs no keyboard but Esc, so it leaves the focus where
+        // it is: activating the app or taking key closes the menu or dropdown about to be captured.
+        let takesFocus = !confirmsOnRelease
+
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
 
             for screen in screens {
-                let panel = AreaSelectionPanel(screen: screen)
+                let panel = AreaSelectionPanel(screen: screen, takesFocus: takesFocus)
 
                 let overlayView = AreaSelectionView(
                     frame: NSRect(origin: .zero, size: screen.frame.size),
@@ -88,20 +67,48 @@ final class AreaSelectionOverlay {
                 overlayView.delegate = self
 
                 panel.contentView = overlayView
-                panel.makeKeyAndOrderFront(nil)
+                if takesFocus {
+                    panel.makeKeyAndOrderFront(nil)
+                } else {
+                    panel.orderFrontRegardless()
+                }
 
                 panels.append(panel)
                 overlayViews.append(overlayView)
             }
 
-            // Ensure the panels capture all events
-            NSApp.activate(ignoringOtherApps: true)
+            if takesFocus {
+                // Ensure the panels capture all events
+                NSApp.activate(ignoringOtherApps: true)
+            } else {
+                // The app stays in the background, where macOS ignores its cursor unless told otherwise
+                BackgroundCursor.setEnabled(true)
+                NSCursor.crosshair.set()
+
+                // Not key, so Esc never reaches the view: a temporary global hotkey, as in CountdownOverlay
+                escapeTask = Task { [weak self] in
+                    for await _ in KeyboardShortcuts.events(.keyDown, for: KeyboardShortcuts.Shortcut(.escape)) {
+                        self?.logger.info("Area selection cancelled")
+                        self?.finish(with: nil)
+                        break
+                    }
+                }
+            }
         }
     }
 
     // MARK: - Private Methods
 
+    /// Removes the overlay, releases Esc and hands the result to `present`
+    private func finish(with result: AreaSelectionResult?) {
+        dismiss()
+        continuation?.resume(returning: result)
+        continuation = nil
+    }
+
     private func dismiss() {
+        escapeTask?.cancel()
+        escapeTask = nil
         for panel in panels {
             panel.orderOut(nil)
             panel.close()
@@ -109,6 +116,7 @@ final class AreaSelectionOverlay {
         panels.removeAll()
         overlayViews.removeAll()
         NSCursor.arrow.set()
+        BackgroundCursor.setEnabled(false)
     }
 
     /// Clears the selection on all overlay views except the given one
@@ -126,31 +134,17 @@ extension AreaSelectionOverlay: AreaSelectionViewDelegate {
     func areaSelectionView(_ view: AreaSelectionView, didConfirmSelection rect: CGRect, on screen: NSScreen) {
         logger.info("Area selected: \(rect.origin.x),\(rect.origin.y) \(rect.width)x\(rect.height)")
 
-        let result = AreaSelectionResult(screenRect: rect, screen: screen)
-        dismiss()
-        continuation?.resume(returning: result)
-        continuation = nil
+        finish(with: AreaSelectionResult(screenRect: rect, screen: screen))
     }
 
     func areaSelectionViewDidCancel(_ view: AreaSelectionView) {
         logger.info("Area selection cancelled")
-        dismiss()
-        continuation?.resume(returning: nil)
-        continuation = nil
+        finish(with: nil)
     }
 
     func areaSelectionViewDidBeginDrawing(_ view: AreaSelectionView) {
         clearOtherViews(except: view)
     }
-}
-
-// MARK: - AreaSelectionViewDelegate Protocol
-
-@MainActor
-protocol AreaSelectionViewDelegate: AnyObject {
-    func areaSelectionView(_ view: AreaSelectionView, didConfirmSelection rect: CGRect, on screen: NSScreen)
-    func areaSelectionViewDidCancel(_ view: AreaSelectionView)
-    func areaSelectionViewDidBeginDrawing(_ view: AreaSelectionView)
 }
 
 // MARK: - Interaction State
@@ -273,7 +267,7 @@ final class AreaSelectionView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         // Ensure this panel becomes key so keyboard events route here
-        window?.makeKey()
+        if window?.canBecomeKey == true { window?.makeKey() }
 
         let point = convert(event.locationInWindow, from: nil)
 
@@ -322,6 +316,8 @@ final class AreaSelectionView: NSView {
         switch interactionState {
         case .drawing(let origin):
             selectionRect = rectFrom(origin, to: clampedPoint)
+            // Dim on the first drag rather than on mouse down, so a plain click never flashes the screen
+            showOverlay = true
 
         case .moving(let offset):
             var newOrigin = CGPoint(
@@ -346,17 +342,7 @@ final class AreaSelectionView: NSView {
     override func mouseUp(with event: NSEvent) {
         switch interactionState {
         case .drawing:
-            if Self.isValidSelection(selectionRect) && confirmsOnRelease {
-                confirmSelectionIfValid()
-            } else if Self.isValidSelection(selectionRect) {
-                interactionState = .adjusting
-                showActionButtons()
-            } else {
-                // Selection too small, reset
-                selectionRect = .zero
-                interactionState = .idle
-                showOverlay = false
-            }
+            finishDrawing()
 
         case .moving:
             interactionState = .adjusting
@@ -630,7 +616,6 @@ final class AreaSelectionView: NSView {
     private func beginDrawing(at point: CGPoint) {
         interactionState = .drawing(origin: point)
         selectionRect = .zero
-        showOverlay = true
         delegate?.areaSelectionViewDidBeginDrawing(self)
     }
 
@@ -776,15 +761,24 @@ final class AreaSelectionView: NSView {
     }
 }
 
-// MARK: - Selection Size
+// MARK: - Drawing Release
 
 extension AreaSelectionView {
 
-    /// Minimum selection size in points
-    nonisolated static let minimumSize: CGFloat = 24
-
-    /// Whether a selection is big enough to confirm; smaller drags and plain clicks are discarded
-    nonisolated static func isValidSelection(_ rect: CGRect) -> Bool {
-        rect.width >= minimumSize && rect.height >= minimumSize
+    /// Applies `drawingRelease` when the mouse is released after drawing
+    private func finishDrawing() {
+        switch Self.drawingRelease(of: selectionRect, confirmsOnRelease: confirmsOnRelease) {
+        case .confirm:
+            confirmSelectionIfValid()
+        case .adjust:
+            interactionState = .adjusting
+            showActionButtons()
+        case .cancel:
+            delegate?.areaSelectionViewDidCancel(self)
+        case .reset:
+            selectionRect = .zero
+            interactionState = .idle
+            showOverlay = false
+        }
     }
 }
