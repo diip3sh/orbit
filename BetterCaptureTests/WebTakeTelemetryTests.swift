@@ -34,10 +34,12 @@ struct WebTakeTelemetryTests {
         take.record(time: 2 / 60, cursor: CGPoint(x: 7, y: 6), presses: [.init(time: 0.03, isDown: false, target: target)], shape: nil)
 
         let telemetry = take.telemetry
-        #expect(telemetry.cursor.map(\.time) == [0, 2.0 / 60])
+        // Typed out: Xcode 26.6, which the release workflow builds with, times out on arithmetic inside #expect
+        let frames: [Double] = [1.0 / 60, 2.0 / 60]
+        #expect(telemetry.cursor.map(\.time) == [0, frames[1]])
         #expect(telemetry.clicks.map(\.isDown) == [true, false])
         // Clicks carry the frame's time and the cursor's location, where the page got them
-        #expect(telemetry.clicks.map(\.time) == [1.0 / 60, 2.0 / 60])
+        #expect(telemetry.clicks.map(\.time) == frames)
         #expect(telemetry.clicks.map(\.location) == [point, CGPoint(x: 7, y: 6)])
     }
 
