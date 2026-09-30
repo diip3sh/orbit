@@ -1,0 +1,225 @@
+name: Fork Release
+
+# Publishes every push to main as a GitHub Release with a Sparkle appcast, so installed copies
+# of the fork offer the update. The build is signed with an Apple Development certificate and
+# isn't notarized: the first launch on another Mac needs "Open Anyway".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "BetterCapture/**"
+      - "BetterCapture.xcodeproj/**"
+      - "dist/update_appcast.py"
+      - ".github/workflows/fork-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One release at a time, in push order: each appcast builds on the previous release's
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+env:
+  APP_NAME: BetterCapture
+  SCHEME: BetterCapture
+  DERIVED_DATA: ${{ runner.temp }}/dd
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Check secrets
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SPARKLE_PUBLIC_EDDSA_KEY: ${{ secrets.SPARKLE_PUBLIC_EDDSA_KEY }}
+          SPARKLE_PRIVATE_EDDSA_KEY: ${{ secrets.SPARKLE_PRIVATE_EDDSA_KEY }}
+        run: |
+          for name in APPLE_CERTIFICATE_BASE64 APPLE_CERTIFICATE_PASSWORD APPLE_TEAM_ID \
+            SPARKLE_PUBLIC_EDDSA_KEY SPARKLE_PRIVATE_EDDSA_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing repository secret $name"
+              exit 1
+            fi
+          done
+
+      # Full history: the build number is the commit count, the notes are the commits since the last release
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Determine version
+        id: version
+        run: |
+          BUILD_NUMBER=$(git rev-list --count HEAD)
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "version=1.0.$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "git_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=fork-$(date -u +%Y.%m.%d)-$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Import signing certificate
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
+          security import "$CERTIFICATE_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          rm "$CERTIFICATE_PATH"
+
+      # Before the Sparkle key goes into Info.plist, so the test host never starts the updater
+      - name: Run tests
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project "$APP_NAME.xcodeproj" \
+            -scheme "$SCHEME" \
+            -destination "platform=macOS,arch=arm64" \
+            -derivedDataPath "$DERIVED_DATA" \
+            CODE_SIGN_IDENTITY="Apple Development" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            | xcbeautify --renderer github-actions
+
+      - name: Set Sparkle public key and git SHA in Info.plist
+        env:
+          SPARKLE_PUBLIC_EDDSA_KEY: ${{ secrets.SPARKLE_PUBLIC_EDDSA_KEY }}
+          GIT_SHA: ${{ steps.version.outputs.git_sha }}
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_EDDSA_KEY" "BetterCapture/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :GitSHA string $GIT_SHA" "BetterCapture/Info.plist"
+
+      - name: Build application
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project "$APP_NAME.xcodeproj" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination "generic/platform=macOS" \
+            -derivedDataPath "$DERIVED_DATA" \
+            CODE_SIGN_IDENTITY="Apple Development" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            | xcbeautify --renderer github-actions
+
+          codesign --verify --deep --strict "$DERIVED_DATA/Build/Products/Release/$APP_NAME.app"
+
+      - name: Create DMG
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          DMG_PATH="$RUNNER_TEMP/$APP_NAME-$TAG.dmg"
+          STAGE="$RUNNER_TEMP/dmg-contents"
+          mkdir -p "$STAGE"
+          ditto "$DERIVED_DATA/Build/Products/Release/$APP_NAME.app" "$STAGE/$APP_NAME.app"
+          ln -s /Applications "$STAGE/Applications"
+
+          hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG_PATH"
+          hdiutil verify "$DMG_PATH"
+
+          echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
+
+      # sign_update ships with the Sparkle package the build just resolved
+      - name: Sign DMG with Sparkle EdDSA
+        env:
+          SPARKLE_PRIVATE_EDDSA_KEY: ${{ secrets.SPARKLE_PRIVATE_EDDSA_KEY }}
+        run: |
+          echo "$SPARKLE_PRIVATE_EDDSA_KEY" > "$RUNNER_TEMP/sparkle_key"
+          "$DERIVED_DATA/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update" \
+            "$DMG_PATH" -f "$RUNNER_TEMP/sparkle_key" > "$RUNNER_TEMP/sign_update.txt"
+          rm "$RUNNER_TEMP/sparkle_key"
+
+      - name: Write release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREVIOUS=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
+          if [ -n "$PREVIOUS" ] && git rev-parse -q --verify "refs/tags/$PREVIOUS" > /dev/null; then
+            git log --no-merges --format='- %s' "$PREVIOUS..HEAD" > "$RUNNER_TEMP/changes.md"
+          else
+            git log --no-merges --format='- %s' -1 > "$RUNNER_TEMP/changes.md"
+          fi
+
+          {
+            cat "$RUNNER_TEMP/changes.md"
+            echo
+            echo "### Installing"
+            echo
+            echo "- This build isn't notarized. On first launch macOS blocks it: open **System Settings → Privacy & Security** and choose **Open Anyway**. Later versions arrive through the app's own updater."
+            echo "- Don't install it next to the official BetterCapture; both use the same bundle ID."
+          } > "$RUNNER_TEMP/notes.md"
+
+      - name: Generate Sparkle appcast
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          APPCAST_DIR="$RUNNER_TEMP/appcast"
+          mkdir -p "$APPCAST_DIR"
+          cp "$RUNNER_TEMP/sign_update.txt" "$APPCAST_DIR/sign_update.txt"
+
+          # Carry the earlier items over from the previous release's appcast
+          curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/appcast.xml" \
+            -o "$APPCAST_DIR/appcast.xml" 2>/dev/null \
+            || echo "No previous appcast found, will create a fresh one"
+
+          cd "$APPCAST_DIR"
+          DMG_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$APP_NAME-$TAG.dmg" \
+          RELEASE_NOTES="$(cat "$RUNNER_TEMP/changes.md")" \
+          RELEASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" \
+            python3 "$GITHUB_WORKSPACE/dist/update_appcast.py"
+
+          mv appcast_new.xml "$RUNNER_TEMP/appcast.xml"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create "$TAG" "$DMG_PATH" "$RUNNER_TEMP/appcast.xml" \
+            --target "$GITHUB_SHA" \
+            --title "$APP_NAME $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --latest
+
+      - name: Clean up keychain
+        if: always()
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH"
+          fi

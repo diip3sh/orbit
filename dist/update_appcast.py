@@ -38,7 +38,8 @@ build_number = os.environ["BUILD_NUMBER"]
 dmg_url = os.environ["DMG_URL"]
 release_notes = os.environ.get("RELEASE_NOTES", "")
 release_url = os.environ.get("RELEASE_URL", "")
-repo_url = "https://github.com/jsattler/BetterCapture"
+# GitHub Actions sets GITHUB_REPOSITORY, so a fork's appcast points at the fork
+repo_url = "https://github.com/" + os.environ.get("GITHUB_REPOSITORY", "jsattler/BetterCapture")
 
 # Define Sparkle namespace URI for element creation
 SPARKLE_NS = "http://www.andymatuschak.org/xml-namespaces/sparkle"
@@ -87,7 +88,7 @@ if et is None:
         ' xmlns:dc="http://purl.org/dc/elements/1.1/">'
         "<channel>"
         "<title>BetterCapture Updates</title>"
-        "<link>https://github.com/jsattler/BetterCapture/releases/latest/download/appcast.xml</link>"
+        f"<link>{repo_url}/releases/latest/download/appcast.xml</link>"
         "<description>Updates for BetterCapture</description>"
         "<language>en</language>"
         "</channel>"
