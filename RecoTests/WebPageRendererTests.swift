@@ -137,6 +137,15 @@ struct WebPageRendererTests {
         #expect(try await pixel(at: CGPoint(x: 20, y: 20), frame: 0, of: movie).isClose(to: [0, 255, 0]))
     }
 
+    @Test func rendersIntoAFolderThatDoesNotExistYet() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let movie = folder.appending(path: "Not Yet/take.mov")
+
+        _ = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { _ in }
+
+        #expect(FileManager.default.fileExists(atPath: movie.path(percentEncoded: false)))
+    }
+
     @Test func failsWhenThePageCantLoad() async throws {
         var script = script
         script.url = URL(string: "https://nonexistent.invalid/")
@@ -144,6 +153,59 @@ struct WebPageRendererTests {
         await #expect(throws: WebRenderError.self) {
             try await WebPageRenderer(script: script).render(to: folder.appending(path: "take.mov"), bitsPerPixel: 0.4) { _ in }
         }
+    }
+
+    @Test func inspectingListsTheButtonAndTheBoxesAskedFor() async throws {
+        let inspection = try await WebPageRenderer(script: Self.script(for: Self.page)).inspect(selectors: ["#band", "#nope"])
+
+        #expect(inspection.viewport == PageInspection.Size(width: 640, height: 400))
+        #expect(inspection.pageHeight == 3000)
+        #expect(!inspection.truncated)
+        let buy = try #require(inspection.elements.first)
+        #expect(inspection.elements.count == 1)
+        #expect(buy.selector == "#buy")
+        #expect(buy.role == "button")
+        #expect(buy.box.rect == CGRect(x: 100, y: 100, width: 200, height: 60))
+        // Only what matched, in page pixels
+        #expect(inspection.boxes?.keys.sorted() == ["#band"])
+        #expect(inspection.boxes?["#band"]?.rect == CGRect(x: 0, y: 500, width: 640, height: 400))
+    }
+
+    @Test func inspectingNamesRolesAndTextAndSkipsWhatIsntVisible() async throws {
+        let page = """
+            <!doctype html><html><body style="margin: 0">
+            <a href="/pricing" id="pricing">  Pricing   and
+              plans </a>
+            <button id="close" aria-label="Close dialog">x</button>
+            <button id="gone" style="display: none">Gone</button>
+            <button id="ghost" style="opacity: 0">Ghost</button>
+            <button id="hidden" style="visibility: hidden">Hidden</button>
+            <input id="agree" type="checkbox"><input id="password" type="password" value="hunter2">
+            <input id="secret" type="hidden">
+            <input id="name" value="Ada">
+            <h1 id="title">Hello</h1>
+            <div id="plain">Not interactive</div>
+            </body></html>
+            """
+
+        let inspection = try await WebPageRenderer(script: Self.script(for: page)).inspect(selectors: [])
+
+        let found: [[String]] = inspection.elements.map { [$0.selector, $0.role, $0.text] }
+        #expect(found == [
+            ["#pricing", "link", "Pricing and plans"], ["#close", "button", "Close dialog"], ["#agree", "checkbox", ""],
+            ["#password", "password", ""], ["#name", "text", "Ada"], ["#title", "heading", "Hello"]
+        ])
+        // Nothing asked for, so no boxes at all
+        #expect(inspection.boxes == nil)
+    }
+
+    @Test func inspectingStopsAtTwoHundredElements() async throws {
+        let links = (0..<250).map { "<a href=\"#\($0)\">Link \($0)</a>" }.joined(separator: "<br>")
+
+        let inspection = try await WebPageRenderer(script: Self.script(for: "<!doctype html><html><body>\(links)</body></html>")).inspect(selectors: [])
+
+        #expect(inspection.elements.count == WebInspectScript.maximumElements)
+        #expect(inspection.truncated)
     }
 
     /// A take of `page` at 640 × 400, 1×, for a second.

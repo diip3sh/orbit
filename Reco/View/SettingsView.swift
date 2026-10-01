@@ -13,23 +13,31 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var settings: SettingsStore
     var updaterService: UpdaterService
+    var agentBridge: AgentBridgeServer
+
+    /// The tab showing, which "Set Up Agents…" in the Record with AI Agent panel switches.
+    @AppStorage(AgentsSettingsView.tabStorageKey) private var tab = "general"
 
     var body: some View {
-        TabView {
-            Tab("General", systemImage: "gearshape") {
+        TabView(selection: $tab) {
+            Tab("General", systemImage: "gearshape", value: "general") {
                 GeneralSettingsView(settings: settings, updaterService: updaterService)
             }
 
-            Tab("Video", systemImage: "video") {
+            Tab("Video", systemImage: "video", value: "video") {
                 VideoSettingsView(settings: settings)
             }
 
-            Tab("Audio", systemImage: "waveform") {
+            Tab("Audio", systemImage: "waveform", value: "audio") {
                 AudioSettingsView(settings: settings)
             }
 
-            Tab("Shortcuts", systemImage: "keyboard") {
+            Tab("Shortcuts", systemImage: "keyboard", value: "shortcuts") {
                 ShortcutsSettingsView()
+            }
+
+            Tab("Agents", systemImage: "terminal", value: AgentsSettingsView.tag) {
+                AgentsSettingsView(server: agentBridge)
             }
         }
         .frame(width: 500, height: 420)
@@ -44,6 +52,10 @@ struct ShortcutsSettingsView: View {
             Section("Recording") {
                 KeyboardShortcuts.Recorder("Toggle Recording", name: .toggleRecording)
                 KeyboardShortcuts.Recorder("Pause/Resume Recording", name: .pauseRecording)
+            }
+
+            Section("Web Recording") {
+                KeyboardShortcuts.Recorder("Record with AI Agent", name: .recordWithAgent)
             }
 
             Section("Content Selection") {
@@ -348,5 +360,10 @@ struct AboutSection: View {
 // MARK: - Preview
 
 #Preview {
-    SettingsView(settings: SettingsStore(), updaterService: UpdaterService())
+    let settings = SettingsStore()
+    SettingsView(
+        settings: settings,
+        updaterService: UpdaterService(),
+        agentBridge: AgentBridgeServer(tools: AgentTools(settings: settings) { _ in })
+    )
 }

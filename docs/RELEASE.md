@@ -73,6 +73,10 @@ Repository secrets, named as in upstream's `release.yml`:
   Privacy & Security → Open Anyway** (or `xattr -dr com.apple.quarantine /Applications/Reco.app`).
   The release notes say so. Installing without that warning needs a Developer ID certificate and
   notarization.
+- **The release after 2026-10-01 drops the App Sandbox** (spec 0007). Its preferences, the agent token
+  and the saved web script are copied from the old container on first launch, so settings, shortcuts and
+  connected agents should carry over. Check the update from the last sandboxed release by hand (settings,
+  shortcuts, custom output folder, agents still Connected, no permission asked again) before relying on it.
 - Reco has its own bundle ID (`com.diip3sh.Reco`), so it installs next to the official BetterCapture.
   Copies installed under the old name, BetterCapture, can't update to Reco (Sparkle needs the same
   bundle ID): they need one manual install, and macOS asks for Reco's permissions again.

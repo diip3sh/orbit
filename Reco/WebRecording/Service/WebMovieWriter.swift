@@ -21,6 +21,8 @@ actor WebMovieWriter {
 
     /// - Parameter bitsPerPixel: The average bitrate per pixel and frame.
     init(url: URL, size: CGSize, frameRate: Int, bitsPerPixel: Double) throws {
+        // The output folder may not exist yet, e.g. before the first recording; AVAssetWriter won't make it
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.hevc,

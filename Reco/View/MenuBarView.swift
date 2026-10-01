@@ -15,6 +15,8 @@ struct MenuBarView: View {
     let editLastRecording: () -> Void
     let showRecordings: () -> Void
     let showWebRecording: () -> Void
+    let showAgentRecording: () -> Void
+    let agentRecording: AgentRecordingViewModel
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
     @State private var currentPreview: NSImage?
@@ -160,6 +162,17 @@ struct MenuBarView: View {
             MenuBarActionButton(title: "New Web Recording…", systemImage: "globe") {
                 showWebRecording()
                 dismiss()
+            }
+
+            if agentRecording.isRunning {
+                MenuBarActionButton(title: "Cancel Agent Recording", systemImage: "xmark.circle") {
+                    agentRecording.cancel()
+                }
+            } else {
+                MenuBarActionButton(title: "Record with AI Agent…", systemImage: "sparkles") {
+                    showAgentRecording()
+                    dismiss()
+                }
             }
 
             MenuBarActionButton(title: "Open Output Folder", systemImage: "folder") {
@@ -466,6 +479,12 @@ struct PermissionRow: View {
         screenshots: .init(settings: SettingsStore(), notificationService: .init(settings: SettingsStore())),
         editLastRecording: {},
         showRecordings: {},
-        showWebRecording: {}
+        showWebRecording: {},
+        showAgentRecording: {},
+        agentRecording: AgentRecordingViewModel(
+            tools: AgentTools(settings: SettingsStore()) { _ in },
+            reportFailure: { _ in },
+            token: ""
+        )
     )
 }

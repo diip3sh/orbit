@@ -9,15 +9,10 @@ import SwiftUI
 
 extension View {
 
-    /// Liquid Glass in `shape` on macOS 26; before, a material with a hairline edge.
-    @ViewBuilder
+    /// Liquid Glass in `shape` on macOS 26; before, a material with a hairline edge. With Reduce
+    /// Transparency on, the stage's solid ground with the hairline.
     func editorGlass(in shape: some Shape) -> some View {
-        if #available(macOS 26, *) {
-            glassEffect(.regular, in: shape)
-        } else {
-            background(.regularMaterial, in: shape)
-                .overlay(shape.stroke(EditorTheme.hairline))
-        }
+        modifier(EditorGlass(shape: shape))
     }
 
     /// The window's ground: the desktop frosted through at the shell's 80%, in ink.
@@ -33,6 +28,27 @@ extension View {
     /// `animation` for changes of `value`, or none with Reduce Motion on.
     func editorMotion(_ animation: Animation = EditorTheme.motion, value: some Equatable) -> some View {
         modifier(EditorMotion(animation: animation, value: value))
+    }
+}
+
+private struct EditorGlass<GlassShape: Shape>: ViewModifier {
+    let shape: GlassShape
+
+    @Environment(\.accessibilityReduceTransparency) private var reducesTransparency
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if reducesTransparency {
+            content
+                .background(EditorTheme.stage, in: shape)
+                .overlay(shape.stroke(EditorTheme.hairline))
+        } else if #available(macOS 26, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content
+                .background(.regularMaterial, in: shape)
+                .overlay(shape.stroke(EditorTheme.hairline))
+        }
     }
 }
 

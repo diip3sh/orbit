@@ -5,10 +5,10 @@
 
 import Foundation
 
-/// Keeps the last web script in Application Support, so the Web Recording window reopens with it.
+/// Keeps the last web script in Reco's Application Support folder, so the Web Recording window reopens with it.
 nonisolated enum WebScriptStore {
 
-    static let defaultURL = URL.applicationSupportDirectory.appending(path: "WebScript.json")
+    static let defaultURL = URL.recoSupport.appending(path: "WebScript.json")
 
     /// The saved script, or `nil` when there is none or it can't be read.
     static func read(from url: URL = defaultURL) -> WebScript? {

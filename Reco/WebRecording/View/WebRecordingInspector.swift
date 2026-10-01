@@ -85,7 +85,7 @@ struct WebRecordingInspector: View {
                         .pickerStyle(.segmented)
                         .labelsHidden()
                     }
-                    InspectorSlider("Length", value: $viewModel.duration, in: WebScript.minimumDuration...WebRecordingViewModel.maximumDuration) {
+                    InspectorSlider("Length", value: $viewModel.duration, in: WebScript.minimumDuration...WebScript.maximumDuration) {
                         Text("\($0, format: .number.precision(.fractionLength(1))) s")
                     }
                 } footer: {

@@ -225,6 +225,57 @@ final class WebPageRenderer: NSObject {
     }
 }
 
+// MARK: - Inspecting
+
+extension WebPageRenderer {
+
+    /// Loads the script's page and lists what it shows at scroll 0: see ``WebInspectScript``.
+    /// `selectors` are the ones to also return the box of.
+    func inspect(selectors: [String]) async throws -> PageInspection {
+        guard let pageURL = script.url else { throw WebRenderError.noURL }
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+
+        try await load(pageURL)
+        // Real time, as in a take: the page's own scripts finish drawing before it's read
+        try await Task.sleep(for: Self.settleTime)
+        let result = try await webView.callAsyncJavaScript(
+            WebInspectScript.source, arguments: ["selectors": selectors], contentWorld: .defaultClient
+        )
+        guard let json = result as? String else { throw WebRenderError.loadFailed("The page couldn't be read.") }
+        return try JSONDecoder().decode(PageInspection.self, from: Data(json.utf8))
+    }
+}
+
+// MARK: - Output folder
+
+extension WebPageRenderer {
+
+    /// Renders `script` into a new movie in the output folder, with its telemetry beside it, and
+    /// returns the movie. A failed or cancelled take leaves no movie.
+    static func renderTake(_ script: WebScript, settings: SettingsStore, progress: (Double) -> Void) async throws -> URL {
+        let accessesOutputDirectory = settings.startAccessingOutputDirectory()
+        defer {
+            if accessesOutputDirectory {
+                settings.stopAccessingOutputDirectory()
+            }
+        }
+        let filename = SettingsStore.filename(prefix: "Reco_Web", fileExtension: "mov", date: .now)
+        let movie = settings.outputDirectory.appending(path: filename)
+        do {
+            let telemetry = try await WebPageRenderer(script: script).render(
+                to: movie, bitsPerPixel: VideoQuality.high.hevcBitsPerPixel, progress: progress
+            )
+            try JSONEncoder().encode(telemetry).write(to: InputTelemetry.sidecarURL(for: movie), options: .atomic)
+            Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "WebPageRenderer").info("Rendered \(filename)")
+            return movie
+        } catch {
+            try? FileManager.default.removeItem(at: movie)
+            throw error
+        }
+    }
+}
+
 // MARK: - WKNavigationDelegate
 
 extension WebPageRenderer: WKNavigationDelegate {

@@ -59,9 +59,6 @@ final class WebRecordingViewModel {
     /// How long edits must settle before the script is saved.
     private static let saveDelay = Duration.seconds(1)
 
-    /// The longest a script can be, in seconds.
-    static let maximumDuration = 120.0
-
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "WebRecordingViewModel")
 
     /// - Parameters:
@@ -158,7 +155,7 @@ final class WebRecordingViewModel {
     /// Loads the address typed: `https://` is added when it has no scheme, `http://` for local
     /// servers.
     func commitAddress() {
-        guard let url = Self.url(from: address) else { return }
+        guard let url = WebScript.url(from: address) else { return }
         address = url.absoluteString
         if url == script.url {
             preview.load(url)
@@ -175,20 +172,6 @@ final class WebRecordingViewModel {
         }
     }
 
-    /// The web page `text` names, or `nil` when it names none.
-    static func url(from text: String) -> URL? {
-        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return nil }
-        let hasScheme = text.prefixMatch(of: /[a-zA-Z][a-zA-Z0-9+.\-]*:\/\//) != nil
-        let host = text.prefix { !":/?#".contains($0) }.lowercased()
-        let isLocal = host == "localhost" || host == "127.0.0.1"
-        let address = hasScheme ? text : (isLocal ? "http://" : "https://") + text
-        guard let url = URL(string: address), ["http", "https"].contains(url.scheme?.lowercased()), url.host() != nil else {
-            return nil
-        }
-        return url
-    }
-
     /// The viewport preset in use, or `nil` for another size.
     var viewport: WebScript.Viewport? {
         get { WebScript.Viewport.allCases.first { $0.size == script.viewport } }
@@ -203,10 +186,10 @@ final class WebRecordingViewModel {
         set { edit("Scale") { $0.scale = newValue } }
     }
 
-    /// The script's length. It can't cut a clip or go beyond ``maximumDuration``.
+    /// The script's length. It can't cut a clip or go beyond ``WebScript/maximumDuration``.
     var duration: Double {
         get { script.duration }
-        set { edit("Length", coalescing: true) { $0.duration = min(max(newValue, $0.minimumAllowedDuration), Self.maximumDuration) } }
+        set { edit("Length", coalescing: true) { $0.duration = min(max(newValue, $0.minimumAllowedDuration), WebScript.maximumDuration) } }
     }
 
     // MARK: - Clips
@@ -387,24 +370,12 @@ extension WebRecordingViewModel {
                 renderProgress = nil
                 renderTask = nil
             }
-            let accessesOutputDirectory = settings.startAccessingOutputDirectory()
-            defer {
-                if accessesOutputDirectory {
-                    settings.stopAccessingOutputDirectory()
-                }
-            }
-            let filename = SettingsStore.filename(prefix: "Reco_Web", fileExtension: "mov", date: .now)
-            let movie = settings.outputDirectory.appending(path: filename)
             do {
-                let renderer = WebPageRenderer(script: script)
-                let telemetry = try await renderer.render(to: movie, bitsPerPixel: VideoQuality.high.hevcBitsPerPixel) { [weak self] progress in
+                let movie = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
                     self?.renderProgress = progress
                 }
-                try JSONEncoder().encode(telemetry).write(to: InputTelemetry.sidecarURL(for: movie), options: .atomic)
-                logger.info("Rendered \(filename)")
                 onRendered(movie)
             } catch {
-                try? FileManager.default.removeItem(at: movie)
                 if !(error is CancellationError) {
                     logger.error("Couldn't render the web script: \(error.localizedDescription)")
                     renderError = error.localizedDescription

@@ -28,11 +28,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
     private lazy var quickAccess = QuickAccessController { [screenshots] screenshot in await screenshots.save(screenshot) }
 
+    /// Serves the tools coding agents record web pages with; a movie it renders opens in the editor.
+    lazy var agentBridge = AgentBridgeServer(tools: AgentTools(settings: viewModel.settings) { [editorWindows] url in editorWindows.open(url) })
+
+    /// Runs coding agents on a request typed into the Record with AI Agent panel.
+    lazy var agentRecording = AgentRecordingViewModel(
+        tools: agentBridge.tools,
+        reportFailure: { [notifications = viewModel.notificationService] in notifications.sendAgentRecordingFailedNotification(reason: $0) },
+        token: AgentBridgeServer.token()
+    )
+
+    private lazy var agentRecordingPanel = AgentRecordingPanelController(viewModel: agentRecording)
+
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "AppDelegate")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerKeyboardShortcuts()
+        agentBridge.start()
         viewModel.notificationService.editRecording = editorWindows.open
+        viewModel.notificationService.retryAgentRecording = { [agentRecording] in agentRecording.retry() }
+        viewModel.notificationService.showAgentRecording = { [weak self] in self?.showAgentRecording() }
 
         // Hidden first so the last card never lands in the next shot, even with Show Reco on;
         // a new shot replaces it, a cancelled or failed one brings it back
@@ -65,6 +80,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editorWindows.showWebRecording()
     }
 
+    /// Shows the Record with AI Agent panel, to have a coding agent record a web page.
+    func showAgentRecording() {
+        agentRecordingPanel.show()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // The agent's command line would otherwise outlive the app
+        agentRecording.cancel()
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where url.scheme == "reco" {
             handle(url)
@@ -83,6 +108,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         KeyboardShortcuts.onKeyUp(for: .pauseRecording) { [viewModel] in
             Task { @MainActor in
                 viewModel.togglePause()
+            }
+        }
+
+        KeyboardShortcuts.onKeyUp(for: .recordWithAgent) { [weak self] in
+            Task { @MainActor in
+                self?.showAgentRecording()
             }
         }
 

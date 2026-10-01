@@ -20,6 +20,7 @@ import Testing
 struct AssetWriterTests {
 
     let videoSize = CGSize(width: 640, height: 480)
+    let defaults = TemporaryDefaults()
 
     // MARK: - Tests
 
@@ -318,9 +319,7 @@ struct AssetWriterTests {
 
     /// Creates a SettingsStore backed by a fresh, empty UserDefaults suite.
     func makeStore() -> SettingsStore {
-        let suiteName = "com.diip3sh.RecoTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        return SettingsStore(defaults: defaults)
+        SettingsStore(defaults: defaults.make())
     }
 
     func makeOutputURL() -> URL {

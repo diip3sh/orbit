@@ -14,11 +14,11 @@ import Testing
 @MainActor
 struct ScreenshotTests {
 
+    private let defaults = TemporaryDefaults()
+
     /// Creates a SettingsStore backed by a fresh, empty UserDefaults suite.
     private func makeSettings() -> SettingsStore {
-        let suiteName = "com.diip3sh.RecoTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        return SettingsStore(defaults: defaults)
+        SettingsStore(defaults: defaults.make())
     }
 
     // MARK: - Screenshot

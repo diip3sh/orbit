@@ -31,6 +31,24 @@ nonisolated struct WebScript: Codable, Equatable, Sendable {
     /// The shortest a script can be, in seconds.
     static let minimumDuration = 1.0
 
+    /// The longest a script can be, in seconds.
+    static let maximumDuration = 120.0
+
+    /// The web page `text` names, or `nil` when it names none: `https://` is added when it has no
+    /// scheme, `http://` for local servers.
+    static func url(from text: String) -> URL? {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        let hasScheme = text.prefixMatch(of: /[a-zA-Z][a-zA-Z0-9+.\-]*:\/\//) != nil
+        let host = text.prefix { !":/?#".contains($0) }.lowercased()
+        let isLocal = host == "localhost" || host == "127.0.0.1"
+        let address = hasScheme ? text : (isLocal ? "http://" : "https://") + text
+        guard let url = URL(string: address), ["http", "https"].contains(url.scheme?.lowercased()), url.host() != nil else {
+            return nil
+        }
+        return url
+    }
+
     var videoSize: CGSize {
         CGSize(width: viewport.width * CGFloat(scale), height: viewport.height * CGFloat(scale))
     }

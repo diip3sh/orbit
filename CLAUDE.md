@@ -9,7 +9,7 @@ This file covers what AGENTS.md doesn't: how to build this fork, what it adds on
 
 ## What this fork is
 
-Reco is a sandboxed macOS menu bar screen recorder (ScreenCaptureKit + AVAssetWriter), forked from BetterCapture
+Reco is a macOS menu bar screen recorder (ScreenCaptureKit + AVAssetWriter, not sandboxed since 2026-10-01, spec 0007), forked from BetterCapture
 and renamed: its own bundle ID (`com.diip3sh.Reco`), `reco://` links, and Reco in every name.
 This fork is working towards a free Screen Studio / CleanShot X alternative: record input telemetry
 now, build an editor (auto-zoom, smooth cursor, backgrounds) on top of it later.
@@ -35,7 +35,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 376 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 565 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -141,7 +141,7 @@ Key facts:
   `InputTelemetry.shadowTopFraction = 0.35` (macOS 27). Re-measure if Apple changes shadows.
 - **Clicks, scrolls and keystrokes** need Input Monitoring (requested when the toggle is turned on;
   effective after relaunch). Without it `keystrokesAvailable` is false, `keys` is empty, and clicks
-  and scrolls come from a global `NSEvent` monitor, which the sandbox feeds only with Accessibility.
+  and scrolls come from a global `NSEvent` monitor, which needs Accessibility.
 
 ### F2 — Cursor sprites (`feat/cursor-sprites`)
 
@@ -485,8 +485,8 @@ global hotkey, as in the countdown. macOS ignores cursor changes from an app tha
 Captures at native pixels with the recording visibility settings into memory (`Screenshot`: image, scale,
 capture time) and hands it to `ScreenshotController.onDidCapture` (the Quick Access card, C2). Nothing is
 written until the card's **Save**: `ScreenshotController.save(_:)` writes
-`Reco_Screenshot_<capture time>.png` into `~/Pictures/Reco` (`ScreenshotService.directory`, through the
-Pictures entitlement), whichever folder recordings go to.
+`Reco_Screenshot_<capture time>.png` into `~/Pictures/Reco` (`ScreenshotService.directory`), whichever folder
+recordings go to.
 
 | File | Role |
 |---|---|
@@ -527,7 +527,7 @@ recording.
 | `WebRecording/Service/WebPageRenderer.swift`, `WebMovieWriter.swift`, `OffscreenWebWindow.swift` | The take: an offscreen web view, one clock step, pointer events and snapshot per frame, HEVC out |
 | `WebRecording/Service/WebMuteScript.swift` | Silences the take's page: media elements, and Web Audio through a silent gain |
 | `WebRecording/Service/WebPreviewController.swift`, `WebPickScript.swift` | The window's live page (`pageZoom` to fit), pick mode in its own content world, scrubbing |
-| `WebRecording/ViewModel/WebRecordingViewModel.swift` | Edits with undo, picking, playhead, render; the script kept in Application Support (`WebScriptStore`) |
+| `WebRecording/ViewModel/WebRecordingViewModel.swift` | Edits with undo, picking, playhead, render; the script kept in `~/Library/Application Support/com.diip3sh.Reco` (`WebScriptStore`) |
 | `Model/TimelineClip.swift`, `Editor/View/TimelineLane.swift`, `TimelineBlock.swift` | Lane operations and the lane and block views, shared with the zoom lane |
 | `Model/EditCoalescing.swift` | Which edits share an undo step, for the editor and this window |
 
@@ -556,6 +556,81 @@ Key facts (measured on an M5, macOS 26.5, spec 0005):
   the preview stays dismissed in the take.
 - App Transport Security blocks plain `http://` pages (measured on neverssl.com); `http://localhost` loads.
 
+### S3 — Agent Bridge (`feat/agent-bridge`, spec 0006)
+
+Coding agents (Claude Code, Codex, OpenCode, Cursor, Gemini CLI, Claude Desktop, Grok Build) record a
+web page from its address. **Settings → Agents** finds the installed ones and adds a server named `reco` to
+each one's own settings. The agent then calls three MCP tools: `inspect_page` (selectors and boxes of a
+page), `record_page` (hover, click and scroll steps rendered like spec 0005, opened in the editor) and
+`render_status`. Started with `--mcp`, the app only pipes stdio to the running app's Unix socket, and
+starts the app first if needed.
+
+| File | Role |
+|---|---|
+| `RecoMain.swift` | `@main`: `--mcp` runs `AgentBridgeClient`, else `RecoApp.main()` |
+| `AgentBridge/Service/AgentBridgeClient.swift` | The `--mcp` process: launches Reco if the socket is absent, token line, stdin/stdout pipe |
+| `AgentBridge/Service/AgentBridgeServer.swift` | `NWListener` on `URL.recoSupport/agent.sock`; one SDK `Server` per connection; the per-install token |
+| `AgentBridge/Service/AgentSocketTransport.swift` | MCP `Transport` actor: first line must be the token, then newline-delimited JSON |
+| `AgentBridge/Service/AgentTools.swift` | Runs the tools; one render at a time, long-poll `wait` |
+| `AgentBridge/Service/AgentConfigStore.swift` | Reads and edits agents' settings; atomic rename, refuses symlinks |
+| `AgentBridge/Model/` | Pure: `AgentKind`, `AgentJSONConfig`, `AgentTOMLConfig`, `AgentToken`, `LineBuffer`, `AgentToolCatalog`, `InspectPageRequest`, `RecordPageRequest`, `RecordPlan`, `RenderStatus` |
+| `AgentBridge/ViewModel`, `View` | `AgentsSettingsViewModel`, `AgentsSettingsView` |
+| `WebRecording/Service/WebPageRenderer.swift` | `inspect(selectors:)` and `renderTake(_:settings:progress:)`, shared with the window |
+| `WebRecording/Service/WebInspectScript.swift`, `Model/PageInspection.swift` | What `inspect_page` returns |
+| `WebRecording/Service/WebPickScript.swift` | `selectorFunctions`, shared so pick and inspect name elements alike |
+
+Key facts:
+- The socket is `~/Library/Application Support/com.diip3sh.Reco/agent.sock` (61 bytes plus the user
+  name; a Unix socket path holds 104), found through the password database's home, not `$HOME`. No HTTP
+  server or TCP port. Any process of the same user can reach it, so the token (`RECO_BRIDGE_TOKEN` in the agent's
+  `env`, kept in UserDefaults as `agentBridgeToken`) is the guard: checked once per connection as its
+  first line, and never logged.
+- `record_page` and `render_status` wait 45 s, `inspect_page` 40 s: under the 60 s tool timeout of Codex
+  and Claude Desktop. A longer render is followed with `render_status`.
+- Windsurf is left out (config path unverifiable). `CODEX_HOME`, `GROK_HOME`, XDG and `OPENCODE_CONFIG`
+  aren't followed (they could be now); `opencode.jsonc` isn't handled.
+- Edited JSON keeps its content but its key order becomes sorted. Files with comments are refused.
+- The test host is Reco, so its server takes `agent.sock` from a running Reco while tests run.
+- The `--mcp` client is covered by `AgentBridgeClientTests`: the test host starts another copy of itself.
+- Config files are written through a temporary file next to the target, then `rename(2)`.
+
+### S4 — Agent recording (`feat/agent-bridge`, spec 0007)
+
+**Record with AI Agent…** in the menu bar, and the shortcut of the same name (Settings → Shortcuts →
+Web Recording, no default), open a Spotlight-style bar: website address, a description of the video,
+an agent, a model and **Record**. Reco runs the agent's command line headlessly with only its own
+three MCP tools allowed; the agent records through the bridge (S3) and the editor opens. While it
+runs the bar and the menu bar (a sparkle, "AI", then the render's percent) show it; **Cancel** stops
+the command line. A failure shows its reason with **Retry** in the bar and in a notification.
+
+| File | Role |
+|---|---|
+| `AgentRecording/Model/AgentRecordingRequest.swift`, `AgentInvocation.swift` | Pure: the prompt; every agent's exact arguments, environment and support files (`make(for:in:)`, the one place that knows the flags) |
+| `AgentRecording/Model/AgentModelCatalog.swift`, `AgentRunOutcome.swift`, `OutputTail.swift`, `LoginEnvironment.swift` | Pure: model lists; process end + render → outcome; the last 16 KB and the reason shown; login shell environment parsing and `PATH` lookup |
+| `AgentRecording/Service/AgentProcess.swift` | `Process` with pipes, time limit, cancel (SIGTERM, SIGKILL after 3 s); `loginEnvironment()` |
+| `AgentRecording/ViewModel/AgentRecordingViewModel.swift` | Fields, remembered agent and model, `refreshAgents()`, `run`/`retry`/`cancel`, `menuBarText`; watches `AgentTools.job` |
+| `AgentRecording/View/AgentRecordingPanelController.swift`, `AgentRecordingView.swift`, `AgentRecordingFooter.swift`, `AgentRecordingFailure.swift` | The non-activating `QuickAccessPanel`, its content, footer by state, failure row |
+| `Service/ContainerMigration.swift`, `Service/URL+RecoPaths.swift` | One-time move from the old sandbox container; `userHome` and `recoSupport` |
+| `Service/NotificationService.swift` | `AGENT_RECORDING_FAILED` category with Retry |
+| `RecoApp.swift` (`MenuBarLabel`) | `fixedWidthImage(_:reference:symbol:)`, shared by the timer and the agent state |
+
+Key facts:
+- Commands run with the user's **login shell environment** (`$SHELL -l -i -c "printf marker; env -0"`, 10 s,
+  read again each time the bar opens; 0.86 s here), never through a shell string; binaries are found on
+  that `PATH`. Claude Desktop has no command line and isn't offered.
+- Only Reco's tools run: Claude `--tools "" --allowedTools mcp__reco__*`, Codex `approve` mode and a
+  read-only sandbox, OpenCode inline permission config, Gemini policy file, Grok `dontAsk` (its read-only
+  built-ins remain), Cursor workspace `cli.json`. Codex wasn't run (not installed).
+- The run's limit is **15 minutes** (a 30 s apple.com take at 2x is 1–2 minutes; linear.app needs 18 for 60 s).
+  After the agent exits its render is waited for.
+- Outcome rules (in order): cancelled; a new render `done` is a success even after a bad exit; time-out;
+  launch failure; non-zero exit with the last output lines; zero exit with a failed render; zero exit
+  without a render. The bridge token is replaced by "…" in any reason.
+- "Set Up Agents…" sends `showSettingsWindow:` (`openSettings` belongs to a scene) after writing the
+  Agents tab to the `settingsTab` default.
+- The panel's motion follows the apple-design skill: one `isPresented` flag drives a bounce-free spring,
+  so closing and reopening mid-animation retargets; Reduce Motion cross-fades, Reduce Transparency is solid.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -572,7 +647,20 @@ cursorShapes:  [{ time, sprite }]
 CG geometry types encode as arrays (`CGRect` → `[[x,y],[w,h]]`). Bump `version` on incompatible changes
 and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVideo` and the cursor fields.
 
-## Sandbox findings (measured, keep the app sandboxed)
+## Permission findings and the sandbox decision
+
+**2026-10-01: the App Sandbox is removed** (spec 0007): agent command lines need the user's `PATH`,
+logins and settings, and a sandboxed parent's children inherit the sandbox. Entitlements are only
+`device.audio-input` and `device.camera`. Paths: `URL.userHome` (passwd, ignores `$HOME`),
+`URL.recoSupport` (`~/Library/Application Support/com.diip3sh.Reco`: `WebScript.json`, `agent.sock`,
+`AgentRun/`). `ContainerMigration` moves the old container's settings (agent token included) and
+Application Support files over once. Test `UserDefaults` suites come from `TemporaryDefaults` (named by a temp path, so no plists
+land in `~/Library/Preferences`). Unsandboxed, `startAccessingSecurityScopedResource()` returns false for a plain
+`NSOpenPanel` URL, so never treat false as failure.
+
+The findings below were measured while sandboxed; the TCC facts (Accessibility, Input Monitoring)
+should hold but need re-measuring.
+
 
 - `NSEvent.mouseLocation` polling works without any permission. Global mouse/scroll monitors need
   Accessibility (Apple DTS, developer.apple.com/forums/thread/811443): on macOS 26.3 two recordings
@@ -607,6 +695,8 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 | S1 editor design: dark studio, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 | S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |
+| S3 agent bridge (spec 0006): MCP server for coding agents | Done; tested over the real socket (token, `initialize`, `tools/list`, error calls), the `--mcp` process (`AgentBridgeClientTests`), config editors and plans. Not yet tried: real agents connected by hand, a real `record_page` render, Gatekeeper on another Mac |
+| S4 agent recording (spec 0007): Record with AI Agent bar, no App Sandbox | Done and tested with fakes and real `/bin/sh` processes; the login-shell environment was read on this Mac (0.86 s). Not yet tried: any real agent run, the panel in the app (focus, Esc, picker menus, Reduce Motion/Transparency), the update from the sandboxed release (migration), Codex |
 
 What to build next, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
 `docs/specs/0004-next-features.md`.

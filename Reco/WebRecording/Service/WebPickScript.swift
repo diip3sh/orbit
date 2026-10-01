@@ -17,30 +17,35 @@ enum WebPickScript {
 
     static let messageName = "pick"
 
+    /// `unique` and `selectorFor`, shared with ``WebInspectScript`` so both name elements alike.
+    static let selectorFunctions = #"""
+    const unique = (selector) => { try { return document.querySelectorAll(selector).length === 1; } catch { return false; } };
+    const selectorFor = (element) => {
+      const parts = [];
+      for (let node = element; node && node.nodeType === Node.ELEMENT_NODE; node = node.parentElement) {
+        let part;
+        if (node.id && unique('#' + CSS.escape(node.id))) {
+          part = '#' + CSS.escape(node.id);
+        } else {
+          part = node.localName + [...node.classList].slice(0, 3).map((name) => '.' + CSS.escape(name)).join('');
+          const parent = node.parentElement;
+          if (parent && parent.querySelectorAll(':scope > ' + part).length > 1) {
+            const siblings = [...parent.children].filter((child) => child.localName === node.localName);
+            part += ':nth-of-type(' + (siblings.indexOf(node) + 1) + ')';
+          }
+        }
+        parts.unshift(part);
+        const selector = parts.join(' > ');
+        if (unique(selector)) return selector;
+      }
+      return parts.join(' > ');
+    };
+    """#
+
     static let source = #"""
     (() => {
       let outline = null;
-      const unique = (selector) => { try { return document.querySelectorAll(selector).length === 1; } catch { return false; } };
-      const selectorFor = (element) => {
-        const parts = [];
-        for (let node = element; node && node.nodeType === Node.ELEMENT_NODE; node = node.parentElement) {
-          let part;
-          if (node.id && unique('#' + CSS.escape(node.id))) {
-            part = '#' + CSS.escape(node.id);
-          } else {
-            part = node.localName + [...node.classList].slice(0, 3).map((name) => '.' + CSS.escape(name)).join('');
-            const parent = node.parentElement;
-            if (parent && parent.querySelectorAll(':scope > ' + part).length > 1) {
-              const siblings = [...parent.children].filter((child) => child.localName === node.localName);
-              part += ':nth-of-type(' + (siblings.indexOf(node) + 1) + ')';
-            }
-          }
-          parts.unshift(part);
-          const selector = parts.join(' > ');
-          if (unique(selector)) return selector;
-        }
-        return parts.join(' > ');
-      };
+      \#(selectorFunctions)
       const show = (element) => {
         if (!outline) {
           outline = document.createElement('div');

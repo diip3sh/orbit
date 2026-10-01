@@ -15,4 +15,5 @@ extension KeyboardShortcuts.Name {
     static let captureArea = Self("captureArea")
     static let captureWindow = Self("captureWindow")
     static let captureScreen = Self("captureScreen")
+    static let recordWithAgent = Self("recordWithAgent")
 }

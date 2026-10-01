@@ -1,0 +1,162 @@
+//
+//  AgentTools.swift
+//  Reco
+//
+
+import Foundation
+
+/// Runs the tools an agent calls (spec 0006): inspect a page, record it, and follow the render.
+///
+/// A render takes longer than most agents wait for a tool, so `record_page` and `render_status` wait
+/// up to ``waitLimit`` and report how far it is; the agent asks again. One render runs at a time and
+/// only the latest is remembered.
+@MainActor
+@Observable
+final class AgentTools {
+
+    /// The latest render, or `nil` before the first. Only this type sets it, except in tests.
+    var job: RenderStatus?
+
+    @ObservationIgnored private var renderTask: Task<Void, Never>?
+    @ObservationIgnored private let settings: SettingsStore
+    @ObservationIgnored private let onRendered: (URL) -> Void
+
+    /// How long `record_page` and `render_status` wait for a render. Under the 60 s default tool
+    /// timeout of Codex and Claude Desktop.
+    static let waitLimit = Duration.seconds(45)
+
+    /// How long `inspect_page` waits for a page, under the same timeout.
+    static let inspectLimit = Duration.seconds(40)
+
+    private static let pollInterval = Duration.milliseconds(250)
+
+    /// - Parameter onRendered: Called with each rendered movie, to open it in the editor.
+    init(settings: SettingsStore, onRendered: @escaping (URL) -> Void) {
+        self.settings = settings
+        self.onRendered = onRendered
+    }
+
+    /// Runs tool `name` with its JSON `arguments`. The text is JSON for the agent; a failure is
+    /// reported as an error text, not thrown.
+    func call(_ name: String, arguments: Data) async -> (text: String, isError: Bool) {
+        do {
+            switch name {
+            case AgentToolCatalog.inspectPage:
+                return (try Self.encode(try await inspect(arguments)), false)
+            case AgentToolCatalog.recordPage:
+                let status = try await record(arguments)
+                return (try Self.encode(status), status.status == .failed)
+            case AgentToolCatalog.renderStatus:
+                let status = try await status(arguments)
+                return (try Self.encode(status), status.status == .failed)
+            default:
+                throw AgentToolError.unknownTool(name)
+            }
+        } catch {
+            return (error.localizedDescription, true)
+        }
+    }
+
+    // MARK: - Tools
+
+    private func inspect(_ arguments: Data) async throws -> PageInspection {
+        let script = try Self.decode(InspectPageRequest.self, from: arguments).validated()
+        return try await Self.withDeadline(Self.inspectLimit) {
+            try await WebPageRenderer(script: script).inspect(selectors: [])
+        }
+    }
+
+    private func record(_ arguments: Data) async throws -> RenderStatus {
+        let plan = try Self.decode(RecordPageRequest.self, from: arguments).plan()
+        if let job, job.status == .rendering {
+            throw AgentToolError.busy(renderID: job.renderID)
+        }
+        let id = UUID().uuidString
+        job = RenderStatus(renderID: id, status: .rendering, progress: 0)
+        renderTask = Task { await render(plan, id: id) }
+        return try await wait(for: id)
+    }
+
+    private func status(_ arguments: Data) async throws -> RenderStatus {
+        try await wait(for: try Self.decode(RenderStatusRequest.self, from: arguments).renderID)
+    }
+
+    // MARK: - Render
+
+    /// Looks at the page to aim the plan, renders it and records the outcome in ``job``.
+    private func render(_ plan: RecordPlan, id: String) async {
+        do {
+            let page = try await WebPageRenderer(script: plan.inspectionScript).inspect(selectors: plan.selectors)
+            let (script, unmatched) = try plan.script(page: page)
+            job?.unmatchedSelectors = unmatched.isEmpty ? nil : unmatched
+            let movie = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
+                self?.job?.progress = progress
+            }
+            job?.status = .done
+            job?.progress = 1
+            job?.movie = movie.path(percentEncoded: false)
+            job?.telemetry = InputTelemetry.sidecarURL(for: movie).path(percentEncoded: false)
+            onRendered(movie)
+        } catch {
+            job?.status = .failed
+            job?.error = error.localizedDescription
+        }
+    }
+
+    /// The render `id` once it's over, or as it is after ``waitLimit``.
+    private func wait(for id: String) async throws -> RenderStatus {
+        let deadline = ContinuousClock.now + Self.waitLimit
+        while let job, job.renderID == id, job.status == .rendering, ContinuousClock.now < deadline {
+            try await Task.sleep(for: Self.pollInterval)
+        }
+        guard let job, job.renderID == id else { throw AgentToolError.unknownRender }
+        return job
+    }
+
+    // MARK: - JSON
+
+    private static func encode(_ value: some Encodable) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return String(data: try encoder.encode(value), encoding: .utf8) ?? ""
+    }
+
+    private static func decode<Request: Decodable>(_ type: Request.Type, from data: Data) throws(AgentToolError) -> Request {
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch let error as DecodingError {
+            throw .invalidArgument("The arguments are wrong at \"\(error.location)\": check the tool's input schema.")
+        } catch {
+            throw .invalidArgument("The arguments aren't valid JSON.")
+        }
+    }
+
+    /// `work`'s result, or ``AgentToolError/timedOut`` when it takes longer than `limit`.
+    private static func withDeadline<Result: Sendable>(
+        _ limit: Duration, _ work: @escaping @MainActor @Sendable () async throws -> Result
+    ) async throws -> Result {
+        try await withThrowingTaskGroup(of: Result.self) { group in
+            group.addTask { try await work() }
+            group.addTask {
+                try await Task.sleep(for: limit)
+                throw AgentToolError.timedOut
+            }
+            defer { group.cancelAll() }
+            guard let result = try await group.next() else { throw AgentToolError.timedOut }
+            return result
+        }
+    }
+}
+
+private extension DecodingError {
+
+    /// The dotted path of the key at fault.
+    var location: String {
+        let path: [any CodingKey] = switch self {
+        case .keyNotFound(let key, let context): context.codingPath + [key]
+        case .typeMismatch(_, let context), .valueNotFound(_, let context), .dataCorrupted(let context): context.codingPath
+        @unknown default: []
+        }
+        return path.map(\.stringValue).joined(separator: ".")
+    }
+}

@@ -27,15 +27,15 @@ struct WebRecordingViewModelTests {
     }
 
     @Test func readsAddressesAsWebPages() {
-        #expect(WebRecordingViewModel.url(from: " example.com/pricing ")?.absoluteString == "https://example.com/pricing")
-        #expect(WebRecordingViewModel.url(from: "localhost:3000")?.absoluteString == "http://localhost:3000")
-        #expect(WebRecordingViewModel.url(from: "http://example.com")?.absoluteString == "http://example.com")
-        #expect(WebRecordingViewModel.url(from: "example.com/in?next=https://example.com")?.absoluteString == "https://example.com/in?next=https://example.com")
-        #expect(WebRecordingViewModel.url(from: "localhost.run/demo")?.absoluteString == "https://localhost.run/demo")
-        #expect(WebRecordingViewModel.url(from: "127.0.0.1")?.absoluteString == "http://127.0.0.1")
-        #expect(WebRecordingViewModel.url(from: "") == nil)
-        #expect(WebRecordingViewModel.url(from: "not a page") == nil)
-        #expect(WebRecordingViewModel.url(from: "ftp://example.com") == nil)
+        #expect(WebScript.url(from: " example.com/pricing ")?.absoluteString == "https://example.com/pricing")
+        #expect(WebScript.url(from: "localhost:3000")?.absoluteString == "http://localhost:3000")
+        #expect(WebScript.url(from: "http://example.com")?.absoluteString == "http://example.com")
+        #expect(WebScript.url(from: "example.com/in?next=https://example.com")?.absoluteString == "https://example.com/in?next=https://example.com")
+        #expect(WebScript.url(from: "localhost.run/demo")?.absoluteString == "https://localhost.run/demo")
+        #expect(WebScript.url(from: "127.0.0.1")?.absoluteString == "http://127.0.0.1")
+        #expect(WebScript.url(from: "") == nil)
+        #expect(WebScript.url(from: "not a page") == nil)
+        #expect(WebScript.url(from: "ftp://example.com") == nil)
     }
 
     @Test func aNewCursorClipIsSelectedAndWaitsForItsTarget() throws {
@@ -114,7 +114,7 @@ struct WebRecordingViewModelTests {
         viewModel.duration = 2
         #expect(viewModel.duration == 7)
         viewModel.duration = 500
-        #expect(viewModel.duration == WebRecordingViewModel.maximumDuration)
+        #expect(viewModel.duration == WebScript.maximumDuration)
     }
 
     @Test func deletesTheSelectedClip() {

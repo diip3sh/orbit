@@ -21,8 +21,10 @@ final class NotificationService: NSObject {
         static let categoryRecordingSaved = "RECORDING_SAVED"
         static let categoryRecordingEditable = "RECORDING_EDITABLE"
         static let categoryRecordingFailed = "RECORDING_FAILED"
+        static let categoryAgentRecordingFailed = "AGENT_RECORDING_FAILED"
         static let actionShowInFinder = "SHOW_IN_FINDER"
         static let actionEdit = "EDIT"
+        static let actionRetryAgent = "RETRY_AGENT"
     }
 
     nonisolated private enum UserInfoKey {
@@ -35,6 +37,12 @@ final class NotificationService: NSObject {
 
     /// Opens a recording in the editor, from the notification's Edit action. Set by the app delegate.
     @ObservationIgnored var editRecording: ((URL) -> Void)?
+
+    /// Runs the last agent recording again, from the failure notification's Retry. Set by the app delegate.
+    @ObservationIgnored var retryAgentRecording: (() -> Void)?
+
+    /// Opens the Record with AI Agent panel, from tapping the failure notification. Set by the app delegate.
+    @ObservationIgnored var showAgentRecording: (() -> Void)?
 
     private let settings: SettingsStore
     private let logger = Logger(
@@ -94,10 +102,18 @@ final class NotificationService: NSObject {
             intentIdentifiers: []
         )
 
+        // Category for a failed agent recording, which can run again
+        let agentRecordingFailedCategory = UNNotificationCategory(
+            identifier: NotificationIdentifier.categoryAgentRecordingFailed,
+            actions: [UNNotificationAction(identifier: NotificationIdentifier.actionRetryAgent, title: "Retry", options: [])],
+            intentIdentifiers: []
+        )
+
         UNUserNotificationCenter.current().setNotificationCategories([
             recordingSavedCategory,
             recordingEditableCategory,
-            recordingFailedCategory
+            recordingFailedCategory,
+            agentRecordingFailedCategory
         ])
     }
 
@@ -204,6 +220,16 @@ final class NotificationService: NSObject {
         )
     }
 
+    /// Sends a notification for an agent recording that failed, with a Retry action
+    /// - Parameter reason: Why it failed, with secrets already removed
+    func sendAgentRecordingFailedNotification(reason: String) {
+        send(
+            title: "Agent Recording Failed",
+            body: reason,
+            category: NotificationIdentifier.categoryAgentRecordingFailed
+        )
+    }
+
     // MARK: - Private Methods
 
     /// Builds and delivers a notification request
@@ -276,6 +302,18 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         let opensEditor = userInfo[UserInfoKey.opensEditor] as? Bool ?? false
 
         switch response.actionIdentifier {
+        case NotificationIdentifier.actionRetryAgent:
+            await MainActor.run {
+                retryAgentRecording?()
+            }
+
+        case UNNotificationDefaultActionIdentifier
+            where response.notification.request.content.categoryIdentifier == NotificationIdentifier.categoryAgentRecordingFailed:
+            // Tapped a failed agent recording: the panel shows why, with Retry
+            await MainActor.run {
+                showAgentRecording?()
+            }
+
         case NotificationIdentifier.actionEdit,
             UNNotificationDefaultActionIdentifier where opensEditor:
             // User chose "Edit", or tapped a notification for a recording that needs the editor

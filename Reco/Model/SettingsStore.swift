@@ -637,15 +637,15 @@ final class SettingsStore {
 
             if isStale {
                 // Bookmark is stale, try to recreate it
-                if url.startAccessingSecurityScopedResource() {
-                    defer { url.stopAccessingSecurityScopedResource() }
-                    if let newBookmark = try? url.bookmarkData(
-                        options: .withSecurityScope,
-                        includingResourceValuesForKeys: nil,
-                        relativeTo: nil
-                    ) {
-                        customOutputDirectoryBookmark = newBookmark
-                    }
+                // Not scoped when the app isn't sandboxed, so a false start isn't a failure
+                let isAccessing = url.startAccessingSecurityScopedResource()
+                defer { if isAccessing { url.stopAccessingSecurityScopedResource() } }
+                if let newBookmark = try? url.bookmarkData(
+                    options: .withSecurityScope,
+                    includingResourceValuesForKeys: nil,
+                    relativeTo: nil
+                ) {
+                    customOutputDirectoryBookmark = newBookmark
                 }
             }
 
@@ -659,10 +659,8 @@ final class SettingsStore {
     /// Sets a custom output directory from a user-selected URL
     /// - Parameter url: The URL selected by the user via NSOpenPanel
     func setCustomOutputDirectory(_ url: URL) {
-        guard url.startAccessingSecurityScopedResource() else {
-            return
-        }
-        defer { url.stopAccessingSecurityScopedResource() }
+        let isAccessing = url.startAccessingSecurityScopedResource()
+        defer { if isAccessing { url.stopAccessingSecurityScopedResource() } }
 
         do {
             let bookmarkData = try url.bookmarkData(
