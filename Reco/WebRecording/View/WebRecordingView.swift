@@ -53,6 +53,5 @@ struct WebRecordingView: View {
         }
         .frame(minWidth: 760, minHeight: 560)
         .editorWindowBackground()
-        .tint(EditorTheme.accent)
     }
 }

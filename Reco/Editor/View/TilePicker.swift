@@ -36,7 +36,7 @@ struct TilePicker<Value: Hashable, Picture: View>: View {
                     .background {
                         if isSelected {
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(.white.opacity(0.1))
+                                .fill(.primary.opacity(0.1))
                                 .matchedGeometryEffect(id: "highlight", in: highlight)
                         } else {
                             RoundedRectangle(cornerRadius: 8)

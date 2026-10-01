@@ -42,7 +42,7 @@ private struct EditorButton: View {
                 if isPrimary {
                     shape.fill(isLit ? EditorTheme.primaryHover : EditorTheme.primary)
                 } else {
-                    shape.fill(.white.opacity(isEnabled && configuration.isPressed ? 0.06 : 0))
+                    shape.fill(.primary.opacity(isEnabled && configuration.isPressed ? 0.06 : 0))
                     shape.strokeBorder(isLit ? EditorTheme.faint : EditorTheme.hairline)
                 }
             }

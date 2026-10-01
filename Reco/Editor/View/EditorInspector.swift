@@ -24,7 +24,7 @@ struct EditorInspector: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(EditorTheme.mediumSpacing)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.white.opacity(0.06), in: .rect(cornerRadius: 8))
+                        .background(.primary.opacity(0.06), in: .rect(cornerRadius: 8))
                         .padding([.horizontal, .top])
                 }
 

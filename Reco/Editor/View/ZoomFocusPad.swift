@@ -38,7 +38,7 @@ struct ZoomFocusPad: View {
                 Image(decorative: image, scale: 1)
                     .resizable()
             } else {
-                Color.white.opacity(0.05)
+                Color.primary.opacity(0.05)
             }
             Canvas { context, size in
                 context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black.opacity(0.5)))

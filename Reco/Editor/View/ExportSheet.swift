@@ -121,7 +121,6 @@ struct ExportSheet: View {
         .padding(EditorTheme.largeSpacing)
         .frame(width: 440)
         .foregroundStyle(EditorTheme.ink)
-        .tint(EditorTheme.accent)
         .editorMotion(value: settings)
         .editorMotion(value: viewModel.exportProgress != nil)
         .editorMotion(value: error?.localizedDescription)

@@ -62,7 +62,6 @@ struct MenuBarToggle: View {
             Spacer()
             Toggle("", isOn: $isOn)
                 .toggleStyle(.switch)
-                .tint(.blue)
                 .scaleEffect(0.8)
                 .disabled(isDisabled)
         }

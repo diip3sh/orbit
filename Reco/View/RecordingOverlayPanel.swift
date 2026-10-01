@@ -23,13 +23,12 @@ private final class RecordingOverlayNSPanel: NSPanel {
 
         isOpaque = false
         backgroundColor = .clear
-        // On once the panel has settled: a window shadow doesn't follow the fade
+        // No window shadow: it outlines the whole rectangle around the rounded glass, which has its own edge
         hasShadow = false
         level = .floating
         isMovableByWindowBackground = true
         isReleasedWhenClosed = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        appearance = NSAppearance(named: .darkAqua)
         // The view animates itself, which the system's own window animation would only distort
         animationBehavior = .none
     }
@@ -89,13 +88,6 @@ final class RecordingOverlayCoordinator {
         newPanel.makeKeyAndOrderFront(nil)
         panel = newPanel
 
-        Task {
-            try? await Task.sleep(for: PanelPresentation.exitDelay)
-            guard panel === newPanel, presence.isShown else { return }
-            newPanel.hasShadow = true
-            newPanel.invalidateShadow()
-        }
-
         // Auto-start live preview
         startPreview(of: viewModel)
     }
@@ -104,7 +96,6 @@ final class RecordingOverlayCoordinator {
     func dismiss() {
         guard let panel, removal == nil else { return }
         presence.isShown = false
-        panel.hasShadow = false
         panel.ignoresMouseEvents = true
 
         if let viewModel {

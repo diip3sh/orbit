@@ -111,16 +111,14 @@ final class EditorWindowManager: NSObject {
         activate(window)
     }
 
-    /// A centred window in the editor's look: always dark, the content running under a transparent
-    /// title bar and toolbar.
+    /// A centred window in the editor's look: the content running under a transparent title bar and toolbar.
     private func makeWindow(_ contentViewController: NSViewController, title: String, size: NSSize) -> NSWindow {
         let window = NSWindow(contentViewController: contentViewController)
         window.title = title
-        window.appearance = NSAppearance(named: .darkAqua)
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
         window.toolbarStyle = .unified
-        window.backgroundColor = NSColor(EditorTheme.stage)
+        window.backgroundColor = .windowBackgroundColor
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         window.delegate = self

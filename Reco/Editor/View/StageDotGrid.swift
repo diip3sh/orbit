@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// A faint purple dot grid behind the preview that fades out before the stage's edges.
+/// A faint dot grid behind the preview that fades out before the stage's edges.
 struct StageDotGrid: View {
     private static let spacing: CGFloat = 23
     private static let dotSize: CGFloat = 1.5
@@ -21,7 +21,7 @@ struct StageDotGrid: View {
                     dots.addEllipse(in: CGRect(x: center.x - Self.dotSize / 2, y: center.y - Self.dotSize / 2, width: Self.dotSize, height: Self.dotSize))
                 }
             }
-            context.fill(dots, with: .color(EditorTheme.accent.opacity(0.13)))
+            context.fill(dots, with: .color(EditorTheme.faint.opacity(0.5)))
         }
         .mask {
             EllipticalGradient(stops: [.init(color: .black, location: 0.3), .init(color: .clear, location: 1)], endRadiusFraction: 0.72)

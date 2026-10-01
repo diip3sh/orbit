@@ -55,6 +55,6 @@ private struct EditorIconButton: View {
         if isProminent {
             return isLit ? EditorTheme.primaryHover : EditorTheme.primary
         }
-        return .white.opacity(isEnabled && configuration.isPressed ? 0.12 : isLit ? 0.06 : 0)
+        return .primary.opacity(isEnabled && configuration.isPressed ? 0.12 : isLit ? 0.06 : 0)
     }
 }

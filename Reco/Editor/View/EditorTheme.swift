@@ -7,40 +7,40 @@
 
 import SwiftUI
 
-/// The editor's look, after zeron.sh: a violet-black ground the desktop frosts through, text in
-/// three tones (ink, dim, faint), hairlines instead of boxes, an off-white main button, and one
-/// purple for the playhead and the selection.
+/// The editor's look in the system's colors, so it follows the user's appearance (light or dark) and
+/// accent color: text in three tones (ink, dim, faint), hairlines instead of boxes, a label-colored main
+/// button, and the accent for the playhead and the selection.
 enum EditorTheme {
 
-    /// The ground, laid over the desktop at 80% like the app's shell. #06040a
-    static let stage = Color(red: 0.024, green: 0.016, blue: 0.039)
+    /// The ground, laid over the desktop at 80%.
+    static let stage = Color(nsColor: .windowBackgroundColor)
 
-    /// Under the timeline. #0c0913
-    static let panel = Color(red: 0.047, green: 0.035, blue: 0.075)
+    /// Under the timeline.
+    static let panel = Color(nsColor: .underPageBackgroundColor)
 
-    /// Text. #ece7f7
-    static let ink = Color(red: 0.925, green: 0.906, blue: 0.969)
+    /// Text.
+    static let ink = Color(nsColor: .labelColor)
 
-    /// Values, notes and the other text under the main one. #9c92b5
-    static let dim = Color(red: 0.612, green: 0.573, blue: 0.71)
+    /// Values, notes and the other text under the main one.
+    static let dim = Color(nsColor: .secondaryLabelColor)
 
-    /// Marks that only structure, like ruler ticks and section titles' chevrons. #5d5178
-    static let faint = Color(red: 0.365, green: 0.318, blue: 0.471)
+    /// Marks that only structure, like ruler ticks and section titles' chevrons.
+    static let faint = Color(nsColor: .tertiaryLabelColor)
 
-    /// Lines between areas and around pictures. #241c36
-    static let hairline = Color(red: 0.141, green: 0.11, blue: 0.212)
+    /// Lines between areas and around pictures.
+    static let hairline = Color(nsColor: .separatorColor)
 
-    /// Lanes and quieter edges. #1a1428
-    static let softHairline = Color(red: 0.102, green: 0.078, blue: 0.157)
+    /// Lanes and quieter edges.
+    static let softHairline = Color(nsColor: .quaternarySystemFill)
 
-    /// The playhead and the selection. Nothing else is purple. #8b5cf6
-    static let accent = Color(red: 0.545, green: 0.361, blue: 0.965)
+    /// The playhead and the selection: the user's accent color (the asset catalog's is empty).
+    static let accent = Color.accentColor
 
-    /// The main button (Export, play) and the trim handles, with its hover and its text.
-    /// #f7f4ee, #ddd6ea, #17141d
-    static let primary = Color(red: 0.969, green: 0.957, blue: 0.933)
-    static let primaryHover = Color(red: 0.867, green: 0.839, blue: 0.918)
-    static let primaryInk = Color(red: 0.09, green: 0.078, blue: 0.114)
+    /// The main button (Export, play) and the trim handles, with its hover and its text: the label
+    /// color, so dark on light and light on dark.
+    static let primary = Color(nsColor: .labelColor)
+    static let primaryHover = Color(nsColor: .labelColor).opacity(0.85)
+    static let primaryInk = Color(nsColor: .windowBackgroundColor)
 
     // Space on a 4-point grid: inside a control, between a title and its control, between
     // controls, around panels, and around the stage and sheets

@@ -207,16 +207,19 @@ Key facts:
 
 A CleanShot-style card for each screenshot. After Capture Area it opens beside the pointer, where the drag
 ended, on the pointer's sides facing away from the captured area (`Screenshot.region`,
-`panelFrame(in:pointer:awayFrom:)`). Otherwise it opens in the bottom-left corner of the screen under the
-mouse (clear of notifications and the menu bar popover, top-right). It has close, a grab handle, the preview,
-and **Copy** (⌘C), **Save** (⌘S), **Recognize Text** and **Pin**. The card takes key when it appears, without
+`panelFrame(in:size:pointer:awayFrom:)`). Otherwise it opens in the bottom-left corner of the screen under the
+mouse (clear of notifications and the menu bar popover, top-right). The card takes the screenshot's shape
+(`cardSize(for:)`: fitted in 260×220, never enlarged, at least 200×120) on an 8 pt glass edge. Under the pointer
+the shot dims and shows **Copy ⌘C** and **Save ⌘S** (the shortcut shown dimmed in the button), with Close, **Recognize Text** and **Pin** as small
+icons in its corners; hidden, they stay in the view so the shortcuts still work. The card takes key when it appears, without
 activating the app, so the shortcuts work until another window is clicked; typing goes to the card meanwhile.
 It grows from the card's corner nearest the pointer (`QuickAccessController.anchor(for:pointer:)`, the
 bottom-left without a region) and shrinks back there when closed, copied, saved or pinned; `hide()` and
-`restore()` stay instant. Drag the card by its handle or background: it follows the pointer 1:1 from where it
+`restore()` stay instant. Drag the card by its 8 pt edge: it follows the pointer 1:1 from where it
 was grabbed (`PanelDragger`), and a flick that projects past the screen's edge (`GesturePhysics.flickExit`)
-throws it off at the release speed and closes it; a slow drag stays where dropped, a flick inwards too. Drag the preview into
-any app to drop the image. Nothing is written until **Save**. The card stays until
+throws it off at the release speed and closes it; a slow drag stays where dropped, a flick inwards too. Drag the shot into
+any app to drop the image. The card and the pre-record overlay have no window shadow: it outlines
+the rectangle around their rounded glass. Nothing is written until **Save**. The card stays until
 closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate` wires
 `ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and `onDidCapture` to
 `show(_:)` for a new screenshot or `restore()` (same card, same place) when the capture is cancelled or fails.
@@ -230,7 +233,7 @@ closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate`
 |---|---|
 | `QuickAccess/View/QuickAccessController.swift`, `QuickAccessPanel.swift` | Non-activating borderless `.floating` dark panel (key on appearing, `hidesOnDeactivate = false`), enter/exit through `panelPresentation` (`exitDelay` before ordering out; leaving panels are tracked so `hide()` clears them too), placement (`panelFrame`), owns the card's view model and the pins |
 | `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin` |
-| `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius, ink text, `.editorIcon` buttons, a solid toast); a `DragGesture` on the background drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the preview. Annotate goes first in the toolbar once it exists (one line) |
+| `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius), hover scrim and controls (`.editorPrimary` Copy/Save, dark corner icons), a solid toast; a `DragGesture` on the edge drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the shot. Annotate goes first in the top-right corner once it exists (one line) |
 | `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, close on hover; appears from and closes into its bottom-left corner (`panelPresentation`, a `PanelPresence` per pin) |
 | `QuickAccess/Service/ImageDownsampler.swift` | Card preview drawn from the captured `CGImage` off the main actor |
 | `Screenshot/Service/TextRecognizer.swift` | Vision `RecognizeTextRequest` (accurate, automatic language) off the main actor; `joined(_:)` orders lines top to bottom |
@@ -238,13 +241,13 @@ closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate`
 
 Key facts:
 - The full-size `CGImage` is held only by the card and pins; the card shows a preview drawn at 2× of its
-  230×210 pt size.
+  largest size.
 - Drag-out offers the file URL and PNG data. The file is written in the background to
   `temporaryDirectory/<UUID>/<save name>` when the card appears (a drop reads the URL at once, so it must
   exist first) and deleted when the card closes.
 - The card and pins are Reco windows, so captures leave them out unless Show Reco is on.
-- A window shadow doesn't follow the fade, so the panels have it off while entering and leaving and turn it
-  on (`invalidateShadow()`) once settled.
+- A window shadow doesn't follow the fade, so pins have it off while entering and leaving and turn it on
+  (`invalidateShadow()`) once settled. The card has none.
 
 ### S1 — Editor, phase 1: shell and playback (`feat/editor-shell`, spec 0003)
 
@@ -446,22 +449,24 @@ Key facts:
 
 ### S1 — Editor design (`feat/editor-shell`)
 
-The editor and Recordings windows are always dark, after zeron.sh: a violet-black ground (80%) the
-desktop frosts through, text in three tones (ink, dim, faint), hairlines instead of boxes, an
-off-white Export button, and one purple (`EditorTheme.accent`) for the playhead and the selection.
-The preview sits on a faint dot grid, the transport floats on glass under it. Nothing else is
-colored: clicks, keys and zooms are greys, and the default canvas is a slate gradient.
+The editor and Recordings windows use the system's colors, so they follow the user's appearance (light
+or dark) and accent color: the window background (80%) the desktop frosts through, text in the label
+tones (ink, dim, faint), separators instead of boxes, a label-colored Export button, and the accent
+(`EditorTheme.accent`, `Color.accentColor`; the asset catalog's AccentColor is empty) for the playhead and
+the selection. No panel forces an appearance. The preview sits on a faint dot grid, the transport floats on
+glass under it. Nothing else is colored: clicks, keys and zooms are greys, and the default canvas is a
+slate gradient.
 
 | File | Role |
 |---|---|
-| `Editor/View/EditorTheme.swift` | Colors, spacing on a 4-point grid, and the motion tokens: `motion` (spring, response 0.35, critically damped: every state change), `quickMotion` (0.15: hover, release), `momentumMotion` (damping 0.8: only after a flick), `fadeMotion` (Reduce Motion's cross-fade) and `release(velocity:distance:)` (a drag's release speed handed to a spring) |
+| `Editor/View/EditorTheme.swift` | System colors by role, spacing on a 4-point grid, and the motion tokens: `motion` (spring, response 0.35, critically damped: every state change), `quickMotion` (0.15: hover, release), `momentumMotion` (damping 0.8: only after a flick), `fadeMotion` (Reduce Motion's cross-fade) and `release(velocity:distance:)` (a drag's release speed handed to a spring) |
 | `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `GlassEffectContainer`), a material with a hairline before; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on (`nil` skips it); `withMotion { }` is the same for code with no environment; Increase Contrast adds a `dim` edge to every glass surface |
 | `Editor/View/EditorBackdrop.swift`, `StageDotGrid.swift` | The frosted desktop behind the window; the dot grid behind the preview, fading out before the stage's edges |
 | `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white) and `.editorGhost` (hairline) text buttons; every press shows on the frame it lands, only hover and release ease |
 | `View/PanelPresentation.swift`, `PanelPresence.swift` | `panelPresentation(isPresented:anchor:)`: a floating panel fades and settles from 0.96 anchored at its source and goes back there (opacity only with Reduce Motion); `exitDelay` is how long its window stays; `PanelPresence` carries the flag for controllers whose view model can't. Used by the agent bar, Quick Access card, pins, pre-record overlay and countdown |
 | `View/MenuRowButtonStyle.swift` | `.menuRow` for the popover's rows: a fill 4 pt in from the edges, 0.08 on hover, 0.14 the moment it's pressed, dimmed when disabled |
 | `Model/GesturePhysics.swift` | Pure: `project` (momentum), `rubberband`/`rubberbanded` (resistance past a boundary), `relativeVelocity`, `velocityMatchedDuration`, `flickExit`, and `VelocityTracker` (the last 0.1 s of a drag) |
-| `Editor/View/EditorWindowManager.swift` | `makeWindow`: dark appearance, content under a transparent title bar |
+| `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the glass transport |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart), the playhead's knob, the zoom blocks |
 | `Editor/View/Inspector*.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | Sections that fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides; a notice on top when the telemetry is missing |
@@ -475,7 +480,7 @@ Key facts:
 - Avoid what reads as generated: no gradients or glows in the chrome, no second accent, no cards
   and badges where a native control works, no all-caps titles, hover as a fill step (no lifts or
   scaling).
-- Two visual families, one motion system: the system-native popover and Settings, and this dark studio
+- Two visual families, one motion system: the system-native popover and Settings, and this studio
   look (editor, Recordings, Web Recording, the agent bar and the floating capture panels: Quick Access card,
   pins, pre-record overlay, countdown).
 - Motion follows the apple-design skill: respond on press, move 1:1 from the grab point, springs that start
@@ -717,7 +722,7 @@ should hold but need re-measuring.
 | S1 editor phase 4: auto-zoom, zoom lane, camera | Done; auto-zoom placement, full-frame-rate transitions and editing zooms on the timeline still need a check in the app on real recordings |
 | S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
 | S1 editor phase 6: canvas and export polish | Done; the canvas, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags), transparent exports and the Recordings window still need a check in the app |
-| S1 editor design: dark studio, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
+| S1 editor design: system colors, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 | S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |
 | S3 agent bridge (spec 0006): MCP server for coding agents | Done; tested over the real socket (token, `initialize`, `tools/list`, error calls), the `--mcp` process (`AgentBridgeClientTests`), config editors and plans. Not yet tried: real agents connected by hand, a real `record_page` render, Gatekeeper on another Mac |

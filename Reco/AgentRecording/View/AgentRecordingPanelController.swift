@@ -62,7 +62,6 @@ final class AgentRecordingPanelController: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
-        panel.appearance = NSAppearance(named: .darkAqua)
         // The view animates itself, which the system's own window animation would only distort
         panel.animationBehavior = .none
         panel.delegate = self

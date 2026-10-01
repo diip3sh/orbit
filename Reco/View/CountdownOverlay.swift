@@ -40,8 +40,6 @@ final class CountdownOverlay {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
-        // Dark glass in either system appearance, like the editor's
-        panel.appearance = NSAppearance(named: .darkAqua)
         panel.animationBehavior = .none
         panel.contentView = NSHostingView(rootView: CountdownView(countdown: countdown))
         panel.orderFront(nil)

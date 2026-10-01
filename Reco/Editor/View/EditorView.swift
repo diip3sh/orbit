@@ -72,7 +72,6 @@ struct EditorView: View {
         }
         .frame(minWidth: 560, minHeight: 440)
         .editorWindowBackground()
-        .tint(EditorTheme.accent)
         .editorMotion(.smooth, value: viewModel.source == nil)
         .task {
             await viewModel.load()
