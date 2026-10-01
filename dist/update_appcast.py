@@ -1,12 +1,12 @@
 """
-Update the appcast.xml file for BetterCapture releases.
+Update the appcast.xml file for Reco releases.
 
 This script adds a new entry to the Sparkle appcast with the release
 information, including GitHub release notes rendered as inline HTML.
 
 The resulting appcast.xml is uploaded as a GitHub release asset so that
 Sparkle clients can fetch it from a stable URL:
-    https://github.com/jsattler/BetterCapture/releases/latest/download/appcast.xml
+    https://github.com/diip3sh/reco/releases/latest/download/appcast.xml
 
 Expected files in the current directory:
     - sign_update.txt   Output from Sparkle's `sign_update` tool.
@@ -39,7 +39,7 @@ dmg_url = os.environ["DMG_URL"]
 release_notes = os.environ.get("RELEASE_NOTES", "")
 release_url = os.environ.get("RELEASE_URL", "")
 # GitHub Actions sets GITHUB_REPOSITORY, so a fork's appcast points at the fork
-repo_url = "https://github.com/" + os.environ.get("GITHUB_REPOSITORY", "jsattler/BetterCapture")
+repo_url = "https://github.com/" + os.environ.get("GITHUB_REPOSITORY", "diip3sh/reco")
 
 # Define Sparkle namespace URI for element creation
 SPARKLE_NS = "http://www.andymatuschak.org/xml-namespaces/sparkle"
@@ -87,9 +87,9 @@ if et is None:
         ' xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"'
         ' xmlns:dc="http://purl.org/dc/elements/1.1/">'
         "<channel>"
-        "<title>BetterCapture Updates</title>"
+        "<title>Reco Updates</title>"
         f"<link>{repo_url}/releases/latest/download/appcast.xml</link>"
-        "<description>Updates for BetterCapture</description>"
+        "<description>Updates for Reco</description>"
         "<language>en</language>"
         "</channel>"
         "</rss>"
@@ -188,12 +188,12 @@ def markdown_to_simple_html(md: str) -> str:
 if release_notes.strip():
     notes_html = markdown_to_simple_html(release_notes)
     description_html = f"""
-<h2>BetterCapture v{version}</h2>
+<h2>Reco v{version}</h2>
 {notes_html}
 """
 else:
     description_html = f"""
-<h2>BetterCapture v{version}</h2>
+<h2>Reco v{version}</h2>
 <p>This release was published on {now.strftime("%Y-%m-%d")}.</p>
 <p>
 View the full release notes on

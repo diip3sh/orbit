@@ -1,16 +1,16 @@
-# Contributing to BetterCapture
+# Contributing to Reco
 
-Thank you for your interest in contributing to BetterCapture! We want to make this project the best macOS screen recorder, and we appreciate your help.
+Thank you for your interest in contributing to Reco! We want to make this project the best macOS screen recorder, and we appreciate your help.
 
 ## Feature Requests
 
-If you have an idea for a new feature, please [open a discussion](https://github.com/jsattler/BetterCapture/discussions) first.
+If you have an idea for a new feature, please [open a discussion](https://github.com/diip3sh/reco/discussions) first.
 
 We want to ensure that new features align with the project's goals and architectural direction before any work begins. **Any issues or pull requests for feature requests submitted without prior discussion will be closed immediately.**
 
 ## Bug Reports
 
-If you've found a bug, please [open an issue](https://github.com/jsattler/BetterCapture/issues). To help us fix it as quickly as possible, please include:
+If you've found a bug, please [open an issue](https://github.com/diip3sh/reco/issues). To help us fix it as quickly as possible, please include:
 
 - A clear, descriptive title.
 - Steps to reproduce the bug.

@@ -1,9 +1,9 @@
 included:
-  - BetterCapture
-  - BetterCaptureTests
+  - Reco
+  - RecoTests
 
 excluded:
-  - BetterCapture.xcodeproj
+  - Reco.xcodeproj
 
 opt_in_rules:
   - array_init

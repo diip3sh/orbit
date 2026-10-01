@@ -1,4 +1,4 @@
-# BetterCapture Documentation
+# Reco Documentation
 
 ## Concepts
 
@@ -18,7 +18,7 @@ How Apple's ScreenCaptureKit and AVFoundation frameworks work together for scree
 
 ## Architecture
 
-How BetterCapture is built. Component structure, data flow, and implementation details.
+How Reco is built. Component structure, data flow, and implementation details.
 
 - [Architecture Overview:](architecture/OVERVIEW.md) MVVM structure, component diagram, recording data flow, codec/container support.
 - [Output Settings:](architecture/OUTPUT.md) Resolution, bitrate, codec/container compatibility, pixel formats, color profiles, HDR, automatic settings adjustment.

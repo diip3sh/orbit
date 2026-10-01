@@ -8,13 +8,13 @@ decision-makers: jsattler
 
 ## Context and Problem Statement
 
-BetterCapture has no keyboard shortcuts.
+Reco has no keyboard shortcuts.
 All actions (toggle recording, select content, select area) require clicking through the menu bar popover.
 Users have requested global hotkeys that work even when the app is not focused (see [Discussion #76](https://github.com/jsattler/BetterCapture/discussions/76), [Issue #119](https://github.com/jsattler/BetterCapture/issues/119)).
 
 ## Decision Drivers
 
-- BetterCapture is fully sandboxed (`com.apple.security.app-sandbox`) and must remain so for Mac App Store compatibility.
+- Reco is fully sandboxed (`com.apple.security.app-sandbox`) and must remain so for Mac App Store compatibility.
 - Shortcuts must work globally (when the app is not focused), since the app is a menu bar agent (`LSUIElement = true`) with no persistent window.
 - The solution should provide a native-feeling UI for users to customize their shortcuts.
 - Conflict detection with system and app shortcuts is important.

@@ -4,7 +4,7 @@
 
 ## Why
 
-Currently BetterCapture relies on `SCContentSharingPicker` which limits content selection to full displays, windows, or applications. Users often need to record a specific region of the screen (e.g., a portion of a webpage, a panel in an IDE, or a UI demo area) without capturing the entire display or window. This feature fills that gap.
+Currently Reco relies on `SCContentSharingPicker` which limits content selection to full displays, windows, or applications. Users often need to record a specific region of the screen (e.g., a portion of a webpage, a panel in an IDE, or a UI demo area) without capturing the entire display or window. This feature fills that gap.
 
 ## Expected outcome
 

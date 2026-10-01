@@ -304,7 +304,7 @@ Each is S:
 - **Capture Previous Area**, alongside F7's remembered selection.
 - **QR codes** in Recognize Text: `DetectBarcodesRequest` next to the text request; the payload is
   copied.
-- **Screenshot URLs:** `bettercapture://capture-area`, `capture-window` and `capture-screen`, with
+- **Screenshot URLs:** `reco://capture-area`, `capture-window` and `capture-screen`, with
   `?then=copy|save|pin`, for Raycast and Shortcuts.
 - **HDR screenshots** on macOS 26: `SCScreenshotConfiguration.dynamicRange = .hdr`, saved as HEIC.
 - **Pins:** an opacity setting, and a click-through mode.
@@ -344,7 +344,7 @@ edges. Recording keeps the live selection.
 
 ### N20 — Cancel and restart a recording
 
-- **What:** shortcuts plus `bettercapture://cancel` and `bettercapture://restart`.
+- **What:** shortcuts plus `reco://cancel` and `reco://restart`.
   - Cancel throws away the movie and its telemetry.
   - Restart cancels, then starts again with the same selection.
 - **Verify:** after a cancel, the output folder has no new file.

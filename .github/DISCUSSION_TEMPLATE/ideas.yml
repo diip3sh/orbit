@@ -4,7 +4,7 @@ body:
     attributes:
       value: |
         > [!IMPORTANT]
-        > Please search existing [Discussions](https://github.com/jsattler/BetterCapture/discussions?discussions_q=category%3AIdeas) and [Issues](https://github.com/jsattler/BetterCapture/issues?q=sort%3Areactions-desc) before opening a new feature request to avoid duplicates.
+        > Please search existing [Discussions](https://github.com/diip3sh/reco/discussions?discussions_q=category%3AIdeas) and [Issues](https://github.com/diip3sh/reco/issues?q=sort%3Areactions-desc) before opening a new feature request to avoid duplicates.
 
   - type: markdown
     attributes:

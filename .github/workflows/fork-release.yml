@@ -8,8 +8,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "BetterCapture/**"
-      - "BetterCapture.xcodeproj/**"
+      - "Reco/**"
+      - "Reco.xcodeproj/**"
       - "dist/update_appcast.py"
       - ".github/workflows/fork-release.yml"
   workflow_dispatch:
@@ -23,8 +23,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  APP_NAME: BetterCapture
-  SCHEME: BetterCapture
+  APP_NAME: Reco
+  SCHEME: Reco
 
 jobs:
   release:
@@ -113,8 +113,8 @@ jobs:
           SPARKLE_PUBLIC_EDDSA_KEY: ${{ secrets.SPARKLE_PUBLIC_EDDSA_KEY }}
           GIT_SHA: ${{ steps.version.outputs.git_sha }}
         run: |
-          /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_EDDSA_KEY" "BetterCapture/Info.plist"
-          /usr/libexec/PlistBuddy -c "Add :GitSHA string $GIT_SHA" "BetterCapture/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_EDDSA_KEY" "Reco/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :GitSHA string $GIT_SHA" "Reco/Info.plist"
 
       - name: Build application
         env:
@@ -181,7 +181,6 @@ jobs:
             echo "### Installing"
             echo
             echo "- This build isn't notarized. On first launch macOS blocks it: open **System Settings → Privacy & Security** and choose **Open Anyway**. Later versions arrive through the app's own updater."
-            echo "- Don't install it next to the official BetterCapture; both use the same bundle ID."
           } > "$RUNNER_TEMP/notes.md"
 
       - name: Generate Sparkle appcast

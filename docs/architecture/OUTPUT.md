@@ -1,10 +1,10 @@
 # Output Settings
 
-BetterCapture-specific output configuration: how resolution, bitrate, codecs, pixel formats, and color profiles are implemented. For general background on these concepts, see [concepts/VIDEO.md](../concepts/VIDEO.md) and [concepts/AUDIO.md](../concepts/AUDIO.md).
+Reco-specific output configuration: how resolution, bitrate, codecs, pixel formats, and color profiles are implemented. For general background on these concepts, see [concepts/VIDEO.md](../concepts/VIDEO.md) and [concepts/AUDIO.md](../concepts/AUDIO.md).
 
 ## Resolution
 
-BetterCapture supports two capture resolutions, controlled by the **Capture Native Resolution** setting (enabled by default):
+Reco supports two capture resolutions, controlled by the **Capture Native Resolution** setting (enabled by default):
 
 - **Native (Retina):** Multiplies the logical dimensions by `SCContentFilter.pointPixelScale` (or `NSScreen.backingScaleFactor` as a fallback). A display set to 1024x666 produces a 2048x1332 video.
 - **Logical (1x):** Uses the logical point dimensions directly. A display set to 1024x666 produces a 1024x666 video.
@@ -51,7 +51,7 @@ HEVC uses lower bpp values because it achieves comparable visual quality at roug
 
 ### Automatic Settings Adjustment
 
-BetterCapture automatically adjusts settings when changing formats to maintain compatibility:
+Reco automatically adjusts settings when changing formats to maintain compatibility:
 
 1. **When switching to MP4:**
    - If video codec is ProRes, switches to HEVC.
@@ -130,7 +130,7 @@ H.264 does not support HDR. HEVC HDR is mutually exclusive with alpha channel ca
 
 ### HDR Presets
 
-BetterCapture uses the `HDRPreset` enum to select the correct ScreenCaptureKit configuration:
+Reco uses the `HDRPreset` enum to select the correct ScreenCaptureKit configuration:
 
 | Preset               | macOS Version | SCStreamConfiguration                                                  | Notes                                              |
 | -------------------- | ------------- | ---------------------------------------------------------------------- | -------------------------------------------------- |
@@ -138,7 +138,7 @@ BetterCapture uses the `HDRPreset` enum to select the correct ScreenCaptureKit c
 | `.hdr10Manual`       | 15            | Manual: `captureDynamicRange = .hdrCanonicalDisplay`                   | Manual pixel format and dynamic range              |
 | `.sdr`               | Any           | Default `SCStreamConfiguration()`                                      | 8-bit BGRA, SDR                                    |
 
-The macOS 26+ preset injects static HDR10 metadata and configures all color properties as a validated unit. On older macOS versions, BetterCapture manually configures `captureDynamicRange` and the codec-appropriate pixel format.
+The macOS 26+ preset injects static HDR10 metadata and configures all color properties as a validated unit. On older macOS versions, Reco manually configures `captureDynamicRange` and the codec-appropriate pixel format.
 
 ### HEVC HDR Encoding
 

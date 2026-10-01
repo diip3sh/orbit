@@ -9,7 +9,8 @@ This file covers what AGENTS.md doesn't: how to build this fork, what it adds on
 
 ## What this fork is
 
-BetterCapture is a sandboxed macOS menu bar screen recorder (ScreenCaptureKit + AVAssetWriter).
+Reco is a sandboxed macOS menu bar screen recorder (ScreenCaptureKit + AVAssetWriter), forked from BetterCapture
+and renamed: its own bundle ID (`com.diip3sh.Reco`), `reco://` links, and Reco in every name.
 This fork is working towards a free Screen Studio / CleanShot X alternative: record input telemetry
 now, build an editor (auto-zoom, smooth cursor, backgrounds) on top of it later.
 
@@ -27,11 +28,11 @@ security find-identity -v -p codesigning
 security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject
 
 TEAM=<YOUR_TEAM_ID>
-xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=macOS,arch=arm64' \
+xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath /tmp/bc-build/dd \
   CODE_SIGN_IDENTITY="Apple Development" DEVELOPMENT_TEAM=$TEAM \
   CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER="" build -quiet \
-  && { pkill -x BetterCapture; open /tmp/bc-build/dd/Build/Products/Debug/BetterCapture.app; }
+  && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
 - Tests: same command with `test` instead of `build -quiet` (Swift Testing, 376 tests).
@@ -43,7 +44,7 @@ xcodebuild -scheme BetterCapture -configuration Debug -destination 'platform=mac
   XCFramework found", `rm -rf /tmp/bc-build` and rebuild (moved DerivedData breaks SPM paths).
 - **Don't use ad-hoc signing (`CODE_SIGN_IDENTITY="-"`)**: the code hash changes every build, so
   macOS forgets the Screen Recording permission and prompts forever. If a permission gets stuck:
-  `tccutil reset ScreenCapture com.sattlerjoshua.BetterCapture`, then relaunch.
+  `tccutil reset ScreenCapture com.diip3sh.Reco`, then relaunch.
 - New `.swift` files need no pbxproj edit (file-system synchronized groups).
 - Don't call an ObjC API whose completion handler is `() -> Void` through Swift's async import
   (`await writer.finishWriting()`). `AVAssetExportSession.export(to:as:)` is back-deployed below
@@ -83,7 +84,7 @@ or indirection that doesn't pay for itself in an AVFoundation app.
 
 - Dependencies point down only: View → ViewModel → Service → Core. Services report up through
   delegates or `async` results, never by reaching into a view model.
-- New features get a feature folder, `BetterCapture/<Feature>/{Model,Render,Service,ViewModel,View}`
+- New features get a feature folder, `Reco/<Feature>/{Model,Render,Service,ViewModel,View}`
   (see spec 0003). Existing layer folders stay as they are.
 - One rule, one place: logic lives in exactly one function that every caller reuses (e.g.
   `SettingsStore.capturesCursor` drives both the capture and the telemetry). Never re-derive it.
@@ -167,7 +168,7 @@ returning nil, sprites are simply empty; nothing else breaks.
 ### F4 — Pause / resume (`feat/pause-resume`, upstream issue #174)
 
 Menu bar **Pause/Resume** button, global shortcut **Pause/Resume Recording** (no default), and
-`bettercapture://pause`. The SCStream keeps running while paused (instant resume, macOS recording
+`reco://pause`. The SCStream keeps running while paused (instant resume, macOS recording
 indicator stays on); every sample is dropped and the paused time is cut from the file.
 
 | File | Role |
@@ -183,7 +184,7 @@ Audio buffers straddling a pause edge are dropped whole (gap ≤ ~21 ms per edge
 
 **Settings → General → Recording → Countdown**: Off / 3 / 5 / 10 s (default 3). Every user start (menu
 Start, pre-record overlay Start, Toggle Recording shortcut) shows a big number centred on what will be
-recorded (area, window, or display) and the seconds in the menu bar. `bettercapture://toggle` /
+recorded (area, window, or display) and the seconds in the menu bar. `reco://toggle` /
 `toggle-copy` skip the countdown (and cancel one that's running) so automation stays precise.
 
 | File | Role |
@@ -236,14 +237,14 @@ Key facts:
 - Drag-out offers the file URL and PNG data. The file is written in the background to
   `temporaryDirectory/<UUID>/<save name>` when the card appears (a drop reads the URL at once, so it must
   exist first) and deleted when the card closes.
-- The card and pins are BetterCapture windows, so captures leave them out unless Show BetterCapture is on.
+- The card and pins are Reco windows, so captures leave them out unless Show Reco is on.
 
 ### S1 — Editor, phase 1: shell and playback (`feat/editor-shell`, spec 0003)
 
 Opens a recording in its own window with the preview, transport controls and a timeline (filmstrip,
 click/key lanes, playhead, scrubbing). Entry points: **Edit** on the recording-saved notification (its
 default action when the cursor was left out of the video), **Edit Last Recording** in the menu bar, and
-`bettercapture://edit-last`. Keys: space play/pause, ←/→ step a frame, ⌘Z/⇧⌘Z undo/redo.
+`reco://edit-last`. Keys: space play/pause, ←/→ step a frame, ⌘Z/⇧⌘Z undo/redo.
 
 | File | Role |
 |---|---|
@@ -481,7 +482,7 @@ global hotkey, as in the countdown. macOS ignores cursor changes from an app tha
 Captures at native pixels with the recording visibility settings into memory (`Screenshot`: image, scale,
 capture time) and hands it to `ScreenshotController.onDidCapture` (the Quick Access card, C2). Nothing is
 written until the card's **Save**: `ScreenshotController.save(_:)` writes
-`BetterCapture_Screenshot_<capture time>.png` into the recordings' output folder.
+`Reco_Screenshot_<capture time>.png` into the recordings' output folder.
 
 | File | Role |
 |---|---|
@@ -498,10 +499,10 @@ Key facts:
 - `SCContentSharingPicker.shared` reports results to every observer. `CaptureEngine.isPickingContent`
   makes the recording selection ignore picks it didn't ask for.
 - Cursor follows `showCursor`, not `capturesCursor`: there's no editor to redraw it.
-- Capture Screen waits 250 ms for the popover's close animation (only matters with Show BetterCapture on).
+- Capture Screen waits 250 ms for the popover's close animation (only matters with Show Reco on).
 - Window shots use the window recording config: SCK fits window + shadow into the window's frame, so
   shadow padding is uneven (same as recordings).
-- Verified on an M2 (1710×1112 pt, 2×): screen 3420×2224, window and area at 2×, sRGB, no BetterCapture UI.
+- Verified on an M2 (1710×1112 pt, 2×): screen 3420×2224, window and area at 2×, sRGB, no Reco UI.
 
 ### S2 — Web recordings (`feat/web-recordings`, spec 0005)
 
@@ -509,7 +510,7 @@ Key facts:
 timeline with a Cursor lane (Hover, Click) and a Scroll lane, and an inspector. **Hover** and
 **Click** add a clip at the playhead and start pick mode: the next click in the page aims the clip at
 that element. **Scroll** adds a clip ending where the page is scrolled now. **Render** plays the
-script frame by frame into `BetterCapture_Web_<date>.mov` and its telemetry sidecar in the output
+script frame by frame into `Reco_Web_<date>.mov` and its telemetry sidecar in the output
 folder, then opens it in the editor, where auto-zoom, the cursor and the canvas work as on any
 recording.
 
@@ -583,7 +584,7 @@ and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVid
 |---|---|
 | F1 input telemetry | Done |
 | F2 cursor sprites | Done, incl. editor spec Phase 0 (hidden cursor, `cursorInVideo`, `kind`); a real recording still has to confirm kinds for I-beam/hand |
-| F3 `.bettercapture` project bundle | **Not needed for editor v1**, which uses a `<name>.edit.json` sidecar (spec 0003, open question 2). Revisit when opening recordings from outside the output folder |
+| F3 `.reco` project bundle | **Not needed for editor v1**, which uses a `<name>.edit.json` sidecar (spec 0003, open question 2). Revisit when opening recordings from outside the output folder |
 | F4 pause / resume | Done and verified on real recordings: audio ticks land within ~30 ms across pauses, all tracks match video length (incl. stop while paused) |
 | F5 countdown | Done |
 | F6 audio robustness (mic hot-swap #208, gain #209, level meters #153) | Todo |
@@ -618,12 +619,12 @@ Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorde
 ## Verifying against real recordings
 
 Recordings can be scripted: select content once in the menu, then drive the running build with
-`open -g -a /tmp/bc-build/dd/Build/Products/Debug/BetterCapture.app "bettercapture://toggle"` (starts
-when content is selected, stops when recording; no countdown), `bettercapture://pause` and
-`bettercapture://edit-last` (opens the editor). Use `-a` with the path:
+`open -g -a /tmp/bc-build/dd/Build/Products/Debug/Reco.app "reco://toggle"` (starts
+when content is selected, stops when recording; no countdown), `reco://pause` and
+`reco://edit-last` (opens the editor). Use `-a` with the path:
 a plain `open` may launch another copy (e.g. Xcode's DerivedData build). Play `afplay` ticks at
 logged wall times, then check each tick lands where expected in the audio, shifted by the paused time.
-Watch the app's logs with `/usr/bin/log stream --level info --predicate 'subsystem == "com.sattlerjoshua.BetterCapture"'`
+Watch the app's logs with `/usr/bin/log stream --level info --predicate 'subsystem == "com.diip3sh.Reco"'`
 (the full path matters: in zsh, `log` is a builtin).
 
 Frame-level checks beat eyeballing. With `ffmpeg`/`ffprobe` (Homebrew):

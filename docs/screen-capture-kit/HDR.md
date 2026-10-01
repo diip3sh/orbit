@@ -2,7 +2,7 @@
 
 Technical reference for HDR screen capture using ScreenCaptureKit and AVAssetWriter. Covers configuration, encoding constraints, and pitfalls discovered during implementation.
 
-For general HDR concepts, see [concepts/VIDEO.md](../concepts/VIDEO.md). For BetterCapture-specific output settings, see [architecture/OUTPUT.md](../architecture/OUTPUT.md).
+For general HDR concepts, see [concepts/VIDEO.md](../concepts/VIDEO.md). For Reco-specific output settings, see [architecture/OUTPUT.md](../architecture/OUTPUT.md).
 
 ## ScreenCaptureKit Configuration
 

@@ -1,10 +1,10 @@
-# BetterCapture Architecture
+# Reco Architecture
 
-This document provides a high-level overview of the BetterCapture architecture, focusing on the component structure, data flow, and media handling.
+This document provides a high-level overview of the Reco architecture, focusing on the component structure, data flow, and media handling.
 
 ## High-Level Components
 
-BetterCapture follows the **MVVM (Model-View-ViewModel)** pattern. The application is structured around a central ViewModel that coordinates interactions between the UI views and various backend services.
+Reco follows the **MVVM (Model-View-ViewModel)** pattern. The application is structured around a central ViewModel that coordinates interactions between the UI views and various backend services.
 
 ### Component Relationship Diagram
 
@@ -99,7 +99,7 @@ sequenceDiagram
 
 ## Codecs and Containers
 
-BetterCapture supports flexible combinations of codecs and containers, managed by the `SettingsStore`. The architecture ensures that invalid combinations (like Alpha channel in MP4) are prevented at the configuration level.
+Reco supports flexible combinations of codecs and containers, managed by the `SettingsStore`. The architecture ensures that invalid combinations (like Alpha channel in MP4) are prevented at the configuration level.
 
 ### Supported Containers
 

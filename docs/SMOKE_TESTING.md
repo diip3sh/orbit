@@ -1,6 +1,6 @@
 # Manual Smoke Testing Strategy
 
-This document outlines the manual testing matrix for BetterCapture. These tests focus on hardware interactions, visual verification, and edge cases that are difficult to automate.
+This document outlines the manual testing matrix for Reco. These tests focus on hardware interactions, visual verification, and edge cases that are difficult to automate.
 
 ## Test Matrix
 

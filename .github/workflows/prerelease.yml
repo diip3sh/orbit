@@ -14,8 +14,8 @@ permissions:
   contents: write
 
 env:
-  APP_NAME: BetterCapture
-  SCHEME: BetterCapture
+  APP_NAME: Reco
+  SCHEME: Reco
   XCODE_VERSION: '26.0'
 
 jobs:
@@ -84,7 +84,7 @@ jobs:
 
       - name: Set git SHA in Info.plist
         run: |
-          /usr/libexec/PlistBuddy -c "Add :GitSHA string ${{ steps.build.outputs.git_sha }}" "BetterCapture/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :GitSHA string ${{ steps.build.outputs.git_sha }}" "Reco/Info.plist"
 
       - name: Build application
         run: |

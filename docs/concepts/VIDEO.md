@@ -29,7 +29,7 @@ Higher frame rates produce smoother playback at the cost of larger files and hig
 
 ### Constant frame rate
 
-Recordings are written at a constant frame rate. ScreenCaptureKit only delivers a frame when the screen changes, and the timestamps it reports jitter by several milliseconds, so the raw stream is variable frame rate. BetterCapture snaps every frame onto a fixed grid at the selected rate and repeats the previous frame across any gap, which is what a static screen produces.
+Recordings are written at a constant frame rate. ScreenCaptureKit only delivers a frame when the screen changes, and the timestamps it reports jitter by several milliseconds, so the raw stream is variable frame rate. Reco snaps every frame onto a fixed grid at the selected rate and repeats the previous frame across any gap, which is what a static screen produces.
 
 This matters because variable frame rate files break tools that expect a constant rate. Concatenating them with `ffmpeg` or uploading them to a platform that transcodes to a fixed rate causes dropped frames and audio drift, even though the file plays back correctly in QuickTime and VLC.
 

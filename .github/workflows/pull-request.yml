@@ -10,8 +10,8 @@ on:
       - '.github/workflows/pull-request.yml'
 
 env:
-  APP_NAME: BetterCapture
-  SCHEME: BetterCapture
+  APP_NAME: Reco
+  SCHEME: Reco
   XCODE_VERSION: '26.0'
 
 jobs:

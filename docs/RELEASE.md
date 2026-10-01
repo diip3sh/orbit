@@ -1,6 +1,6 @@
 # Release Process
 
-How this fork (`diip3sh/reco`, formerly `diip3sh/BetterCapture`) ships. Upstream's process (a
+How this fork (`diip3sh/reco`, formerly `diip3sh/Reco`) ships. Upstream's process (a
 hand-published GitHub Release, Developer ID signing, notarization, the Homebrew tap) doesn't apply
 here: its `release.yml` and `prerelease.yml` workflows stay in the repository for merges from
 upstream, and only run when a release is published by hand.
@@ -17,7 +17,7 @@ Every push to `main` that touches the app is released automatically by
 
 Installed copies read that feed (`SUFeedURL` in `Info.plist`) and offer the new version.
 
-- A push releases when it changes `BetterCapture/**`, `BetterCapture.xcodeproj/**`,
+- A push releases when it changes `Reco/**`, `Reco.xcodeproj/**`,
   `dist/update_appcast.py` or the workflow itself. Docs-only and website-only pushes don't.
 - **Actions → Fork Release → Run workflow** releases the current `main` by hand.
 - Never commit the DMG or any build output to git; it only goes on the Release.
@@ -70,10 +70,12 @@ Repository secrets, named as in upstream's `release.yml`:
 ## Installing
 
 - The build isn't notarized. On another Mac, macOS blocks the first launch until **System Settings →
-  Privacy & Security → Open Anyway** (or `xattr -dr com.apple.quarantine /Applications/BetterCapture.app`).
+  Privacy & Security → Open Anyway** (or `xattr -dr com.apple.quarantine /Applications/Reco.app`).
   The release notes say so. Installing without that warning needs a Developer ID certificate and
   notarization.
-- Don't install it next to the official BetterCapture: both use the same bundle ID.
+- Reco has its own bundle ID (`com.diip3sh.Reco`), so it installs next to the official BetterCapture.
+  Copies installed under the old name, BetterCapture, can't update to Reco (Sparkle needs the same
+  bundle ID): they need one manual install, and macOS asks for Reco's permissions again.
 - Copies installed before this workflow (up to `fork-2026.09.29-a87a5dd`) have no Sparkle key and
   can't update themselves; they need one manual install.
 

@@ -14,8 +14,8 @@ permissions:
   contents: write
 
 env:
-  APP_NAME: BetterCapture
-  SCHEME: BetterCapture
+  APP_NAME: Reco
+  SCHEME: Reco
   XCODE_VERSION: "26.0"
   SPARKLE_VERSION: "2.9.0"
 
@@ -96,8 +96,8 @@ jobs:
         env:
           SPARKLE_PUBLIC_KEY: ${{ secrets.SPARKLE_PUBLIC_EDDSA_KEY }}
         run: |
-          /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_KEY" "BetterCapture/Info.plist"
-          /usr/libexec/PlistBuddy -c "Add :GitSHA string ${{ steps.build.outputs.git_sha }}" "BetterCapture/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_PUBLIC_KEY" "Reco/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :GitSHA string ${{ steps.build.outputs.git_sha }}" "Reco/Info.plist"
 
       - name: Build application
         run: |

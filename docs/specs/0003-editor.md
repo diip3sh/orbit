@@ -208,7 +208,7 @@ These apply to every phase, on top of `AGENTS.md`.
 
 **Structure**
 
-- New code goes in a feature folder, `BetterCapture/Editor/{Model,Render,Service,ViewModel,View}`. The Xcode project uses synchronized folders, so no project file edits are needed.
+- New code goes in a feature folder, `Reco/Editor/{Model,Render,Service,ViewModel,View}`. The Xcode project uses synchronized folders, so no project file edits are needed.
 - One type per file. Files stay under 500 lines and types under 300 (the SwiftLint limits).
 - Models and algorithms are `nonisolated` value types that are `Sendable` and pure (auto-zoom, camera path, cursor smoothing, time mapping, key labels). They are unit tested without AVFoundation. Side effects stay at the edges, in the services.
 - The target builds in Swift 6 language mode with complete concurrency checking. Use `@concurrent` for work that must leave the main actor, and never GCD.
@@ -232,7 +232,7 @@ These apply to every phase, on top of `AGENTS.md`.
 - Errors are a typed `EditorError`. Failures are logged with a `Logger` category per type and surfaced in the window, never swallowed.
 - Unsupported versions of telemetry and project files are reported, not guessed at.
 
-**Tests** use Swift Testing (`import Testing`), as the existing suite does. Fixtures (small telemetry and project JSON files) live in `BetterCaptureTests/Fixtures`.
+**Tests** use Swift Testing (`import Testing`), as the existing suite does. Fixtures (small telemetry and project JSON files) live in `RecoTests/Fixtures`.
 
 ---
 
@@ -273,7 +273,7 @@ Recording-side changes that the editor depends on. They come first so that every
 **Build**
 
 - `EditorWindowManager`: one window per recording (a second request focuses the existing one), activation policy switching, and the output folder's security scope held for the window's lifetime (`startAccessingOutputDirectory()`).
-- Entry points: an "Edit" action on the recording-saved notification, "Edit Last Recording" in the menu bar (`RecorderViewModel` keeps `lastRecordingURL`), and a `bettercapture://edit-last` URL. When the recording was made without the cursor in the video, "Edit" is the notification's default action, because the raw file has no cursor until it goes through the editor.
+- Entry points: an "Edit" action on the recording-saved notification, "Edit Last Recording" in the menu bar (`RecorderViewModel` keeps `lastRecordingURL`), and a `reco://edit-last` URL. When the recording was made without the cursor in the video, "Edit" is the notification's default action, because the raw file has no cursor until it goes through the editor.
 - `EditorSourceLoader`: loads the asset (duration, video track, natural size, frame rate, audio tracks), the telemetry (optional, off the main actor, version checked) and the project, or creates a default one.
 - `PlaybackController`: play/pause, coalesced seeking, frame stepping (`AVPlayerItem.step(byCount:)`), and end-of-item handling.
 - Preview: `AVPlayerLayer` in an `NSViewRepresentable`, with no system controls.
@@ -460,7 +460,7 @@ Needs Phase 0 data and recordings made with the cursor hidden (`cursorInVideo ==
 ## Proposed files
 
 ```text
-BetterCapture/Editor/
+Reco/Editor/
   Model/      EditorProject, EditorSource, EditorError, EditorSelection, FrameGrid, TimelineMarkers,
               ZoomSegment, ClickHighlightStyle, KeystrokeOverlayStyle, RGBAColor, ExportFormat,
               ExportSettings, CursorStyle, CanvasStyle, AudioMixSettings, DynamicRange, Recording
@@ -477,7 +477,7 @@ BetterCapture/Editor/
 
 `EditorTimelineView` is named so that it doesn't collide with SwiftUI's `TimelineView`.
 
-Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry types, in `BetterCapture/Model` and `BetterCapture/Service`, because the recorder writes that data. Phase 1 added `UnsupportedVersionError` to `BetterCapture/Model`, because `InputTelemetry` throws it too. Phase 2 added `PartitioningIndex` there, because `InputTelemetry.geometry(at:)` uses it. Phase 4 added `InputTelemetry.normalizedVideoPoint(for:at:)` and `pixelsPerPoint`. Phase 5 added `StandardCursors.png(of:)`, which the recorder now uses too, and `StandardCursors.arrowSprite`. Phase 6 added the menu bar's **Recordings…** button and moved `MenuBarActionButton` into its own file, which kept `MenuBarView.swift` under SwiftLint's length limit.
+Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry types, in `Reco/Model` and `Reco/Service`, because the recorder writes that data. Phase 1 added `UnsupportedVersionError` to `Reco/Model`, because `InputTelemetry` throws it too. Phase 2 added `PartitioningIndex` there, because `InputTelemetry.geometry(at:)` uses it. Phase 4 added `InputTelemetry.normalizedVideoPoint(for:at:)` and `pixelsPerPoint`. Phase 5 added `StandardCursors.png(of:)`, which the recorder now uses too, and `StandardCursors.arrowSprite`. Phase 6 added the menu bar's **Recordings…** button and moved `MenuBarActionButton` into its own file, which kept `MenuBarView.swift` under SwiftLint's length limit.
 
 ## Risks
 

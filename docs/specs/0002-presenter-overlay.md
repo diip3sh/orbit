@@ -4,14 +4,14 @@
 
 ## Why
 
-Screen recordings often lack a personal touch. macOS provides Presenter Overlay, a system-level feature that composites the presenter's camera feed on top of shared content (small movable window or large immersive mode). BetterCapture currently has no camera integration, so Presenter Overlay is unavailable. Adding camera support enables this feature automatically through the system's Video menu bar item.
+Screen recordings often lack a personal touch. macOS provides Presenter Overlay, a system-level feature that composites the presenter's camera feed on top of shared content (small movable window or large immersive mode). Reco currently has no camera integration, so Presenter Overlay is unavailable. Adding camera support enables this feature automatically through the system's Video menu bar item.
 
 ## Expected outcome
 
 - A new "Presenter Overlay" toggle appears in the menu bar settings under a "Camera" section.
-- When enabled and a recording starts, BetterCapture starts an `AVCaptureSession` for the selected camera.
+- When enabled and a recording starts, Reco starts an `AVCaptureSession` for the selected camera.
 - The system detects the active camera + `SCStream` combination and enables Presenter Overlay controls in the macOS Video menu bar item.
-- The user controls overlay mode (small/large/off) through the system Video menu bar — BetterCapture does not need its own overlay controls.
+- The user controls overlay mode (small/large/off) through the system Video menu bar — Reco does not need its own overlay controls.
 - Composited frames (screen content + camera overlay) arrive through the existing `SCStream` pipeline with no changes to the recording/encoding path.
 - A camera picker (similar to the existing microphone picker) lets the user select which camera to use.
 - A status indicator appears during recording when Presenter Overlay is active.
@@ -44,7 +44,7 @@ The camera session itself does not need to output frames to the app. It only nee
 
 Camera access requires:
 
-1. **Entitlement**: `com.apple.security.device.camera` in `BetterCapture.entitlements`.
+1. **Entitlement**: `com.apple.security.device.camera` in `Reco.entitlements`.
 2. **Usage description**: `NSCameraUsageDescription` in `Info.plist`.
 3. **Runtime permission**: `AVCaptureDevice.requestAccess(for: .video)` — prompted when the user first enables the Presenter Overlay toggle.
 
@@ -114,7 +114,7 @@ The `presenterOverlayPrivacyAlertSetting` on `SCStreamConfiguration` is left at 
 
 | File | Change |
 |------|--------|
-| `BetterCapture.entitlements` | Add `com.apple.security.device.camera` entitlement |
+| `Reco.entitlements` | Add `com.apple.security.device.camera` entitlement |
 | `Info.plist` | Add `NSCameraUsageDescription` usage string |
 | `Model/SettingsStore.swift` | Add `presenterOverlayEnabled` and `selectedCameraID` properties |
 | `Service/CameraService.swift` | **New file** — camera enumeration and `AVCaptureSession` management |

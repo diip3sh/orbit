@@ -23,7 +23,7 @@ the clicks.
   - an inspector for the selected clip.
 - Clip targets are picked by clicking an element in the page. Scroll clips end where the page is
   scrolled to.
-- **Render** writes `BetterCapture_Web_<date>.mov` and its `.telemetry.json` into the output folder
+- **Render** writes `Reco_Web_<date>.mov` and its `.telemetry.json` into the output folder
   at 1× or 2× and 60 fps, then opens the recording in the editor.
 - Every frame advances the page's clock exactly 1/60 s, however long the frame takes to render, so
   the video never drops or stretches a frame.
@@ -74,7 +74,7 @@ A command-line prototype drove a `WKWebView` in an offscreen window.
 
 ## Approach
 
-A feature folder, `BetterCapture/WebRecording/{Model,Service,ViewModel,View}`.
+A feature folder, `Reco/WebRecording/{Model,Service,ViewModel,View}`.
 
 ### Script (`Model/`, pure)
 
