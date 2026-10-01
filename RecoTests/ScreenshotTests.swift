@@ -36,6 +36,25 @@ struct ScreenshotTests {
         #expect(screenshot.pointSize == CGSize(width: 300, height: 200))
     }
 
+    @Test func croppingCutsTheSourceRectInPixelsAndKeepsScaleAndDate() throws {
+        let date = Date(timeIntervalSince1970: 1_000)
+        let display = try Screenshot(image: .filled(width: 600, height: 400), scale: 2, date: date)
+
+        let area = try #require(display.cropped(to: CGRect(x: 10, y: 20, width: 100, height: 50)))
+
+        #expect(area.image.width == 200)
+        #expect(area.image.height == 100)
+        #expect(area.scale == 2)
+        #expect(area.date == date)
+    }
+
+    @Test func croppingOutsideTheShotGivesNothing() throws {
+        let display = try Screenshot(image: .filled(width: 600, height: 400), scale: 2, date: .now)
+
+        let isOutside = display.cropped(to: CGRect(x: 400, y: 0, width: 50, height: 50)) == nil
+        #expect(isOutside)
+    }
+
     // MARK: - PNG
 
     @Test func pngDataDecodesToTheSamePixelSize() async throws {

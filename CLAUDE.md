@@ -211,12 +211,12 @@ mouse (clear of notifications and the menu bar popover, top-right). It has close
 and **Copy** (⌘C), **Save** (⌘S), **Recognize Text** and **Pin**. The card takes key when it appears, without
 activating the app, so the shortcuts work until another window is clicked; typing goes to the card meanwhile.
 Drag the card by its handle or background; drag the preview into
-any app to drop the image. Nothing is written to the output folder until **Save**. The card stays until
+any app to drop the image. Nothing is written until **Save**. The card stays until
 closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate` wires
 `ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and `onDidCapture` to
 `show(_:)` for a new screenshot or `restore()` (same card, same place) when the capture is cancelled or fails.
 
-- **Copy** (C14): PNG data only, then closes. **Save**: writes to the output folder, then closes; on
+- **Copy** (C14): PNG data only, then closes. **Save**: writes to `~/Pictures/Reco`, then closes; on
   failure the card stays and the Screenshot Failed notification is sent. **Recognize Text** (C7): the
   image's text to the clipboard. **Pin** (C8): the image in its own panel, then closes. Recognize Text
   confirms on the card for 1.5 s.
@@ -473,7 +473,10 @@ Key facts:
 Menu bar **Capture Area / Capture Window / Capture Screen** and global shortcuts of the same names
 (Settings → Shortcuts → Screenshots, no defaults; no URLs yet). Both follow `canCapture(alongside:)`: idle only,
 so a shortcut pressed while recording, counting down or capturing is ignored and logged.
-Capture Area shoots as soon as the drag ends (`AreaSelectionOverlay.present(confirmsOnRelease:)`); a click, a
+Capture Area freezes the screen first: every display is captured when it starts (`ScreenshotService.captureDisplays`),
+the overlay shows that picture (`AreaSelectionPanel.show(_:over:)`), and the area is cut from it
+(`Screenshot.cropped(to:)`), so hover states, tooltips and open menus the overlay takes away from the apps
+under it are still in the shot. Capture Area shoots as soon as the drag ends (`AreaSelectionOverlay.present(confirmsOnRelease:)`); a click, a
 drag under 24 pt (`AreaSelectionView.drawingRelease`) or Esc cancels. Its overlay never activates the app or
 takes key, so a menu or dropdown open in another app stays open and lands in the shot; Esc is a temporary
 global hotkey, as in the countdown. macOS ignores cursor changes from an app that isn't frontmost, so
@@ -482,13 +485,14 @@ global hotkey, as in the countdown. macOS ignores cursor changes from an app tha
 Captures at native pixels with the recording visibility settings into memory (`Screenshot`: image, scale,
 capture time) and hands it to `ScreenshotController.onDidCapture` (the Quick Access card, C2). Nothing is
 written until the card's **Save**: `ScreenshotController.save(_:)` writes
-`Reco_Screenshot_<capture time>.png` into the recordings' output folder.
+`Reco_Screenshot_<capture time>.png` into `~/Pictures/Reco` (`ScreenshotService.directory`, through the
+Pictures entitlement), whichever folder recordings go to.
 
 | File | Role |
 |---|---|
 | `Screenshot/Model/Screenshot.swift` | The captured `CGImage`, its scale and capture time; `filename`, `pointSize` |
 | `Screenshot/ViewModel/ScreenshotController.swift` | Owned by `AppDelegate` (which registers the shortcuts); permission check, selection, `isCapturing`, `canCapture`, `onWillCapture`/`onDidCapture`, `save(_:)` with the failure notification |
-| `Screenshot/Service/ScreenshotService.swift` | Display lookup, `SCScreenshotManager.captureImage`, save inside the output folder's security scope, PNG via ImageIO (`@concurrent`) |
+| `Screenshot/Service/ScreenshotService.swift` | Display lookup, `SCScreenshotManager.captureImage`, save into `~/Pictures/Reco`, PNG via ImageIO (`@concurrent`) |
 | `Screenshot/Service/WindowPicker.swift` | System `SCContentSharingPicker` in `.window` mode, observed only while picking |
 | `Screenshot/View/ScreenshotButtons.swift` | The three popover rows |
 | `Service/SCContentFilter+CaptureScale.swift` | Window-scale fix shared with recording (moved from `RecorderViewModel`) |

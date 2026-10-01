@@ -26,12 +26,22 @@ final class ScreenshotService {
 
     /// The ScreenCaptureKit display showing a screen
     func display(for screen: NSScreen) async throws -> SCDisplay {
-        let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
         let content = try await SCShareableContent.current
-        guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
+        guard let display = content.displays.first(where: { $0.displayID == screen.displayID }) else {
             throw CaptureError.selectedDisplayDisconnected
         }
         return display
+    }
+
+    /// Every display as it is now, by display ID, for an area cut from a frozen screen
+    func captureDisplays(settings: SettingsStore) async throws -> [CGDirectDisplayID: Screenshot] {
+        var shots: [CGDirectDisplayID: Screenshot] = [:]
+        // ponytail: one display after another; capture them together if several displays make the start slow
+        for display in try await SCShareableContent.current.displays {
+            let filter = SCContentFilter(display: display, excludingWindows: [])
+            shots[display.displayID] = try await capture(filter, sourceRect: nil, settings: settings)
+        }
+        return shots
     }
 
     /// Captures at native resolution with the user's visibility settings. Nothing is written.
@@ -54,14 +64,13 @@ final class ScreenshotService {
         return Screenshot(image: image, scale: scale, date: .now)
     }
 
-    /// Writes the screenshot into the output folder, inside its security scope
+    /// Where saved screenshots go, as recordings go to `Movies/Reco`
+    static let directory = URL.homeDirectory.appending(path: "Pictures/Reco")
+
+    /// Writes the screenshot into `directory`
     /// - Returns: The saved file, `Reco_Screenshot_<capture time>.png`
-    func save(_ screenshot: Screenshot, settings: SettingsStore) async throws -> URL {
-        let didStart = settings.startAccessingOutputDirectory()
-        defer {
-            if didStart { settings.stopAccessingOutputDirectory() }
-        }
-        let url = settings.outputDirectory.appending(path: screenshot.filename)
+    func save(_ screenshot: Screenshot) async throws -> URL {
+        let url = Self.directory.appending(path: screenshot.filename)
         try await Self.writePNG(screenshot.image, to: url)
         return url
     }

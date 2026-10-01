@@ -27,6 +27,8 @@ final class AreaSelectionPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = false
         level = .screenSaver
+        // Appears at once: the default zoom-in would shrink and grow the frozen screen it shows
+        animationBehavior = .none
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         ignoresMouseEvents = false
         acceptsMouseMovedEvents = true
@@ -35,4 +37,23 @@ final class AreaSelectionPanel: NSPanel {
 
     override var canBecomeKey: Bool { takesFocus }
     override var canBecomeMain: Bool { takesFocus }
+
+    /// Shows the selection over `background`, the screen as it was when the selection started, or over the live screen
+    func show(_ selection: AreaSelectionView, over background: CGImage?) {
+        guard let background else {
+            contentView = selection
+            return
+        }
+        let frozen = NSImageView(frame: selection.frame)
+        frozen.image = NSImage(cgImage: background, size: selection.frame.size)
+        frozen.imageScaling = .scaleAxesIndependently
+        // Own layers, so the hole the selection clears in its dimming shows the frozen screen
+        frozen.wantsLayer = true
+        selection.wantsLayer = true
+
+        let container = NSView(frame: selection.frame)
+        container.addSubview(frozen)
+        container.addSubview(selection)
+        contentView = container
+    }
 }

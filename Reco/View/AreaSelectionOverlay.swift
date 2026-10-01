@@ -38,9 +38,11 @@ final class AreaSelectionOverlay {
     // MARK: - Public Methods
 
     /// Presents the area selection overlay on all connected displays
-    /// - Parameter confirmsOnRelease: Confirms as soon as a large enough drag ends, skipping adjusting and Confirm
+    /// - Parameters:
+    ///   - confirmsOnRelease: Confirms as soon as a large enough drag ends, skipping adjusting and Confirm
+    ///   - frozen: Each display as it was when the selection started, by display ID, shown instead of the live screen
     /// - Returns: The selected area result, or nil if cancelled
-    func present(confirmsOnRelease: Bool = false) async -> AreaSelectionResult? {
+    func present(confirmsOnRelease: Bool = false, frozen: [CGDirectDisplayID: CGImage] = [:]) async -> AreaSelectionResult? {
         let screens = NSScreen.screens
         guard !screens.isEmpty else {
             logger.error("No screens available")
@@ -66,7 +68,7 @@ final class AreaSelectionOverlay {
                 )
                 overlayView.delegate = self
 
-                panel.contentView = overlayView
+                panel.show(overlayView, over: screen.displayID.flatMap { frozen[$0] })
                 if takesFocus {
                     panel.makeKeyAndOrderFront(nil)
                 } else {

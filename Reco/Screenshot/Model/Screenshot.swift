@@ -28,6 +28,18 @@ nonisolated struct Screenshot: Sendable {
         SettingsStore.filename(prefix: "Reco_Screenshot", fileExtension: "png", date: date)
     }
 
+    /// The part of a display shot inside `sourceRect` (display points, top-left origin); nil if it's outside
+    func cropped(to sourceRect: CGRect) -> Screenshot? {
+        let pixels = CGRect(
+            x: sourceRect.minX * scale,
+            y: sourceRect.minY * scale,
+            width: sourceRect.width * scale,
+            height: sourceRect.height * scale
+        )
+        guard let image = image.cropping(to: pixels.integral) else { return nil }
+        return Screenshot(image: image, scale: scale, date: date)
+    }
+
     /// The size it had on screen
     var pointSize: CGSize {
         CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale)
