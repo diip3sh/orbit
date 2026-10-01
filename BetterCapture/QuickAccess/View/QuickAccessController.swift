@@ -35,7 +35,9 @@ final class QuickAccessController {
     func show(_ screenshot: Screenshot) {
         dismiss()
 
-        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main else {
+        // After an area capture the pointer is still where the drag ended
+        let pointer = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) }) ?? NSScreen.main else {
             return
         }
 
@@ -48,7 +50,7 @@ final class QuickAccessController {
                 logger.error("Couldn't draw a preview of the screenshot")
                 return
             }
-            present(QuickAccessViewModel(screenshot: screenshot, preview: preview, save: save), on: screen)
+            present(QuickAccessViewModel(screenshot: screenshot, preview: preview, save: save), on: screen, pointer: pointer)
         }
     }
 
@@ -90,12 +92,27 @@ final class QuickAccessController {
         CGRect(origin: CGPoint(x: visibleFrame.minX + margin, y: visibleFrame.minY + margin), size: cardSize)
     }
 
-    private func present(_ model: QuickAccessViewModel, on screen: NSScreen) {
+    /// Beside `pointer`, a `margin` away on its sides facing away from the captured `region`, so the card
+    /// opens where the drag ended without covering the shot. Slid back on screen where it wouldn't fit.
+    nonisolated static func panelFrame(in visibleFrame: CGRect, pointer: CGPoint, awayFrom region: CGRect) -> CGRect {
+        let bounds = visibleFrame.insetBy(dx: margin, dy: margin)
+        let left = pointer.x >= region.midX ? pointer.x + margin : pointer.x - margin - cardSize.width
+        let bottom = pointer.y >= region.midY ? pointer.y + margin : pointer.y - margin - cardSize.height
+        let origin = CGPoint(
+            x: min(max(left, bounds.minX), bounds.maxX - cardSize.width),
+            y: min(max(bottom, bounds.minY), bounds.maxY - cardSize.height)
+        )
+        return CGRect(origin: origin, size: cardSize)
+    }
+
+    private func present(_ model: QuickAccessViewModel, on screen: NSScreen, pointer: CGPoint) {
         model.onClose = { [weak self] in self?.dismiss() }
         model.onPin = { [weak self] in self?.pin() }
 
-        let panel = NSPanel(
-            contentRect: Self.panelFrame(in: screen.visibleFrame),
+        let visibleFrame = screen.visibleFrame
+        let frame = model.screenshot.region.map { Self.panelFrame(in: visibleFrame, pointer: pointer, awayFrom: $0) }
+        let panel = QuickAccessPanel(
+            contentRect: frame ?? Self.panelFrame(in: visibleFrame),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -111,7 +128,8 @@ final class QuickAccessController {
         panel.appearance = NSAppearance(named: .darkAqua)
         panel.contentView = NSHostingView(rootView: QuickAccessView(model: model))
         panel.alphaValue = 0
-        panel.orderFront(nil)
+        // Key, so ⌘C and ⌘S copy and save the new screenshot until another window is clicked
+        panel.makeKeyAndOrderFront(nil)
         self.panel = panel
         self.model = model
 

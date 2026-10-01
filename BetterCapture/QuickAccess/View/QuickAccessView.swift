@@ -80,7 +80,9 @@ private struct QuickAccessToolbar: View {
             // Annotate goes first once annotation exists:
             // ToolbarButton(title: "Annotate", systemImage: "pencil", action: model.annotate)
             ToolbarButton(title: "Copy", systemImage: "doc.on.doc") { Task { await model.copy() } }
+                .keyboardShortcut("c", modifiers: .command)
             ToolbarButton(title: "Save", systemImage: "square.and.arrow.down") { Task { await model.save() } }
+                .keyboardShortcut("s", modifiers: .command)
             ToolbarButton(title: "Recognize Text", systemImage: "text.viewfinder") { Task { await model.recognizeText() } }
                 .disabled(model.isRecognizingText)
             ToolbarButton(title: "Pin", systemImage: "pin", action: model.pin)

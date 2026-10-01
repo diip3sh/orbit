@@ -20,6 +20,9 @@ nonisolated struct Screenshot: Sendable {
     /// When it was captured; names the saved file
     let date: Date
 
+    /// Where an area capture was taken, in screen points (bottom-left origin); nil for windows and screens
+    var region: CGRect?
+
     /// `BetterCapture_Screenshot_<yyyy-MM-dd-HH.mm.ss>.png`, for Save and drag-out
     var filename: String {
         SettingsStore.filename(prefix: "BetterCapture_Screenshot", fileExtension: "png", date: date)

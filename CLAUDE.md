@@ -203,9 +203,13 @@ Key facts:
 
 ### C2 / C7 / C8 / C14 — Quick Access card, text recognition, pins, clipboard (`feat/screenshot-card`)
 
-A CleanShot-style card for each screenshot in the bottom-left corner of the screen under the mouse (clear
-of notifications and the menu bar popover, top-right): close, a grab handle, the preview, and **Copy**,
-**Save**, **Recognize Text** and **Pin**. Drag the card by its handle or background; drag the preview into
+A CleanShot-style card for each screenshot. After Capture Area it opens beside the pointer, where the drag
+ended, on the pointer's sides facing away from the captured area (`Screenshot.region`,
+`panelFrame(in:pointer:awayFrom:)`). Otherwise it opens in the bottom-left corner of the screen under the
+mouse (clear of notifications and the menu bar popover, top-right). It has close, a grab handle, the preview,
+and **Copy** (⌘C), **Save** (⌘S), **Recognize Text** and **Pin**. The card takes key when it appears, without
+activating the app, so the shortcuts work until another window is clicked; typing goes to the card meanwhile.
+Drag the card by its handle or background; drag the preview into
 any app to drop the image. Nothing is written to the output folder until **Save**. The card stays until
 closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate` wires
 `ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and `onDidCapture` to
@@ -218,7 +222,7 @@ closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate`
 
 | File | Role |
 |---|---|
-| `QuickAccess/View/QuickAccessController.swift` | Non-activating borderless `.floating` dark panel (never key, `hidesOnDeactivate = false`), fade in/out, placement (`panelFrame(in:)`), owns the card's view model and the pins |
+| `QuickAccess/View/QuickAccessController.swift`, `QuickAccessPanel.swift` | Non-activating borderless `.floating` dark panel (key on appearing, `hidesOnDeactivate = false`), fade in/out, placement (`panelFrame`), owns the card's view model and the pins |
 | `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin` |
 | `QuickAccess/View/QuickAccessView.swift` | Card layout; `WindowDragGesture` on the background, `.onDrag` on the preview. Annotate goes first in the toolbar once it exists (one line) |
 | `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, close on hover |

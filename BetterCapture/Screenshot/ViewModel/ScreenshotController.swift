@@ -53,14 +53,15 @@ final class ScreenshotController {
                 in: selection.screen.frame,
                 scale: selection.screen.backingScaleFactor
             )
-            return (SCContentFilter(display: display, excludingWindows: []), sourceRect)
+            let filter = SCContentFilter(display: display, excludingWindows: [])
+            return Target(filter: filter, sourceRect: sourceRect, region: selection.screenRect)
         }
     }
 
     func captureWindow() async {
         await capture {
             guard let filter = await windowPicker.pick() else { return nil }
-            return (filter, nil)
+            return Target(filter: filter)
         }
     }
 
@@ -71,7 +72,7 @@ final class ScreenshotController {
             try? await Task.sleep(for: .milliseconds(250))
             let mouse = NSEvent.mouseLocation
             guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main else { return nil }
-            return (SCContentFilter(display: try await service.display(for: screen), excludingWindows: []), nil)
+            return Target(filter: SCContentFilter(display: try await service.display(for: screen), excludingWindows: []))
         }
     }
 
@@ -89,8 +90,17 @@ final class ScreenshotController {
         }
     }
 
+    /// What a screenshot captures
+    private struct Target {
+        let filter: SCContentFilter
+        /// The part of the filter's display to capture, for an area
+        var sourceRect: CGRect?
+        /// That part's place on screen (bottom-left origin), which the card opens next to
+        var region: CGRect?
+    }
+
     /// Checks permission, lets the user select (nil = cancelled), then captures
-    private func capture(_ select: () async throws -> (filter: SCContentFilter, sourceRect: CGRect?)?) async {
+    private func capture(_ select: () async throws -> Target?) async {
         guard !isCapturing else { return }
         isCapturing = true
         onWillCapture?()
@@ -106,7 +116,8 @@ final class ScreenshotController {
                 logger.info("Screenshot cancelled")
                 return
             }
-            let captured = try await service.capture(target.filter, sourceRect: target.sourceRect, settings: settings)
+            var captured = try await service.capture(target.filter, sourceRect: target.sourceRect, settings: settings)
+            captured.region = target.region
             logger.info("Screenshot captured: \(captured.image.width)×\(captured.image.height) px")
             screenshot = captured
         } catch {
