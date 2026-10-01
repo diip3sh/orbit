@@ -50,6 +50,24 @@ enum EditorTheme {
     static let spacing: CGFloat = 16
     static let largeSpacing: CGFloat = 24
 
-    /// Every state change, so the editor moves one way.
-    static let motion = Animation.snappy(duration: 0.28)
+    /// Every state change, so the app moves one way: critically damped, no overshoot.
+    static let motion = Animation.spring(response: 0.35, dampingFraction: 1)
+
+    /// Hover and release: fast enough to feel instant, still continuous.
+    static let quickMotion = Animation.spring(response: 0.15, dampingFraction: 1)
+
+    /// Only after a flick: the gesture carried momentum, so a little bounce reads as physical.
+    static let momentumMotion = Animation.spring(response: 0.35, dampingFraction: 0.8)
+
+    /// Reduce Motion's stand-in for movement: a short cross-fade.
+    static let fadeMotion = Animation.easeOut(duration: 0.15)
+
+    /// The spring a drag hands off to when released, carrying the release speed so the motion
+    /// continues without a seam. `velocity` in points per second, `distance` the way left to go.
+    static func release(velocity: Double, distance: Double) -> Animation {
+        .interpolatingSpring(
+            SwiftUI.Spring(response: 0.35, dampingRatio: 1),
+            initialVelocity: GesturePhysics.relativeVelocity(velocity, from: 0, to: distance)
+        )
+    }
 }

@@ -7,47 +7,29 @@
 
 import SwiftUI
 
-/// A styled action button for menu bar window with hover effect
+/// An action row of the menu bar window: its symbol in a fixed column, then its title
 struct MenuBarActionButton: View {
     let title: String
     var systemImage: String?
-    var accentColor: Color = .primary
     var isDisabled: Bool = false
     let action: () -> Void
-    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
                 if let systemImage {
-                    ZStack {
-                        Circle()
-                            .fill(.gray.opacity(0.2))
-                            .frame(width: 24, height: 24)
-
-                        Image(systemName: systemImage)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(isDisabled ? Color.gray.opacity(0.3) : accentColor.opacity(0.8))
-                    }
+                    Image(systemName: systemImage)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20)
                 }
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(isDisabled ? Color.gray.opacity(0.5) : Color.primary)
+                    .font(.body.weight(.medium))
                 Spacer()
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
-            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.menuRow)
         .disabled(isDisabled)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered && !isDisabled ? accentColor.opacity(0.1) : .clear)
-                .padding(.horizontal, 4)
-        )
-        .onHover { hovering in
-            isHovered = hovering
-        }
     }
 }

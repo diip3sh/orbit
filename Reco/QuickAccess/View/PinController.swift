@@ -25,22 +25,34 @@ final class PinController {
         )
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        // On once the pin has settled: a window shadow doesn't follow the fade
+        panel.hasShadow = false
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         panel.contentAspectRatio = screenshot.pointSize
 
-        let hostingView = NSHostingView(rootView: PinView(image: screenshot.image) { [weak self, weak panel] in
+        // The pin appears where the card was, which hands its corner over
+        panel.animationBehavior = .none
+
+        let presence = PanelPresence()
+        let hostingView = NSHostingView(rootView: PinView(image: screenshot.image, presence: presence) { [weak self, weak panel] in
             guard let self, let panel else { return }
-            close(panel)
+            close(panel, presence: presence)
         })
         // The panel's frame is the size; the image's intrinsic size would grow it to full pixels
         hostingView.sizingOptions = []
         panel.contentView = hostingView
         panel.orderFront(nil)
         panels.append(panel)
+
+        Task {
+            try? await Task.sleep(for: PanelPresentation.exitDelay)
+            guard panels.contains(where: { $0 === panel }), presence.isShown else { return }
+            panel.hasShadow = true
+            panel.invalidateShadow()
+        }
     }
 
     /// The screenshot at its on-screen size, shrunk (never enlarged) to fit `visibleFrame`, with its
@@ -56,8 +68,16 @@ final class PinController {
         )
     }
 
-    private func close(_ panel: NSPanel) {
-        panel.orderOut(nil)
-        panels.removeAll { $0 === panel }
+    /// Shrinks the pin back to its corner, then takes it off screen
+    private func close(_ panel: NSPanel, presence: PanelPresence) {
+        guard presence.isShown else { return }
+        presence.isShown = false
+        panel.hasShadow = false
+        panel.ignoresMouseEvents = true
+        Task {
+            try? await Task.sleep(for: PanelPresentation.exitDelay)
+            panel.orderOut(nil)
+            panels.removeAll { $0 === panel }
+        }
     }
 }

@@ -8,9 +8,11 @@
 import SwiftUI
 
 /// The SwiftUI content view hosted inside the recording overlay panel.
-/// Shows a live preview and two action buttons: Start Recording and Dismiss.
+/// Shows a live preview and two action buttons: Start Recording and Dismiss. Glass in the editor's
+/// dark look; it arrives from and returns to the status item above it.
 struct RecordingOverlayView: View {
     let viewModel: RecorderViewModel
+    let presence: PanelPresence
     let onDismiss: () -> Void
 
     @State private var currentPreview: NSImage?
@@ -22,6 +24,9 @@ struct RecordingOverlayView: View {
         }
         .padding(10)
         .padding(.top, 4)
+        .editorGlass(in: .rect(cornerRadius: 16))
+        .foregroundStyle(EditorTheme.ink)
+        .panelPresentation(isPresented: presence.isShown, anchor: .top)
         .onChange(of: viewModel.previewService.previewImage) { _, newImage in
             currentPreview = newImage
         }
@@ -37,7 +42,7 @@ struct RecordingOverlayView: View {
             if let image = currentPreview {
                 Image(nsImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .scaledToFit()
                     .clipShape(.rect(cornerRadius: 8))
             } else {
                 RoundedRectangle(cornerRadius: 8)
@@ -48,17 +53,12 @@ struct RecordingOverlayView: View {
                     }
             }
 
-            // "LIVE" badge — only shown when preview is streaming
+            // Only shown when preview is streaming
             if viewModel.previewService.isCapturing {
                 VStack {
                     HStack {
                         Spacer()
-                        Text("LIVE")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.red, in: .capsule)
+                        LiveIndicator()
                     }
                     Spacer()
                 }
@@ -73,37 +73,24 @@ struct RecordingOverlayView: View {
 
     private var buttonRow: some View {
         VStack(spacing: 6) {
-            Button("Start Recording", systemImage: "record.circle") {
+            Button {
                 Task {
                     await viewModel.startRecordingWithCountdown()
                 }
+            } label: {
+                Label("Start Recording", systemImage: "record.circle")
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(OverlayButtonStyle(labelColor: .green, weight: .semibold))
+            .buttonStyle(.editorPrimary)
 
-            Button("Dismiss") {
+            Button {
                 onDismiss()
+            } label: {
+                Text("Dismiss")
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(OverlayButtonStyle(labelColor: .secondary, weight: .medium))
+            .buttonStyle(.editorGhost)
         }
         .padding(.top, 10)
-    }
-}
-
-// MARK: - Button Style
-
-private struct OverlayButtonStyle: ButtonStyle {
-    let labelColor: Color
-    var weight: Font.Weight = .medium
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: weight))
-            .foregroundStyle(configuration.isPressed ? labelColor.opacity(0.6) : labelColor)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 7)
-                    .fill(configuration.isPressed ? Color.gray.opacity(0.2) : Color.gray.opacity(0.12))
-            )
     }
 }

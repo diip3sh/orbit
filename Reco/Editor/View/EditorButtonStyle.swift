@@ -42,12 +42,14 @@ private struct EditorButton: View {
                 if isPrimary {
                     shape.fill(isLit ? EditorTheme.primaryHover : EditorTheme.primary)
                 } else {
+                    shape.fill(.white.opacity(isEnabled && configuration.isPressed ? 0.06 : 0))
                     shape.strokeBorder(isLit ? EditorTheme.faint : EditorTheme.hairline)
                 }
             }
             .contentShape(shape)
             .opacity(isEnabled ? 1 : 0.4)
             .onHover { isHovered = $0 }
-            .editorMotion(.snappy(duration: 0.15), value: isLit)
+            // The press shows on the frame it lands; only the release eases
+            .editorMotion(configuration.isPressed ? nil : EditorTheme.quickMotion, value: isLit)
     }
 }

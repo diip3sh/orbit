@@ -26,7 +26,7 @@ struct SectionHeader: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 12, weight: .semibold))
+            .font(.callout.weight(.semibold))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
@@ -57,7 +57,7 @@ struct MenuBarToggle: View {
     var body: some View {
         HStack {
             Text(name)
-                .font(.system(size: 13, weight: .medium))
+                .font(.body.weight(.medium))
                 .foregroundStyle(isDisabled ? .secondary : .primary)
             Spacer()
             Toggle("", isOn: $isOn)
@@ -71,12 +71,13 @@ struct MenuBarToggle: View {
         .contentShape(.rect)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered && !isDisabled ? .gray.opacity(0.1) : .clear)
+                .fill(Color.primary.opacity(isHovered && !isDisabled ? 0.08 : 0))
                 .padding(.horizontal, 4)
         )
         .onHover { hovering in
             isHovered = hovering
         }
+        .editorMotion(EditorTheme.quickMotion, value: isHovered)
     }
 }
 
@@ -90,13 +91,12 @@ struct PickerOption<Value: Hashable & Equatable> {
     var disabledMessage: String?
 }
 
-/// A menu bar style picker that expands inline to show options with hover effect
+/// A menu bar style picker that expands inline to show options
 struct MenuBarExpandablePicker<SelectionValue: Hashable & Equatable>: View {
     let name: String
     @Binding var selection: SelectionValue
     let options: [PickerOption<SelectionValue>]
     @State private var isExpanded = false
-    @State private var isHovered = false
 
     /// Convenience initializer for simple options without disabled state
     init(
@@ -122,38 +122,7 @@ struct MenuBarExpandablePicker<SelectionValue: Hashable & Equatable>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header row
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack {
-                    Text(name)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Text(currentLabel)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(isHovered ? .gray.opacity(0.1) : .clear)
-                    .padding(.horizontal, 4)
-            )
-            .onHover { hovering in
-                isHovered = hovering
-            }
+            ExpandableHeader(title: name, value: currentLabel, isExpanded: $isExpanded)
 
             // Expanded options
             if isExpanded {
@@ -166,9 +135,7 @@ struct MenuBarExpandablePicker<SelectionValue: Hashable & Equatable>: View {
                             disabledMessage: option.disabledMessage
                         ) {
                             selection = option.value
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isExpanded = false
-                            }
+                            withMotion { isExpanded = false }
                         }
                     }
                 }
@@ -183,151 +150,117 @@ struct MenuBarExpandablePicker<SelectionValue: Hashable & Equatable>: View {
     }
 }
 
+// MARK: - Expandable Header
+
+/// The header row of an expandable section: its title, the current value if there is one, and a
+/// chevron that turns when it's open. Toggles with the app's one motion.
+struct ExpandableHeader: View {
+    let title: String
+    var value: String?
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        Button {
+            withMotion { isExpanded.toggle() }
+        } label: {
+            HStack {
+                Text(title)
+                    .font(.body.weight(.medium))
+                Spacer()
+                if let value {
+                    Text(value)
+                        .foregroundStyle(.secondary)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.menuRow)
+    }
+}
+
 // MARK: - Picker Option Row
 
-/// A single option row in an expandable picker with hover effect
+/// A single option row in an expandable picker
 struct PickerOptionRow: View {
     let label: String
     let isSelected: Bool
     var isDisabled: Bool = false
     var disabledMessage: String?
     let onSelect: () -> Void
-    @State private var isHovered = false
 
     var body: some View {
         Button(action: onSelect) {
             HStack {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(label)
-                        .font(.system(size: 13))
-                        .foregroundStyle(isDisabled ? .tertiary : .primary)
                     if isDisabled, let message = disabledMessage {
                         Text(message)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.blue)
+                        .font(.callout.weight(.semibold))
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.menuRow)
         .disabled(isDisabled)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered && !isDisabled ? .gray.opacity(0.1) : .clear)
-                .padding(.horizontal, 4)
-        )
-        .onHover { hovering in
-            isHovered = hovering
-        }
     }
 }
 
 // MARK: - Device Row (for microphone selection)
 
-/// A device selection row with icon in circle, native macOS style
+/// A device selection row: its icon in a fixed column, a checkmark when selected
 struct DeviceRow: View {
     let name: String
     let icon: String
     let isSelected: Bool
     let onSelect: () -> Void
-    @State private var isHovered = false
 
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 12) {
-                // Icon in circle
-                ZStack {
-                    Circle()
-                        .fill(isSelected ? .blue.opacity(0.8) : .gray.opacity(0.3))
-                        .frame(width: 24, height: 24)
+                Image(systemName: icon)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
 
-                    Image(systemName: icon)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(isSelected ? .white : .primary)
-                }
-
-                // Name
                 Text(name)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.primary)
 
                 Spacer()
 
-                // Checkmark when selected
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.blue)
+                        .font(.callout.weight(.semibold))
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
-            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? .gray.opacity(0.1) : .clear)
-                .padding(.horizontal, 4)
-        )
-        .onHover { hovering in
-            isHovered = hovering
-        }
+        .buttonStyle(.menuRow)
     }
 }
 
 // MARK: - Microphone Expandable Picker
 
-/// A microphone picker with device-style rows (icon in circle)
+/// A microphone picker with device rows
 struct MicrophoneExpandablePicker: View {
     @Binding var selectedID: String?
     let devices: [AudioInputDevice]
     @State private var isExpanded = false
-    @State private var isHovered = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header row
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack {
-                    Text("Microphone")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Text(currentLabel)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(isHovered ? .gray.opacity(0.1) : .clear)
-                    .padding(.horizontal, 4)
-            )
-            .onHover { hovering in
-                isHovered = hovering
-            }
+            ExpandableHeader(title: "Microphone", value: currentLabel, isExpanded: $isExpanded)
 
             // Expanded device options
             if isExpanded {
@@ -339,9 +272,7 @@ struct MicrophoneExpandablePicker: View {
                         isSelected: selectedID == nil
                     ) {
                         selectedID = nil
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isExpanded = false
-                        }
+                        withMotion { isExpanded = false }
                     }
 
                     // Available devices
@@ -352,9 +283,7 @@ struct MicrophoneExpandablePicker: View {
                             isSelected: selectedID == device.id
                         ) {
                             selectedID = device.id
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isExpanded = false
-                            }
+                            withMotion { isExpanded = false }
                         }
                     }
                 }
@@ -374,44 +303,15 @@ struct MicrophoneExpandablePicker: View {
 
 // MARK: - Expandable Section (for arbitrary content)
 
-/// A menu bar style expandable section with hover effect
+/// A menu bar style expandable section
 struct MenuBarExpandableSection<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
     @State private var isExpanded = false
-    @State private var isHovered = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header row
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack {
-                    Text(title)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(isHovered ? .gray.opacity(0.1) : .clear)
-                    .padding(.horizontal, 4)
-            )
-            .onHover { hovering in
-                isHovered = hovering
-            }
+            ExpandableHeader(title: title, isExpanded: $isExpanded)
 
             // Expanded content
             if isExpanded {
@@ -544,42 +444,10 @@ struct CameraExpandablePicker: View {
     @Binding var selectedID: String?
     let devices: [CameraDevice]
     @State private var isExpanded = false
-    @State private var isHovered = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header row
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack {
-                    Text("Camera")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Text(currentLabel)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(isHovered ? .gray.opacity(0.1) : .clear)
-                    .padding(.horizontal, 4)
-            )
-            .onHover { hovering in
-                isHovered = hovering
-            }
+            ExpandableHeader(title: "Camera", value: currentLabel, isExpanded: $isExpanded)
 
             // Expanded device options
             if isExpanded {
@@ -591,9 +459,7 @@ struct CameraExpandablePicker: View {
                         isSelected: selectedID == nil
                     ) {
                         selectedID = nil
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isExpanded = false
-                        }
+                        withMotion { isExpanded = false }
                     }
 
                     // Available devices
@@ -604,9 +470,7 @@ struct CameraExpandablePicker: View {
                             isSelected: selectedID == device.id
                         ) {
                             selectedID = device.id
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isExpanded = false
-                            }
+                            withMotion { isExpanded = false }
                         }
                     }
                 }

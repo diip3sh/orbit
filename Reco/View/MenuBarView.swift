@@ -51,16 +51,14 @@ struct MenuBarView: View {
 
                 MenuBarActionButton(
                     title: viewModel.isPaused ? "Resume Recording" : "Pause Recording",
-                    systemImage: viewModel.isPaused ? "play.circle" : "pause.circle",
-                    accentColor: .orange
+                    systemImage: viewModel.isPaused ? "play.circle" : "pause.circle"
                 ) {
                     viewModel.togglePause()
                 }
             } else if let remaining = viewModel.countdown.remaining {
                 MenuBarActionButton(
                     title: "Cancel Countdown (\(remaining))",
-                    systemImage: "xmark.circle",
-                    accentColor: .orange
+                    systemImage: "xmark.circle"
                 ) {
                     viewModel.cancelCountdown()
                 }
@@ -69,7 +67,6 @@ struct MenuBarView: View {
                 MenuBarActionButton(
                     title: "Start Recording",
                     systemImage: "record.circle",
-                    accentColor: .green,
                     isDisabled: !viewModel.canStartRecording
                 ) {
                     Task {
@@ -116,7 +113,7 @@ struct MenuBarView: View {
                     }
                 } label: {
                     Text("Reset Selection")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.body.weight(.medium))
                         .foregroundStyle(.red)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
@@ -203,48 +200,32 @@ struct MenuBarView: View {
 
 // MARK: - Recording Button
 
-/// A combined button that shows recording status and allows stopping
+/// A combined button that shows recording status and allows stopping. The red is the one color
+/// in the popover: it means stop.
 struct RecordingButton: View {
     let duration: String
     let action: () -> Void
-    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                // Pulsing red dot with stop icon
-                ZStack {
-                    Circle()
-                        .fill(.gray.opacity(0.2))
-                        .frame(width: 24, height: 24)
-
-                    Image(systemName: "stop.circle")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.red.opacity(0.8))
-                }
+                Image(systemName: "stop.circle")
+                    .foregroundStyle(.red)
+                    .frame(width: 20)
 
                 Text("Stop Recording")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.body.weight(.semibold))
 
                 Spacer()
 
                 Text(duration)
-                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .font(.body.weight(.medium).monospaced())
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
-            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? .red.opacity(0.1) : .clear)
-                .padding(.horizontal, 4)
-        )
-        .onHover { hovering in
-            isHovered = hovering
-        }
+        .buttonStyle(.menuRow)
     }
 }
 
@@ -258,8 +239,6 @@ struct ContentSelectionButton: View {
     var onDismissPanel: (() -> Void)?
     @AppStorage(ContentSelectionMode.storageKey) private var mode: ContentSelectionMode = .pickContent
     @State private var isDropdownExpanded = false
-    @State private var isMainHovered = false
-    @State private var isChevronHovered = false
 
     /// Whether content has been selected via the currently active mode
     private var hasActiveSelection: Bool {
@@ -277,62 +256,37 @@ struct ContentSelectionButton: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Main button row
+            // Main button row: the action, and beside it the chevron that opens the modes
             HStack(spacing: 0) {
-                // Left: action button
                 Button {
                     triggerAction()
                 } label: {
                     HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(hasActiveSelection ? .blue.opacity(0.8) : .gray.opacity(0.2))
-                                .frame(width: 24, height: 24)
-
-                            Image(systemName: mode.icon)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(hasActiveSelection ? .white : .primary)
-                        }
+                        Image(systemName: mode.icon)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20)
 
                         Text(buttonLabel)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.primary)
+                            .font(.body.weight(.medium))
 
                         Spacer()
                     }
                     .padding(.leading, 12)
                     .padding(.vertical, 4)
-                    .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
-                .onHover { hovering in
-                    isMainHovered = hovering
-                }
+                .buttonStyle(.menuRow)
 
-                // Right: chevron dropdown toggle
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isDropdownExpanded.toggle()
-                    }
+                    withMotion { isDropdownExpanded.toggle() }
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(isDropdownExpanded ? 90 : 0))
-                        .frame(width: 28, height: 28)
-                        .contentShape(.rect)
+                        .frame(width: 36, height: 28)
                 }
-                .buttonStyle(.plain)
-                .padding(.trailing, 12)
-                .onHover { hovering in
-                    isChevronHovered = hovering
-                }
+                .buttonStyle(.menuRow)
             }
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill((isMainHovered || isChevronHovered) ? .gray.opacity(0.1) : .clear)
-                    .padding(.horizontal, 4)
-            )
 
             // Dropdown options
             if isDropdownExpanded {
@@ -343,9 +297,7 @@ struct ContentSelectionButton: View {
                         isSelected: mode == .pickContent
                     ) {
                         mode = .pickContent
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isDropdownExpanded = false
-                        }
+                        withMotion { isDropdownExpanded = false }
                     }
 
                     DeviceRow(
@@ -354,9 +306,7 @@ struct ContentSelectionButton: View {
                         isSelected: mode == .selectArea
                     ) {
                         mode = .selectArea
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isDropdownExpanded = false
-                        }
+                        withMotion { isDropdownExpanded = false }
                     }
                 }
                 .padding(.leading, 12)
@@ -392,7 +342,7 @@ struct PermissionStatusBanner: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
                 Text("Permissions Required")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.body.weight(.semibold))
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -434,40 +384,29 @@ struct PermissionRow: View {
     let title: String
     let isGranted: Bool
     let action: () -> Void
-    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: isGranted ? "checkmark.circle.fill" : "xmark.circle.fill")
                     .foregroundStyle(isGranted ? .green : .red)
-                    .font(.system(size: 12))
+                    .font(.callout)
 
                 Text(title)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.primary)
+                    .font(.callout)
 
                 Spacer()
 
                 if !isGranted {
                     Text("Open Settings")
-                        .font(.system(size: 11))
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
-            .contentShape(.rect)
         }
-        .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? .gray.opacity(0.1) : .clear)
-                .padding(.horizontal, 4)
-        )
-        .onHover { hovering in
-            isHovered = hovering
-        }
+        .buttonStyle(.menuRow)
     }
 }
 

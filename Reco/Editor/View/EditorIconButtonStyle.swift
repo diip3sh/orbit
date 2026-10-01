@@ -41,8 +41,9 @@ private struct EditorIconButton: View {
             .contentShape(.circle)
             .opacity(isEnabled ? 1 : 0.35)
             .onHover { isHovered = $0 }
-            .editorMotion(.snappy(duration: 0.18), value: isHovered)
-            .editorMotion(.snappy(duration: 0.18), value: configuration.isPressed)
+            .editorMotion(EditorTheme.quickMotion, value: isHovered)
+            // The press shows on the frame it lands; only the release eases
+            .editorMotion(configuration.isPressed ? nil : EditorTheme.quickMotion, value: configuration.isPressed)
     }
 
     private var isLit: Bool {

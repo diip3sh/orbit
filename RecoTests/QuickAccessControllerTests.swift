@@ -6,6 +6,7 @@
 //
 
 import CoreGraphics
+import SwiftUI
 import Testing
 @testable import Reco
 
@@ -49,5 +50,16 @@ struct QuickAccessControllerTests {
         let region = CGRect(x: 1300, y: 100, width: 200, height: 150)
 
         #expect(origin(pointer: CGPoint(x: 1500, y: 100), region: region) == CGPoint(x: 1266, y: 86))
+    }
+
+    // MARK: - Where the card grows from
+
+    @Test func growsFromTheCornerNearestThePointer() {
+        let card = CGRect(x: 916, y: 274, width: 230, height: 210)
+
+        // Pointer left of and below the card: its bottom-left corner. Screen y grows upwards.
+        #expect(QuickAccessController.anchor(for: card, pointer: CGPoint(x: 900, y: 260)) == .bottomLeading)
+        #expect(QuickAccessController.anchor(for: card, pointer: CGPoint(x: 1200, y: 500)) == .topTrailing)
+        #expect(QuickAccessController.anchor(for: card, pointer: nil) == .bottomLeading)
     }
 }

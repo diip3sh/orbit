@@ -6,7 +6,8 @@
 import SwiftUI
 
 /// A timeline lane of clips: clicking one selects it, dragging moves it, and its handles resize it.
-/// Moves and resizes are reported in seconds when the pointer lets go.
+/// Moves and resizes are reported in seconds when the pointer lets go. A drag past the lane's ends
+/// resists, and on release what the lane refuses springs back from where it was shown.
 struct TimelineLane<Clip: TimelineClip, Block: View>: View {
     let clips: [Clip]
 
@@ -26,7 +27,7 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
     /// A clip's block, told whether it's being dragged.
     @ViewBuilder let block: (Clip, Bool) -> Block
 
-    /// The clip being dragged and how far, in points.
+    /// The clip being dragged and how far it's shown moved, in points.
     @State private var drag: (id: UUID, offset: CGFloat)?
 
     static var height: CGFloat { 24 }
@@ -42,26 +43,35 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                     let end = clip.range.upperBound / duration * width
                     let dragged = drag.flatMap { $0.id == clip.id ? $0.offset : nil } ?? 0
 
+                    // Where the block may go: its edges stay in the lane
+                    let limits = -start...max(width - end, -start)
+
                     block(clip, drag?.id == clip.id)
                         .frame(width: end - start)
                         .offset(x: start + dragged)
                         .gesture(
                             DragGesture(minimumDistance: 0)
-                                .onChanged { drag = (clip.id, $0.translation.width) }
+                                .onChanged { value in
+                                    drag = (clip.id, GesturePhysics.rubberbanded(value.translation.width, in: limits, dimension: width))
+                                }
                                 .onEnded { value in
-                                    drag = nil
-                                    if abs(value.translation.width) < Self.clickTolerance {
-                                        onSelect(clip.id)
-                                    } else {
-                                        onMove(clip.id, value.translation.width / width * duration)
+                                    let shown = drag?.offset ?? value.translation.width
+                                    let settled = min(max(value.translation.width, limits.lowerBound), limits.upperBound)
+                                    withMotion(EditorTheme.release(velocity: value.velocity.width, distance: settled - shown)) {
+                                        drag = nil
+                                        if abs(value.translation.width) < Self.clickTolerance {
+                                            onSelect(clip.id)
+                                        } else {
+                                            onMove(clip.id, value.translation.width / width * duration)
+                                        }
                                     }
                                 }
                         )
 
-                    TrimHandle(edge: .leading, position: start) { position in
+                    TrimHandle(edge: .leading, position: start, width: width) { position in
                         onMoveStart(clip.id, position / width * duration)
                     }
-                    TrimHandle(edge: .trailing, position: end) { position in
+                    TrimHandle(edge: .trailing, position: end, width: width) { position in
                         onMoveEnd(clip.id, position / width * duration)
                     }
                 }

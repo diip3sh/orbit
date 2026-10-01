@@ -33,6 +33,9 @@ final class QuickAccessViewModel {
     /// Drawn at the card's size; the full image is only encoded when copied, saved or dragged
     let preview: CGImage
 
+    /// False once the card is on its way out, which plays its exit; set by `QuickAccessController`
+    var isPresented = true
+
     private(set) var feedback: Feedback?
     private(set) var isRecognizingText = false
 

@@ -33,7 +33,7 @@ struct RecordingTile: View {
                     }
                     .clipShape(shape)
                     .overlay {
-                        shape.strokeBorder(isHovered ? EditorTheme.accent.opacity(0.6) : EditorTheme.softHairline)
+                        shape.strokeBorder(isHovered ? EditorTheme.faint : EditorTheme.softHairline)
                     }
 
                 VStack(alignment: .leading, spacing: EditorTheme.tightSpacing) {
@@ -51,7 +51,7 @@ struct RecordingTile: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .editorMotion(.snappy(duration: 0.22), value: isHovered)
+        .editorMotion(EditorTheme.quickMotion, value: isHovered)
         .editorMotion(.smooth, value: thumbnail != nil)
         .help(recording.url.lastPathComponent)
     }

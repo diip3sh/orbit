@@ -7,7 +7,9 @@
 
 import SwiftUI
 
-/// The frame with a zoom's view outlined on it and the rest dimmed. Dragging moves the view's centre.
+/// The frame with a zoom's view outlined on it and the rest dimmed. Dragging moves the view's centre:
+/// grabbed inside the outline, it keeps the offset from where it was grabbed; pressed outside, the
+/// centre jumps to the pointer.
 struct ZoomFocusPad: View {
 
     /// The frame, or `nil` while the filmstrip loads.
@@ -20,6 +22,9 @@ struct ZoomFocusPad: View {
     @Binding var center: CGPoint
 
     @State private var size: CGSize = .zero
+
+    /// From the outline's centre to where it was grabbed, in points; zero after a press outside.
+    @State private var grabOffset: CGSize?
 
     var body: some View {
         let shown = ZoomSegment.clamped(center, scale: scale)
@@ -57,8 +62,16 @@ struct ZoomFocusPad: View {
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
                     guard size.width > 0, size.height > 0 else { return }
-                    center = CGPoint(x: value.location.x / size.width, y: value.location.y / size.height)
+                    let offset = grabOffset ?? (view.contains(value.startLocation)
+                        ? CGSize(width: value.startLocation.x - view.midX, height: value.startLocation.y - view.midY)
+                        : .zero)
+                    grabOffset = offset
+                    center = CGPoint(
+                        x: (value.location.x - offset.width) / size.width,
+                        y: (value.location.y - offset.height) / size.height
+                    )
                 }
+                .onEnded { _ in grabOffset = nil }
         )
         .accessibilityLabel("Zoom focus")
     }

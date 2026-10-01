@@ -26,6 +26,9 @@ final class QuickAccessController {
     private var model: QuickAccessViewModel?
     private var loadTask: Task<Void, Never>?
 
+    /// Panels playing their exit; `hide()` takes them off at once too, so none lands in a capture
+    private var leaving: [NSPanel] = []
+
     /// - Parameter save: Saves a screenshot into the output folder, returning whether it did
     init(save: @escaping @MainActor (Screenshot) async -> Bool) {
         self.save = save
@@ -62,16 +65,18 @@ final class QuickAccessController {
         model?.onClose = nil
         model?.onPin = nil
         model?.removeDragFile()
+        model?.isPresented = false
         model = nil
 
         if let panel {
+            // The card shrinks back to the corner it grew from; a window shadow can't follow that
+            panel.hasShadow = false
             panel.ignoresMouseEvents = true
-            NSAnimationContext.runAnimationGroup { _ in
-                panel.animator().alphaValue = 0
-            } completionHandler: {
-                MainActor.assumeIsolated {
-                    panel.orderOut(nil)
-                }
+            leaving.append(panel)
+            Task {
+                try? await Task.sleep(for: PanelPresentation.exitDelay)
+                panel.orderOut(nil)
+                leaving.removeAll { $0 === panel }
             }
         }
         panel = nil
@@ -80,6 +85,9 @@ final class QuickAccessController {
     /// Takes the card off screen at once, keeping it for `restore()`
     func hide() {
         panel?.orderOut(nil)
+        for panel in leaving {
+            panel.orderOut(nil)
+        }
     }
 
     /// Brings back a card taken away by `hide()`, where it was
@@ -90,6 +98,13 @@ final class QuickAccessController {
     /// Bottom-left of `visibleFrame`, inset by `margin`.
     nonisolated static func panelFrame(in visibleFrame: CGRect) -> CGRect {
         CGRect(origin: CGPoint(x: visibleFrame.minX + margin, y: visibleFrame.minY + margin), size: cardSize)
+    }
+
+    /// The corner of a card at `frame` nearest `pointer`, where it grows from and shrinks back to; the
+    /// bottom-left without a pointer, for the card in the screen's corner.
+    nonisolated static func anchor(for frame: CGRect, pointer: CGPoint?) -> UnitPoint {
+        guard let pointer else { return .bottomLeading }
+        return UnitPoint(x: pointer.x >= frame.midX ? 1 : 0, y: pointer.y >= frame.midY ? 0 : 1)
     }
 
     /// Beside `pointer`, a `margin` away on its sides facing away from the captured `region`, so the card
@@ -110,31 +125,42 @@ final class QuickAccessController {
         model.onPin = { [weak self] in self?.pin() }
 
         let visibleFrame = screen.visibleFrame
-        let frame = model.screenshot.region.map { Self.panelFrame(in: visibleFrame, pointer: pointer, awayFrom: $0) }
+        let region = model.screenshot.region
+        let frame = region.map { Self.panelFrame(in: visibleFrame, pointer: pointer, awayFrom: $0) } ?? Self.panelFrame(in: visibleFrame)
         let panel = QuickAccessPanel(
-            contentRect: frame ?? Self.panelFrame(in: visibleFrame),
+            contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        // On once the card has settled: a window shadow doesn't follow the fade
+        panel.hasShadow = false
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         // Dark translucent card in either system appearance
         panel.appearance = NSAppearance(named: .darkAqua)
-        panel.contentView = NSHostingView(rootView: QuickAccessView(model: model))
-        panel.alphaValue = 0
+        // The card animates itself, which the system's own window animation would only distort
+        panel.animationBehavior = .none
+
+        let dragger = PanelDragger()
+        dragger.panel = panel
+        dragger.onFlick = { [weak model] in model?.close() }
+        let anchor = Self.anchor(for: frame, pointer: region == nil ? nil : pointer)
+        panel.contentView = NSHostingView(rootView: QuickAccessView(model: model, dragger: dragger, anchor: anchor))
         // Key, so ⌘C and ⌘S copy and save the new screenshot until another window is clicked
         panel.makeKeyAndOrderFront(nil)
         self.panel = panel
         self.model = model
 
-        NSAnimationContext.runAnimationGroup { _ in
-            panel.animator().alphaValue = 1
+        Task {
+            try? await Task.sleep(for: PanelPresentation.exitDelay)
+            guard self.panel === panel else { return }
+            panel.hasShadow = true
+            panel.invalidateShadow()
         }
     }
 

@@ -10,9 +10,8 @@ import SwiftUI
 
 // MARK: - Panel
 
-/// A borderless, non-activating floating panel for the recording overlay.
-/// Uses an NSVisualEffectView background with .menu material for the native
-/// translucent menu-style appearance.
+/// A borderless, non-activating floating panel for the recording overlay. Its content draws its
+/// own glass (`RecordingOverlayView`).
 private final class RecordingOverlayNSPanel: NSPanel {
     init(contentRect: CGRect) {
         super.init(
@@ -24,11 +23,15 @@ private final class RecordingOverlayNSPanel: NSPanel {
 
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        // On once the panel has settled: a window shadow doesn't follow the fade
+        hasShadow = false
         level = .floating
         isMovableByWindowBackground = true
         isReleasedWhenClosed = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        appearance = NSAppearance(named: .darkAqua)
+        // The view animates itself, which the system's own window animation would only distort
+        animationBehavior = .none
     }
 
     override var canBecomeKey: Bool { true }
@@ -42,20 +45,36 @@ final class RecordingOverlayCoordinator {
 
     private var panel: RecordingOverlayNSPanel?
     private weak var viewModel: RecorderViewModel?
+    private let presence = PanelPresence()
+
+    /// Takes the panel off screen once its exit has played; cancelled by a `show()` meanwhile.
+    private var removal: Task<Void, Never>?
 
     // MARK: - Public API
 
     /// Shows the recording overlay anchored below the menu bar status item on the given screen.
     /// If `screen` is nil the overlay falls back to the screen containing the status item.
-    /// Starts the live preview automatically.
+    /// Starts the live preview automatically. Drops from the status item; shown again during its
+    /// exit, it turns round from where it is.
     func show(viewModel: RecorderViewModel, screen: NSScreen? = nil) {
+        let isLeaving = removal != nil
+        removal?.cancel()
+        removal = nil
+
         // If already showing, just bring to front
         if let existing = panel {
+            presence.isShown = true
+            existing.ignoresMouseEvents = false
             existing.makeKeyAndOrderFront(nil)
+            if isLeaving {
+                self.viewModel = viewModel
+                startPreview(of: viewModel)
+            }
             return
         }
 
         self.viewModel = viewModel
+        presence.isShown = true
 
         let panelWidth: CGFloat = 280
         let panelHeight: CGFloat = 270
@@ -64,41 +83,29 @@ final class RecordingOverlayCoordinator {
         let contentRect = CGRect(x: origin.x, y: origin.y, width: panelWidth, height: panelHeight)
 
         let newPanel = RecordingOverlayNSPanel(contentRect: contentRect)
-
-        // NSVisualEffectView provides the .menu material blur background
-        let visualEffect = NSVisualEffectView(frame: .init(origin: .zero, size: contentRect.size))
-        visualEffect.material = .menu
-        visualEffect.blendingMode = .behindWindow
-        visualEffect.state = .active
-        visualEffect.wantsLayer = true
-        visualEffect.layer?.cornerRadius = 12
-        visualEffect.layer?.masksToBounds = true
-
-        let hostingView = NSHostingView(rootView: RecordingOverlayView(viewModel: viewModel) {
-            self.dismiss()
+        newPanel.contentView = NSHostingView(rootView: RecordingOverlayView(viewModel: viewModel, presence: presence) { [weak self] in
+            self?.dismiss()
         })
-        hostingView.frame = visualEffect.bounds
-        hostingView.autoresizingMask = [.width, .height]
-        hostingView.wantsLayer = true
-        hostingView.layer?.backgroundColor = .clear
-
-        visualEffect.addSubview(hostingView)
-        newPanel.contentView = visualEffect
-
         newPanel.makeKeyAndOrderFront(nil)
         panel = newPanel
 
-        // Auto-start live preview
         Task {
-            await viewModel.startPreview()
+            try? await Task.sleep(for: PanelPresentation.exitDelay)
+            guard panel === newPanel, presence.isShown else { return }
+            newPanel.hasShadow = true
+            newPanel.invalidateShadow()
         }
+
+        // Auto-start live preview
+        startPreview(of: viewModel)
     }
 
-    /// Dismisses the overlay and stops the live preview.
+    /// Stops the live preview at once and takes the overlay away after its exit.
     func dismiss() {
-        guard let panel else { return }
-        panel.orderOut(nil)
-        self.panel = nil
+        guard let panel, removal == nil else { return }
+        presence.isShown = false
+        panel.hasShadow = false
+        panel.ignoresMouseEvents = true
 
         if let viewModel {
             Task {
@@ -106,6 +113,20 @@ final class RecordingOverlayCoordinator {
             }
         }
         viewModel = nil
+
+        removal = Task {
+            try? await Task.sleep(for: PanelPresentation.exitDelay)
+            guard !Task.isCancelled else { return }
+            panel.orderOut(nil)
+            self.panel = nil
+            removal = nil
+        }
+    }
+
+    private func startPreview(of viewModel: RecorderViewModel) {
+        Task {
+            await viewModel.startPreview()
+        }
     }
 
     // MARK: - Positioning

@@ -40,6 +40,9 @@ final class CountdownOverlay {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
+        // Dark glass in either system appearance, like the editor's
+        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.animationBehavior = .none
         panel.contentView = NSHostingView(rootView: CountdownView(countdown: countdown))
         panel.orderFront(nil)
         self.panel = panel
@@ -52,7 +55,8 @@ final class CountdownOverlay {
         }
     }
 
-    /// Removes the panel and releases Esc.
+    /// Removes the panel and releases Esc. At once, with no exit animation: a recording starts
+    /// right after, and the disc must not land in its first frame.
     func dismiss() {
         escapeTask?.cancel()
         escapeTask = nil

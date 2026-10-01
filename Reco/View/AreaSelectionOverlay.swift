@@ -159,12 +159,6 @@ private enum InteractionState {
     case resizing(handle: ResizeHandle)
 }
 
-private enum ResizeHandle {
-    case topLeft, top, topRight
-    case left, right
-    case bottomLeft, bottom, bottomRight
-}
-
 // MARK: - AreaSelectionView
 
 /// The NSView that handles drawing the overlay, selection rectangle, and user interaction
@@ -319,7 +313,10 @@ final class AreaSelectionView: NSView {
         case .drawing(let origin):
             selectionRect = rectFrom(origin, to: clampedPoint)
             // Dim on the first drag rather than on mouse down, so a plain click never flashes the screen
-            showOverlay = true
+            if !showOverlay {
+                showOverlay = true
+                fadeIn(self)
+            }
 
         case .moving(let offset):
             var newOrigin = CGPoint(
@@ -431,7 +428,7 @@ final class AreaSelectionView: NSView {
         let evenWidth = Int(ceil(pixelWidth / 2) * 2)
         let evenHeight = Int(ceil(pixelHeight / 2) * 2)
 
-        let text = "\(evenWidth) x \(evenHeight)"
+        let text = "\(evenWidth) × \(evenHeight)"
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
             .foregroundColor: NSColor.white
@@ -478,17 +475,8 @@ final class AreaSelectionView: NSView {
 
         let container = NSView()
 
-        let confirm = makeActionButton(
-            title: "Confirm",
-            textColor: .systemGreen,
-            action: #selector(confirmButtonClicked)
-        )
-
-        let cancel = makeActionButton(
-            title: "Cancel",
-            textColor: .systemRed,
-            action: #selector(cancelButtonClicked)
-        )
+        let confirm = makeActionButton(title: "Confirm", keyEquivalent: "\r", action: #selector(confirmButtonClicked))
+        let cancel = makeActionButton(title: "Cancel", keyEquivalent: "\u{1b}", action: #selector(cancelButtonClicked))
 
         container.addSubview(confirm)
         container.addSubview(cancel)
@@ -526,6 +514,7 @@ final class AreaSelectionView: NSView {
         self.buttonContainerCenterY = centerY
 
         updateButtonPositions()
+        fadeIn(container)
     }
 
     private func hideActionButtons() {
@@ -543,16 +532,17 @@ final class AreaSelectionView: NSView {
         buttonContainerCenterY?.constant = selectionRect.midY
     }
 
-    private func makeActionButton(title: String, textColor: NSColor, action: Selector) -> NSButton {
+    /// A system button: glass on macOS 26. Return confirms and Esc cancels, as the keys always did.
+    private func makeActionButton(title: String, keyEquivalent: String, action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
-        button.isBordered = false
-        button.wantsLayer = true
-        button.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.8).cgColor
-        button.layer?.cornerRadius = 6
-        button.contentTintColor = textColor
-        button.font = .systemFont(ofSize: 14, weight: .regular)
+        button.controlSize = .large
+        button.keyEquivalent = keyEquivalent
+        if #available(macOS 26, *) {
+            button.bezelStyle = .glass
+        } else {
+            button.bezelStyle = .push
+        }
         button.widthAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
-        button.heightAnchor.constraint(equalToConstant: 36).isActive = true
         return button
     }
 
@@ -687,35 +677,11 @@ final class AreaSelectionView: NSView {
         if let container = buttonContainer, container.frame.contains(point) {
             NSCursor.arrow.set()
         } else if let handle = resizeHandle(at: point) {
-            cursorForHandle(handle).set()
+            handle.cursor.set()
         } else if selectionRect.contains(point) {
             NSCursor.openHand.set()
         } else {
             NSCursor.crosshair.set()
-        }
-    }
-
-    /// Returns the native macOS frame resize cursor for a given handle position
-    private func cursorForHandle(_ handle: ResizeHandle) -> NSCursor {
-        let directions: NSCursor.FrameResizeDirection.Set = [.inward, .outward]
-
-        switch handle {
-        case .topLeft:
-            return .frameResize(position: .topLeft, directions: directions)
-        case .top:
-            return .frameResize(position: .top, directions: directions)
-        case .topRight:
-            return .frameResize(position: .topRight, directions: directions)
-        case .left:
-            return .frameResize(position: .left, directions: directions)
-        case .right:
-            return .frameResize(position: .right, directions: directions)
-        case .bottomLeft:
-            return .frameResize(position: .bottomLeft, directions: directions)
-        case .bottom:
-            return .frameResize(position: .bottom, directions: directions)
-        case .bottomRight:
-            return .frameResize(position: .bottomRight, directions: directions)
         }
     }
 

@@ -80,7 +80,7 @@ final class AgentRecordingPanelController: NSObject, NSWindowDelegate {
         guard panel != nil, removal == nil else { return }
         viewModel.isPresented = false
         removal = Task {
-            try? await Task.sleep(for: .milliseconds(350))
+            try? await Task.sleep(for: PanelPresentation.exitDelay)
             guard !Task.isCancelled else { return }
             panel?.orderOut(nil)
             panel = nil

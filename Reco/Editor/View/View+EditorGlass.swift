@@ -5,6 +5,7 @@
 //  Created by Diip3sh on 28.09.26.
 //
 
+import AppKit
 import SwiftUI
 
 extension View {
@@ -25,8 +26,8 @@ extension View {
             }
     }
 
-    /// `animation` for changes of `value`, or none with Reduce Motion on.
-    func editorMotion(_ animation: Animation = EditorTheme.motion, value: some Equatable) -> some View {
+    /// `animation` for changes of `value`, or none with Reduce Motion on (or when `animation` is nil).
+    func editorMotion(_ animation: Animation? = EditorTheme.motion, value: some Equatable) -> some View {
         modifier(EditorMotion(animation: animation, value: value))
     }
 }
@@ -35,9 +36,20 @@ private struct EditorGlass<GlassShape: Shape>: ViewModifier {
     let shape: GlassShape
 
     @Environment(\.accessibilityReduceTransparency) private var reducesTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        surface(content)
+            .overlay {
+                // Increase Contrast: a defined edge on every surface
+                if contrast == .increased {
+                    shape.stroke(EditorTheme.dim)
+                }
+            }
+    }
 
     @ViewBuilder
-    func body(content: Content) -> some View {
+    private func surface(_ content: Content) -> some View {
         if reducesTransparency {
             content
                 .background(EditorTheme.stage, in: shape)
@@ -53,7 +65,7 @@ private struct EditorGlass<GlassShape: Shape>: ViewModifier {
 }
 
 private struct EditorMotion<Value: Equatable>: ViewModifier {
-    let animation: Animation
+    let animation: Animation?
     let value: Value
 
     @Environment(\.accessibilityReduceMotion) private var reducesMotion
@@ -61,6 +73,15 @@ private struct EditorMotion<Value: Equatable>: ViewModifier {
     func body(content: Content) -> some View {
         content.animation(reducesMotion ? nil : animation, value: value)
     }
+}
+
+/// Runs `body` animated by `animation`, or without animation with Reduce Motion on. For code
+/// with no view environment to read it from.
+func withMotion<Result>(
+    _ animation: Animation = EditorTheme.motion,
+    _ body: () throws -> Result
+) rethrows -> Result {
+    try withAnimation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : animation, body)
 }
 
 extension ToolbarContent {

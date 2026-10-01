@@ -35,7 +35,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 565 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 581 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -190,13 +190,14 @@ recorded (area, window, or display) and the seconds in the menu bar. `reco://tog
 | File | Role |
 |---|---|
 | `Service/RecordingCountdown.swift` | `@Observable` tick loop (`remaining`), cancellable, injectable one-second sleep for tests |
-| `View/CountdownOverlay.swift`, `View/CountdownView.swift` | Click-through, non-activating `.screenSaver` panel with the number; Esc as a temporary global hotkey |
+| `View/CountdownOverlay.swift`, `View/CountdownView.swift` | Click-through, non-activating `.screenSaver` dark panel with the number on a 150 pt glass disc (`editorGlass`) that grows in from its centre (`panelPresentation`) and counts with `numericText`; Esc as a temporary global hotkey |
 | `Model/CountdownDuration.swift` | Setting enum (`SettingsStore.countdownDuration`) |
 | `ViewModel/RecorderViewModel.swift` | `// MARK: - Countdown` extension: `startRecordingWithCountdown()`, `cancelCountdown()`; `toggleRecording(countdown:)` |
 
 Key facts:
 - State stays `.idle` while counting (`isRecording` false); `countdown.isRunning` is the flag. When it
-  ends, the panel is ordered out *before* the normal `startRecording()`, so it never lands in the video.
+  ends, the panel is ordered out *before* the normal `startRecording()`, so it never lands in the video;
+  that is why the disc has no exit animation.
 - Cancel: Esc, or starting again (menu, shortcut). Nothing is created. Esc is
   `KeyboardShortcuts.events(.keyDown, for: Shortcut(.escape))`: a Carbon hotkey, registered only during
   the countdown, so it swallows Esc system-wide only then. If another app holds a global Esc hotkey,
@@ -210,7 +211,11 @@ ended, on the pointer's sides facing away from the captured area (`Screenshot.re
 mouse (clear of notifications and the menu bar popover, top-right). It has close, a grab handle, the preview,
 and **Copy** (⌘C), **Save** (⌘S), **Recognize Text** and **Pin**. The card takes key when it appears, without
 activating the app, so the shortcuts work until another window is clicked; typing goes to the card meanwhile.
-Drag the card by its handle or background; drag the preview into
+It grows from the card's corner nearest the pointer (`QuickAccessController.anchor(for:pointer:)`, the
+bottom-left without a region) and shrinks back there when closed, copied, saved or pinned; `hide()` and
+`restore()` stay instant. Drag the card by its handle or background: it follows the pointer 1:1 from where it
+was grabbed (`PanelDragger`), and a flick that projects past the screen's edge (`GesturePhysics.flickExit`)
+throws it off at the release speed and closes it; a slow drag stays where dropped, a flick inwards too. Drag the preview into
 any app to drop the image. Nothing is written until **Save**. The card stays until
 closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate` wires
 `ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and `onDidCapture` to
@@ -223,10 +228,10 @@ closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate`
 
 | File | Role |
 |---|---|
-| `QuickAccess/View/QuickAccessController.swift`, `QuickAccessPanel.swift` | Non-activating borderless `.floating` dark panel (key on appearing, `hidesOnDeactivate = false`), fade in/out, placement (`panelFrame`), owns the card's view model and the pins |
+| `QuickAccess/View/QuickAccessController.swift`, `QuickAccessPanel.swift` | Non-activating borderless `.floating` dark panel (key on appearing, `hidesOnDeactivate = false`), enter/exit through `panelPresentation` (`exitDelay` before ordering out; leaving panels are tracked so `hide()` clears them too), placement (`panelFrame`), owns the card's view model and the pins |
 | `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin` |
-| `QuickAccess/View/QuickAccessView.swift` | Card layout; `WindowDragGesture` on the background, `.onDrag` on the preview. Annotate goes first in the toolbar once it exists (one line) |
-| `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, close on hover |
+| `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius, ink text, `.editorIcon` buttons, a solid toast); a `DragGesture` on the background drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the preview. Annotate goes first in the toolbar once it exists (one line) |
+| `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, close on hover; appears from and closes into its bottom-left corner (`panelPresentation`, a `PanelPresence` per pin) |
 | `QuickAccess/Service/ImageDownsampler.swift` | Card preview drawn from the captured `CGImage` off the main actor |
 | `Screenshot/Service/TextRecognizer.swift` | Vision `RecognizeTextRequest` (accurate, automatic language) off the main actor; `joined(_:)` orders lines top to bottom |
 | `Service/ImagePasteboard.swift` | PNG data on the pasteboard (Slack, Messages, Figma, Preview) |
@@ -238,6 +243,8 @@ Key facts:
   `temporaryDirectory/<UUID>/<save name>` when the card appears (a drop reads the URL at once, so it must
   exist first) and deleted when the card closes.
 - The card and pins are Reco windows, so captures leave them out unless Show Reco is on.
+- A window shadow doesn't follow the fade, so the panels have it off while entering and leaving and turn it
+  on (`invalidateShadow()`) once settled.
 
 ### S1 — Editor, phase 1: shell and playback (`feat/editor-shell`, spec 0003)
 
@@ -447,10 +454,13 @@ colored: clicks, keys and zooms are greys, and the default canvas is a slate gra
 
 | File | Role |
 |---|---|
-| `Editor/View/EditorTheme.swift` | Colors, spacing on a 4-point grid, and the one animation every state change uses |
-| `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `GlassEffectContainer`), a material with a hairline before; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on |
+| `Editor/View/EditorTheme.swift` | Colors, spacing on a 4-point grid, and the motion tokens: `motion` (spring, response 0.35, critically damped: every state change), `quickMotion` (0.15: hover, release), `momentumMotion` (damping 0.8: only after a flick), `fadeMotion` (Reduce Motion's cross-fade) and `release(velocity:distance:)` (a drag's release speed handed to a spring) |
+| `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `GlassEffectContainer`), a material with a hairline before; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on (`nil` skips it); `withMotion { }` is the same for code with no environment; Increase Contrast adds a `dim` edge to every glass surface |
 | `Editor/View/EditorBackdrop.swift`, `StageDotGrid.swift` | The frosted desktop behind the window; the dot grid behind the preview, fading out before the stage's edges |
-| `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white) and `.editorGhost` (hairline) text buttons |
+| `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white) and `.editorGhost` (hairline) text buttons; every press shows on the frame it lands, only hover and release ease |
+| `View/PanelPresentation.swift`, `PanelPresence.swift` | `panelPresentation(isPresented:anchor:)`: a floating panel fades and settles from 0.96 anchored at its source and goes back there (opacity only with Reduce Motion); `exitDelay` is how long its window stays; `PanelPresence` carries the flag for controllers whose view model can't. Used by the agent bar, Quick Access card, pins, pre-record overlay and countdown |
+| `View/MenuRowButtonStyle.swift` | `.menuRow` for the popover's rows: a fill 4 pt in from the edges, 0.08 on hover, 0.14 the moment it's pressed, dimmed when disabled |
+| `Model/GesturePhysics.swift` | Pure: `project` (momentum), `rubberband`/`rubberbanded` (resistance past a boundary), `relativeVelocity`, `velocityMatchedDuration`, `flickExit`, and `VelocityTracker` (the last 0.1 s of a drag) |
 | `Editor/View/EditorWindowManager.swift` | `makeWindow`: dark appearance, content under a transparent title bar |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the glass transport |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart), the playhead's knob, the zoom blocks |
@@ -465,6 +475,21 @@ Key facts:
 - Avoid what reads as generated: no gradients or glows in the chrome, no second accent, no cards
   and badges where a native control works, no all-caps titles, hover as a fill step (no lifts or
   scaling).
+- Two visual families, one motion system: the system-native popover and Settings, and this dark studio
+  look (editor, Recordings, Web Recording, the agent bar and the floating capture panels: Quick Access card,
+  pins, pre-record overlay, countdown).
+- Motion follows the apple-design skill: respond on press, move 1:1 from the grab point, springs that start
+  from the current value, bounce only after a flick, symmetric enter and exit from the source. Timeline
+  clip and trim-handle drags resist past the ends (`rubberbanded`) and release into `release(velocity:distance:)`,
+  so what the timeline refuses springs home from where it was shown; the zoom focus pad keeps the offset
+  from where its outline was grabbed.
+- The pre-record overlay drops from the status item (`panelPresentation(anchor: .top)`); dismissing stops the
+  preview at once, and showing it again during the exit turns it round and restarts the preview. Its Live
+  mark (`LiveIndicator`, also on the popover's preview) is a red dot and a word, static.
+- Area selection fades its dim in over 0.12 s on the first drag (instant with Reduce Motion), and its
+  Confirm and Cancel are system buttons (glass on macOS 26) with Return and Esc as key equivalents.
+- Skipped on purpose: Settings, the menu bar label, the export sheet, momentum on timeline edits, rubber-banding
+  area selection, pin flick, scrubbing.
 - `ImageRenderer` can't draw glass content, AppKit controls, `ScrollView`s or the player, and
   `screencapture`/`cacheDisplay` need permission or miss SwiftUI; check the look in the app.
 

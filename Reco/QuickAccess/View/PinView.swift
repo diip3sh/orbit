@@ -7,10 +7,12 @@
 
 import SwiftUI
 
-/// A pinned screenshot: fills its panel, drags it anywhere, shows a close button on hover.
+/// A pinned screenshot: fills its panel, drags it anywhere, shows a close button on hover. It
+/// appears from, and closes back into, its bottom-left corner, where the card it came from was.
 struct PinView: View {
 
     let image: CGImage
+    let presence: PanelPresence
     let close: () -> Void
 
     @State private var isHovering = false
@@ -30,9 +32,12 @@ struct PinView: View {
                         .imageScale(.large)
                         .help("Close")
                         .padding(6)
+                        .transition(.opacity)
                 }
             }
+            .editorMotion(value: isHovering)
             .onHover { isHovering = $0 }
+            .panelPresentation(isPresented: presence.isShown, anchor: .bottomLeading)
             .allowsWindowActivationEvents(true)
     }
 }

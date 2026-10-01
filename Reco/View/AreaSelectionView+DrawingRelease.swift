@@ -5,7 +5,7 @@
 //  Created by Diip3sh on 30.09.26.
 //
 
-import CoreGraphics
+import AppKit
 
 extension AreaSelectionView {
 
@@ -30,6 +30,17 @@ extension AreaSelectionView {
         case (true, false): .adjust
         case (false, true): .cancel
         case (false, false): .reset
+        }
+    }
+
+    /// Fades `view` in over 0.12 s, so the dim and the buttons arrive instead of jumping in;
+    /// at once with Reduce Motion on.
+    func fadeIn(_ view: NSView) {
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        view.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            view.animator().alphaValue = 1
         }
     }
 }

@@ -7,21 +7,25 @@
 
 import SwiftUI
 
-/// The Quick Access card: close, grab handle, preview (drag it out), toolbar. Drag the card by its background.
+/// The Quick Access card: close, grab handle, preview (drag it out), toolbar. Drag the card by its
+/// background; a flick throws it off screen. It grows from `anchor`, the corner nearest where it opened.
 struct QuickAccessView: View {
 
     let model: QuickAccessViewModel
+    let dragger: PanelDragger
+    let anchor: UnitPoint
 
     var body: some View {
         VStack {
             ZStack {
                 // Decorative: the background under it moves the card
                 Image(systemName: "ellipsis")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(EditorTheme.faint)
                     .accessibilityHidden(true)
                     .allowsHitTesting(false)
                 HStack {
                     Button("Close", systemImage: "xmark", action: model.close)
+                        .buttonStyle(.editorIcon)
                         .help("Close")
                     Spacer()
                 }
@@ -30,15 +34,20 @@ struct QuickAccessView: View {
             QuickAccessToolbar(model: model)
         }
         .labelStyle(.iconOnly)
-        .buttonStyle(.borderless)
         .padding(8)
         .frame(width: QuickAccessController.cardSize.width, height: QuickAccessController.cardSize.height)
         .background {
-            Rectangle()
-                .fill(.regularMaterial)
-                .gesture(WindowDragGesture())
+            Color.clear
+                .contentShape(.rect)
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { _ in dragger.drag() }
+                        .onEnded { _ in dragger.end() }
+                )
         }
-        .clipShape(.rect(cornerRadius: 12))
+        .editorGlass(in: .rect(cornerRadius: 16))
+        .foregroundStyle(EditorTheme.ink)
+        .panelPresentation(isPresented: model.isPresented, anchor: anchor)
         .allowsWindowActivationEvents(true)
     }
 }
@@ -52,7 +61,7 @@ private struct QuickAccessPreview: View {
         Image(model.preview, scale: 1, label: Text("Screenshot"))
             .resizable()
             .scaledToFit()
-            .clipShape(.rect(cornerRadius: 6))
+            .clipShape(.rect(cornerRadius: 8))
             .onDrag(model.dragItem)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay(alignment: .bottom) {
@@ -61,12 +70,13 @@ private struct QuickAccessPreview: View {
                         .font(.caption)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(.thickMaterial, in: .capsule)
+                        // Solid: it sits on the card's glass, which can't carry another
+                        .background(EditorTheme.stage.opacity(0.9), in: .capsule)
                         .padding(6)
-                        .transition(.opacity)
+                        .transition(.opacity.combined(with: .offset(y: 4)))
                 }
             }
-            .animation(.default, value: model.feedback)
+            .editorMotion(value: model.feedback)
     }
 }
 
@@ -87,7 +97,6 @@ private struct QuickAccessToolbar: View {
                 .disabled(model.isRecognizingText)
             ToolbarButton(title: "Pin", systemImage: "pin", action: model.pin)
         }
-        .imageScale(.large)
     }
 }
 
@@ -100,6 +109,7 @@ private struct ToolbarButton: View {
 
     var body: some View {
         Button(title, systemImage: systemImage, action: action)
+            .buttonStyle(.editorIcon)
             .help(title)
             .frame(maxWidth: .infinity)
     }

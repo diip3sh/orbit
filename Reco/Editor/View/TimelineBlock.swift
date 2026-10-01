@@ -37,6 +37,6 @@ struct TimelineBlock<Label: View>: View {
             .shadow(color: .black.opacity(isDragged ? 0.5 : 0), radius: 6, y: 2)
             .pointerStyle(isDragged ? .grabActive : .grabIdle)
             .onHover { isHovered = $0 }
-            .editorMotion(.snappy(duration: 0.18), value: isHovered)
+            .editorMotion(EditorTheme.quickMotion, value: isHovered)
     }
 }

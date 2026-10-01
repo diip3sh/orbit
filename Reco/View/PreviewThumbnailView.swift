@@ -22,7 +22,7 @@ struct PreviewThumbnailView: View {
                 ZStack {
                     Image(nsImage: image)
                         .resizable()
-                        .aspectRatio(contentMode: .fit)
+                        .scaledToFit()
                         .clipShape(.rect(cornerRadius: 8))
 
                     // Play/Stop button overlay
@@ -42,15 +42,16 @@ struct PreviewThumbnailView: View {
     }
 
     private var previewControlOverlay: some View {
-        ZStack {
-            // Semi-transparent background when hovered or when showing play button
-            if isHovered || !isLivePreviewActive {
+        // The scrim and the button show under the pointer, and while there's no live preview to see
+        let showsControls = isHovered || !isLivePreviewActive
+
+        return ZStack {
+            if showsControls {
                 Color.black.opacity(0.3)
                     .clipShape(.rect(cornerRadius: 8))
-            }
+                    .transition(.opacity)
 
-            // Play/Stop button
-            if isHovered || !isLivePreviewActive {
+                // Play/Stop button
                 Button {
                     if isLivePreviewActive {
                         onStopLivePreview()
@@ -64,30 +65,26 @@ struct PreviewThumbnailView: View {
                             .frame(width: 48, height: 48)
 
                         Image(systemName: isLivePreviewActive ? "stop.fill" : "play.fill")
-                            .font(.system(size: 20, weight: .semibold))
+                            .font(.title.weight(.semibold))
                             .foregroundStyle(.white)
                     }
                 }
                 .buttonStyle(.plain)
+                .transition(.opacity)
             }
 
-            // Live indicator badge
             if isLivePreviewActive {
                 VStack {
                     HStack {
                         Spacer()
-                        Text("LIVE")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.red, in: .capsule)
+                        LiveIndicator()
                     }
                     Spacer()
                 }
                 .padding(8)
             }
         }
+        .editorMotion(value: showsControls)
     }
 
     private var placeholderView: some View {
@@ -103,7 +100,7 @@ struct PreviewThumbnailView: View {
                             .frame(width: 48, height: 48)
 
                         Image(systemName: "play.fill")
-                            .font(.system(size: 20, weight: .semibold))
+                            .font(.title.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
                 }

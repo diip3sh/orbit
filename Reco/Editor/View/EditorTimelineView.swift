@@ -126,10 +126,10 @@ struct EditorTimelineView: View {
                 ZStack(alignment: .leading) {
                     ForEach(timeMap.keptRanges.indices, id: \.self) { index in
                         let range = timeMap.keptRanges[index]
-                        TrimHandle(edge: .leading, position: range.lowerBound / duration * width) { position in
+                        TrimHandle(edge: .leading, position: range.lowerBound / duration * width, width: width) { position in
                             viewModel.moveStart(ofKeptRange: index, to: position / width * duration)
                         }
-                        TrimHandle(edge: .trailing, position: range.upperBound / duration * width) { position in
+                        TrimHandle(edge: .trailing, position: range.upperBound / duration * width, width: width) { position in
                             viewModel.moveEnd(ofKeptRange: index, to: position / width * duration)
                         }
                     }
