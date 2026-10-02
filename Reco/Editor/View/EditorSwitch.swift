@@ -40,7 +40,7 @@ struct EditorSwitch: View {
         }
         .frame(width: Self.size.width, height: Self.size.height)
         .editorMotion(EditorTheme.slideMotion, value: isOn)
-        // The press shows on the frame it lands; only the release eases
-        .editorMotion(isPressed ? nil : EditorTheme.quickMotion, value: isPressed)
+        // The knob's stretch eases both ways: a jump in its width reads as a stutter before the slide
+        .editorMotion(EditorTheme.quickMotion, value: isPressed)
     }
 }

@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// A choice between a few words in a capsule. One thumb springs to the chosen word; it's chosen
+/// A choice between a few words in a rounded bar. One thumb springs to the chosen word; it's chosen
 /// the moment it's pressed, a drag across carries the thumb along, and the thumb shrinks a
 /// little while held.
 struct EditorSegmentedPicker<Value: Hashable>: View {
@@ -17,6 +17,7 @@ struct EditorSegmentedPicker<Value: Hashable>: View {
     @State private var isPressed = false
 
     private static var inset: CGFloat { 2 }
+    private static var thumbShape: RoundedRectangle { RoundedRectangle(cornerRadius: 6, style: .continuous) }
 
     var body: some View {
         let segmentWidth = width / CGFloat(max(options.count, 1))
@@ -32,10 +33,10 @@ struct EditorSegmentedPicker<Value: Hashable>: View {
             }
         }
         .background(alignment: .leading) {
-            Capsule()
+            Self.thumbShape
                 .fill(.primary.opacity(0.14))
                 .overlay {
-                    Capsule()
+                    Self.thumbShape
                         .strokeBorder(.primary.opacity(0.08))
                 }
                 .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
@@ -60,7 +61,7 @@ struct EditorSegmentedPicker<Value: Hashable>: View {
                 }
         )
         .padding(Self.inset)
-        .background(EditorTheme.tray, in: .capsule)
+        .background(EditorTheme.tray, in: .rect(cornerRadius: 8, style: .continuous))
         .editorMotion(EditorTheme.slideMotion, value: selection)
         // The press shows on the frame it lands; only the release eases
         .editorMotion(isPressed ? nil : EditorTheme.quickMotion, value: isPressed)

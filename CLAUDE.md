@@ -456,15 +456,15 @@ tones (ink, dim, faint), separators instead of boxes, a label-colored Export but
 (`EditorSlider`, the `.inspector` switch, `EditorSegmentedPicker`: no system accent anywhere), and one accent
 (`EditorTheme.accent`, a warm orange, whatever the user's accent color) for the playhead and
 the selection. No panel forces an appearance. The preview sits on a faint dot grid, the transport floats on
-glass under it, the timeline lies in a rounded tray (`EditorTheme.tray`, 5% of the label color, 16 pt
+glass under it, the timeline lies in a rounded tray (`EditorTheme.tray`, 5% of the label color, 10 pt
 continuous corners) inset from the window's edges, and the inspector and the agent chat share a glass panel
-floating beside them (`EditorSidePanel`, 320 pt wide, 20 pt corners), which the toolbar button slides away.
+floating beside them (`EditorSidePanel`, 320 pt wide, 10 pt corners), which the toolbar button slides away.
 The ground lets the desktop through at 60%. Nothing else is colored: clicks, keys and zooms are greys, and the default canvas is a
 slate gradient.
 
 | File | Role |
 |---|---|
-| `Editor/View/EditorTheme.swift` | System colors by role, spacing on a 4-point grid, and the motion tokens: `motion` (spring, response 0.35, critically damped: every state change), `quickMotion` (0.15: hover, release), `momentumMotion` (damping 0.8: only after a flick), `slideMotion` (response 0.3, damping 0.78: a switch's knob, a tab's thumb), `fadeMotion` (Reduce Motion's cross-fade) and `release(velocity:distance:)` (a drag's release speed handed to a spring) |
+| `Editor/View/EditorTheme.swift` | System colors by role, spacing on a 4-point grid, and the motion tokens: `motion` (spring, response 0.35, critically damped: every state change), `quickMotion` (0.15: hover, release), `momentumMotion` (damping 0.8: only after a flick), `slideMotion` (response 0.4, damping 0.72: a switch's knob, a tab's thumb, landing with a small bounce), `fadeMotion` (Reduce Motion's cross-fade) and `release(velocity:distance:)` (a drag's release speed handed to a spring) |
 | `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `GlassEffectContainer`), a material with a hairline before; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on (`nil` skips it); `withMotion { }` is the same for code with no environment; Increase Contrast adds a `dim` edge to every glass surface |
 | `Editor/View/EditorBackdrop.swift`, `StageDotGrid.swift` | The frosted desktop behind the window; the dot grid behind the preview, fading out before the stage's edges |
 | `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white) and `.editorGhost` (hairline) text buttons; every press shows on the frame it lands (the button shrinks to 0.97, icon buttons to 0.92), only hover and release ease |
@@ -473,7 +473,7 @@ slate gradient.
 | `View/MenuRowButtonStyle.swift` | `.menuRow` for the popover's rows: a fill 4 pt in from the edges, 0.08 on hover, 0.14 the moment it's pressed, dimmed when disabled |
 | `Model/GesturePhysics.swift` | Pure: `project` (momentum), `rubberband`/`rubberbanded` (resistance past a boundary), `relativeVelocity`, `velocityMatchedDuration`, `flickExit`, and `VelocityTracker` (the last 0.1 s of a drag) |
 | `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar; `contained(_:)` puts the editor's hosting controller a level under the window's content |
-| `Editor/View/EditorSidePanel.swift`, `EditorSegmentedPicker.swift` | The glass side panel with Style and Agent, each coming in from its side of the switch (`.materialize(sideways:)`), and the capsule switch: one thumb that springs to the chosen word, chosen on press, carried along by a drag, shrinking while held |
+| `Editor/View/EditorSidePanel.swift`, `EditorSegmentedPicker.swift` | The glass side panel with Style and Agent, each coming in from its side of the switch (`.materialize(sideways:)`), and the switch between them, a rounded bar (8 pt): one thumb that springs to the chosen word, chosen on press, carried along by a drag, shrinking while held |
 | `Editor/View/EditorSlider.swift`, `EditorSwitch.swift`, `InspectorToggleStyle.swift` | The slider (6 pt track in ink, a white pill that follows from where it was grabbed and grows while held; a press on the track springs it there; the track brightens under the pointer) and the switch (ink when on; the knob springs across and stretches while pressed); both stand in for the system control to accessibility |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the glass transport |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart), the playhead's knob, the zoom blocks |
@@ -491,6 +491,8 @@ Key facts:
   1280×800 and holds its own minimum (`EditorView.minimumSize`, 900×560).
 - The filmstrip and lanes have no least width (`minWidth: 0`): their tiles are sized from the measured width, which kept a
   narrowing window's content wide.
+- A binding unwrapped with `Binding(_:)` traps if its view outlives the value: the zoom focus pad fades out after Follow
+  Cursor has removed the fixed focus, which crashed the app. It reads the view model with a fallback instead.
 - Text is ink by default, so it doesn't dim when disabled: `InspectorSection` fades disabled content.
 - Avoid what reads as generated: no gradients or glows in the chrome, no second accent, no cards
   and badges where a native control works, no all-caps titles, hover as a fill step (no lifts or

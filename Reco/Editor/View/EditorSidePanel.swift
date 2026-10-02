@@ -33,7 +33,7 @@ struct EditorSidePanel: View {
 
     var body: some View {
         let panel = panel
-        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 
         // Each panel comes in from its side of the switch and leaves that way
         ZStack {

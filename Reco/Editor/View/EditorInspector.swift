@@ -42,12 +42,14 @@ struct EditorInspector: View {
                             ])
                             .disabled(telemetry == nil)
                         }
-                        if let center = Binding(zoom.fixedCenter), let videoSize = viewModel.source?.naturalSize {
+                        if let center = zoom.wrappedValue.fixedCenter, let videoSize = viewModel.source?.naturalSize {
                             ZoomFocusPad(
                                 image: viewModel.thumbnail(at: zoom.wrappedValue.range.lowerBound),
                                 videoSize: videoSize,
                                 scale: zoom.wrappedValue.scale,
-                                center: center
+                                // Not `Binding(zoom.fixedCenter)`: the pad fades out after the focus is
+                                // gone, and an unwrapped binding traps on its next update
+                                center: Binding { viewModel.selectedZoom?.fixedCenter ?? center } set: { viewModel.selectedZoom?.fixedCenter = $0 }
                             )
                             .transition(.opacity.combined(with: .scale(scale: 0.96)))
                         }
@@ -163,12 +165,14 @@ struct EditorInspector: View {
             .controlSize(.small)
         }
         .scrollIndicators(.never)
-        // The controls fade out into the panel's bottom edge
+        // The controls fade out under the switch and into the panel's bottom edge
         .mask {
             VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: EditorTheme.spacing)
                 Color.black
                 LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                    .frame(height: EditorTheme.largeSpacing)
+                    .frame(height: EditorTheme.largeSpacing + EditorTheme.smallSpacing)
             }
         }
     }

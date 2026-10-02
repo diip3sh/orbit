@@ -19,7 +19,7 @@ struct AgentChatMessageRow: View {
                 .textSelection(.enabled)
                 .padding(.horizontal, EditorTheme.mediumSpacing)
                 .padding(.vertical, EditorTheme.smallSpacing)
-                .background(.primary.opacity(0.08), in: .rect(cornerRadius: 16, style: .continuous))
+                .background(.primary.opacity(0.08), in: .rect(cornerRadius: 10, style: .continuous))
                 .padding(.leading, EditorTheme.largeSpacing)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .accessibilityLabel("You: \(text)")

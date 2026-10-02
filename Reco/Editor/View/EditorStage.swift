@@ -11,7 +11,7 @@ import SwiftUI
 struct EditorStage: View {
     let viewModel: EditorViewModel
 
-    private static let cornerRadius: CGFloat = 12
+    private static let cornerRadius: CGFloat = 8
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)

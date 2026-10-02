@@ -17,7 +17,7 @@ enum EditorTheme {
 
     /// The timeline's tray and the chat's quiet surfaces: a step off the ground that lets it through.
     static let tray = Color.primary.opacity(0.05)
-    static let trayShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+    static let trayShape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 
     /// Zoom blocks on the timeline.
     static let panel = Color(nsColor: .underPageBackgroundColor)
@@ -64,9 +64,9 @@ enum EditorTheme {
     /// Only after a flick: the gesture carried momentum, so a little bounce reads as physical.
     static let momentumMotion = Animation.spring(response: 0.35, dampingFraction: 0.8)
 
-    /// A thumb or a knob sliding to where it was sent (switches, tabs, a slider's knob let go): quick,
-    /// with the slightest overshoot, as system switches settle.
-    static let slideMotion = Animation.spring(response: 0.3, dampingFraction: 0.78)
+    /// A thumb or a knob sliding to where it was sent (switches, tabs, a slider's knob let go): unhurried,
+    /// landing with a small bounce.
+    static let slideMotion = Animation.spring(response: 0.4, dampingFraction: 0.72)
 
     /// Reduce Motion's stand-in for movement: a short cross-fade.
     static let fadeMotion = Animation.easeOut(duration: 0.15)

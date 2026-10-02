@@ -18,7 +18,7 @@ struct EditorSlider: View {
     /// How far from the knob's centre it was grabbed, while it's dragged.
     @State private var grabOffset: CGFloat?
 
-    private static let knobSize = CGSize(width: 22, height: 14)
+    private static let knobSize = CGSize(width: 18, height: 12)
     private static let trackHeight: CGFloat = 6
 
     var body: some View {

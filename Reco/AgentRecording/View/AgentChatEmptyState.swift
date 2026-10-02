@@ -63,8 +63,8 @@ private struct SuggestionButtonStyle: ButtonStyle {
                 .foregroundStyle(isLit ? EditorTheme.ink : EditorTheme.dim)
                 .padding(.horizontal, EditorTheme.mediumSpacing)
                 .padding(.vertical, EditorTheme.smallSpacing - 2)
-                .background(.primary.opacity(configuration.isPressed ? 0.12 : isHovered ? 0.08 : 0.05), in: .capsule)
-                .contentShape(.capsule)
+                .background(.primary.opacity(configuration.isPressed ? 0.12 : isHovered ? 0.08 : 0.05), in: .rect(cornerRadius: 8, style: .continuous))
+                .contentShape(.rect(cornerRadius: 8, style: .continuous))
                 .scaleEffect(configuration.isPressed ? 0.97 : 1)
                 .onHover { isHovered = $0 }
                 // The press shows on the frame it lands; only hover and release ease
