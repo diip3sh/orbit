@@ -26,7 +26,10 @@ struct InspectorSection<Content: View, Footer: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: EditorTheme.mediumSpacing) {
             Button {
-                isExpanded.toggle()
+                // Animated from here, not on this view: the sections below move with it
+                withMotion {
+                    isExpanded.toggle()
+                }
             } label: {
                 HStack {
                     Text(title)
@@ -52,18 +55,19 @@ struct InspectorSection<Content: View, Footer: View>: View {
                         .foregroundStyle(EditorTheme.dim)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .transition(.opacity)
+                .transition(.opacity.combined(with: .offset(y: -EditorTheme.smallSpacing)))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
+        // The controls are uncovered as the section grows, and covered as it folds
+        .clipped()
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(EditorTheme.softHairline)
                 .frame(height: 1)
                 .padding(.horizontal)
         }
-        .editorMotion(value: isExpanded)
     }
 }
 

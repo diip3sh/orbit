@@ -477,7 +477,7 @@ slate gradient.
 | `Editor/View/EditorSlider.swift`, `EditorSwitch.swift`, `InspectorToggleStyle.swift` | The slider (6 pt track in ink, a white pill that follows from where it was grabbed and grows while held; a press on the track springs it there; the track brightens under the pointer) and the switch (ink when on; the knob springs across and stretches while pressed); both stand in for the system control to accessibility |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the glass transport |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart), the playhead's knob, the zoom blocks |
-| `Editor/View/Inspector*.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | Sections that fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides; a notice on top when the telemetry is missing |
+| `Editor/View/Inspector*.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | Sections that fold away under a dim title (the controls are uncovered as the section grows and the sections below slide with it, one `withMotion`), sliders with their values, switches, and tiles whose highlight slides; a notice on top when the telemetry is missing |
 | `Editor/View/ExportSheet.swift`, `ExportProgressBar.swift` | Native pickers in a grid with a line on what the format is for; progress |
 
 Key facts:
