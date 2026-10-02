@@ -31,9 +31,9 @@ struct AudioTrackRow: View {
                 .labelStyle(.iconOnly)
                 .contentTransition(.symbolEffect(.replace))
             }
-            Slider(value: $settings.volume, in: 0...1)
-                .labelsHidden()
+            EditorSlider(value: $settings.volume, range: 0...1)
                 .disabled(settings.isMuted)
+                .opacity(settings.isMuted ? 0.4 : 1)
         }
     }
 }

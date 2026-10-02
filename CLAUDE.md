@@ -451,9 +451,10 @@ Key facts:
 ### S1 — Editor design (`feat/editor-shell`)
 
 The editor and Recordings windows use the system's colors, so they follow the user's appearance (light
-or dark) and accent color: the window background (80%) the desktop frosts through, text in the label
-tones (ink, dim, faint), separators instead of boxes, a label-colored Export button, and the accent
-(`EditorTheme.accent`, `Color.accentColor`; the asset catalog's AccentColor is empty) for the playhead and
+or dark): the window background (60%) the desktop frosts through, text in the label
+tones (ink, dim, faint), separators instead of boxes, a label-colored Export button, controls in ink
+(`EditorSlider`, the `.inspector` switch, `EditorSegmentedPicker`: no system accent anywhere), and one accent
+(`EditorTheme.accent`, a warm orange, whatever the user's accent color) for the playhead and
 the selection. No panel forces an appearance. The preview sits on a faint dot grid, the transport floats on
 glass under it, the timeline lies in a rounded tray (`EditorTheme.tray`, 5% of the label color, 16 pt
 continuous corners) inset from the window's edges, and the inspector and the agent chat share a glass panel
@@ -472,7 +473,8 @@ slate gradient.
 | `View/MenuRowButtonStyle.swift` | `.menuRow` for the popover's rows: a fill 4 pt in from the edges, 0.08 on hover, 0.14 the moment it's pressed, dimmed when disabled |
 | `Model/GesturePhysics.swift` | Pure: `project` (momentum), `rubberband`/`rubberbanded` (resistance past a boundary), `relativeVelocity`, `velocityMatchedDuration`, `flickExit`, and `VelocityTracker` (the last 0.1 s of a drag) |
 | `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar; `contained(_:)` puts the editor's hosting controller a level under the window's content |
-| `Editor/View/EditorSidePanel.swift`, `EditorSegmentedPicker.swift` | The glass side panel with Style and Agent, and the capsule switch whose highlight slides |
+| `Editor/View/EditorSidePanel.swift`, `EditorSegmentedPicker.swift` | The glass side panel with Style and Agent, each coming in from its side of the switch (`.materialize(sideways:)`), and the capsule switch whose highlight slides |
+| `Editor/View/EditorSlider.swift`, `InspectorToggleStyle.swift` | The slider (4 pt track in ink, a white knob that follows from where it was grabbed and grows while held; a press on the track jumps there) and the switch (ink when on, sliding knob); both stand in for the system control to accessibility |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the glass transport |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart), the playhead's knob, the zoom blocks |
 | `Editor/View/Inspector*.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | Sections that fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides; a notice on top when the telemetry is missing |
@@ -690,7 +692,7 @@ render and the problems go back to the agent as `warnings`.
 | `AgentRecording/Model/AgentChatMessage.swift`, `AgentRecordedTake.swift` | A message (user, agent, failure); a run's take with its conversation and the take it replaces |
 | `AgentRecording/Model/AgentRecordingRequest.swift` | `take` (`RecordPageRequest(script:)`) and `conversation` in the prompt; replies of a sentence or two |
 | `AgentRecording/ViewModel/AgentChatViewModel.swift` | Per editor window: reads `<name>.web.json`, sends through the one runner, failure folding, saving |
-| `AgentRecording/View/AgentChatView.swift`, `AgentChatMessageRow.swift`, `AgentChatComposer.swift` | The chat: the conversation fades out at its top and bottom edges, above the message box, a filled rounded rectangle with the message, the agent and model menus and Record, which is Stop while a run goes |
+| `AgentRecording/View/AgentChatView.swift`, `AgentChatMessageRow.swift`, `AgentChatComposer.swift` | The chat: the conversation scrolls under the switch and the message box (`editorBar`: `safeAreaBar` on macOS 26, whose scroll edge effect blurs it away there; not yet seen scrolled), a filled rounded rectangle with the message, the agent and model menus and Record, which is Stop while a run goes |
 | `AgentRecording/View/AgentChatEmptyState.swift`, `AgentChatStatus.swift`, `AgentChatFailure.swift` | Before the first message: three requests that go into the box. A run's step under a breathing sparkle with a band of light crossing it every 1.6 s (still with Reduce Motion). A failure with Retry |
 | `WebRecording/Model/WebTake.swift` | `<name>.web.json` v1: the take's script and conversation, written by `renderTake` |
 | `WebRecording/Model/WebTakeIssues.swift` | A cursor target missing, outside the view or covered at its clip's start; skipped clicks; unfound scrolls |

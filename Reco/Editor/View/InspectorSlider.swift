@@ -33,8 +33,7 @@ struct InspectorSlider: View {
                     .monospaced()
                     .foregroundStyle(EditorTheme.dim)
             }
-            Slider(value: $value, in: range)
-                .labelsHidden()
+            EditorSlider(value: $value, range: range)
         }
     }
 }

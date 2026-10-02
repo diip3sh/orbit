@@ -37,8 +37,9 @@ enum EditorTheme {
     /// Lanes and quieter edges.
     static let softHairline = Color(nsColor: .quaternarySystemFill)
 
-    /// The playhead and the selection: the user's accent color (the asset catalog's is empty).
-    static let accent = Color.accentColor
+    /// The playhead and the selection, the only color in the chrome: a warm orange, whatever the
+    /// user's accent color. Controls are ink.
+    static let accent = Color(red: 1, green: 0.45, blue: 0.2)
 
     /// The main button (Export, play) and the trim handles, with its hover and its text: the label
     /// color, so dark on light and light on dark.

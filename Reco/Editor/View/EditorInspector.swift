@@ -36,12 +36,10 @@ struct EditorInspector: View {
                             Text("\($0, format: .number.precision(.fractionLength(0...2)))×")
                         }
                         InspectorField("Focus") {
-                            Picker("Focus", selection: zoom.followsCursor) {
-                                Text("Follow Cursor").tag(true)
-                                Text("Fixed").tag(false)
-                            }
-                            .pickerStyle(.segmented)
-                            .labelsHidden()
+                            EditorSegmentedPicker(selection: zoom.followsCursor, options: [
+                                (true, "Follow Cursor"),
+                                (false, "Fixed")
+                            ])
                             .disabled(telemetry == nil)
                         }
                         if let center = Binding(zoom.fixedCenter), let videoSize = viewModel.source?.naturalSize {
@@ -63,6 +61,7 @@ struct EditorInspector: View {
                         Label("Regenerate Automatic Zooms", systemImage: "wand.and.sparkles")
                             .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.editorGhost)
                     .disabled(telemetry == nil)
                 } footer: {
                     if telemetry?.clicks.isEmpty == true {
@@ -97,13 +96,11 @@ struct EditorInspector: View {
                         Text("\($0, format: .number.precision(.fractionLength(1)))×")
                     }
                     InspectorField("Movement") {
-                        Picker("Movement", selection: $viewModel.cursor.smoothing) {
-                            Text("Mellow").tag(CursorStyle.Smoothing.mellow)
-                            Text("Smooth").tag(CursorStyle.Smoothing.smooth)
-                            Text("Fast").tag(CursorStyle.Smoothing.fast)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
+                        EditorSegmentedPicker(selection: $viewModel.cursor.smoothing, options: [
+                            (CursorStyle.Smoothing.mellow, "Mellow"),
+                            (CursorStyle.Smoothing.smooth, "Smooth"),
+                            (CursorStyle.Smoothing.fast, "Fast")
+                        ])
                     }
                     .disabled(isWebTake)
                     Toggle("Shrink on Click", isOn: $viewModel.cursor.animatesClicks)
@@ -131,13 +128,11 @@ struct EditorInspector: View {
                         Text("\($0, format: .number.precision(.fractionLength(1))) s")
                     }
                     InspectorField("Buttons") {
-                        Picker("Buttons", selection: $viewModel.clickHighlights.buttons) {
-                            Text("All").tag(ClickHighlightStyle.Buttons.all)
-                            Text("Left Only").tag(ClickHighlightStyle.Buttons.left)
-                            Text("Right Only").tag(ClickHighlightStyle.Buttons.right)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
+                        EditorSegmentedPicker(selection: $viewModel.clickHighlights.buttons, options: [
+                            (ClickHighlightStyle.Buttons.all, "All"),
+                            (ClickHighlightStyle.Buttons.left, "Left Only"),
+                            (ClickHighlightStyle.Buttons.right, "Right Only")
+                        ])
                     }
                 }
                 .disabled(telemetry == nil)
@@ -168,5 +163,13 @@ struct EditorInspector: View {
             .controlSize(.small)
         }
         .scrollIndicators(.never)
+        // The controls fade out into the panel's bottom edge
+        .mask {
+            VStack(spacing: 0) {
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: EditorTheme.largeSpacing)
+            }
+        }
     }
 }

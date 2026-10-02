@@ -26,6 +26,17 @@ extension View {
             }
     }
 
+    /// `bar` over an edge of the scrolling content, which macOS 26 blurs away under it; before, the
+    /// content just ends at the bar.
+    @ViewBuilder
+    func editorBar(edge: VerticalEdge, @ViewBuilder _ bar: () -> some View) -> some View {
+        if #available(macOS 26, *) {
+            safeAreaBar(edge: edge, spacing: 0, content: bar)
+        } else {
+            safeAreaInset(edge: edge, spacing: 0, content: bar)
+        }
+    }
+
     /// `animation` for changes of `value`, or none with Reduce Motion on (or when `animation` is nil).
     func editorMotion(_ animation: Animation? = EditorTheme.motion, value: some Equatable) -> some View {
         modifier(EditorMotion(animation: animation, value: value))

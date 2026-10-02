@@ -35,21 +35,22 @@ struct EditorSidePanel: View {
         let panel = panel
         let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
 
-        VStack(spacing: 0) {
+        // Each panel comes in from its side of the switch and leaves that way
+        ZStack {
+            if chat.isAvailable, panel.wrappedValue == .agent {
+                AgentChatView(chat: chat)
+                    .transition(.materialize(sideways: 24))
+            } else {
+                EditorInspector(viewModel: viewModel)
+                    .transition(.materialize(sideways: -24))
+            }
+        }
+        .editorMotion(value: panel.wrappedValue)
+        .editorBar(edge: .top) {
             if chat.isAvailable {
                 EditorSegmentedPicker(selection: panel, options: [(.style, "Style"), (.agent, "Agent")])
-                    .padding([.horizontal, .top], EditorTheme.mediumSpacing)
+                    .padding(EditorTheme.mediumSpacing)
             }
-            ZStack {
-                if chat.isAvailable, panel.wrappedValue == .agent {
-                    AgentChatView(chat: chat)
-                        .transition(.opacity)
-                } else {
-                    EditorInspector(viewModel: viewModel)
-                        .transition(.opacity)
-                }
-            }
-            .editorMotion(value: panel.wrappedValue)
         }
         .frame(width: Self.width)
         .frame(maxHeight: .infinity)

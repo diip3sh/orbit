@@ -6,13 +6,16 @@
 import SwiftUI
 
 /// A surface arriving like a material: it sharpens, settles from 0.98 and fades in, `offset` points
-/// from where it rests, and leaves the same way. Opacity alone with Reduce Motion. Only for SwiftUI
+/// below or beside where it rests, and leaves the same way. Opacity alone with Reduce Motion. Only for SwiftUI
 /// content: AppKit controls and the player aren't blurred.
 struct MaterializeTransition: Transition {
     var offset: CGFloat = 0
 
+    /// Points to the side of where it rests.
+    var sideways: CGFloat = 0
+
     func body(content: Content, phase: TransitionPhase) -> some View {
-        content.modifier(Materialized(isSettled: phase.isIdentity, offset: offset))
+        content.modifier(Materialized(isSettled: phase.isIdentity, offset: CGSize(width: sideways, height: offset)))
     }
 }
 
@@ -22,11 +25,15 @@ extension Transition where Self == MaterializeTransition {
     static func materialize(offset: CGFloat) -> Self {
         MaterializeTransition(offset: offset)
     }
+
+    static func materialize(sideways: CGFloat) -> Self {
+        MaterializeTransition(sideways: sideways)
+    }
 }
 
 private struct Materialized: ViewModifier {
     let isSettled: Bool
-    let offset: CGFloat
+    let offset: CGSize
 
     @Environment(\.accessibilityReduceMotion) private var reducesMotion
 
@@ -36,7 +43,7 @@ private struct Materialized: ViewModifier {
         content
             .blur(radius: isStill ? 0 : 6)
             .scaleEffect(isStill ? 1 : 0.98)
-            .offset(y: isStill ? 0 : offset)
+            .offset(isStill ? .zero : offset)
             .opacity(isSettled ? 1 : 0)
     }
 }
