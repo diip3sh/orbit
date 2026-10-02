@@ -64,6 +64,10 @@ enum EditorTheme {
     /// Only after a flick: the gesture carried momentum, so a little bounce reads as physical.
     static let momentumMotion = Animation.spring(response: 0.35, dampingFraction: 0.8)
 
+    /// A thumb or a knob sliding to where it was sent (switches, tabs, a slider's knob let go): quick,
+    /// with the slightest overshoot, as system switches settle.
+    static let slideMotion = Animation.spring(response: 0.3, dampingFraction: 0.78)
+
     /// Reduce Motion's stand-in for movement: a short cross-fade.
     static let fadeMotion = Animation.easeOut(duration: 0.15)
 

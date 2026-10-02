@@ -39,10 +39,10 @@ struct EditorSidePanel: View {
         ZStack {
             if chat.isAvailable, panel.wrappedValue == .agent {
                 AgentChatView(chat: chat)
-                    .transition(.materialize(sideways: 24))
+                    .transition(.materialize(sideways: 48))
             } else {
                 EditorInspector(viewModel: viewModel)
-                    .transition(.materialize(sideways: -24))
+                    .transition(.materialize(sideways: -48))
             }
         }
         .editorMotion(value: panel.wrappedValue)
