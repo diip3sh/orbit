@@ -15,7 +15,11 @@ enum EditorTheme {
     /// The ground, laid over the desktop at 80%.
     static let stage = Color(nsColor: .windowBackgroundColor)
 
-    /// Under the timeline.
+    /// The timeline's tray and the chat's quiet surfaces: a step off the ground that lets it through.
+    static let tray = Color.primary.opacity(0.05)
+    static let trayShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+
+    /// Zoom blocks on the timeline.
     static let panel = Color(nsColor: .underPageBackgroundColor)
 
     /// Text.

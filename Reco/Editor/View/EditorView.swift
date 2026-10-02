@@ -7,71 +7,46 @@
 
 import SwiftUI
 
-/// An editor window's content: the preview and transport on a dark stage, the timeline under them,
-/// and the inspector, which for a web take can show the agent chat instead.
+/// An editor window's content: the preview and transport on the stage, the timeline in a tray under them,
+/// and the side panel floating on glass beside them.
 struct EditorView: View {
     let viewModel: EditorViewModel
     let chat: AgentChatViewModel
 
+    /// The smallest content the window allows: the side panel beside a stage that still shows its transport.
+    static let minimumSize = CGSize(width: 900, height: 560)
+
     @State private var showsInspector = true
     @State private var showsExport = false
 
-    /// The panel the user picked, if they did.
-    @State private var pickedPanel: Panel?
-
-    /// What the inspector's column shows.
-    private enum Panel {
-        case style
-        case agent
-    }
-
-    /// The picked panel, else the chat when an agent made the take.
-    private var panel: Binding<Panel> {
-        Binding {
-            pickedPanel ?? (chat.conversation.isEmpty ? .style : .agent)
-        } set: {
-            pickedPanel = $0
-        }
-    }
+    /// The side panel the user picked, if they did.
+    @State private var pickedPanel: EditorSidePanel.Panel?
 
     var body: some View {
         Group {
             if let source = viewModel.source {
-                VStack(spacing: 0) {
-                    EditorStage(viewModel: viewModel)
+                HStack(spacing: 0) {
+                    VStack(spacing: 0) {
+                        EditorStage(viewModel: viewModel)
 
-                    EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
-                        .padding(.horizontal, EditorTheme.largeSpacing)
-                        .padding(.vertical, EditorTheme.spacing)
-                        .background(EditorTheme.panel.opacity(0.6))
-                        .overlay(alignment: .top) {
-                            Rectangle()
-                                .fill(EditorTheme.hairline)
-                                .frame(height: 1)
-                        }
+                        EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
+                            .padding(.horizontal, EditorTheme.spacing)
+                            .padding(.vertical, EditorTheme.mediumSpacing)
+                            .background(EditorTheme.tray, in: EditorTheme.trayShape)
+                            .overlay {
+                                EditorTheme.trayShape.strokeBorder(EditorTheme.hairline)
+                            }
+                            .padding([.horizontal, .bottom], EditorTheme.mediumSpacing)
+                    }
+
+                    if showsInspector {
+                        EditorSidePanel(viewModel: viewModel, chat: chat, picked: $pickedPanel)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
                 }
                 // A take the agent recorded again replaces this one in the window: its views start over
                 .id(viewModel.videoURL)
-                .inspector(isPresented: $showsInspector) {
-                    VStack(spacing: 0) {
-                        if chat.isAvailable {
-                            Picker("Panel", selection: panel) {
-                                Text("Style").tag(Panel.style)
-                                Text("Agent").tag(Panel.agent)
-                            }
-                            .pickerStyle(.segmented)
-                            .labelsHidden()
-                            .padding([.horizontal, .top])
-                        }
-                        if chat.isAvailable, panel.wrappedValue == .agent {
-                            AgentChatView(chat: chat)
-                        } else {
-                            EditorInspector(viewModel: viewModel)
-                        }
-                    }
-                    .id(viewModel.videoURL)
-                    .inspectorColumnWidth(min: 260, ideal: 300, max: 380)
-                }
+                .editorMotion(value: showsInspector)
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button("Export…", systemImage: "square.and.arrow.up") {
@@ -107,7 +82,7 @@ struct EditorView: View {
                     .controlSize(.small)
             }
         }
-        .frame(minWidth: 560, minHeight: 440)
+        .frame(minWidth: Self.minimumSize.width, minHeight: Self.minimumSize.height)
         .editorWindowBackground()
         .editorMotion(.smooth, value: viewModel.source == nil)
         .task(id: viewModel.videoURL) {

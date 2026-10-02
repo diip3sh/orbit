@@ -7,7 +7,8 @@
 
 import SwiftUI
 
-/// A group of inspector controls under a quiet title that folds it away, with a note below them.
+/// A group of inspector controls under a title that folds it away, with a note below them and a
+/// hairline under it all.
 struct InspectorSection<Content: View, Footer: View>: View {
     let title: LocalizedStringKey
     let content: Content
@@ -29,7 +30,7 @@ struct InspectorSection<Content: View, Footer: View>: View {
             } label: {
                 HStack {
                     Text(title)
-                        .foregroundStyle(EditorTheme.dim)
+                        .font(.subheadline.weight(.semibold))
                     Spacer()
                     Image(systemName: "chevron.down")
                         .imageScale(.small)
@@ -56,6 +57,12 @@ struct InspectorSection<Content: View, Footer: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(EditorTheme.softHairline)
+                .frame(height: 1)
+                .padding(.horizontal)
+        }
         .editorMotion(value: isExpanded)
     }
 }

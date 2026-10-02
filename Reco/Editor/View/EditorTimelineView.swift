@@ -56,7 +56,8 @@ struct EditorTimelineView: View {
                     .clipped()
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: Self.filmstripHeight, maxHeight: Self.filmstripHeight, alignment: .leading)
+            // No least width: the tiles are sized from the width measured, so they'd keep a narrowing window wide
+            .frame(minWidth: 0, maxWidth: .infinity, minHeight: Self.filmstripHeight, maxHeight: Self.filmstripHeight, alignment: .leading)
             .background(EditorTheme.softHairline)
             .clipShape(.rect(cornerRadius: 6))
             .overlay {

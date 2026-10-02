@@ -8,7 +8,7 @@
 import SwiftUI
 
 /// A text button: the primary one off-white with dark text, the ghost one a hairline outline whose
-/// text brightens under the pointer.
+/// text brightens under the pointer. A press shrinks it a little.
 struct EditorButtonStyle: ButtonStyle {
     var isPrimary = true
 
@@ -30,7 +30,7 @@ private struct EditorButton: View {
     @State private var isHovered = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 8)
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         let isLit = isEnabled && (isHovered || configuration.isPressed)
 
         configuration.label
@@ -47,6 +47,7 @@ private struct EditorButton: View {
                 }
             }
             .contentShape(shape)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .opacity(isEnabled ? 1 : 0.4)
             .onHover { isHovered = $0 }
             // The press shows on the frame it lands; only the release eases

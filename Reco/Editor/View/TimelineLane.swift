@@ -77,7 +77,7 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height, alignment: .leading)
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height, alignment: .leading)
         .background(EditorTheme.softHairline.opacity(0.6), in: .rect(cornerRadius: 6))
     }
 }

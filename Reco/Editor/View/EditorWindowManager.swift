@@ -62,8 +62,9 @@ final class EditorWindowManager: NSObject {
 
         let viewModel = EditorViewModel(videoURL: videoURL)
         let chat = AgentChatViewModel(movie: videoURL, runner: agentRecording, conversation: conversation)
-        let window = makeWindow(editorController(viewModel, chat), title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1280, height: 800))
+        let window = makeWindow(contained(editorController(viewModel, chat)), title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1280, height: 800))
         window.representedURL = videoURL
+        window.contentMinSize = EditorView.minimumSize
         editors[videoURL] = Editor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
 
         // A regular app gets a Dock icon, ⌘-Tab and the main menu with Undo and Redo
@@ -86,7 +87,7 @@ final class EditorWindowManager: NSObject {
             // Loaded first: the window would size itself to the loading placeholder
             await viewModel.load()
             guard let current = editors[replaced], current.window === editor.window,
-                  let hostingController = editor.window.contentViewController as? NSHostingController<EditorView> else {
+                  let hostingController = editor.window.contentViewController?.children.first as? NSHostingController<EditorView> else {
                 open(movie, conversation: take.conversation)
                 return
             }
@@ -144,11 +145,30 @@ final class EditorWindowManager: NSObject {
 
     private func editorController(_ viewModel: EditorViewModel, _ chat: AgentChatViewModel) -> NSHostingController<EditorView> {
         let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel, chat: chat))
-        // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
-        hostingController.sizingOptions = .minSize
+        // No sizes from the content: the window holds the minimum itself (`open`)
+        hostingController.sizingOptions = []
         // The export and inspector buttons are SwiftUI toolbar items
         hostingController.sceneBridgingOptions = [.toolbars]
         return hostingController
+    }
+
+    /// `controller` filling a plain view controller. As a window's own content, a hosting view
+    /// resizes the window to its smallest size once the recording has loaded
+    /// (`NSHostingView.updateAnimatedWindowSize`); a level down it leaves the window alone.
+    private func contained(_ controller: NSViewController) -> NSViewController {
+        let container = NSViewController()
+        container.view = NSView()
+        container.addChild(controller)
+        let (view, content) = (container.view, controller.view)
+        content.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            content.topAnchor.constraint(equalTo: view.topAnchor),
+            content.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+        return container
     }
 
     /// A centred window in the editor's look: the content running under a transparent title bar and toolbar.

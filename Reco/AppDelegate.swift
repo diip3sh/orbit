@@ -97,8 +97,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls where url.scheme == "reco" {
-            handle(url)
+        for url in urls {
+            if url.scheme == "reco" {
+                handle(url)
+            } else if url.isFileURL {
+                // A recording opened with Reco (`open -a Reco <movie>`) goes to the editor
+                editorWindows.open(url)
+            }
         }
     }
 

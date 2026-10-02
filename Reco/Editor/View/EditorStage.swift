@@ -11,10 +11,10 @@ import SwiftUI
 struct EditorStage: View {
     let viewModel: EditorViewModel
 
-    private static let cornerRadius: CGFloat = 10
+    private static let cornerRadius: CGFloat = 12
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius)
+        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
 
         VStack(spacing: EditorTheme.spacing) {
             PlayerLayerView(player: viewModel.playback.player, cornerRadius: Self.cornerRadius)
@@ -26,13 +26,15 @@ struct EditorStage: View {
                         shape.fill(.black)
                     }
                 }
-                // A rim of light inside, a dark ring outside and a deep shadow, like a window on the desktop
-                .shadow(color: .black.opacity(0.7), radius: 24, y: 24)
+                // A rim of light inside, and two shadows like a window on the desktop: a tight one
+                // that seats it and a wide one that lifts it
+                .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+                .shadow(color: .black.opacity(0.28), radius: 32, y: 18)
                 .overlay {
                     shape.strokeBorder(.white.opacity(0.1))
                 }
                 .overlay {
-                    shape.stroke(.black.opacity(0.9), lineWidth: 1)
+                    shape.stroke(.black.opacity(0.35), lineWidth: 0.5)
                 }
                 .aspectRatio(viewModel.exportSize(resolution: nil), contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -52,7 +54,7 @@ struct EditorStage: View {
                     .padding(.vertical, EditorTheme.smallSpacing)
                     .editorGlass(in: .capsule)
                     .padding(.top, EditorTheme.mediumSpacing)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(.materialize(offset: -8))
             }
         }
         .editorMotion(value: viewModel.error?.localizedDescription)

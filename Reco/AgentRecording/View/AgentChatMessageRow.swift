@@ -15,16 +15,18 @@ struct AgentChatMessageRow: View {
         switch role {
         case .user:
             Text(text)
+                .lineSpacing(2)
                 .textSelection(.enabled)
                 .padding(.horizontal, EditorTheme.mediumSpacing)
                 .padding(.vertical, EditorTheme.smallSpacing)
-                .background(.primary.opacity(0.06), in: .rect(cornerRadius: 10))
+                .background(.primary.opacity(0.08), in: .rect(cornerRadius: 16, style: .continuous))
                 .padding(.leading, EditorTheme.largeSpacing)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .accessibilityLabel("You: \(text)")
         case .agent:
             Label {
                 Text(text)
+                    .lineSpacing(2)
                     .textSelection(.enabled)
             } icon: {
                 Image(systemName: "sparkles")

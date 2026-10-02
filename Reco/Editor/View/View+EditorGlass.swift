@@ -20,7 +20,7 @@ extension View {
     func editorWindowBackground() -> some View {
         foregroundStyle(EditorTheme.ink)
             .background {
-                EditorTheme.stage.opacity(0.8)
+                EditorTheme.stage.opacity(0.6)
                     .background(EditorBackdrop())
                     .ignoresSafeArea()
             }

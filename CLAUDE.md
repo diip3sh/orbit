@@ -455,7 +455,10 @@ or dark) and accent color: the window background (80%) the desktop frosts throug
 tones (ink, dim, faint), separators instead of boxes, a label-colored Export button, and the accent
 (`EditorTheme.accent`, `Color.accentColor`; the asset catalog's AccentColor is empty) for the playhead and
 the selection. No panel forces an appearance. The preview sits on a faint dot grid, the transport floats on
-glass under it. Nothing else is colored: clicks, keys and zooms are greys, and the default canvas is a
+glass under it, the timeline lies in a rounded tray (`EditorTheme.tray`, 5% of the label color, 16 pt
+continuous corners) inset from the window's edges, and the inspector and the agent chat share a glass panel
+floating beside them (`EditorSidePanel`, 320 pt wide, 20 pt corners), which the toolbar button slides away.
+The ground lets the desktop through at 60%. Nothing else is colored: clicks, keys and zooms are greys, and the default canvas is a
 slate gradient.
 
 | File | Role |
@@ -463,11 +466,13 @@ slate gradient.
 | `Editor/View/EditorTheme.swift` | System colors by role, spacing on a 4-point grid, and the motion tokens: `motion` (spring, response 0.35, critically damped: every state change), `quickMotion` (0.15: hover, release), `momentumMotion` (damping 0.8: only after a flick), `fadeMotion` (Reduce Motion's cross-fade) and `release(velocity:distance:)` (a drag's release speed handed to a spring) |
 | `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `GlassEffectContainer`), a material with a hairline before; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on (`nil` skips it); `withMotion { }` is the same for code with no environment; Increase Contrast adds a `dim` edge to every glass surface |
 | `Editor/View/EditorBackdrop.swift`, `StageDotGrid.swift` | The frosted desktop behind the window; the dot grid behind the preview, fading out before the stage's edges |
-| `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white) and `.editorGhost` (hairline) text buttons; every press shows on the frame it lands, only hover and release ease |
+| `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white) and `.editorGhost` (hairline) text buttons; every press shows on the frame it lands (the button shrinks to 0.97, icon buttons to 0.92), only hover and release ease |
+| `Editor/View/MaterializeTransition.swift` | `.materialize(offset:)`: SwiftUI content sharpens from a 6 pt blur, settles from 0.98 and fades in, and leaves the same way (opacity only with Reduce Motion). Chat rows, the chat's empty state, the stage's error. Not for AppKit controls or the player, which SwiftUI can't blur |
 | `View/PanelPresentation.swift`, `PanelPresence.swift` | `panelPresentation(isPresented:anchor:)`: a floating panel fades and settles from 0.96 anchored at its source and goes back there (opacity only with Reduce Motion); `exitDelay` is how long its window stays; `PanelPresence` carries the flag for controllers whose view model can't. Used by the agent bar, Quick Access card, pins, pre-record overlay and countdown |
 | `View/MenuRowButtonStyle.swift` | `.menuRow` for the popover's rows: a fill 4 pt in from the edges, 0.08 on hover, 0.14 the moment it's pressed, dimmed when disabled |
 | `Model/GesturePhysics.swift` | Pure: `project` (momentum), `rubberband`/`rubberbanded` (resistance past a boundary), `relativeVelocity`, `velocityMatchedDuration`, `flickExit`, and `VelocityTracker` (the last 0.1 s of a drag) |
-| `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar |
+| `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar; `contained(_:)` puts the editor's hosting controller a level under the window's content |
+| `Editor/View/EditorSidePanel.swift`, `EditorSegmentedPicker.swift` | The glass side panel with Style and Agent, and the capsule switch whose highlight slides |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the glass transport |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart), the playhead's knob, the zoom blocks |
 | `Editor/View/Inspector*.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | Sections that fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides; a notice on top when the telemetry is missing |
@@ -476,11 +481,18 @@ slate gradient.
 Key facts:
 - Glass only on controls over the stage, never on the timeline (content) or over the live video:
   each glass shape costs a sampling pass on the GPU the compositor also uses.
-- The inspector keeps the system `.inspector`, which macOS 26 draws as glass, so it has no background.
+- The side panel replaces the system `.inspector`: that one is a flat column on macOS 26, glass drawn on it doesn't show,
+  and toggling it ended in a layout loop that crashed the app (`NSSplitViewItem setCollapsed`, 300 layout passes). What lies
+  on the panel (the chat's message box, chips, the switch) is a fill, never glass on glass.
+- As a window's own content, `NSHostingView` resized the editor window to its smallest size once the recording had loaded
+  (`updateAnimatedWindowSize`, whatever its `sizingOptions`); hosted a level down it doesn't, so the window opens at
+  1280×800 and holds its own minimum (`EditorView.minimumSize`, 900×560).
+- The filmstrip and lanes have no least width (`minWidth: 0`): their tiles are sized from the measured width, which kept a
+  narrowing window's content wide.
 - Text is ink by default, so it doesn't dim when disabled: `InspectorSection` fades disabled content.
 - Avoid what reads as generated: no gradients or glows in the chrome, no second accent, no cards
   and badges where a native control works, no all-caps titles, hover as a fill step (no lifts or
-  scaling).
+  scaling; only a press scales).
 - Two visual families, one motion system: the system-native popover and Settings, and this studio
   look (editor, Recordings, Web Recording, the agent bar and the floating capture panels: Quick Access card,
   pins, pre-record overlay, countdown).
@@ -667,7 +679,7 @@ Key facts:
 
 ### S5 — Agent chat and reliable web takes (`feat/ui-polish`, spec 0008)
 
-A web take's editor has **Style | Agent** at the top of the inspector. Agent is a chat: the conversation that
+A web take's editor has **Style | Agent** at the top of the side panel. Agent is a chat: the conversation that
 made the take, the run's state ("Looking at apple.com…", "Recording… 42%", Cancel) and a message box (↩
 records, ⌥↩ new line) with the agent and model. Sending has the agent record the take again with the change;
 the window swaps to the new take in the same look, the conversation carried over. Takes are checked as they
@@ -678,7 +690,8 @@ render and the problems go back to the agent as `warnings`.
 | `AgentRecording/Model/AgentChatMessage.swift`, `AgentRecordedTake.swift` | A message (user, agent, failure); a run's take with its conversation and the take it replaces |
 | `AgentRecording/Model/AgentRecordingRequest.swift` | `take` (`RecordPageRequest(script:)`) and `conversation` in the prompt; replies of a sentence or two |
 | `AgentRecording/ViewModel/AgentChatViewModel.swift` | Per editor window: reads `<name>.web.json`, sends through the one runner, failure folding, saving |
-| `AgentRecording/View/AgentChatView.swift`, `AgentChatMessageRow.swift`, `AgentChatComposer.swift` | The chat |
+| `AgentRecording/View/AgentChatView.swift`, `AgentChatMessageRow.swift`, `AgentChatComposer.swift` | The chat: the conversation fades out at its top and bottom edges, above the message box, a filled rounded rectangle with the message, the agent and model menus and Record, which is Stop while a run goes |
+| `AgentRecording/View/AgentChatEmptyState.swift`, `AgentChatStatus.swift`, `AgentChatFailure.swift` | Before the first message: three requests that go into the box. A run's step under a breathing sparkle with a band of light crossing it every 1.6 s (still with Reduce Motion). A failure with Retry |
 | `WebRecording/Model/WebTake.swift` | `<name>.web.json` v1: the take's script and conversation, written by `renderTake` |
 | `WebRecording/Model/WebTakeIssues.swift` | A cursor target missing, outside the view or covered at its clip's start; skipped clicks; unfound scrolls |
 | `WebRecording/Model/ScrollClip.swift` | `Target` (`top` or `intoView`), aimed again on the clip's first frame |
@@ -766,7 +779,7 @@ should hold but need re-measuring.
 | S1 editor phase 4: auto-zoom, zoom lane, camera | Done; auto-zoom placement, full-frame-rate transitions and editing zooms on the timeline still need a check in the app on real recordings |
 | S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
 | S1 editor phase 6: canvas and export polish | Done; the canvas, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags), transparent exports and the Recordings window still need a check in the app |
-| S1 editor design: system colors, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
+| S1 editor design: system colors, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15. The side panel, tray, chat and its empty state were checked in window captures on macOS 26.5 (dark); a run's status, failure card and the transitions in motion were not |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 | S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |
 | S3 agent bridge (spec 0006): MCP server for coding agents | Done; tested over the real socket (token, `initialize`, `tools/list`, error calls), the `--mcp` process (`AgentBridgeClientTests`), config editors and plans. Not yet tried: real agents connected by hand, a real `record_page` render, Gatekeeper on another Mac |
@@ -782,9 +795,6 @@ Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorde
 
 ## Known open items
 
-- New editor windows open at their 560×492 minimum instead of 1280×800 (seen on `feat/ui-polish` before
-  spec 0008 too): the window takes the loading placeholder's size.
-
 - Not yet verified on real recordings: area capture mapping, a window moved/resized mid-recording.
 - `RecorderViewModel` is over SwiftLint's type size limit (pre-existing); split it before adding more.
 
@@ -793,7 +803,7 @@ Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorde
 Recordings can be scripted: select content once in the menu, then drive the running build with
 `open -g -a /tmp/bc-build/dd/Build/Products/Debug/Reco.app "reco://toggle"` (starts
 when content is selected, stops when recording; no countdown), `reco://pause` and
-`reco://edit-last` (opens the editor). Use `-a` with the path:
+`reco://edit-last` (opens the editor); `open -a <app> <movie>` opens any recording in the editor. Use `-a` with the path:
 a plain `open` may launch another copy (e.g. Xcode's DerivedData build). Play `afplay` ticks at
 logged wall times, then check each tick lands where expected in the audio, shifted by the paused time.
 Watch the app's logs with `/usr/bin/log stream --level info --predicate 'subsystem == "com.diip3sh.Reco"'`
