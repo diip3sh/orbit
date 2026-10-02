@@ -10,6 +10,7 @@ nonisolated enum AgentToolError: LocalizedError, Equatable {
     case invalidArgument(String)
     case busy(renderID: String)
     case unknownRender
+    case exporting
     case unknownTool(String)
     case timedOut
 
@@ -18,7 +19,8 @@ nonisolated enum AgentToolError: LocalizedError, Equatable {
         case .invalidArgument(let reason): reason
         case .busy(let renderID): "Reco is already rendering render_id \(renderID). Call render_status with it, then try again."
         case .unknownRender: "No render with that render_id. Only the latest render is kept; start one with record_page."
-        case .unknownTool(let name): "Unknown tool \(name). Use inspect_page, record_page or render_status."
+        case .exporting: "Reco is already exporting another recording. Call export_recording for that one until it is done, then try again."
+        case .unknownTool(let name): "Unknown tool \(name). Use inspect_page, record_page, render_status or export_recording."
         case .timedOut: "The page didn't finish loading in time. Check the url and try again."
         }
     }

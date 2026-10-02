@@ -141,6 +141,12 @@ final class WebPageRenderer: NSObject {
                 webView.sendPointer(press.isDown ? .press : .release, at: location)
             }
         }
+        // After the press, which put the caret in the field. Not into a field the page doesn't have now
+        var typed: [Character] = []
+        for key in script.keystrokes(after: take.time, through: time) {
+            guard let selector = key.target.selector, page.boxes[selector] != nil, await type(key.character, into: selector) else { continue }
+            typed.append(key.character)
+        }
         // Checked where each cursor clip starts, as Playwright checks an action's target
         let previous = take.time
         let arriving = script.pointer.first {
@@ -150,7 +156,7 @@ final class WebPageRenderer: NSObject {
         if let selector = arriving?.target.selector {
             take.issues.check(selector, at: time, frame: page.boxes[selector], cover: cover)
         }
-        take.telemetry.record(time: time, cursor: location, presses: presses, shape: CursorKind(css: cursor), scrolled: scrolled)
+        take.telemetry.record(time: time, cursor: location, presses: presses, shape: CursorKind(css: cursor), scrolled: scrolled, typed: typed)
         take.time = time
     }
 
@@ -281,6 +287,15 @@ final class WebPageRenderer: NSObject {
         )
         let values = result as? [String: Any]
         return (values?["cursor"] as? String ?? "default", values?["cover"] as? String)
+    }
+
+    /// Types `character` into the element `selector` matches. False when the page has none, or is
+    /// being replaced.
+    private func type(_ character: Character, into selector: String) async -> Bool {
+        let result = try? await webView.callAsyncJavaScript(
+            WebTypeScript.source, arguments: ["selector": selector, "text": String(character)], contentWorld: .defaultClient
+        )
+        return result as? Bool == true
     }
 
     /// The page drawn at the take's scale. WebKit paints it for the requested width, so a 2× take

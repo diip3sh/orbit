@@ -21,3 +21,20 @@ nonisolated struct RenderResources: Sendable {
 
     static let none = RenderResources()
 }
+
+extension RenderResources {
+
+    /// What `project`'s plans of `source` draw with: the keyboard layout in use now, the system's
+    /// arrow for a recording made without the cursor, and the background picture if it can be read.
+    @MainActor
+    static func current(for source: EditorSource, project: EditorProject) async -> RenderResources {
+        var resources = RenderResources(
+            keyLabels: KeyLabelFormatter.current(),
+            arrow: source.telemetry?.capture.cursorInVideo == false ? StandardCursors.arrowSprite : nil
+        )
+        if let bookmark = project.canvas.imageBookmark {
+            resources.background = await BackgroundImageLoader.image(from: bookmark)
+        }
+        return resources
+    }
+}

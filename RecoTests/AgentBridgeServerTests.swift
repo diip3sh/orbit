@@ -68,7 +68,7 @@ struct AgentBridgeServerTests {
         let result = try #require(message["result"] as? [String: Any])
 
         let tools = try #require(result["tools"] as? [[String: Any]])
-        #expect(tools.compactMap { $0["name"] as? String } == ["inspect_page", "record_page", "render_status"])
+        #expect(tools.compactMap { $0["name"] as? String } == ["inspect_page", "record_page", "render_status", "export_recording"])
         #expect(tools.allSatisfy { ($0["inputSchema"] as? [String: Any])?["type"] as? String == "object" })
     }
 

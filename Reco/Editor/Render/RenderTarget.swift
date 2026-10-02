@@ -16,5 +16,9 @@ nonisolated struct RenderTarget: Equatable, Sendable {
     /// Whether an HDR recording is drawn in HDR; otherwise AVFoundation converts its frames to SDR.
     var keepsHDR = true
 
+    /// The most samples a frame blurred by motion is averaged from: what plays in real time for the
+    /// preview; an export takes twice as many, which leaves no steps in smeared text.
+    var blurSamples = 8
+
     static let preview = RenderTarget()
 }

@@ -40,9 +40,10 @@ struct FrameRendererTests {
     /// otherwise. The overlays are drawn in `dynamicRange`, as plans draw them.
     private func plan(
         at time: Double, zooms: [ZoomSegment] = [], cursor: InputTelemetry.CursorSprite? = nil, canvas: CanvasStyle = .plain,
-        dynamicRange: DynamicRange = .sdr
+        dynamicRange: DynamicRange = .sdr, motionBlur: Double = 0, telemetry: InputTelemetry? = nil
     ) -> RenderPlan {
-        RenderPlan(
+        let cursorTelemetry = telemetry ?? cursorTelemetry
+        return RenderPlan(
             timeMap: TimeMap(cuts: [], sourceDuration: 10, frameRate: 60),
             videoSize: bounds.size,
             camera: CameraPath(zooms: zooms, cursor: [], duration: 10),
@@ -54,7 +55,10 @@ struct FrameRendererTests {
             keystrokes: [KeystrokeChip(time: time, image: 0)],
             chipImages: [OverlayImages.encoded(OverlayImages.chip(label: "⌘C", height: 30), in: dynamicRange)],
             canvas: CanvasLayout(style: canvas, videoSize: bounds.size, shorterSide: nil, background: nil).encoded(in: dynamicRange),
-            dynamicRange: dynamicRange
+            dynamicRange: dynamicRange,
+            cameraShutter: motionBlur * RenderPlan.maximumShutter,
+            cursorShutter: motionBlur * RenderPlan.maximumShutter,
+            blurSamples: 8
         )
     }
 
@@ -129,6 +133,53 @@ struct FrameRendererTests {
         let unzoomed = render(white, at: 3, plan: self.plan(at: 3)).pixel(at: chip)
         #expect(unzoomed[0] < 200)
         #expect(render(white, at: 3, plan: plan).pixel(at: chip) == unzoomed)
+    }
+
+    @Test func blursTheFrameAlongTheCamerasMoveAndLeavesAStillViewAsItIs() {
+        // Black with a white right part from x = 150, which a zoom from 2 s moves to x = 300
+        let frame = CIImage(color: .white).cropped(to: CGRect(x: 150, y: 0, width: 250, height: 300))
+            .composited(over: CIImage(color: .black).cropped(to: bounds))
+        let zoom = ZoomSegment(range: 2..<10, scale: 2, focus: .fixed(center: CGPoint(x: 0.25, y: 1.0 / 3)))
+        let greys = { (image: CIImage) in (0..<400).filter { (20..<236).contains(image.pixel(at: CGPoint(x: $0, y: 150))[0]) }.count }
+
+        // 0.15 s into the move the edge is at its fastest: sharp without blur, smeared over its way with it
+        let sharp = render(frame, at: 2.15, plan: plan(at: 0, zooms: [zoom]))
+        let blurred = render(frame, at: 2.15, plan: plan(at: 0, zooms: [zoom], motionBlur: 1))
+        #expect(greys(sharp) <= 2)
+        #expect(greys(blurred) >= 10)
+        // As bright as it was, away from the edge
+        #expect(blurred.pixel(at: CGPoint(x: 390, y: 150)) == [255, 255, 255, 255] && blurred.pixel(at: CGPoint(x: 5, y: 150)) == [0, 0, 0, 255])
+
+        // Settled, the frame is the same with and without
+        let still = render(frame, at: 6, plan: plan(at: 0, zooms: [zoom]))
+        let stillBlurred = render(frame, at: 6, plan: plan(at: 0, zooms: [zoom], motionBlur: 1))
+        #expect((0..<400).allSatisfy { still.pixel(at: CGPoint(x: $0, y: 150)) == stillBlurred.pixel(at: CGPoint(x: $0, y: 150)) })
+    }
+
+    @Test func blursTheCursorAlongItsMove() {
+        // Jumps 100 pt to the right at 1 s; the smoothed cursor is fastest shortly after
+        var telemetry = cursorTelemetry
+        telemetry.cursor = [.init(time: 0, location: CGPoint(x: 50, y: 50)), .init(time: 1, location: CGPoint(x: 150, y: 50))]
+        let frame = CIImage(color: .black).cropped(to: bounds)
+        let greens = { (image: CIImage) in (0..<400).filter { image.pixel(at: CGPoint(x: $0, y: 196))[1] > 20 }.count }
+
+        let sharp = render(frame, at: 1.1, plan: plan(at: 0, cursor: greenSquare, telemetry: telemetry))
+        let blurred = render(frame, at: 1.1, plan: plan(at: 0, cursor: greenSquare, motionBlur: 1, telemetry: telemetry))
+        let resting = render(frame, at: 0.5, plan: plan(at: 0, cursor: greenSquare, motionBlur: 1, telemetry: telemetry))
+
+        // 8 px wide; smeared over more than twice that while it moves, and whole at rest
+        #expect((8...9).contains(greens(sharp)))
+        #expect(greens(blurred) > 20 && (0..<400).allSatisfy { blurred.pixel(at: CGPoint(x: $0, y: 196))[1] < 200 })
+        #expect(greens(resting) == 8 && resting.pixel(at: CGPoint(x: 103, y: 196)) == [0, 255, 0, 255])
+    }
+
+    @Test func aBlurredFrameIsSampledEveryFewPixelsOfItsMove() {
+        #expect(FrameRenderer.blurOffsets(distance: 0.4, most: 8) == [0])
+        #expect(FrameRenderer.blurOffsets(distance: 8, most: 8) == [-0.25, 0.25])
+        #expect(FrameRenderer.blurOffsets(distance: 13, most: 8).count == 4)
+        let most = FrameRenderer.blurOffsets(distance: 500, most: 16)
+        #expect(most.count == 16)
+        #expect(abs(most.reduce(0, +)) < 1e-12 && most.allSatisfy { abs($0) < 0.5 })
     }
 
     @Test func drawsTheCursorWithItsHotspotOnTheClickAtEveryZoom() {

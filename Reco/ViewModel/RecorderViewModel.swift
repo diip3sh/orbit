@@ -519,6 +519,44 @@ extension RecorderViewModel {
     }
 }
 
+// MARK: - Cancelling
+
+extension RecorderViewModel {
+
+    /// Stops the recording and throws it away: nothing is left in the output folder.
+    func cancelRecording() async {
+        guard isRecording else { return }
+
+        state = .stopping
+        stopTimer()
+        isPaused = false
+        selectionBorderFrame.dismiss()
+        inputTelemetry.stop()
+        // The file is removed whether or not the stream stops cleanly
+        try? await captureEngine.stopCapture()
+        cameraSession.stop()
+        isPresenterOverlayActive = false
+        assetWriter.cancel()
+        settings.stopAccessingOutputDirectory()
+
+        state = .idle
+        recordingDuration = 0
+        logger.info("Recording cancelled")
+    }
+
+    /// Throws the recording away and starts again with the same selection.
+    /// - Parameter countdown: Whether the new start waits for the countdown from Settings.
+    func restartRecording(countdown useCountdown: Bool = true) async {
+        guard isRecording else { return }
+        await cancelRecording()
+        if useCountdown {
+            await startRecordingWithCountdown()
+        } else {
+            await startRecording()
+        }
+    }
+}
+
 // MARK: - Countdown
 
 extension RecorderViewModel {

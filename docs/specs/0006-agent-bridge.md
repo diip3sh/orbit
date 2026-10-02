@@ -22,6 +22,8 @@ MCP over stdio, so one local MCP server covers all of them.
   - `record_page`: renders hovers, clicks and scrolls on that page into a movie with telemetry, and
     opens it in the editor;
   - `render_status`: follows a render that takes longer than an agent will wait.
+  - `export_recording` (added by spec 0009): exports a take as MP4, MOV or GIF and returns the file's path.
+  `record_page` also takes `type` steps (spec 0009).
 - The user gives a site address and asks to record it; the agent inspects, writes the steps, records
   and reports the movie's path. If Reco isn't running, the agent's `--mcp` process starts it.
 

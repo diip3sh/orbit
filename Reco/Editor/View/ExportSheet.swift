@@ -25,6 +25,7 @@ struct ExportSheet: View {
 
     var body: some View {
         let canvasSize = viewModel.exportSize(resolution: nil)
+        let shorterSide = min(canvasSize.width, canvasSize.height)
         let frameRate = viewModel.source?.frameRate ?? 0
         let isHDR = viewModel.source.map { $0.dynamicRange != .sdr } ?? false
 
@@ -62,8 +63,12 @@ struct ExportSheet: View {
                     Text("Size")
                         .foregroundStyle(EditorTheme.dim)
                     Picker("Size", selection: $settings.resolution) {
-                        Text("Original, \(Self.dimensions(of: canvasSize))").tag(Int?.none)
-                        ForEach(ExportSettings.resolutions(below: min(canvasSize.width, canvasSize.height)), id: \.self) { resolution in
+                        let resolutions = ExportSettings.resolutions(below: shorterSide, for: settings.format)
+                        // A GIF is offered at the canvas's size only when it's small
+                        if settings.format != .gif || !resolutions.contains(540) {
+                            Text("Original, \(Self.dimensions(of: canvasSize))").tag(Int?.none)
+                        }
+                        ForEach(resolutions, id: \.self) { resolution in
                             Text("\(resolution, format: .number.grouping(.never))p, \(Self.dimensions(of: viewModel.exportSize(resolution: resolution)))")
                                 .tag(Int?.some(resolution))
                         }
@@ -74,8 +79,10 @@ struct ExportSheet: View {
                     Text("Frame Rate")
                         .foregroundStyle(EditorTheme.dim)
                     Picker("Frame Rate", selection: $settings.frameRate) {
-                        Text("Original, \(frameRate, format: .number.precision(.fractionLength(0...2))) fps").tag(Int?.none)
-                        ForEach(ExportSettings.frameRates(below: frameRate), id: \.self) { rate in
+                        if settings.format != .gif {
+                            Text("Original, \(frameRate, format: .number.precision(.fractionLength(0...2))) fps").tag(Int?.none)
+                        }
+                        ForEach(ExportSettings.frameRates(below: frameRate, for: settings.format), id: \.self) { rate in
                             Text("\(rate) fps").tag(Int?.some(rate))
                         }
                     }
@@ -124,6 +131,9 @@ struct ExportSheet: View {
         .editorMotion(value: settings)
         .editorMotion(value: viewModel.exportProgress != nil)
         .editorMotion(value: error?.localizedDescription)
+        .onChange(of: settings.format) {
+            settings = settings.conformed(shorterSide: shorterSide, frameRate: frameRate)
+        }
         // Dismissing the sheet cancels the task, and with it the export
         .task(id: isExporting) {
             guard isExporting else { return }
@@ -144,6 +154,7 @@ struct ExportSheet: View {
         case .hevc: isHDR ? "Small files at high quality, in HDR." : "Small files at high quality."
         case .h264: isHDR ? "Larger files that play everywhere, in SDR." : "Larger files that play everywhere."
         case .proRes422: isHDR ? "Very large files for editing apps, in HDR." : "Very large files for editing apps."
+        case .gif: "A silent loop for READMEs, pull requests and chats. Large for its size; gradients band."
         case .proRes4444:
             isHDR ? "Very large files for editing apps, in HDR with transparency." : "Very large files for editing apps, with transparency."
         }

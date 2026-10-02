@@ -5,7 +5,8 @@
 
 import Foundation
 
-/// Runs the tools an agent calls (spec 0006): inspect a page, record it, and follow the render.
+/// Runs the tools an agent calls (spec 0006): inspect a page, record it, follow the render and
+/// export the recording.
 ///
 /// A render takes longer than most agents wait for a tool, so `record_page` and `render_status` wait
 /// up to ``waitLimit`` and report how far it is; the agent asks again. One render runs at a time and
@@ -21,6 +22,10 @@ final class AgentTools {
     private(set) var inspecting: URL?
 
     @ObservationIgnored private var renderTask: Task<Void, Never>?
+
+    /// The latest export and what asked for it, or `nil` before the first.
+    @ObservationIgnored private var export: (request: ExportRecordingRequest, status: ExportStatus)?
+    @ObservationIgnored private var exportTask: Task<Void, Never>?
     @ObservationIgnored private let settings: SettingsStore
     @ObservationIgnored private let onRendered: (URL) -> Void
 
@@ -51,6 +56,9 @@ final class AgentTools {
                 return (try Self.encode(status), status.status == .failed)
             case AgentToolCatalog.renderStatus:
                 let status = try await status(arguments)
+                return (try Self.encode(status), status.status == .failed)
+            case AgentToolCatalog.exportRecording:
+                let status = try await export(arguments)
                 return (try Self.encode(status), status.status == .failed)
             default:
                 throw AgentToolError.unknownTool(name)
@@ -84,6 +92,34 @@ final class AgentTools {
 
     private func status(_ arguments: Data) async throws -> RenderStatus {
         try await wait(for: try Self.decode(RenderStatusRequest.self, from: arguments).renderID)
+    }
+
+    /// Starts the export, or follows it when it's the one already running, for up to ``waitLimit``.
+    private func export(_ arguments: Data) async throws -> ExportStatus {
+        let request = try Self.decode(ExportRecordingRequest.self, from: arguments)
+        let (movie, settings) = try request.validated()
+        if let export, export.status.status == .exporting {
+            guard export.request == request else { throw AgentToolError.exporting }
+        } else {
+            export = (request, ExportStatus(status: .exporting, progress: 0))
+            exportTask = Task {
+                do {
+                    let file = try await ExportService.export(recordingAt: movie, settings: settings) { [weak self] in
+                        self?.export?.status.progress = $0
+                    }
+                    export?.status = ExportStatus(status: .done, progress: 1, file: file.path(percentEncoded: false))
+                } catch {
+                    export?.status.status = .failed
+                    export?.status.error = error.localizedDescription
+                }
+            }
+        }
+
+        let deadline = ContinuousClock.now + Self.waitLimit
+        while let export, export.status.status == .exporting, ContinuousClock.now < deadline {
+            try await Task.sleep(for: Self.pollInterval)
+        }
+        return export?.status ?? ExportStatus(status: .failed, progress: 0)
     }
 
     // MARK: - Render

@@ -106,7 +106,7 @@ struct RecordPageRequestTests {
             (request(steps: [scroll()]), "either a selector or y"),
             (request(steps: [scroll(selector: "#a", y: 5)]), "either a selector or y"),
             (request(steps: [scroll(y: -1)]), "0 or more"),
-            (request(steps: [Step(action: "drag", selector: "#a")]), "hover, click or scroll"),
+            (request(steps: [Step(action: "drag", selector: "#a")]), "hover, click, type or scroll"),
             (request(steps: [hover(start: -1)]), "start"),
             (request(steps: [hover(duration: 0.1)]), "at least 0.2"),
             (request(steps: [scroll(y: 1, duration: 0.1)]), "at least 0.2")
@@ -115,6 +115,33 @@ struct RecordPageRequestTests {
             let message = problem(bad)
             #expect(message?.contains(reason) == true, "\(message ?? "no problem") should mention \(reason)")
             #expect(message?.contains("steps[0]") == true)
+        }
+    }
+
+    @Test func aTypeStepIsAClickThatTypesAndLastsAsLongAsItsText() throws {
+        let plan = try request(steps: [Step(action: "type", selector: "#search", text: "macbook\n")]).plan()
+
+        #expect(plan.steps[0].action == .click)
+        #expect(plan.steps[0].text == "macbook\n")
+        // 0.3 s to the first key, 8 keys at 0.08 s, 0.8 s to read
+        #expect(abs(plan.steps[0].range.upperBound - plan.steps[0].range.lowerBound - 1.74) < 1e-9)
+
+        let page = PageInspection(
+            title: "Test", url: "https://example.com", viewport: .init(width: 1440, height: 900), pageHeight: 900, elements: [],
+            truncated: false, boxes: ["#search": .init(left: 100, top: 100, width: 200, height: 40)]
+        )
+        let script = try plan.script(page: page).script
+        #expect(script.pointer.map(\.text) == ["macbook\n"])
+        #expect(RecordPageRequest(script: script).steps.map(\.action) == ["type"])
+        #expect(RecordPageRequest(script: script).steps[0].text == "macbook\n")
+    }
+
+    @Test func textBelongsToTypeStepsOnly() {
+        #expect(throws: AgentToolError.invalidArgument("steps[0]: type needs the text to type.")) {
+            try request(steps: [Step(action: "type", selector: "#a")]).plan()
+        }
+        #expect(throws: AgentToolError.invalidArgument("steps[0]: text is for type only.")) {
+            try request(steps: [Step(action: "click", selector: "#a", text: "hello")]).plan()
         }
     }
 

@@ -22,6 +22,18 @@ nonisolated struct CursorStyle: Codable, Equatable, Sendable {
     /// Whether the cursor fades out when it hasn't moved or clicked for a while.
     var hidesWhenIdle = false
 
+    /// Whether the cursor glides back to where it started as the video ends, so a loop is seamless.
+    var loopsToStart = false
+
+    /// For how many seconds before the end the cursor stays where it is, which hides the reach for Stop.
+    var stopsBeforeEnd = 0.0
+
+    /// Whether the cursor leans the way it moves.
+    var tilts = false
+
+    /// How much the cursor's moves are blurred, from 0 for none to 1.
+    var motionBlur = 0.5
+
     /// How closely the drawn cursor follows the recorded one.
     nonisolated enum Smoothing: String, Codable, CaseIterable, Sendable {
         case mellow
@@ -39,5 +51,24 @@ nonisolated struct CursorStyle: Codable, Equatable, Sendable {
             case .fast: 25
             }
         }
+    }
+}
+
+// MARK: - Decoding
+
+extension CursorStyle {
+
+    /// Settings added after the first projects were saved take their defaults when missing.
+    nonisolated init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        size = try container.decode(Double.self, forKey: .size)
+        smoothing = try container.decode(Smoothing.self, forKey: .smoothing)
+        animatesClicks = try container.decode(Bool.self, forKey: .animatesClicks)
+        hidesWhenIdle = try container.decode(Bool.self, forKey: .hidesWhenIdle)
+        loopsToStart = try container.decodeIfPresent(Bool.self, forKey: .loopsToStart) ?? false
+        stopsBeforeEnd = try container.decodeIfPresent(Double.self, forKey: .stopsBeforeEnd) ?? 0
+        tilts = try container.decodeIfPresent(Bool.self, forKey: .tilts) ?? false
+        motionBlur = try container.decodeIfPresent(Double.self, forKey: .motionBlur) ?? 0.5
     }
 }

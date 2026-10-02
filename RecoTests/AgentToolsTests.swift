@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import ImageIO
 import Testing
 @testable import Reco
 
@@ -54,6 +55,39 @@ struct AgentToolsTests {
 
         #expect(second.renderID != first.renderID)
         #expect(second.status == .failed)
+    }
+
+    @Test func exportsARecordingAsItWouldOpenInTheEditorAndReportsTheFile() async throws {
+        let folder = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let movie = folder.appending(path: "take.mov")
+        try await TestRecording.write(to: movie, size: CGSize(width: 320, height: 240), frameCount: 15, frameRate: 30)
+        let tools = tools()
+
+        let reply = await tools.call("export_recording", arguments: Data(#"{"movie":"\#(movie.path(percentEncoded: false))","format":"gif"}"#.utf8))
+
+        let status = try JSONDecoder().decode(ExportStatus.self, from: Data(reply.text.utf8))
+        #expect(!reply.isError)
+        #expect(status == ExportStatus(status: .done, progress: 1, file: folder.appending(path: "take-edited.gif").path(percentEncoded: false)))
+        let gif = try #require(CGImageSourceCreateWithURL(folder.appending(path: "take-edited.gif") as CFURL, nil))
+        // The default canvas at its own size: 240 px is under a GIF's 540
+        #expect(CGImageSourceGetCount(gif) >= 1)
+        #expect(CGImageSourceCreateImageAtIndex(gif, 0, nil)?.height == 240)
+    }
+
+    @Test func exportRefusesWhatIsNotARecordingOrAFormat() async {
+        let tools = tools()
+
+        let missing = await tools.call("export_recording", arguments: Data(#"{"movie":"/nowhere/take.mov"}"#.utf8))
+        let relative = await tools.call("export_recording", arguments: Data(#"{"movie":"take.mov"}"#.utf8))
+        let format = await tools.call("export_recording", arguments: Data(#"{"movie":"/bin/sh","format":"avi"}"#.utf8))
+        let unreadable = await tools.call("export_recording", arguments: Data(#"{"movie":"/bin/sh"}"#.utf8))
+
+        #expect(missing.isError && missing.text.contains("record_page"))
+        #expect(relative.isError)
+        #expect(format.isError && format.text.contains("gif, h264, hevc"))
+        #expect(unreadable.isError && unreadable.text.contains(#""status":"failed""#))
     }
 
     @Test func badArgumentsAreErrorsTheAgentCanActOn() async {

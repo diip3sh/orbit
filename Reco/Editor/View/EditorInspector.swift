@@ -57,6 +57,11 @@ struct EditorInspector: View {
                         Label("Select a zoom on the timeline to change it.", systemImage: "cursorarrow.click")
                             .foregroundStyle(EditorTheme.dim)
                     }
+                    InspectorSlider("Motion Blur", value: Binding { viewModel.project.motionBlur } set: { blur in
+                        viewModel.edit("Motion Blur", coalescing: true) { $0.motionBlur = blur }
+                    }, in: 0...1) {
+                        Text($0, format: .percent.precision(.fractionLength(0)))
+                    }
                     Button {
                         viewModel.regenerateZooms()
                     } label: {
@@ -107,6 +112,14 @@ struct EditorInspector: View {
                     .disabled(isWebTake)
                     Toggle("Shrink on Click", isOn: $viewModel.cursor.animatesClicks)
                     Toggle("Hide When Idle", isOn: $viewModel.cursor.hidesWhenIdle)
+                    InspectorSlider("Motion Blur", value: $viewModel.cursor.motionBlur, in: 0...1) {
+                        Text($0, format: .percent.precision(.fractionLength(0)))
+                    }
+                    Toggle("Tilt When Moving", isOn: $viewModel.cursor.tilts)
+                    Toggle("Loop to Start", isOn: $viewModel.cursor.loopsToStart)
+                    InspectorSlider("Stop Before End", value: $viewModel.cursor.stopsBeforeEnd, in: 0...3) {
+                        Text("\($0, format: .number.precision(.fractionLength(1))) s")
+                    }
                 } footer: {
                     if isWebTake {
                         Text("A web take's cursor moves as scripted, so it's drawn without smoothing, in step with the page.")

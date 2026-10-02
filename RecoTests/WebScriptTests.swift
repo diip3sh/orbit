@@ -215,4 +215,36 @@ struct WebScriptTests {
         #expect(offset(top, CGRect(x: 0, y: 4000, width: 10, height: 40), pageHeight: 3000) == 2100)
         #expect(offset(intoView, CGRect(x: 0, y: -1000, width: 10, height: 40)) == 0)
     }
+
+    @Test func aClickTypesItsTextKeyByKeyAfterThePress() {
+        var script = WebScript()
+        let field = WebTarget(selector: "#name", point: .zero)
+        script.pointer = [
+            PointerClip(range: 1..<3, action: .click, target: field, text: "Hi!"),
+            PointerClip(range: 4..<5, action: .hover, target: field, text: "never typed")
+        ]
+
+        #expect(script.keystrokes(after: 0, through: 1.29).isEmpty)
+        #expect(script.keystrokes(after: 1.29, through: 1.3).map(\.character) == ["H"])
+        #expect(script.keystrokes(after: 1.3, through: 1.5).map(\.character) == ["i", "!"])
+        #expect(script.keystrokes(after: 1.5, through: 10).isEmpty)
+        #expect(script.keystrokes(after: 0, through: 10).allSatisfy { $0.target == field })
+    }
+
+    @Test func typingFitsAClipTooShortForItsText() {
+        let clip = PointerClip(range: 0..<0.4, action: .click, target: WebTarget(point: .zero), text: "abcdefghij")
+
+        let times = clip.keystrokes.map(\.time)
+
+        // From half-way, 0.02 s apart instead of 0.08
+        #expect(times.count == 10 && abs(times[0] - 0.2) < 1e-9 && abs(times[9] - 0.38) < 1e-9)
+    }
+
+    @Test func aUSKeyboardsKeysForCharacters() {
+        #expect(USKeyCodes.key(for: "a").map { [$0.keyCode, $0.shift ? 1 : 0] } == [0, 0])
+        #expect(USKeyCodes.key(for: "A").map { [$0.keyCode, $0.shift ? 1 : 0] } == [0, 1])
+        #expect(USKeyCodes.key(for: "?").map { [$0.keyCode, $0.shift ? 1 : 0] } == [44, 1])
+        #expect(USKeyCodes.key(for: "\n").map { [$0.keyCode, $0.shift ? 1 : 0] } == [36, 0])
+        #expect(USKeyCodes.key(for: "é") == nil && USKeyCodes.key(for: "🙂") == nil)
+    }
 }

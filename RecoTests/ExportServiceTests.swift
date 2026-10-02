@@ -76,6 +76,68 @@ struct ExportServiceTests {
         #expect(abs(frameRate - 15) < 0.5)
     }
 
+    @Test func exportsALoopingGIFWhoseRepeatedFramesOnlyShowLonger() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // Half a second dark, then half a second light
+        try await TestRecording.write(to: video, size: videoSize, frameCount: 30, frameRate: 30) { $0 < 15 ? 0 : 200 }
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        var project = EditorProject()
+        project.canvas = .plain
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none, target: RenderTarget(shorterSide: 120, keepsHDR: false))
+        var composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
+        composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan, frameRate: 25)
+        let output = ExportFormat.gif.outputURL(for: video)
+        #expect(output.lastPathComponent == "recording-edited.gif")
+
+        try await ExportService.export(composition, to: output, as: .gif) { _ in }
+
+        let gif = try #require(CGImageSourceCreateWithURL(output as CFURL, nil))
+        let count = CGImageSourceGetCount(gif)
+        #expect(count == 2)
+        let delays = (0..<count).compactMap { index in
+            let properties = CGImageSourceCopyPropertiesAtIndex(gif, index, nil) as? [CFString: Any]
+            return (properties?[kCGImagePropertyGIFDictionary] as? [CFString: Any])?[kCGImagePropertyGIFUnclampedDelayTime] as? Double
+        }
+        #expect(abs(delays.reduce(0, +) - 1) < 0.001)
+        let last = try #require(CGImageSourceCreateImageAtIndex(gif, count - 1, nil))
+        #expect(last.width == 160 && last.height == 120)
+        #expect(CIImage(cgImage: last).pixel(at: CGPoint(x: 80, y: 60))[0] > 150)
+    }
+
+    @Test func drawsTheFrameAtATimeAsAnExportWould() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await TestRecording.write(to: video, size: videoSize, frameCount: 30, frameRate: 30) { $0 < 15 ? 0 : 200 }
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        var project = EditorProject()
+        project.canvas = .plain
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
+        let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
+
+        let dark = try await ExportService.frame(of: composition, at: CMTime(value: 5, timescale: 30))
+        let light = try await ExportService.frame(of: composition, at: CMTime(value: 20, timescale: 30))
+
+        #expect(dark.width == 320 && dark.height == 240)
+        #expect(CIImage(cgImage: dark).pixel(at: CGPoint(x: 160, y: 120))[0] < 40)
+        #expect(CIImage(cgImage: light).pixel(at: CGPoint(x: 160, y: 120))[0] > 150)
+    }
+
+    @Test func gifSettingsAreSmallAndInTimeAndVideosKeepTheOriginal() {
+        let movie = ExportSettings(format: .hevc, resolution: 1080, frameRate: 30)
+        #expect(movie.conformed(shorterSide: 2160, frameRate: 60) == movie)
+        #expect(movie.conformed(shorterSide: 1080, frameRate: 30) == ExportSettings(format: .hevc))
+
+        var gif = movie
+        gif.format = .gif
+        #expect(gif.conformed(shorterSide: 2160, frameRate: 60) == ExportSettings(format: .gif, resolution: 540, frameRate: 25))
+        // A small canvas is exported as it is
+        #expect(gif.conformed(shorterSide: 400, frameRate: 30) == ExportSettings(format: .gif, resolution: nil, frameRate: 25))
+        #expect(ExportSettings.frameRates(below: 30, for: .gif) == [25])
+        let chosen = ExportSettings(format: .gif, resolution: 720, frameRate: 50)
+        #expect(chosen.conformed(shorterSide: 2160, frameRate: 60) == chosen)
+        // Back to a video: its size and rate aren't a GIF's
+        #expect(ExportSettings(format: .h264, resolution: 540, frameRate: 25).conformed(shorterSide: 2160, frameRate: 60) == ExportSettings(format: .h264))
+    }
+
     @Test func keepsATransparentBackgroundInProRes4444() async throws {
         defer { try? FileManager.default.removeItem(at: folder) }
         try await TestRecording.write(to: video, size: videoSize, frameCount: 5, frameRate: 30)

@@ -35,6 +35,14 @@ nonisolated struct CursorPath: Sendable {
     static let idleDelay = 2.0
     static let fadeDuration = 0.3
 
+    /// How long the glide back to the first position takes when the cursor loops.
+    static let loopDuration = 1.0
+
+    /// The lean at full speed, in radians, and the speed in screen points per second that gives
+    /// three quarters of it.
+    static let maximumTilt = 0.2
+    static let tiltSpeed = 1500.0
+
     /// The smoothed positions in Core Image pixels (bottom-left origin).
     private let samples: [CGPoint]
 
@@ -51,11 +59,20 @@ nonisolated struct CursorPath: Sendable {
     /// Video pixels per screen point times the style's size, whenever the capture geometry changed.
     private let scales: [(time: Double, scale: Double)]
 
+    /// The cursor stays where it is from this time on. Infinite when it never stops.
+    private let holdTime: Double
+
+    /// The glide back to the position at its `home` time, or `nil` when the cursor doesn't loop.
+    private let loop: (home: Double, range: Range<Double>)?
+
+    private let tilts: Bool
+
     /// - Parameters:
     ///   - duration: The recording's length in seconds.
     ///   - videoHeight: The video's height in pixels, to flip positions into Core Image space.
+    ///   - shown: From the first source time the output shows to the last. The whole recording when `nil`.
     /// - Returns: `nil` without cursor positions or capture geometry.
-    init?(telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat) {
+    init?(telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, shown: Range<Double>? = nil) {
         let moves = Self.withoutJitter(telemetry.cursor)
         guard !moves.isEmpty, !telemetry.geometry.isEmpty else { return nil }
         // A web take's path is smooth already, and exact: a spring would trail the hover effects the page shows
@@ -77,10 +94,39 @@ nonisolated struct CursorPath: Sendable {
         presses = style.animatesClicks ? Self.presses(in: telemetry.clicks) : []
         idle = style.hidesWhenIdle ? Self.idleSpans(moves: moves, clicks: telemetry.clicks) : []
         scales = telemetry.geometry.map { ($0.time, $0.contentScale * $0.scaleFactor * style.size) }
+
+        let shown = shown ?? 0..<duration
+        holdTime = style.stopsBeforeEnd > 0 ? max(shown.upperBound - style.stopsBeforeEnd, shown.lowerBound) : .infinity
+        let glide = min(Self.loopDuration, (shown.upperBound - shown.lowerBound) / 2)
+        loop = style.loopsToStart && glide > 0 ? (shown.lowerBound, shown.upperBound - glide..<shown.upperBound) : nil
+        tilts = style.tilts
     }
 
-    /// Where the cursor's hot spot is at source time `time`, in Core Image pixels.
+    /// Where the cursor's hot spot is at source time `time`, in Core Image pixels: where it was
+    /// recorded, held before the end and gliding home over the last second when the style says so.
     func position(at time: Double) -> CGPoint {
+        var position = recorded(at: min(time, holdTime))
+        if let loop, time > loop.range.lowerBound {
+            let home = recorded(at: loop.home)
+            let weight = Self.ease((time - loop.range.lowerBound) / (loop.range.upperBound - loop.range.lowerBound))
+            position.x += (home.x - position.x) * weight
+            position.y += (home.y - position.y) * weight
+        }
+        return position
+    }
+
+    /// How far the cursor leans at `time`, in radians, counterclockwise: against its horizontal
+    /// speed, so it leans the way it moves. Zero at rest.
+    func tilt(at time: Double) -> Double {
+        guard tilts else { return 0 }
+        let step = 1 / Self.sampleRate
+        let pixelsPerPoint = scales[max(scales.partitioningIndex { $0.time > time } - 1, 0)].scale
+        let speed = (position(at: time + step).x - position(at: time - step).x) / (2 * step) / pixelsPerPoint
+        return -Self.maximumTilt * tanh(speed / Self.tiltSpeed)
+    }
+
+    /// The smoothed position at `time`, on the click points at their times.
+    private func recorded(at time: Double) -> CGPoint {
         var position = Self.interpolated(samples, at: time)
         let next = clickOffsets.partitioningIndex { $0.time > time }
         if next < clickOffsets.count {

@@ -64,6 +64,16 @@ struct RecorderViewModelTests {
         #expect(viewModel.isPaused == false)
     }
 
+    @Test func cancelAndRestartDoNothingWhenNotRecording() async {
+        let viewModel = RecorderViewModel()
+
+        await viewModel.cancelRecording()
+        await viewModel.restartRecording()
+
+        #expect(viewModel.state == .idle)
+        #expect(!viewModel.countdown.isRunning)
+    }
+
     @Test func togglePauseDoesNothingWhenNotRecording() {
         let viewModel = RecorderViewModel()
         viewModel.togglePause()

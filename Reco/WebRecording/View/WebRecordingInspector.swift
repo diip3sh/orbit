@@ -30,11 +30,16 @@ struct WebRecordingInspector: View {
                             }
                             .frame(maxWidth: .infinity)
                         }
+                        if clip.wrappedValue.action == .click {
+                            InspectorField("Type") {
+                                TextField("Type", text: clip.text.orEmpty, prompt: Text("Text for the field, if any"))
+                            }
+                        }
                         WebClipTiming(viewModel: viewModel)
                     } footer: {
                         Text("""
                             The cursor is on the target from the clip's start to its end, and travels there \
-                            before. A click presses at the start.
+                            before. A click presses at the start, then types its text.
                             """)
                     }
                 } else if let clip = Binding($viewModel.selectedScrollClip) {

@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Play/pause, frame stepping, the playhead's time, cutting and zooming, floating on glass under
 /// the preview. Space plays and pauses, ← and → step a frame, S splits at the playhead, Z adds a
-/// zoom there and ⌫ removes the selection.
+/// zoom there, ⌫ removes the selection and ⇧⌘C copies the frame.
 struct TransportBar: View {
     let viewModel: EditorViewModel
 
@@ -40,6 +40,14 @@ struct TransportBar: View {
                     .keyboardShortcut(.delete, modifiers: [])
                     .help(deletesZoom ? "Delete the selected zoom (⌫)" : "Cut the selected part (⌫)")
                     .disabled(!viewModel.canDeleteSelection)
+
+                    Button("Copy Frame", systemImage: "photo.on.rectangle") {
+                        Task {
+                            await viewModel.copyFrame()
+                        }
+                    }
+                    .keyboardShortcut("c", modifiers: [.command, .shift])
+                    .help("Copy the frame at the playhead (⇧⌘C)")
                 }
                 .padding(EditorTheme.tightSpacing)
                 .editorGlass(in: .capsule)

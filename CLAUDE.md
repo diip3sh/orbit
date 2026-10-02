@@ -35,7 +35,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 615 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 638 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
   reads alpha 254 instead of 255 with Xcode 26.0.1 on macOS 26.5.2, also without this fork's later changes.
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
@@ -607,9 +607,9 @@ Key facts (measured on an M5, macOS 26.5, spec 0005):
 
 Coding agents (Claude Code, Codex, OpenCode, Cursor, Gemini CLI, Claude Desktop, Grok Build) record a
 web page from its address. **Settings → Agents** finds the installed ones and adds a server named `reco` to
-each one's own settings. The agent then calls three MCP tools: `inspect_page` (selectors and boxes of a
-page), `record_page` (hover, click and scroll steps rendered like spec 0005, opened in the editor) and
-`render_status`. Started with `--mcp`, the app only pipes stdio to the running app's Unix socket, and
+each one's own settings. The agent then calls four MCP tools: `inspect_page` (selectors and boxes of a
+page), `record_page` (hover, click, type and scroll steps rendered like spec 0005, opened in the editor),
+`render_status` and `export_recording` (the take as a finished MP4, MOV or GIF, spec 0009). Started with `--mcp`, the app only pipes stdio to the running app's Unix socket, and
 starts the app first if needed.
 
 | File | Role |
@@ -722,6 +722,52 @@ Key facts:
   to the sides and gives links an `href`. Step defaults: first at 1 s, 0.8 s apart, 1.5 s per hover or
   click, 2 s per scroll, 1.5 s after the last.
 
+### Stand-out roadmap, first batch (`feat/stand-out-roadmap`, spec 0009)
+
+What recorders are checked for, and what an agent needs to go from a page to a finished file.
+
+- **Cursor** (inspector's Cursor section): **Loop to Start** (glides back to its first position over the last
+  second, so a GIF loops), **Stop Before End** (0–3 s; hides the reach for Stop), **Tilt When Moving**, **Motion Blur**.
+- **Motion blur** (Zoom section, default 50%): frames in which the camera moves are averaged from samples
+  across a shutter of up to 1/24 s; the cursor likewise along its own move.
+- **GIF export** and **Copy Frame** (⇧⌘C, transport bar): a GIF is 540 px at 25 fps unless chosen (720/540/360,
+  50/25 fps), loops, and repeated frames only show longer.
+- **Cancel / Restart Recording**: menu bar rows while recording, shortcuts of the same names (no defaults),
+  `reco://cancel` and `reco://restart` (no countdown). Nothing is left in the output folder.
+- **`export_recording`** (MCP): a recording's path and a format in, the exported file's path out; with the saved
+  edit, or as the recording would open in the editor. Called again with the same arguments, it follows the export.
+- **Type steps** in web takes: a click clip with `text` types it into its field key by key; `"action":"type"` in
+  `record_page`, a Type field in the Web Recording inspector.
+
+| File | Role |
+|---|---|
+| `Editor/Render/CursorPath.swift` | `shown` (first to last source time in the output), hold and loop applied at lookup, `tilt(at:)` |
+| `Editor/Render/FrameRenderer.swift` | `blurOffsets(distance:most:)`, `average`, the camera's and cursor's samples |
+| `Editor/Render/RenderTarget.swift` | `blurSamples`: 8 for the preview, 16 for exports |
+| `Editor/Model/GIFFrame.swift`, `Editor/Service/GIFWriter.swift` | One frame taken out of ImageIO's single-image GIF, and the animation's bytes around it; the reader loop |
+| `Editor/Service/ExportService.swift` | `export(recordingAt:settings:)` (headless), `export(_:of:resources:settings:)` (shared with the editor), `frame(of:at:)` |
+| `Editor/Model/ExportSettings.swift` | `conformed(shorterSide:frameRate:)`: the one place that knows which sizes and rates a format offers |
+| `AgentBridge/Model/ExportRecordingRequest.swift`, `ExportStatus.swift` | The tool's arguments and result |
+| `WebRecording/Model/PointerClip.swift` | `text`, `keystrokes` (0.3 s after the click, 0.08 s apart, or closer to fit the clip) |
+| `WebRecording/Service/WebTypeScript.swift`, `Model/USKeyCodes.swift` | `keydown`, `execCommand("insertText")`, `keyup` on the field; Enter submits its form. Key codes of a US keyboard for the telemetry |
+| `ViewModel/RecorderViewModel.swift` | `// MARK: - Cancelling` extension |
+
+Key facts:
+- ImageIO keeps every frame of a GIF until it's finalized: 750 frames of 960×540 peaked at 3.1 GB (M5, macOS 26.5).
+  Each frame is encoded as its own GIF and spliced, 8 ms a frame, memory at one frame. A 7 s 2880×1800 take
+  exported as an 864×540 GIF in 1.3 s (5 MB, 169 frames) and as HEVC in 4.1 s.
+- Each GIF frame has its own 256 colors and no dithering, so gradients band (spec 0004, open question 3).
+- Motion blur, M5, Debug, 4K with a ring and a chip, load average 3, mid-zoom: 8 samples 2.8 ms p50 (1.3
+  unblurred), 7.9 ms on the default canvas (2.8 unblurred); 16 samples 5.5 and 12.5 ms. A still view is drawn
+  once, so its pixels are unchanged. Not measured on an M1, where a 4K preview will drop frames during camera moves.
+- `CIColorMatrix` works on unpremultiplied color: scaling RGB and alpha both darkens by the share squared.
+  Averaging scales alpha only (`fading(to:)`), then `CIAdditionCompositing`.
+- A web take's typing is in its telemetry as keys (`keys`), so zooms hold on a field while it's typed into;
+  characters a US keyboard has no key for are typed but not recorded.
+- `AVComposition` isn't Sendable; the GIF writer gets it through `nonisolated(unsafe)` since it's never changed
+  once built.
+- Tilt is `-0.2 rad × tanh(speed / 1500 pt/s)` about the hot spot; the loop's glide is at most half the output.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -769,6 +815,7 @@ should hold but need re-measuring.
 | F2 cursor sprites | Done, incl. editor spec Phase 0 (hidden cursor, `cursorInVideo`, `kind`); a real recording still has to confirm kinds for I-beam/hand |
 | F3 `.reco` project bundle | **Not needed for editor v1**, which uses a `<name>.edit.json` sidecar (spec 0003, open question 2). Revisit when opening recordings from outside the output folder |
 | F4 pause / resume | Done and verified on real recordings: audio ticks land within ~30 ms across pauses, all tracks match video length (incl. stop while paused) |
+| N20 cancel / restart recording (spec 0009) | Done; not yet tried on a real recording (the output folder after a cancel, a restart's new file) |
 | F5 countdown | Done |
 | F6 audio robustness (mic hot-swap #208, gain #209, level meters #153) | Todo |
 | F7 remember last selection (#172) | Todo |
@@ -790,7 +837,9 @@ should hold but need re-measuring.
 | S4 agent recording (spec 0007): Record with AI Agent bar, no App Sandbox | Done and tested with fakes and real `/bin/sh` processes; the login-shell environment was read on this Mac (0.86 s). Not yet tried: any real agent run, the panel in the app (focus, Esc, picker menus, Reduce Motion/Transparency), the update from the sandboxed release (migration), Codex |
 | S5 agent chat and reliable web takes (spec 0008) | Done and tested: real Claude Code runs from the prompt and from the chat in the app (sent through accessibility), 60 s apple.com takes checked frame by frame. Not yet tried: Retry and Cancel by hand, VoiceOver, Reduce Motion, other agents |
 
-What to build next, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
+| Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop). Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
+
+What to build next and in what order: `docs/specs/0009-stand-out-roadmap.md` (October 2026). The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
 `docs/specs/0004-next-features.md`.
 
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0
@@ -800,7 +849,7 @@ Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorde
 ## Known open items
 
 - Not yet verified on real recordings: area capture mapping, a window moved/resized mid-recording.
-- `RecorderViewModel` is over SwiftLint's type size limit (pre-existing); split it before adding more.
+- `RecorderViewModel` is over SwiftLint's file length limit (pre-existing, 711 lines after cancel/restart); split it before adding more.
 
 ## Verifying against real recordings
 

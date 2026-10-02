@@ -168,6 +168,14 @@ nonisolated extension WebScript {
         .filter { $0.time > start + Self.pressTolerance && $0.time <= end + Self.pressTolerance }
     }
 
+    /// The characters typed after `start` and up to and including `end`, give or take
+    /// ``pressTolerance``, in time order, each with the target it's typed into.
+    func keystrokes(after start: Double, through end: Double) -> [(character: Character, target: WebTarget)] {
+        pointer.flatMap { clip in
+            clip.keystrokes.filter { $0.time > start + Self.pressTolerance && $0.time <= end + Self.pressTolerance }.map { ($0.character, clip.target) }
+        }
+    }
+
     /// The point `progress` of the way from `start` to `end` along a gentle arc that bows to the left
     /// of the direction of travel, by ``travelArc`` of the distance at its middle.
     static func travelPoint(from start: CGPoint, to end: CGPoint, progress: Double) -> CGPoint {

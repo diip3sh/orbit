@@ -37,6 +37,14 @@ nonisolated enum FrameRenderer {
         }
     }
 
+    /// How far apart, in pixels, the samples of a blurred frame are, until there are as many as the
+    /// plan allows: close enough that text smears instead of doubling.
+    ///
+    /// Measured on an M5, Debug, 4K with a ring and a chip, load average 3, mid-zoom: 8 samples
+    /// draw in 2.8 ms p50 (1.3 unblurred), and in 7.9 ms on the default canvas (2.8 unblurred); 16
+    /// take 5.5 and 12.5 ms, 4 still 2 and 5.6. Only frames in which the camera moves pay it.
+    static let blurSampleSpacing = 4.0
+
     /// The frame with everything on it - clicks, zoom, cursor and keystroke chip - placed on the
     /// canvas and clipped to the video's frame, square-cornered.
     private static func video(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CIImage {
@@ -45,17 +53,52 @@ nonisolated enum FrameRenderer {
             image = ring(for: click, at: time, plan: plan).composited(over: image)
         }
         // Clicks are on the content, so they zoom with it and move onto the canvas; the chip doesn't zoom
-        let placement = transform(to: plan.camera.viewport(at: time), size: plan.videoSize).concatenating(plan.canvas.videoTransform)
-        image = placed(image, by: placement, plan: plan)
+        let placement = placement(at: time, plan: plan)
+        // While the camera moves, the frame as a shutter open across the move would see it. A view
+        // that's still is drawn once, so its pixels stay the source's
+        let opening = Self.placement(at: time - plan.cameraShutter / 2, plan: plan)
+        let closing = Self.placement(at: time + plan.cameraShutter / 2, plan: plan)
+        let corner = CGPoint(x: plan.videoSize.width, y: plan.videoSize.height)
+        let moves = blurOffsets(
+            distance: max(distance(CGPoint.zero.applying(opening), CGPoint.zero.applying(closing)), distance(corner.applying(opening), corner.applying(closing))),
+            most: plan.blurSamples
+        )
+        let source = image
+        image = average(moves.map { placed(source, by: $0 == 0 ? placement : Self.placement(at: time + $0 * plan.cameraShutter, plan: plan), plan: plan) })
         // The cursor is placed after, so it's drawn from its full-resolution image
-        if let path = plan.cursor, let sprite = plan.cursorShapes.sprite(at: time),
-           let drawn = cursor(sprite, path: path, at: time, placement: placement) {
+        if let path = plan.cursor, let sprite = plan.cursorShapes.sprite(at: time), let drawn = cursor(sprite, path: path, at: time, plan: plan) {
             image = drawn.composited(over: image)
         }
         if let (chip, opacity) = KeystrokeChip.visible(in: plan.keystrokes, at: time) {
             image = keystroke(chip, opacity: opacity, plan: plan).composited(over: image)
         }
         return image.cropped(to: plan.canvas.videoFrame)
+    }
+
+    /// When a frame whose content moves `distance` pixels while the shutter is open is sampled, as
+    /// shares of the shutter from the frame's time: one sample per ``blurSampleSpacing`` pixels, at
+    /// most `most`, or just the frame's time when it moves less than half a pixel.
+    static func blurOffsets(distance: Double, most: Int) -> [Double] {
+        guard distance >= 0.5 else { return [0] }
+        let count = min(max(Int((distance / blurSampleSpacing).rounded(.up)), 2), most)
+        return (0..<count).map { (Double($0) + 0.5) / Double(count) - 0.5 }
+    }
+
+    /// The mean of `images`; the one itself when alone.
+    private static func average(_ images: [CIImage]) -> CIImage {
+        guard images.count > 1 else { return images[0] }
+        let shares = images.map { $0.fading(to: 1 / Double(images.count)) }
+        return shares.dropFirst().reduce(shares[0]) { $1.applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: $0]) }
+    }
+
+    private static func distance(_ first: CGPoint, _ second: CGPoint) -> Double {
+        hypot(first.x - second.x, first.y - second.y)
+    }
+
+    /// Maps the frame's Core Image pixels to the canvas's at source time `time`: zoomed to the
+    /// camera's view, then onto the canvas.
+    private static func placement(at time: Double, plan: RenderPlan) -> CGAffineTransform {
+        transform(to: plan.camera.viewport(at: time), size: plan.videoSize).concatenating(plan.canvas.videoTransform)
     }
 
     /// The click's ring, growing from 40% of its size with an ease-out while it fades.
@@ -95,18 +138,26 @@ nonisolated enum FrameRenderer {
         return video.applyingFilter("CIBlendWithAlphaMask", parameters: [kCIInputBackgroundImageKey: backdrop, kCIInputMaskImageKey: mask])
     }
 
-    /// The cursor's image with its hot spot on the path, moved and magnified with the video, or
-    /// `nil` while it's hidden.
-    private static func cursor(_ sprite: CursorShapeTrack.Sprite, path: CursorPath, at time: Double, placement: CGAffineTransform) -> CIImage? {
+    /// The cursor's image with its hot spot on the path, moved and magnified with the video, and
+    /// smeared along its way across the canvas while the shutter is open, or `nil` while it's hidden.
+    private static func cursor(_ sprite: CursorShapeTrack.Sprite, path: CursorPath, at time: Double, plan: RenderPlan) -> CIImage? {
         let opacity = path.opacity(at: time)
         guard opacity > 0 else { return nil }
-        let position = path.position(at: time).applying(placement)
-        let scale = path.scale(at: time) * placement.a * sprite.pointsPerPixel
-        let placement = CGAffineTransform(translationX: -sprite.hotspot.x, y: -sprite.hotspot.y)
+        // Where the hot spot is on the canvas a share of the shutters from `time`: it moves on the
+        // video and with the camera
+        let position = { (offset: Double) in
+            path.position(at: time + offset * plan.cursorShutter).applying(placement(at: time + offset * plan.cameraShutter, plan: plan))
+        }
+        let scale = path.scale(at: time) * placement(at: time, plan: plan).a * sprite.pointsPerPixel
+        let shape = CGAffineTransform(translationX: -sprite.hotspot.x, y: -sprite.hotspot.y)
+            .concatenating(CGAffineTransform(rotationAngle: path.tilt(at: time)))
             .concatenating(CGAffineTransform(scaleX: scale, y: scale))
-            .concatenating(CGAffineTransform(translationX: position.x, y: position.y))
-        // Images recorded at up to 10× are scaled down a lot, which plain sampling would alias
-        let image = sprite.image.transformed(by: placement, highQualityDownsample: true)
+        let offsets = plan.cursorShutter > 0 ? blurOffsets(distance: distance(position(-0.5), position(0.5)), most: plan.blurSamples) : [0]
+        let image = average(offsets.map { offset in
+            let position = position(offset)
+            // Images recorded at up to 10× are scaled down a lot, which plain sampling would alias
+            return sprite.image.transformed(by: shape.concatenating(CGAffineTransform(translationX: position.x, y: position.y)), highQualityDownsample: true)
+        })
         return opacity < 1 ? image.fading(to: opacity) : image
     }
 

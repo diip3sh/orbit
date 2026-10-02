@@ -7,6 +7,7 @@
 
 import AppKit
 import CoreGraphics
+import CoreMedia
 import Foundation
 import OSLog
 
@@ -87,19 +88,13 @@ final class EditorViewModel {
         do {
             // A new project starts with the automatic zooms, and is saved only once edited or restyled
             let stored = try await ProjectStore.read(for: videoURL)
-            saved = stored ?? EditorProject(zooms: source.telemetry.map { AutoZoomGenerator.segments(for: $0, duration: source.duration) } ?? [])
+            saved = stored ?? EditorProject(opening: source)
             project = stored ?? style.map(saved.styled(like:)) ?? saved
         } catch {
             fail(.unreadableProject(error))
             return
         }
-        var resources = RenderResources(
-            keyLabels: KeyLabelFormatter.current(),
-            arrow: source.telemetry?.capture.cursorInVideo == false ? StandardCursors.arrowSprite : nil
-        )
-        if let bookmark = project.canvas.imageBookmark {
-            resources.background = await BackgroundImageLoader.image(from: bookmark)
-        }
+        let resources = await RenderResources.current(for: source, project: project)
         let plan = await RenderPlan.build(project: project, source: source, resources: resources)
         let composition: EditorComposition
         do {
@@ -210,26 +205,34 @@ final class EditorViewModel {
     /// Cancelling the calling task cancels the export.
     func export(_ settings: ExportSettings) async throws {
         await rebuild?.value
-        guard let source, var composition else { return }
-        // Drawn at the export's size, frame rate and dynamic range; otherwise the same as the preview
-        let target = RenderTarget(shorterSide: settings.resolution.map { CGFloat($0) }, keepsHDR: settings.format.keepsHDR)
-        let plan = await RenderPlan.build(project: project, source: source, resources: resources, target: target)
-        composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan, frameRate: settings.frameRate.map { Double($0) })
-        let url = settings.format.outputURL(for: videoURL)
+        guard let source else { return }
         exportProgress = 0
         defer { exportProgress = nil }
 
         do {
-            try await ExportService.export(composition, to: url, as: settings.format) { [weak self] in
+            let url = try await ExportService.export(project, of: source, resources: resources, settings: settings) { [weak self] in
                 self?.exportProgress = $0
             }
+            logger.info("Exported \(url.lastPathComponent)")
+            NSWorkspace.shared.activateFileViewerSelecting([url])
         } catch {
             guard !Task.isCancelled else { throw CancellationError() }
             logger.error("Export of \(self.videoURL.lastPathComponent) failed: \(error.localizedDescription)")
             throw EditorError.exportFailed(error)
         }
-        logger.info("Exported \(url.lastPathComponent)")
-        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    /// Copies the frame at the playhead to the clipboard, as an export at the canvas's size draws it.
+    func copyFrame() async {
+        await rebuild?.value
+        guard let source, let composition else { return }
+        do {
+            let time = CMTime(seconds: playback.currentTime, preferredTimescale: source.timescale)
+            let frame = try await ExportService.frame(of: composition, at: time)
+            ImagePasteboard.copy(png: try await ScreenshotService.pngData(of: frame))
+        } catch {
+            logger.error("Copying a frame of \(self.videoURL.lastPathComponent) failed: \(error.localizedDescription)")
+        }
     }
 
     /// Releases the player and filmstrip and saves pending edits. Called when the window closes.

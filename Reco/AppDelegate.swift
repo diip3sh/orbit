@@ -122,6 +122,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        registerCancelShortcuts()
+
         KeyboardShortcuts.onKeyUp(for: .recordWithAgent) { [weak self] in
             Task { @MainActor in
                 self?.showAgentRecording()
@@ -160,6 +162,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logger.info("Registered global keyboard shortcuts")
     }
 
+    private func registerCancelShortcuts() {
+        KeyboardShortcuts.onKeyUp(for: .cancelRecording) { [viewModel] in
+            Task { @MainActor in
+                await viewModel.cancelRecording()
+            }
+        }
+
+        KeyboardShortcuts.onKeyUp(for: .restartRecording) { [viewModel] in
+            Task { @MainActor in
+                await viewModel.restartRecording()
+            }
+        }
+    }
+
     // MARK: - URL Scheme
 
     private func handle(_ url: URL) {
@@ -178,6 +194,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         case "pause":
             viewModel.togglePause()
+        case "cancel":
+            Task {
+                await viewModel.cancelRecording()
+            }
+        case "restart":
+            // Without the countdown, like reco://toggle
+            Task {
+                await viewModel.restartRecording(countdown: false)
+            }
         case "edit-last":
             editLastRecording()
         case "open-recordings":

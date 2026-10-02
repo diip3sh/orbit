@@ -17,12 +17,14 @@ nonisolated enum AgentToolCatalog {
 
     static let instructions = """
         Call inspect_page to get selectors, then record_page; if it returns status rendering, \
-        call render_status with its render_id until done. If the result has warnings, fix those steps and record again.
+        call render_status with its render_id until done. If the result has warnings, fix those steps and record again. \
+        For a finished file (MP4 or GIF) call export_recording with the movie.
         """
 
     static let inspectPage = "inspect_page"
     static let recordPage = "record_page"
     static let renderStatus = "render_status"
+    static let exportRecording = "export_recording"
 
     static let tools: [Definition] = [
         Definition(
@@ -42,14 +44,15 @@ nonisolated enum AgentToolCatalog {
         Definition(
             name: recordPage,
             description: """
-                Records a web page as a demo video with a smooth cursor: Reco plays the steps (hover, click, scroll) on the live \
+                Records a web page as a demo video with a smooth cursor: Reco plays the steps (hover, click, type, scroll) on the live \
                 page frame by frame into a movie with input telemetry, and opens it in its editor, which zooms in where the cursor \
                 stops and clicks. Before each hover or click Reco scrolls its element into view if needed; a scroll to a selector \
                 finds the element again as the page is then. Rendering can take longer than a minute: this returns when the movie \
                 is done or after 45 s with status rendering and a render_id; then call render_status until it is done. One render \
                 at a time. Pacing that reads well: about 1 s still first, 1.5 to 3 s per hover or click so viewers can read it, \
                 0.8 to 1 s between steps for the cursor to travel, 1.5 to 3 s per scroll. A hover menu stays open while the cursor \
-                is over it. A click that opens another page cuts to it. The result's warnings say which steps missed their element.
+                is over it. A type step clicks its field, then types the text key by key (12 a second); end the text with \\n to press Enter, \
+                which submits the field's form. A click that opens another page cuts to it. The result's warnings say which steps missed their element.
                 """,
             schema: #"""
             {"type":"object","properties":{"url":{"type":"string","description":"Page address; https:// added if missing"},
@@ -57,11 +60,12 @@ nonisolated enum AgentToolCatalog {
             "scale":{"type":"integer","enum":[1,2],"default":2},
             "duration":{"type":"number","description":"Seconds, max 120; default: last step end + 1.5"},
             "steps":{"type":"array","items":{"type":"object","properties":{
-            "action":{"type":"string","enum":["hover","click","scroll"]},
+            "action":{"type":"string","enum":["hover","click","type","scroll"]},
             "selector":{"type":"string","description":"CSS selector from inspect_page; for scroll, the element to bring near the top"},
             "y":{"type":"number","description":"scroll only: page offset in CSS px"},
             "start":{"type":"number","description":"seconds; default: 0.8 s after the previous step, the first at 1 s"},
-            "duration":{"type":"number","description":"seconds; default 1.5 (hover/click), 2 (scroll)"}},
+            "duration":{"type":"number","description":"seconds; default 1.5 (hover/click), 2 (scroll), the typing plus 1.1 (type)"},
+            "text":{"type":"string","description":"type only: what to type into the selector's field"}},
             "required":["action"],"additionalProperties":false}}},"required":["url","steps"],"additionalProperties":false}
             """#
         ),
@@ -73,6 +77,23 @@ nonisolated enum AgentToolCatalog {
                 """,
             schema: #"""
             {"type":"object","properties":{"render_id":{"type":"string"}},"required":["render_id"],"additionalProperties":false}
+            """#
+        ),
+        Definition(
+            name: exportRecording,
+            description: """
+                Exports a recording as a finished video with Reco's edit: the zooms, the drawn cursor, click highlights and the \
+                background, as its editor shows it. Saved next to the movie as <name>-edited. Use gif for READMEs, pull requests \
+                and chats (silent, loops, 540 px at 25 fps unless set), hevc for a small MP4, h264 for an MP4 that plays \
+                everywhere. Returns when the file is written or after 45 s with status exporting; then call it again with the \
+                same arguments until done. One export at a time.
+                """,
+            schema: #"""
+            {"type":"object","properties":{"movie":{"type":"string","description":"Path of the movie, from record_page or render_status"},
+            "format":{"type":"string","enum":["hevc","h264","gif","prores422","prores4444"],"default":"hevc"},
+            "resolution":{"type":"integer","description":"Shorter side in px, smaller than the recording's: 2160, 1440, 1080 or 720; gif: 720, 540 or 360"},
+            "frame_rate":{"type":"integer","description":"Lower than the recording's: 60, 30 or 24; gif: 50 or 25"}},
+            "required":["movie"],"additionalProperties":false}
             """#
         )
     ]

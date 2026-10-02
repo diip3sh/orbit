@@ -48,6 +48,18 @@ nonisolated struct RenderPlan: Sendable {
     /// What frames are drawn in: the recording's dynamic range, or SDR for a target that doesn't keep
     /// HDR. The overlays' images are already in its encoding.
     let dynamicRange: DynamicRange
+
+    /// How long the shutter that blurs the camera's moves, and the one that blurs the cursor's, is
+    /// open, in seconds. 0 for no blur.
+    let cameraShutter: Double
+    let cursorShutter: Double
+
+    /// The most samples a blurred frame is averaged from.
+    let blurSamples: Int
+
+    /// The shutter at the most motion blur: a frame of film at 24 fps. Half of it is film's usual
+    /// 180° shutter.
+    static let maximumShutter = 1.0 / 24
 }
 
 // MARK: - Building
@@ -73,8 +85,10 @@ extension RenderPlan {
         async let camera = CameraPath(
             zooms: project.zooms, cursor: source.telemetry.map { cursorPoints(for: $0, during: project.zooms) } ?? [], duration: source.duration
         )
+        let timeMap = TimeMap(cuts: project.cuts, sourceDuration: source.duration, frameRate: source.frameRate)
+        let shown = (timeMap.keptRanges.first?.lowerBound ?? 0)..<(timeMap.keptRanges.last?.upperBound ?? source.duration)
         async let cursor = source.telemetry.flatMap {
-            drawnCursor(for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: resources.arrow)
+            drawnCursor(for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: resources.arrow, shown: shown)
         }
         let canvas = CanvasLayout(style: project.canvas, videoSize: videoSize, shorterSide: target.shorterSide, background: resources.background)
             .encoded(in: dynamicRange)
@@ -94,7 +108,7 @@ extension RenderPlan {
         let ringDiameter = clicks.map(\.diameter).max() ?? 0
         let chipHeight = min(canvas.videoFrame.width, canvas.videoFrame.height) * chipHeightFraction
         return RenderPlan(
-            timeMap: TimeMap(cuts: project.cuts, sourceDuration: source.duration, frameRate: source.frameRate),
+            timeMap: timeMap,
             videoSize: videoSize,
             camera: await camera,
             cursor: await cursor?.path,
@@ -107,7 +121,10 @@ extension RenderPlan {
             keystrokes: keystrokes,
             chipImages: labels.map { OverlayImages.encoded(OverlayImages.chip(label: $0, height: chipHeight), in: dynamicRange) },
             canvas: canvas,
-            dynamicRange: dynamicRange
+            dynamicRange: dynamicRange,
+            cameraShutter: project.motionBlur * maximumShutter,
+            cursorShutter: project.cursor.motionBlur * maximumShutter,
+            blurSamples: target.blurSamples
         )
     }
 
@@ -147,10 +164,11 @@ extension RenderPlan {
 
     /// The cursor to draw and its images, or `nil` when the video shows the system's or it's off.
     nonisolated static func drawnCursor(
-        for telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, arrow: InputTelemetry.CursorSprite?
+        for telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, arrow: InputTelemetry.CursorSprite?,
+        shown: Range<Double>? = nil
     ) -> (path: CursorPath, shapes: CursorShapeTrack)? {
         guard !telemetry.capture.cursorInVideo, style.isEnabled,
-              let path = CursorPath(telemetry: telemetry, style: style, duration: duration, videoHeight: videoHeight)
+              let path = CursorPath(telemetry: telemetry, style: style, duration: duration, videoHeight: videoHeight, shown: shown)
         else { return nil }
         return (path, CursorShapeTrack(telemetry: telemetry, duration: duration, arrow: arrow))
     }

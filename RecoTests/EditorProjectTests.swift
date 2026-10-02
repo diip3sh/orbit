@@ -19,6 +19,7 @@ struct EditorProjectTests {
         ]
         project.clickHighlights.buttons = .left
         project.keystrokes.showsAllKeys = true
+        project.motionBlur = 0.8
         project.cursor.smoothing = .mellow
         project.cursor.hidesWhenIdle = true
         project.canvas.aspect = .portrait
@@ -41,6 +42,16 @@ struct EditorProjectTests {
         #expect(project == EditorProject(cuts: [1..<2]))
     }
 
+    @Test func readsACursorStyleSavedBeforeLoopHoldAndTilt() throws {
+        let json = #"""
+            { "version": 1, "cuts": [], "cursor": { "isEnabled": true, "size": 2, "smoothing": "fast", "animatesClicks": false, "hidesWhenIdle": true } }
+            """#
+
+        let project = try JSONDecoder().decode(EditorProject.self, from: Data(json.utf8))
+
+        #expect(project.cursor == CursorStyle(size: 2, smoothing: .fast, animatesClicks: false, hidesWhenIdle: true))
+    }
+
     @Test func rejectsAnUnknownVersion() {
         let json = #"{ "version": 2, "cuts": [] }"#
 
@@ -54,6 +65,7 @@ struct EditorProjectTests {
         old.zooms = [ZoomSegment(range: 2..<4, focus: .followCursor)]
         old.canvas.aspect = .portrait
         old.cursor.size = 2
+        old.motionBlur = 0.2
         old.clickHighlights.size = 80
         old.keystrokes.showsAllKeys = true
         old.audio[track: 0].isMuted = true
@@ -61,7 +73,7 @@ struct EditorProjectTests {
 
         let styled = new.styled(like: old)
 
-        #expect(styled.canvas == old.canvas && styled.cursor == old.cursor)
+        #expect(styled.canvas == old.canvas && styled.cursor == old.cursor && styled.motionBlur == 0.2)
         #expect(styled.clickHighlights == old.clickHighlights && styled.keystrokes == old.keystrokes)
         #expect(styled.cuts.isEmpty && styled.splits.isEmpty)
         #expect(styled.zooms == new.zooms && styled.audio == new.audio)

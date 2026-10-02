@@ -27,6 +27,9 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     /// Sorted and apart.
     var zooms: [ZoomSegment] = []
 
+    /// How much the camera's moves are blurred, from 0 for none to 1.
+    var motionBlur = 0.5
+
     var clickHighlights = ClickHighlightStyle()
     var keystrokes = KeystrokeOverlayStyle()
     var cursor = CursorStyle()
@@ -39,16 +42,27 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - New projects
+
+extension EditorProject {
+
+    /// The project a recording without one opens with: the styled default with its automatic zooms.
+    nonisolated init(opening source: EditorSource) {
+        self.init(zooms: source.telemetry.map { AutoZoomGenerator.segments(for: $0, duration: source.duration) } ?? [])
+    }
+}
+
 // MARK: - Look
 
 extension EditorProject {
 
-    /// This project with `other`'s look: canvas, cursor, click highlights and keystrokes, which a
+    /// This project with `other`'s look: canvas, motion blur, cursor, click highlights and keystrokes, which a
     /// new take of the same page keeps (spec 0008). Cuts, splits, zooms and audio belong to one
     /// recording.
     nonisolated func styled(like other: EditorProject) -> EditorProject {
         var project = self
         project.canvas = other.canvas
+        project.motionBlur = other.motionBlur
         project.cursor = other.cursor
         project.clickHighlights = other.clickHighlights
         project.keystrokes = other.keystrokes
@@ -71,6 +85,7 @@ extension EditorProject {
         cuts = try container.decode([Range<Double>].self, forKey: .cuts)
         splits = try container.decodeIfPresent([Double].self, forKey: .splits) ?? []
         zooms = try container.decodeIfPresent([ZoomSegment].self, forKey: .zooms) ?? []
+        motionBlur = try container.decodeIfPresent(Double.self, forKey: .motionBlur) ?? 0.5
         clickHighlights = try container.decodeIfPresent(ClickHighlightStyle.self, forKey: .clickHighlights) ?? ClickHighlightStyle()
         keystrokes = try container.decodeIfPresent(KeystrokeOverlayStyle.self, forKey: .keystrokes) ?? KeystrokeOverlayStyle()
         cursor = try container.decodeIfPresent(CursorStyle.self, forKey: .cursor) ?? CursorStyle()

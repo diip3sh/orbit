@@ -52,6 +52,8 @@ struct ShortcutsSettingsView: View {
             Section("Recording") {
                 KeyboardShortcuts.Recorder("Toggle Recording", name: .toggleRecording)
                 KeyboardShortcuts.Recorder("Pause/Resume Recording", name: .pauseRecording)
+                KeyboardShortcuts.Recorder("Cancel Recording", name: .cancelRecording)
+                KeyboardShortcuts.Recorder("Restart Recording", name: .restartRecording)
             }
 
             Section("Web Recording") {

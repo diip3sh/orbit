@@ -16,7 +16,7 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
 
     nonisolated struct Step: Codable, Equatable, Sendable {
 
-        /// `hover`, `click` or `scroll`.
+        /// `hover`, `click`, `type` or `scroll`.
         var action: String
         var selector: String?
 
@@ -25,10 +25,13 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         var start: Double?
         var duration: Double?
 
+        /// What a `type` step types into its element after clicking it.
+        var text: String?
+
         // swiftlint:disable:next nesting - the schema's key is y, too short a name for a property
         private enum CodingKeys: String, CodingKey {
             case offset = "y"
-            case action, selector, start, duration
+            case action, selector, start, duration, text
         }
     }
 
@@ -70,14 +73,18 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         let hasSelector = !(selector ?? "").isEmpty
         let action: PointerClip.Action?
         let minimum: Double
-        let fallback: Double
+        var fallback: Double
+        guard (step.action == "type") == (step.text?.isEmpty == false) else {
+            throw .invalidArgument(step.action == "type" ? "\(name): type needs the text to type." : "\(name): text is for type only.")
+        }
         switch step.action {
-        case "hover", "click":
+        case "hover", "click", "type":
             guard hasSelector else { throw .invalidArgument("\(name): \(step.action) needs a selector from inspect_page.") }
             guard step.offset == nil else { throw .invalidArgument("\(name): y is for scroll only.") }
-            action = PointerClip.Action(rawValue: step.action)
+            // Typing is a click on the field, then its keys
+            action = step.action == "hover" ? .hover : .click
             minimum = PointerClip.minimumDuration
-            fallback = RecordPlan.pointerDuration
+            fallback = step.text.map(PointerClip.typingDuration) ?? RecordPlan.pointerDuration
         case "scroll":
             guard hasSelector != (step.offset != nil) else { throw .invalidArgument("\(name): scroll needs either a selector or y, not both.") }
             if let offset = step.offset, offset < 0 {
@@ -87,14 +94,14 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
             minimum = ScrollClip.minimumDuration
             fallback = RecordPlan.scrollDuration
         default:
-            throw .invalidArgument("\(name): action must be hover, click or scroll.")
+            throw .invalidArgument("\(name): action must be hover, click, type or scroll.")
         }
 
         let start = step.start ?? previousEnd.map { $0 + RecordPlan.gap } ?? RecordPlan.leadIn
         guard start >= 0 else { throw .invalidArgument("\(name): start must be 0 or more.") }
         let length = step.duration ?? fallback
         guard length >= minimum else { throw .invalidArgument("\(name): duration must be at least \(minimum) s.") }
-        return RecordPlan.TimedStep(index: index, action: action, selector: hasSelector ? selector : nil, offset: step.offset, range: start..<start + length)
+        return RecordPlan.TimedStep(index: index, action: action, selector: hasSelector ? selector : nil, offset: step.offset, range: start..<start + length, text: step.text)
     }
 
     // MARK: - Shared with inspect_page
@@ -126,8 +133,9 @@ nonisolated extension RecordPageRequest {
         let pointer = script.pointer.compactMap { clip in
             clip.target.selector.map { selector in
                 Step(
-                    action: clip.action.rawValue, selector: selector,
-                    start: Self.rounded(clip.range.lowerBound), duration: Self.rounded(clip.range.upperBound - clip.range.lowerBound)
+                    action: clip.text == nil ? clip.action.rawValue : "type", selector: selector,
+                    start: Self.rounded(clip.range.lowerBound), duration: Self.rounded(clip.range.upperBound - clip.range.lowerBound),
+                    text: clip.text
                 )
             }
         }

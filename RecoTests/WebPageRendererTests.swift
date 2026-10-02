@@ -46,6 +46,44 @@ struct WebPageRendererTests {
         </script></body></html>
         """
 
+    /// A field in a form: the page turns green once the field holds "Hi, 2!" and the band below
+    /// it blue when the form is submitted.
+    private static let formPage = """
+        <!doctype html><html><head><style>
+        body { margin: 0; background: rgb(255, 255, 255); }
+        #name { position: absolute; left: 100px; top: 100px; width: 200px; height: 30px; }
+        #band { position: absolute; left: 0; top: 300px; width: 100%; height: 100px; background: rgb(255, 255, 0); }
+        </style></head><body><form id="form"><input id="name"></form><div id="band"></div>
+        <script>
+        const field = document.getElementById('name');
+        let keys = 0;
+        field.addEventListener('keydown', () => { keys += 1; });
+        field.addEventListener('input', () => { if (field.value === 'Hi, 2!' && keys === 6) document.body.style.background = 'rgb(0, 255, 0)'; });
+        document.getElementById('form').addEventListener('submit', event => {
+          event.preventDefault();
+          document.getElementById('band').style.background = 'rgb(0, 0, 255)';
+        });
+        </script></body></html>
+        """
+
+    @Test func typesAClicksTextIntoItsFieldAndSubmitsOnEnter() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var script = Self.script(for: Self.formPage)
+        script.pointer = [PointerClip(range: 0.1..<0.9, action: .click, target: WebTarget(selector: "#name", point: .zero), text: "Hi, 2!\n")]
+
+        let rendered = try await render(script)
+
+        #expect(rendered.issues.isEmpty)
+        // Nothing typed yet at the click; the text is in after its 6 keys, and Enter submits the form
+        #expect(try await pixel(at: CGPoint(x: 500, y: 50), frame: 12, of: rendered.movie).isClose(to: [255, 255, 255]))
+        #expect(try await pixel(at: CGPoint(x: 500, y: 50), frame: 59, of: rendered.movie).isClose(to: [0, 255, 0]))
+        #expect(try await pixel(at: CGPoint(x: 500, y: 350), frame: 59, of: rendered.movie).isClose(to: [0, 0, 255]))
+        // H and ! with Shift; the keys start 0.3 s after the click and share the 0.5 s left
+        #expect(rendered.telemetry.keys.map(\.keyCode) == [4, 34, 43, 49, 19, 18, 36])
+        #expect(rendered.telemetry.keys.map(\.modifiers) == [["shift"], [], [], [], [], ["shift"], []])
+        #expect(abs(rendered.telemetry.keys[0].time - 0.4) < 1.0 / 60 && abs(rendered.telemetry.keys[6].time - (0.4 + 3.0 / 7)) < 1.0 / 60)
+    }
+
     private var script: WebScript {
         var script = Self.script(for: Self.page)
         let buy = WebTarget(selector: "#buy", point: .zero)

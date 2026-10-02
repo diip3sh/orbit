@@ -148,4 +148,49 @@ struct CursorPathTests {
 
         #expect(try self.path(telemetry).opacity(at: 4) == 1)
     }
+
+    @Test func staysWhereItIsBeforeTheEnd() throws {
+        var style = CursorStyle()
+        style.stopsBeforeEnd = 2
+        let telemetry = telemetry(cursor: sweep(speed: 80, until: 10))
+
+        let path = try path(telemetry, style: style)
+
+        #expect(path.position(at: 9) == path.position(at: 8) && path.position(at: 10) == path.position(at: 8))
+        #expect(path.position(at: 7) != path.position(at: 8))
+        // Before the last source time shown, not the recording's end
+        let trimmed = try #require(CursorPath(telemetry: telemetry, style: style, duration: 10, videoHeight: 800, shown: 1..<6))
+        #expect(trimmed.position(at: 6) == trimmed.position(at: 4) && trimmed.position(at: 3.9) != trimmed.position(at: 4))
+    }
+
+    @Test func glidesBackToItsFirstPositionOverTheLastSecond() throws {
+        var style = CursorStyle()
+        style.loopsToStart = true
+        let telemetry = telemetry(cursor: sweep(speed: 80, until: 10))
+        let plain = try path(telemetry)
+
+        let path = try path(telemetry, style: style)
+
+        #expect(path.position(at: 9) == plain.position(at: 9))
+        #expect(abs(path.position(at: 10).x - path.position(at: 0).x) < 1e-9)
+        let halfway = path.position(at: 9.5)
+        #expect(abs(halfway.x - (plain.position(at: 9.5).x + plain.position(at: 0).x) / 2) < 1e-9)
+
+        let trimmed = try #require(CursorPath(telemetry: telemetry, style: style, duration: 10, videoHeight: 800, shown: 2..<6))
+        #expect(abs(trimmed.position(at: 6).x - plain.position(at: 2).x) < 1e-9 && trimmed.position(at: 5) == plain.position(at: 5))
+    }
+
+    @Test func leansTheWayItMovesAndNotAtRest() throws {
+        var style = CursorStyle()
+        style.tilts = true
+        // 1500 pt/s to the right until 0.5 s, then still; 2 px per point
+        let telemetry = telemetry(cursor: sweep(speed: 1500, until: 0.5), scaleFactor: 2)
+
+        let path = try path(telemetry, style: style)
+
+        // The smoothed cursor has reached the move's speed: clockwise by tanh(1) of the most
+        #expect(abs(path.tilt(at: 0.45) + CursorPath.maximumTilt * tanh(1)) < 0.005)
+        #expect(abs(path.tilt(at: 3)) < 1e-6)
+        #expect(try self.path(telemetry).tilt(at: 0.45) == 0)
+    }
 }
