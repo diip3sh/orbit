@@ -79,8 +79,22 @@ struct AgentToolsTests {
         #expect(tools.job == nil)
     }
 
+    @Test func browsingOutsideARunRecoStartedIsRefused() async {
+        let tools = tools()
+        tools.browser = {
+            Issue.record("An agent run elsewhere reached the user's live page")
+            return nil
+        }
+
+        let open = await tools.call("open_page", arguments: Data(#"{"url":"example.com"}"#.utf8))
+
+        #expect(open.isError)
+        #expect(open.text.contains("started from Reco"))
+    }
+
     @Test func browsingWithoutAWindowSaysSoAndOthersAreChecked() async {
         let tools = tools()
+        tools.hostsRun = true
 
         let open = await tools.call("open_page", arguments: Data(#"{"url":"example.com"}"#.utf8))
         #expect(open.isError)
@@ -93,4 +107,3 @@ struct AgentToolsTests {
         #expect(Set(AgentToolCatalog.names).isSuperset(of: ["open_page", "look", "read_page", "hover", "click", "type", "inspect_page", "record_page", "render_status"]))
     }
 }
-

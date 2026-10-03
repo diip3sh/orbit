@@ -45,6 +45,10 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
 - **Don't use ad-hoc signing (`CODE_SIGN_IDENTITY="-"`)**: the code hash changes every build, so
   macOS forgets the Screen Recording permission and prompts forever. If a permission gets stuck:
   `tccutil reset ScreenCapture com.diip3sh.Reco`, then relaunch.
+- Live reload: `brew install --cask injectioniii`, run it, open this project in it, then run the app. Saving
+  a Swift file patches the running Debug build (`DebugInjection`; Debug has `-interposable` and no hardened
+  runtime). Changes it can't patch (new stored properties, type layout) need a relaunch: `scripts/dev.sh`
+  rebuilds and relaunches on save.
 - New `.swift` files need no pbxproj edit (file-system synchronized groups).
 - Don't call an ObjC API whose completion handler is `() -> Void` through Swift's async import
   (`await writer.finishWriting()`). `AVAssetExportSession.export(to:as:)` is back-deployed below
@@ -597,8 +601,7 @@ Key facts (measured on an M5, macOS 26.5, spec 0005):
 
 Coding agents (Claude Code, Codex, OpenCode, Cursor, Gemini CLI, Claude Desktop, Grok Build) record a
 web page from its address. **Settings → Agents** finds the installed ones and adds a server named `reco` to
-each one's own settings, on its own when the tab opens for agents that can run here (command line on the login `PATH`,
-or Claude Desktop's app; a leftover settings folder isn't enough), except agents the user disconnected (`declinedAgents`). The agent then calls three MCP tools: `inspect_page` (selectors and boxes of a
+each one's own settings, only when the user clicks Connect (it writes the bridge token there). The agent then calls three MCP tools: `inspect_page` (selectors and boxes of a
 page), `record_page` (hover, click and scroll steps rendered like spec 0005, opened in the editor) and
 `render_status`. Started with `--mcp`, the app only pipes stdio to the running app's Unix socket, and
 starts the app first if needed.
@@ -740,6 +743,9 @@ as its file) or moves to the Trash with a recording's `.telemetry.json` and `.ed
 Before recording, the agent learns the site as Claude in Chrome does: `open_page`, `look`, `read_page`,
 `hover`, `click` and `type` act on the Web Recording window's live preview and each returns JSON plus a JPEG
 screenshot (MCP image content). The prompt (`AgentRecordingRequest.prompt`) asks it to explore every section first.
+Browsing works only while a run Reco started is going (`AgentTools.hostsRun`, cleared with `stagesPlans` when it
+ends or is cancelled): the preview shares the default website data store, so it has the user's logins. Element
+text sent to the agent never includes a password's value.
 
 | File | Role |
 |---|---|

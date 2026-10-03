@@ -292,6 +292,26 @@ struct AgentRecordingViewModelTests {
         #expect(failures.arguments.isEmpty)
     }
 
+    @Test func aRunLetsItsAgentBrowseAndStagePlansOnlyWhileItGoes() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let tools = AgentTools(settings: SettingsStore(defaults: defaults.make())) { _ in }
+        let page = try #require(URL(string: "https://example.com"))
+        let finishing = try makeModel(tools: tools)
+        await finishing.refreshAgents()
+
+        finishing.send("Show the hero", about: page)
+        #expect(tools.hostsRun && tools.stagesPlans)
+        await finish(finishing)
+        #expect(!tools.hostsRun && !tools.stagesPlans)
+
+        let cancelled = try makeModel(tools: tools, run: Self.hanging)
+        await cancelled.refreshAgents()
+        cancelled.send("Show the hero", about: page)
+        #expect(tools.hostsRun && tools.stagesPlans)
+        cancelled.cancel()
+        #expect(!tools.hostsRun && !tools.stagesPlans)
+    }
+
     @Test func aChatRunFillsTheTranscriptAndAFollowUpResumesIt() async throws {
         defer { try? FileManager.default.removeItem(at: home) }
         let calls = Calls()

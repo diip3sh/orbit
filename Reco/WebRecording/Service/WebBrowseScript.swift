@@ -14,7 +14,9 @@ nonisolated enum WebBrowseScript {
         if (!element) return null;
         element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
         const box = element.getBoundingClientRect();
-        const text = (element.getAttribute('aria-label') || element.innerText || element.value || '').replace(/\\s+/g, ' ').trim().slice(0, 60);
+        // A password's value is a secret, and this goes to the agent (as in WebInspectScript's valueOf)
+        const value = ['checkbox', 'radio', 'password'].includes(element.type) ? '' : element.value;
+        const text = (element.getAttribute('aria-label') || element.innerText || value || '').replace(/\\s+/g, ' ').trim().slice(0, 60);
         return [box.x, box.y, box.width, box.height, text];
         """
 
@@ -35,6 +37,9 @@ nonisolated enum WebBrowseScript {
 
     /// Where the page is: its address, height and scroll, as JSON.
     static let position = """
-        return JSON.stringify({ url: location.href, title: document.title, page_height: document.documentElement.scrollHeight, viewport_height: innerHeight, scroll_y: Math.round(scrollY) });
+        return JSON.stringify({
+          url: location.href, title: document.title, page_height: document.documentElement.scrollHeight,
+          viewport_height: innerHeight, scroll_y: Math.round(scrollY)
+        });
         """
 }

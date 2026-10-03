@@ -29,6 +29,9 @@ The prompt asks the agent to explore every section, read it and try its menus an
 ## Rules
 
 - Browsing is refused while the window renders a take.
+- Browsing is refused outside a run Reco started (the bar or the chat): the live page has the user's logins, so an
+  agent connected from elsewhere can't drive it and has only `inspect_page`, `record_page` and `render_status`.
+- Element text never includes the value of a password, checkbox or radio input.
 - The tools are in `AgentToolCatalog.names`, so Cursor's allowlist and Claude's `mcp__reco__*` cover them.
 
 Verified through the bridge on wikipedia.org: open, look at y 600, read, click into en.wikipedia.org; each

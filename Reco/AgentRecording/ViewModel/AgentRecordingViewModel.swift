@@ -204,6 +204,7 @@ final class AgentRecordingViewModel {
         lastRequest = request
         transcript.addRequest(request.summary)
         startingRenderID = tools.job?.renderID
+        tools.hostsRun = true
         tools.stagesPlans = !request.rendersVideo
         phase = .running(request.agent)
         task = Task { await execute(request) }
@@ -235,7 +236,15 @@ final class AgentRecordingViewModel {
         guard isRunning else { return }
         task?.cancel()
         task = nil
+        endRun()
         phase = .idle
+    }
+
+    /// Takes back what a run allowed its agent, so agents run elsewhere can't browse and their
+    /// `record_page` renders.
+    private func endRun() {
+        tools.hostsRun = false
+        tools.stagesPlans = false
     }
 
     private func execute(_ request: AgentRecordingRequest) async {
@@ -246,7 +255,9 @@ final class AgentRecordingViewModel {
         } catch {
             outcome = Task.isCancelled ? .cancelled : .failed(reason: error.localizedDescription)
         }
+        // A cancelled run was ended by cancel(), and a new one may have started since
         guard !Task.isCancelled else { return }
+        endRun()
         switch outcome {
         case .succeeded:
             phase = .idle

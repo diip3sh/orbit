@@ -24,8 +24,14 @@ final class AgentTools {
     /// Called with each script an agent's plan became, before it renders, for the window to adopt.
     @ObservationIgnored var onPlanned: ((WebScript) -> Void)?
 
+    /// Whether an agent run Reco started (the bar or the chat) is going. Only then can an agent browse:
+    /// the live page shares the default website data store, so it has the user's logins.
+    /// ponytail: any connection may browse during such a run, not just its agent; tell them apart by a
+    /// per-run token if that matters.
+    @ObservationIgnored var hostsRun = false
+
     /// Whether `record_page` only puts the plan on the window's timeline, for the user to render: for
-    /// the chat, where the user reviews and edits before rendering.
+    /// the chat, where the user reviews and edits before rendering. Set for a run, cleared when it ends.
     @ObservationIgnored var stagesPlans = false
 
     /// The Web Recording window, opened if it isn't, whose live page an agent browses (spec 0011).
@@ -79,6 +85,9 @@ final class AgentTools {
                 return Reply(text: try Self.encode(status), isError: status.status == .failed)
             case AgentToolCatalog.openPage, AgentToolCatalog.look, AgentToolCatalog.readPage, AgentToolCatalog.click,
                  AgentToolCatalog.hover, AgentToolCatalog.type:
+                guard hostsRun else {
+                    throw AgentToolError.invalidArgument("Browsing works only in runs started from Reco. Use inspect_page, then record_page.")
+                }
                 return try await browse(name, arguments: arguments)
             default:
                 throw AgentToolError.unknownTool(name)
@@ -187,10 +196,10 @@ final class AgentTools {
         case AgentToolCatalog.click, AgentToolCatalog.hover, AgentToolCatalog.type:
             let selector = try request.requiredSelector(for: name)
             guard let found = try await preview.evaluate(WebBrowseScript.locate, arguments: ["selector": selector]) as? [Any], found.count == 5,
-                  let x = found[0] as? Double, let y = found[1] as? Double, let width = found[2] as? Double, let height = found[3] as? Double else {
+                  let left = found[0] as? Double, let top = found[1] as? Double, let width = found[2] as? Double, let height = found[3] as? Double else {
                 throw AgentToolError.invalidArgument("No element matches \"\(selector)\". Use a selector from open_page or inspect_page.")
             }
-            let frame = CGRect(x: x, y: y, width: width, height: height)
+            let frame = CGRect(x: left, y: top, width: width, height: height)
             let center = CGPoint(x: frame.midX, y: frame.midY)
             window.showAgentTarget(frame)
             if name == AgentToolCatalog.hover {
