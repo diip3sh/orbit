@@ -18,7 +18,7 @@ Every push to `main` that touches the app is released automatically by
 Installed copies read that feed (`SUFeedURL` in `Info.plist`) and offer the new version.
 
 - A push releases when it changes `Reco/**`, `Reco.xcodeproj/**`,
-  `dist/update_appcast.py` or the workflow itself. Docs-only and website-only pushes don't.
+  `dist/update_appcast.py` or the workflow itself. Documentation-only pushes don't.
 - **Actions → Fork Release → Run workflow** releases the current `main` by hand.
 - Never commit the DMG or any build output to git; it only goes on the Release.
 

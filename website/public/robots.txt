@@ -1,6 +1,0 @@
-# BetterCapture - robots.txt
-User-agent: *
-Allow: /
-
-# Sitemap
-Sitemap: https://bettercapture.app/sitemap-index.xml
