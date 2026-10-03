@@ -47,6 +47,7 @@ docs updated, frame budget measured) before the next starts. Details of the N it
 |---|---|---|---|
 | A1 | `export_recording` MCP tool | S–M | The agent exports its take (format, size, GIF once N10 lands) and gets the file's path. Reuses `ExportService`; long-polls like `record_page`. Without it an agent's take ends in a window a person must click through |
 | A2 | Type steps in web takes | M | A `type` step: text into the focused or selected field, key by key on the page's clock, with key telemetry so the keystroke overlay works. Demos of search, sign-up and forms are impossible today |
+| A2b | Shown elements and the walkthrough playbook | M | Auto-zoom follows the cursor's rests, so an agent that hovers headings makes a video that zooms on headings. A `show` selector per step says what the video frames; the prompt gives a method (research the pages, plan beats, record with shows at scale 1), and Claude gets web search and fetch for the research |
 | A3 | Text callouts on a timeline lane | M | A title or caption for a time range, drawn once per plan like `KeystrokeChip`. Agents give them per step in `record_page` ("Pick a plan", "Check out"); people add them with **T**. A silent demo that explains itself, no AI voice |
 | A4 | `edit_recording` MCP tool | M | Zooms, cuts, canvas shape and style on an existing take, as the chat does by re-recording today, but without the render |
 | A5 | Localhost and auth | S | Document and test `http://localhost` takes for "record the feature I just built" from a coding agent; cookies already carry over from the preview |
@@ -89,6 +90,7 @@ The session order interleaves them: N2 → N10 → A1 → N20 → A2 → N1 → 
 | N20 cancel and restart | Done. Not yet tried on a real recording |
 | A2 type steps | Done. Tested on a local form (input events, Enter submits); real sites not yet tried |
 | N1 motion blur | Done for the camera and the cursor. 8 samples in the preview, 16 in exports; at the 8 ms budget on an M5 on the default canvas, unmeasured on an M1 |
+| Walkthrough method: `show` per step, page descriptions, Claude's web research, the playbook | Done. Three linear.app takes without it zoomed on headings and the navigation; with it the agent names what each beat frames. Not yet added: a Show field in the Web Recording window, a plan-time check of show selectors on the first page |
 | A3 text callouts | Todo, next |
 | A4 `edit_recording`, A5 localhost | Todo |
 | N11, N3, N4, N6, N5, N7, N8, N9 | Todo, in that order |

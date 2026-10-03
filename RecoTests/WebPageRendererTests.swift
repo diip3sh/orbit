@@ -84,6 +84,53 @@ struct WebPageRendererTests {
         #expect(abs(rendered.telemetry.keys[0].time - 0.4) < 1.0 / 60 && abs(rendered.telemetry.keys[6].time - (0.4 + 3.0 / 7)) < 1.0 / 60)
     }
 
+    @Test func aShownElementIsFramedWhereItsClipStartsAndOneOutOfViewReported() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var script = Self.script(for: Self.page)
+        // The band is 500 px down a 400 px view, so out of view; the button is framed where the scroll leaves it
+        script.pointer = [
+            PointerClip(range: 0.1..<0.4, action: .hover, target: WebTarget(selector: "#buy", point: .zero), show: "#band"),
+            PointerClip(range: 0.6..<0.9, action: .hover, target: WebTarget(selector: "#buy", point: .zero), show: "#buy")
+        ]
+        script.scrolls = [ScrollClip(range: 0.4..<0.6, offset: CGPoint(x: 0, y: 50), easing: .easeInOut)]
+
+        let rendered = try await render(script)
+
+        #expect(rendered.issues.count == 1 && rendered.issues.first?.contains("\"#band\", which the step shows, wasn't on the page or mostly in view") == true)
+        // The button (200 × 60 at 100, 100 on the page, scrolled 50 up) fills 80% of the view's width: 640 × 0.8 / 200
+        let zoom = try #require(rendered.zooms.first)
+        #expect(rendered.zooms.count == 1 && zoom.range == 0.6..<0.9)
+        #expect(abs(zoom.scale - 2.56) < 0.01)
+        #expect(zoom.fixedCenter.map { abs($0.x - 200.0 / 640) < 0.01 && abs($0.y - 80.0 / 400) < 0.01 } == true)
+    }
+
+    @Test func aPageAClickOpensShowsFromItsTopAndAnAnchorLinkIsNoNewPage() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // A 3000 px page, red at its top and blue from 1000 px down; the first page links to it from 600 px down
+        let pages = try await LocalPages.serving([
+            "/": """
+                <!doctype html><html><body style="margin:0;height:3000px;background:rgb(0,255,0)">
+                <a id="here" href="#low" style="position:absolute;left:0;top:100px;width:200px;height:60px;display:block;background:black"></a>
+                <a id="low" href="/second" style="position:absolute;left:0;top:600px;width:200px;height:60px;display:block;background:black"></a>
+                </body></html>
+                """,
+            "/second": "<!doctype html><html><body style='margin:0;height:3000px;background:linear-gradient(rgb(255,0,0) 0 1000px, rgb(0,0,255) 1000px)'></body></html>"
+        ])
+        var script = Self.script(for: "")
+        (script.url, script.duration) = (pages.url("/"), 1.5)
+        script.pointer = [
+            PointerClip(range: 0.1..<0.3, action: .click, target: WebTarget(selector: "#here", point: .zero)),
+            PointerClip(range: 0.7..<1, action: .click, target: WebTarget(selector: "#low", point: .zero))
+        ]
+        script.scrolls = [ScrollClip(range: 0.4..<0.6, offset: CGPoint(x: 0, y: 500), easing: .easeInOut)]
+
+        let rendered = try await render(script)
+
+        // The anchor click opened nothing; the second page shows its top, not 500 px down
+        #expect(rendered.telemetry.navigations.map(\.url) == [pages.url("/second").absoluteString])
+        #expect(try await pixel(at: CGPoint(x: 500, y: 20), frame: 80, of: rendered.movie).isClose(to: [255, 0, 0]))
+    }
+
     private var script: WebScript {
         var script = Self.script(for: Self.page)
         let buy = WebTarget(selector: "#buy", point: .zero)
@@ -101,7 +148,8 @@ struct WebPageRendererTests {
         let movie = folder.appending(path: "take.mov")
         var progress: [Double] = []
 
-        let (telemetry, issues) = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { progress.append($0) }
+        let rendered = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { progress.append($0) }
+        let (telemetry, issues) = (rendered.telemetry, rendered.issues)
 
         #expect(progress.count == 60)
         #expect(progress.last == 1)
@@ -247,6 +295,7 @@ struct WebPageRendererTests {
 
         #expect(inspection.viewport == PageInspection.Size(width: 640, height: 400))
         #expect(inspection.pageHeight == 3000)
+        #expect(inspection.description == nil)
         #expect(!inspection.truncated)
         let buy = try #require(inspection.elements.first)
         #expect(inspection.elements.count == 1)
@@ -260,7 +309,7 @@ struct WebPageRendererTests {
 
     @Test func inspectingNamesRolesAndTextAndSkipsWhatIsntVisible() async throws {
         let page = """
-            <!doctype html><html><body style="margin: 0">
+            <!doctype html><html><head><meta name="Description" content="  Plans for every team. "></head><body style="margin: 0">
             <a href="/pricing" id="pricing">  Pricing   and
               plans </a>
             <button id="close" aria-label="Close dialog">x</button>
@@ -282,6 +331,7 @@ struct WebPageRendererTests {
             ["#pricing", "link", "Pricing and plans"], ["#close", "button", "Close dialog"], ["#agree", "checkbox", ""],
             ["#password", "password", ""], ["#name", "text", "Ada"], ["#title", "heading", "Hello"]
         ])
+        #expect(inspection.description == "Plans for every team.")
         // Nothing asked for, so no boxes at all
         #expect(inspection.boxes == nil)
     }
@@ -309,13 +359,14 @@ struct WebPageRendererTests {
     private func render(_ script: WebScript) async throws -> Rendered {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let movie = folder.appending(path: "take.mov")
-        let (telemetry, issues) = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { _ in }
-        return Rendered(telemetry: telemetry, movie: AVURLAsset(url: movie), issues: issues)
+        let rendered = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { _ in }
+        return Rendered(telemetry: rendered.telemetry, movie: AVURLAsset(url: movie), zooms: rendered.zooms, issues: rendered.issues)
     }
 
     private struct Rendered {
         let telemetry: InputTelemetry
         let movie: AVURLAsset
+        let zooms: [ZoomSegment]
         let issues: [String]
     }
 

@@ -28,10 +28,13 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         /// What a `type` step types into its element after clicking it.
         var text: String?
 
+        /// The element the video zooms on during a cursor step, when the agent chooses the zooms.
+        var show: String?
+
         // swiftlint:disable:next nesting - the schema's key is y, too short a name for a property
         private enum CodingKeys: String, CodingKey {
             case offset = "y"
-            case action, selector, start, duration, text
+            case action, selector, start, duration, text, show
         }
     }
 
@@ -71,16 +74,15 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         let name = "steps[\(index)]"
         let selector = step.selector?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasSelector = !(selector ?? "").isEmpty
+        let show = step.show?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shows = !(show ?? "").isEmpty
         let action: PointerClip.Action?
         let minimum: Double
         var fallback: Double
-        guard (step.action == "type") == (step.text?.isEmpty == false) else {
-            throw .invalidArgument(step.action == "type" ? "\(name): type needs the text to type." : "\(name): text is for type only.")
-        }
+        try Self.checkFields(of: step, named: name)
         switch step.action {
         case "hover", "click", "type":
             guard hasSelector else { throw .invalidArgument("\(name): \(step.action) needs a selector from inspect_page.") }
-            guard step.offset == nil else { throw .invalidArgument("\(name): y is for scroll only.") }
             // Typing is a click on the field, then its keys
             action = step.action == "hover" ? .hover : .click
             minimum = PointerClip.minimumDuration
@@ -101,7 +103,23 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         guard start >= 0 else { throw .invalidArgument("\(name): start must be 0 or more.") }
         let length = step.duration ?? fallback
         guard length >= minimum else { throw .invalidArgument("\(name): duration must be at least \(minimum) s.") }
-        return RecordPlan.TimedStep(index: index, action: action, selector: hasSelector ? selector : nil, offset: step.offset, range: start..<start + length, text: step.text)
+        return RecordPlan.TimedStep(
+            index: index, action: action, selector: hasSelector ? selector : nil, offset: step.offset, range: start..<start + length,
+            text: step.text, show: shows ? show : nil
+        )
+    }
+
+    /// The fields that go with one action only: text with type, y with scroll, show with the cursor actions.
+    private static func checkFields(of step: Step, named name: String) throws(AgentToolError) {
+        guard (step.action == "type") == (step.text?.isEmpty == false) else {
+            throw .invalidArgument(step.action == "type" ? "\(name): type needs the text to type." : "\(name): text is for type only.")
+        }
+        if ["hover", "click", "type"].contains(step.action), step.offset != nil {
+            throw .invalidArgument("\(name): y is for scroll only.")
+        }
+        if step.action == "scroll", !(step.show ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw .invalidArgument("\(name): show is for hover, click and type only.")
+        }
     }
 
     // MARK: - Shared with inspect_page
@@ -135,7 +153,7 @@ nonisolated extension RecordPageRequest {
                 Step(
                     action: clip.text == nil ? clip.action.rawValue : "type", selector: selector,
                     start: Self.rounded(clip.range.lowerBound), duration: Self.rounded(clip.range.upperBound - clip.range.lowerBound),
-                    text: clip.text
+                    text: clip.text, show: clip.show
                 )
             }
         }

@@ -104,8 +104,11 @@ final class AgentTools {
             export = (request, ExportStatus(status: .exporting, progress: 0))
             exportTask = Task {
                 do {
-                    let file = try await ExportService.export(recordingAt: movie, settings: settings) { [weak self] in
-                        self?.export?.status.progress = $0
+                    // Progress comes from its own task, which can still report after the export has returned
+                    let file = try await ExportService.export(recordingAt: movie, settings: settings) { [weak self] progress in
+                        if self?.export?.status.status == .exporting {
+                            self?.export?.status.progress = progress
+                        }
                     }
                     export?.status = ExportStatus(status: .done, progress: 1, file: file.path(percentEncoded: false))
                 } catch {

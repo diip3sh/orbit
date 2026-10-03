@@ -29,6 +29,9 @@ nonisolated struct RecordPlan: Equatable, Sendable {
 
         /// What a click types into its element afterwards.
         var text: String?
+
+        /// The element the video zooms on meanwhile.
+        var show: String?
     }
 
     /// The first step starts this many seconds in, so the page shows before anything moves.
@@ -118,7 +121,7 @@ nonisolated struct RecordPlan: Equatable, Sendable {
                 unmatched.append(selector)
             }
             let target = WebTarget(selector: selector, point: point)
-            script.pointer = script.pointer.inserting(PointerClip(range: step.range, action: action, target: target, text: step.text))
+            script.pointer = script.pointer.inserting(PointerClip(range: step.range, action: action, target: target, text: step.text, show: step.show))
         }
         return (script, unmatched)
     }

@@ -56,9 +56,11 @@ enum WebInspectScript {
     };
     const roleOf = (element) => element.getAttribute('role') || implicitRoles[element.localName] || (element.localName === 'input' ? element.type : 'generic');
     const visible = [...document.querySelectorAll(interactive)].filter(isVisible);
+    const description = (document.querySelector('meta[name="description" i], meta[property="og:description"]')?.content || '').trim();
     const result = {
       title: document.title,
       url: location.href,
+      description: description ? description.slice(0, 300) : undefined,
       viewport: { width: innerWidth, height: innerHeight },
       page_height: document.documentElement.scrollHeight,
       elements: visible.slice(0, \#(maximumElements)).map((element) => ({

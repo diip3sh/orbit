@@ -5,8 +5,9 @@
 
 import Foundation
 
-/// The command line that runs one agent headlessly on a request, with only Reco's tools allowed
-/// (spec 0007). All argument building is here, so a CLI changing a flag is a change to one function.
+/// The command line that runs one agent headlessly on a request, with only Reco's tools allowed,
+/// plus web search and fetch where the agent has them (spec 0007). All argument building is here,
+/// so a CLI changing a flag is a change to one function.
 nonisolated struct AgentInvocation: Equatable, Sendable {
 
     /// The executable's name, looked up on the login shell's `PATH`.
@@ -95,7 +96,9 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
             // --tools and --allowedTools take any number of values, so the prompt goes right after -p.
             // Reco's server from a file in the run's folder, not the command line, which other users see
             files[serversFile] = servers(server, for: .claudeCode)
-            arguments = ["-p", prompt, "--tools", "", "--allowedTools", "mcp__reco__*", "--permission-mode", "dontAsk",
+            // Web search and fetch too, for the research a walkthrough starts with; both only read
+            arguments = ["-p", prompt, "--tools", "WebSearch,WebFetch", "--allowedTools", "mcp__reco__*", "WebSearch", "WebFetch",
+                         "--permission-mode", "dontAsk",
                          "--no-session-persistence", "--mcp-config", directory.appending(path: serversFile).path(percentEncoded: false),
                          "--strict-mcp-config"] + option("--model") + ["--output-format", "text"]
         case .codex:

@@ -86,10 +86,10 @@ final class EditorViewModel {
             return
         }
         do {
-            // A new project starts with the automatic zooms, and is saved only once edited or restyled
-            let stored = try await ProjectStore.read(for: videoURL)
-            saved = stored ?? EditorProject(opening: source)
-            project = stored ?? style.map(saved.styled(like:)) ?? saved
+            // A new project starts with the automatic zooms, and is saved only once edited or restyled.
+            // A take replacing another takes its look, whether it brought a project (a web take's zooms) or not
+            saved = try await ProjectStore.read(for: videoURL) ?? EditorProject(opening: source)
+            project = style.map(saved.styled(like:)) ?? saved
         } catch {
             fail(.unreadableProject(error))
             return

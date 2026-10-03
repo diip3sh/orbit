@@ -23,7 +23,7 @@ struct AgentRecordingRequestTests {
 
         \(AgentRecordingRequest.playbook)
 
-        Use only the reco MCP tools; render_status with the render_id until the status is done or failed. Don't ask questions; \
+        Record only with the reco MCP tools (web search and fetch are for research); render_status with the render_id until the status is done or failed. Don't ask questions; \
         decide yourself. If the result has warnings, fix those steps and record once more, but only once: then stop and report, \
         whatever the second result says. When it's done, reply in one or two short sentences saying what the video \
         shows, without paths or selectors. If it fails, reply with the error.

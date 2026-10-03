@@ -28,8 +28,11 @@ struct WebTakeIssuesTests {
         issues.check("#buy", at: 4, frame: CGRect(x: 100, y: 100, width: 80, height: 40), cover: #"div.menu ("iPhone")"#)
         issues.skippedClick("#gone", at: 2.26)
         issues.notFound("#faq", at: 6)
+        issues.notShown("#shot", at: 7)
+        issues.notShown("#shot", at: 8)
 
-        #expect(issues.messages.count == 5)
+        #expect(issues.messages.count == 6)
+        #expect(issues.messages[5].hasPrefix(##"At 7.0 s "#shot", which the step shows, wasn't on the page or mostly in view, so the video doesn't zoom there."##))
         #expect(issues.messages[0].hasPrefix(##"At 2.3 s no element matched "#gone", so the cursor went to the middle of the view."##))
         #expect(issues.messages[1].hasPrefix(##"At 3.0 s "#low" was outside the view (its middle at x 140, y 1220 of 1440×900)"##))
         #expect(issues.messages[2].hasPrefix(##"At 4.0 s div.menu ("iPhone") covered "#buy" where the cursor pointed."##))

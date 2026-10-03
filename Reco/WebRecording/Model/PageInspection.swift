@@ -10,6 +10,10 @@ import CoreGraphics
 nonisolated struct PageInspection: Codable, Equatable, Sendable {
     var title: String
     var url: String
+
+    /// The page's own summary (its meta or Open Graph description), for an agent learning what
+    /// the product does; `nil` when it has none.
+    var description: String?
     var viewport: Size
     var pageHeight: Double
     var elements: [Element]
@@ -21,7 +25,7 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
     var boxes: [String: Box]?
 
     private enum CodingKeys: String, CodingKey {
-        case title, url, viewport, elements, truncated, boxes
+        case title, url, description, viewport, elements, truncated, boxes
         case pageHeight = "page_height"
     }
 

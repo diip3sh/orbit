@@ -46,6 +46,12 @@ nonisolated struct WebTakeIssues: Sendable {
             + "from inspect_page of the page shown then.")
     }
 
+    /// The element a cursor clip starting at `time` shows wasn't in view, so the video doesn't zoom there.
+    mutating func notShown(_ selector: String, at time: Double) {
+        report("show", selector, "At \(Self.seconds(time)) \"\(selector)\", which the step shows, wasn't on the page or mostly in view, so the "
+            + "video doesn't zoom there. Scroll to it first, or show an element in view then.")
+    }
+
     /// A scroll at `time` found nothing matching `selector`, so the page didn't move.
     mutating func notFound(_ selector: String, at time: Double) {
         report("scroll", selector, "At \(Self.seconds(time)) the scroll found no element matching \"\(selector)\", so the page didn't move. "

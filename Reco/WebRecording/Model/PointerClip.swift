@@ -16,6 +16,10 @@ nonisolated struct PointerClip: Codable, Equatable, Sendable, TimelineClip {
     /// What a click clip types into its target once it has clicked it. A new line is Enter.
     var text: String?
 
+    /// A selector for the element the video zooms on while the clip runs (``WebTakeZooms``), or
+    /// `nil` to leave the zooms to the editor.
+    var show: String?
+
     nonisolated enum Action: String, Codable, CaseIterable, Sendable {
         case hover
         case click

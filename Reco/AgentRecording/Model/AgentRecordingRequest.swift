@@ -30,19 +30,24 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
     /// What the video shows when the user said nothing.
     static let defaultInstructions = "No instructions: hover and click the page's main call to action, then scroll through the page."
 
-    /// How a video is made from nothing: learn the product, plan the story, then record it. The
-    /// editor zooms where the cursor stops, so the steps say where to stop and for how long.
+    /// How a video is made from nothing: learn the product, plan the story, then record it, saying
+    /// with each step what the video zooms on (``WebTakeZooms``).
     static let playbook = """
         How to make it:
-        1. Research. Call inspect_page on the page, then on the two to four pages its product or features navigation links \
-        to (use their href), to learn what the product does and which features it shows best.
-        2. Plan. Write a shot list of four to six beats that tell one story: what the product is (its hero), its two or three \
-        strongest features, each on its own page or section, and the call to action at the end. For each beat decide the one \
-        thing the viewer should see and how to get there: a click on the link that opens the page, a scroll to the section.
-        3. Record with record_page. The video zooms in wherever the cursor stops, so stop it only on what the viewer should \
-        read: hover the feature's heading or the thing itself for 2 to 3 s, hover a menu to open it, click a link to open its \
-        page and then hover that page's heading. Never park the cursor on empty space or on the navigation while a page \
-        loads. Keep 1 s still at the start, 0.8 to 1 s between steps, and 45 to 60 s in all unless asked otherwise.
+        1. Research. Learn what the product does and which three features matter most. Call inspect_page on the page, then on \
+        the two to four pages its product or features navigation links to (use their href): their descriptions and headings \
+        say what each page shows. If you have web search or fetch, read the product's features or docs page too, and what a \
+        review names as its best features. Don't record anything until you can say in one sentence what the product is for.
+        2. Plan. Write a shot list of four to six beats that tell one story: what the product is (the hero), its two or three \
+        strongest features, each on its own page or section, and the call to action. For each beat name the one element the \
+        viewer should see (a product screenshot, a feature card, a short heading with its text), the page it is on and how to \
+        get there: a click on the link that opens the page, a scroll to the section.
+        3. Record with record_page, one or two steps per beat, every step with a show: the element the video zooms on; it zooms \
+        on nothing else. Show the thing itself, not the heading above it; show the hero or a whole section to stay zoomed out. \
+        Hover something in or beside what you show for 2 to 3 s, so it is in view. To open a page, click its link, then hover that \
+        page's hero showing it. Never park the cursor on the navigation while a page loads. Use scale 1 unless asked for 2: a \
+        minute at 2 takes over 15 minutes to render on a heavy page. Keep 1 s still at the start, 0.8 to 1 s between steps, and \
+        45 to 60 s in all unless asked otherwise.
         """
 
     /// How a video is recorded again with a change (spec 0008).
@@ -64,7 +69,7 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         parts.append((take == nil ? "What the video should show:\n" : "What the user asks now:\n") + (wanted.isEmpty ? Self.defaultInstructions : wanted))
         parts.append(take == nil ? Self.playbook : Self.changePlaybook)
         parts.append("""
-            Use only the reco MCP tools; render_status with the render_id until the status is done or failed. Don't ask questions; \
+            Record only with the reco MCP tools (web search and fetch are for research); render_status with the render_id until the status is done or failed. Don't ask questions; \
             decide yourself. If the result has warnings, fix those steps and record once more, but only once: then stop and report, \
             whatever the second result says. When it's done, reply in one or two short sentences saying what the video \
             shows\(take == nil ? "" : " and what changed"), without paths or selectors. If it fails, reply with the error.

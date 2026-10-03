@@ -22,14 +22,14 @@ struct AgentInvocationTests {
         try #require(AgentInvocation.make(for: request(agent, model: model), in: directory, server: server))
     }
 
-    @Test func claudeCodeGetsThePromptRightAfterPAndOnlyRecosTools() throws {
+    @Test func claudeCodeGetsThePromptRightAfterPAndRecosToolsPlusWebResearch() throws {
         let prompt = try request(.claudeCode).prompt
         let plain = try invocation(.claudeCode)
         let chosen = try invocation(.claudeCode, model: "opus")
 
         let servers = "/Users/someone/Library/Application Support/com.diip3sh.Reco/AgentRun/reco-mcp.json"
-        let head: [String] = ["-p", prompt, "--tools", "", "--allowedTools", "mcp__reco__*", "--permission-mode", "dontAsk",
-                              "--no-session-persistence", "--mcp-config", servers, "--strict-mcp-config"]
+        let head: [String] = ["-p", prompt, "--tools", "WebSearch,WebFetch", "--allowedTools", "mcp__reco__*", "WebSearch", "WebFetch",
+                              "--permission-mode", "dontAsk", "--no-session-persistence", "--mcp-config", servers, "--strict-mcp-config"]
         let expected: [String] = head + ["--output-format", "text"]
         let expectedWithModel: [String] = head + ["--model", "opus", "--output-format", "text"]
         #expect(plain.executableName == "claude")

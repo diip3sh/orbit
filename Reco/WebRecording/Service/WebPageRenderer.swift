@@ -59,9 +59,9 @@ final class WebPageRenderer: NSObject {
     }
 
     /// Renders the take into a movie at `url`, reporting progress from 0 to 1, and returns its
-    /// telemetry and what went wrong on the page (``WebTakeIssues``). Cancelling the task stops it;
-    /// the caller removes the partial movie.
-    func render(to url: URL, bitsPerPixel: Double, progress: (Double) -> Void) async throws -> (telemetry: InputTelemetry, issues: [String]) {
+    /// telemetry, the zooms its script asked for (``WebTakeZooms``) and what went wrong on the page
+    /// (``WebTakeIssues``). Cancelling the task stops it; the caller removes the partial movie.
+    func render(to url: URL, bitsPerPixel: Double, progress: (Double) -> Void) async throws -> Rendered {
         guard let pageURL = script.url else { throw WebRenderError.noURL }
         // Ordered in, off every display, so WebKit sees a visible window
         window.orderFrontRegardless()
@@ -84,7 +84,17 @@ final class WebPageRenderer: NSObject {
             await writer.cancel()
             throw error
         }
-        return (take.telemetry.finished { StandardCursors.sprite(of: $0, id: $1) }, take.issues.messages)
+        let telemetry = take.telemetry.finished { StandardCursors.sprite(of: $0, id: $1) }
+        // A zoom on an element ends as the page scrolls or is replaced under it, as a held rest's does
+        let scrolls = take.script.scrolls.map(\.range.lowerBound) + telemetry.navigations.map(\.time)
+        return Rendered(telemetry: telemetry, zooms: take.zooms.segments(endingAt: scrolls), issues: take.issues.messages)
+    }
+
+    /// What a take leaves besides its movie.
+    nonisolated struct Rendered: Sendable {
+        var telemetry: InputTelemetry
+        var zooms: [ZoomSegment]
+        var issues: [String]
     }
 
     /// What a take keeps from one frame to the next.
@@ -95,6 +105,7 @@ final class WebPageRenderer: NSObject {
         var aimed = Set<UUID>()
         var pointer: PointerTrack
         var telemetry: WebTakeTelemetry
+        var zooms: WebTakeZooms
         var issues: WebTakeIssues
 
         /// Where the pointer and the page were in the last frame.
@@ -107,6 +118,7 @@ final class WebPageRenderer: NSObject {
             self.script = script
             pointer = PointerTrack(script: script)
             telemetry = WebTakeTelemetry(script: script)
+            zooms = WebTakeZooms(viewport: script.viewport)
             issues = WebTakeIssues(viewport: script.viewport)
         }
     }
@@ -116,7 +128,12 @@ final class WebPageRenderer: NSObject {
     private func play(_ time: Double, of take: inout Take) async throws {
         let scroll = take.script.scrollOffset(at: time)
         let aiming = take.script.scrolls.filter { $0.target != nil && !take.aimed.contains($0.id) && $0.range.lowerBound <= time }
-        let page = try await advance(to: time, scroll: scroll, selectors: take.pointer.selectors(at: time) + aiming.compactMap(\.target?.selector))
+        // The cursor clip starting this frame: its target is checked and its shown element measured
+        let arriving = script.pointer.first {
+            $0.range.lowerBound > take.time + WebScript.pressTolerance && $0.range.lowerBound <= time + WebScript.pressTolerance
+        }
+        let selectors = take.pointer.selectors(at: time) + aiming.compactMap(\.target?.selector) + [arriving?.show].compactMap { $0 }
+        let page = try await advance(to: time, scroll: scroll, selectors: selectors)
         for clip in aiming {
             take.aimed.insert(clip.id)
             aim(clip, in: &take, at: page, scrolledTo: scroll)
@@ -130,8 +147,12 @@ final class WebPageRenderer: NSObject {
         }
         let scrolled = take.scroll.map { CGVector(dx: $0.x - scroll.x, dy: $0.y - scroll.y) }
         // The page after the first that replaced the last frame's; the first is the one asked for
-        let opened = take.page != nil && webView.url != take.page ? webView.url : nil
+        let opened = take.page != nil && Self.isAnotherPage(webView.url, than: take.page) ? webView.url : nil
         (take.location, take.scroll, take.page) = (location, scroll, webView.url)
+        // A page a click opened shows from its top: where the script had scrolled belongs to the page before
+        if opened != nil, let index = take.script.scrolls.lastIndex(where: { $0.range.lowerBound <= time }) {
+            take.script.scrolls[index].offset = .zero
+        }
         // Not on a target the page doesn't have now: the press would land on whatever is there
         let presses = script.presses(after: take.time, through: time).filter { press in
             guard let selector = press.target.selector, page.boxes[selector] == nil else { return true }
@@ -150,18 +171,38 @@ final class WebPageRenderer: NSObject {
             typed.append(key.character)
         }
         // Checked where each cursor clip starts, as Playwright checks an action's target
-        let previous = take.time
-        let arriving = script.pointer.first {
-            $0.range.lowerBound > previous + WebScript.pressTolerance && $0.range.lowerBound <= time + WebScript.pressTolerance
-        }
         let (cursor, cover) = await hold(at: location, aimingAt: arriving?.target.selector)
         if let selector = arriving?.target.selector {
             take.issues.check(selector, at: time, frame: page.boxes[selector], cover: cover)
+        }
+        if let arriving {
+            show(arriving, at: page, in: &take, time: time)
         }
         take.telemetry.record(
             time: time, cursor: location, presses: presses, shape: CursorKind(css: cursor), scrolled: scrolled, typed: typed, opened: opened
         )
         take.time = time
+    }
+
+    /// Frames the element `clip` shows, where `page` has it as the clip starts at `time`.
+    private func show(_ clip: PointerClip, at page: PageFrame, in take: inout Take, time: Double) {
+        guard let show = clip.show else { return }
+        if let frame = page.boxes[show], WebTakeZooms.canFrame(frame, in: script.viewport) {
+            take.zooms.show(frame, during: clip.range)
+        } else {
+            take.issues.notShown(show, at: time)
+        }
+    }
+
+    /// Whether `url` is another page than `page`, not another place on it: a link to an anchor
+    /// changes the fragment, and the page scrolls there without being replaced.
+    private static func isAnotherPage(_ url: URL?, than page: URL?) -> Bool {
+        func withoutFragment(_ url: URL?) -> URL? {
+            guard let url, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+            components.fragment = nil
+            return components.url
+        }
+        return withoutFragment(url) != withoutFragment(page)
     }
 
     /// Aims `clip` at its element where `page`, scrolled to `scroll`, shows it now.
@@ -354,13 +395,17 @@ extension WebPageRenderer {
         let filename = SettingsStore.filename(prefix: "Reco_Web", fileExtension: "mov", date: .now)
         let movie = settings.outputDirectory.appending(path: filename)
         do {
-            let (telemetry, issues) = try await WebPageRenderer(script: script).render(
+            let rendered = try await WebPageRenderer(script: script).render(
                 to: movie, bitsPerPixel: VideoQuality.high.hevcBitsPerPixel, progress: progress
             )
-            try JSONEncoder().encode(telemetry).write(to: InputTelemetry.sidecarURL(for: movie), options: .atomic)
+            try JSONEncoder().encode(rendered.telemetry).write(to: InputTelemetry.sidecarURL(for: movie), options: .atomic)
             try await WebTake(script: script).write(for: movie)
+            // A script that chooses its zooms opens with them and no others: its project is saved before the editor opens
+            if script.pointer.contains(where: { $0.show != nil }) {
+                try await ProjectStore.write(EditorProject(zooms: rendered.zooms), for: movie)
+            }
             Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "WebPageRenderer").info("Rendered \(filename)")
-            return (movie, issues)
+            return (movie, rendered.issues)
         } catch {
             try? FileManager.default.removeItem(at: movie)
             throw error

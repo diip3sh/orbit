@@ -136,6 +136,28 @@ struct RecordPageRequestTests {
         #expect(RecordPageRequest(script: script).steps[0].text == "macbook\n")
     }
 
+    @Test func aShownElementGoesWithItsCursorClipAndBack() throws {
+        let plan = try request(steps: [
+            Step(action: "hover", selector: "#heading", show: " #screenshot "), Step(action: "click", selector: "#heading"),
+            Step(action: "scroll", selector: "#heading")
+        ]).plan()
+        let page = PageInspection(
+            title: "Test", url: "https://example.com", viewport: .init(width: 1440, height: 900), pageHeight: 900, elements: [],
+            truncated: false, boxes: ["#heading": .init(left: 100, top: 100, width: 200, height: 40)]
+        )
+        let script = try plan.script(page: page).script
+        #expect(script.pointer.map(\.show) == ["#screenshot", nil])
+        #expect(RecordPageRequest(script: script).steps.map(\.show) == ["#screenshot", nil, nil])
+        // Blank is none
+        #expect(try request(steps: [Step(action: "hover", selector: "#a", show: " ")]).plan().steps[0].show == nil)
+    }
+
+    @Test func showBelongsToCursorStepsOnly() {
+        #expect(throws: AgentToolError.invalidArgument("steps[0]: show is for hover, click and type only.")) {
+            try request(steps: [Step(action: "scroll", offset: 100, show: "#a")]).plan()
+        }
+    }
+
     @Test func textBelongsToTypeStepsOnly() {
         #expect(throws: AgentToolError.invalidArgument("steps[0]: type needs the text to type.")) {
             try request(steps: [Step(action: "type", selector: "#a")]).plan()

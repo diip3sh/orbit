@@ -35,7 +35,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 638 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 651 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
   reads alpha 254 instead of 255 with Xcode 26.0.1 on macOS 26.5.2, also without this fork's later changes.
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
@@ -645,8 +645,10 @@ Key facts:
 
 **Record with AI Agent…** in the menu bar, and the shortcut of the same name (Settings → Shortcuts →
 Web Recording, no default), open a Spotlight-style bar: website address, a description of the video,
-an agent, a model and **Record**. Reco runs the agent's command line headlessly with only its own
-three MCP tools allowed; the agent records through the bridge (S3) and the editor opens. While it
+an agent, a model and **Record**. Reco runs the agent's command line headlessly with its own four MCP
+tools allowed (Claude Code also web search and fetch, to research the product); the agent records through
+the bridge (S3) and the editor opens. `reco://record-agent?url=<page>&prompt=<text>` fills the bar and
+starts the run (for scripting and tests). While it
 runs the bar and the menu bar (a sparkle, "AI", then the render's percent) show it; **Cancel** stops
 the command line. A failure shows its reason with **Retry** in the bar and in a notification.
 
@@ -665,7 +667,7 @@ Key facts:
 - Commands run with the user's **login shell environment** (`$SHELL -l -i -c "printf marker; env -0"`, 10 s,
   read again each time the bar opens; 0.86 s here), never through a shell string; binaries are found on
   that `PATH`. Claude Desktop has no command line and isn't offered.
-- Only Reco's tools run: Claude `--tools "" --allowedTools mcp__reco__*`, Codex `approve` mode and a
+- Only Reco's tools run, and for Claude the read-only web ones: `--tools WebSearch,WebFetch --allowedTools mcp__reco__* WebSearch WebFetch`; Codex `approve` mode and a
   read-only sandbox, OpenCode inline permission config, Gemini policy file, Grok `dontAsk` (its read-only
   built-ins remain), Cursor workspace `cli.json`. Codex wasn't run (not installed).
 - Claude Code gets Reco's server from `AgentRun/reco-mcp.json` with `--strict-mcp-config` (spec 0008), so it
@@ -738,6 +740,16 @@ What recorders are checked for, and what an agent needs to go from a page to a f
   edit, or as the recording would open in the editor. Called again with the same arguments, it follows the export.
 - **Type steps** in web takes: a click clip with `text` types it into its field key by key; `"action":"type"` in
   `record_page`, a Type field in the Web Recording inspector.
+- **Shown elements** (`show` on a `record_page` cursor step, `PointerClip.show`): the video zooms on that element
+  while the step runs (framed to fill 80% of the view, 1.1–3×; a whole section makes no zoom), ending as the page
+  scrolls or is replaced under it (none at all when that happens within 0.5 s of its start, as a click that opens a page
+  does: the view would zoom in and straight back out) and panning to a zoom that follows within 1 s. Once any step shows, only shown
+  steps zoom: the take is rendered with its `.edit.json` already written. One not mostly in view where its step
+  starts is a warning. No field in the Web Recording window yet.
+- **Walkthrough playbook** (`AgentRecordingRequest.playbook`, in every new-take prompt; a short form in the MCP
+  server's `instructions`): research (inspect_page on the page and the pages its navigation links to, each with its
+  meta description; web search or fetch if the agent has them), a shot list of four to six beats, then record with
+  a show on every step, scale 1, 45–60 s. A re-record with warnings is tried once, then the agent must stop and report.
 
 | File | Role |
 |---|---|
@@ -750,6 +762,8 @@ What recorders are checked for, and what an agent needs to go from a page to a f
 | `AgentBridge/Model/ExportRecordingRequest.swift`, `ExportStatus.swift` | The tool's arguments and result |
 | `WebRecording/Model/PointerClip.swift` | `text`, `keystrokes` (0.3 s after the click, 0.08 s apart, or closer to fit the clip) |
 | `WebRecording/Service/WebTypeScript.swift`, `Model/USKeyCodes.swift` | `keydown`, `execCommand("insertText")`, `keyup` on the field; Enter submits its form. Key codes of a US keyboard for the telemetry |
+| `WebRecording/Model/WebTakeZooms.swift` | Pure: the zooms shown elements ask for, from their boxes where their clips start; `WebPageRenderer.render` returns them and `renderTake` saves the project |
+| `AgentRecording/Model/AgentRecordingRequest.swift` | `playbook`, `changePlaybook`: the method the prompt gives an agent |
 | `ViewModel/RecorderViewModel.swift` | `// MARK: - Cancelling` extension |
 
 Key facts:
@@ -764,6 +778,16 @@ Key facts:
   Averaging scales alpha only (`fading(to:)`), then `CIAdditionCompositing`.
 - A web take's typing is in its telemetry as keys (`keys`), so zooms hold on a field while it's typed into;
   characters a US keyboard has no key for are typed but not recorded.
+- A web take records the pages its clicks open as `navigations` (a link to an anchor isn't one: only the fragment
+  changes); auto-zoom ends a zoom at one as at a scroll, so a zoom on a nav link doesn't hang over the page it opened.
+  A page a click opens shows from its top: the script's scroll offset belonged to the page before, so the renderer
+  zeroes the last scroll clip's offset (before that, linear.app/plan opened 3,774 px down and scrolled up to its hero).
+- `RecoTests/LocalPages.swift` serves a few pages on `127.0.0.1` for renderer tests that need a real navigation:
+  `data:` pages can't link to each other. The editor applies a replaced take's look to the new
+  take's stored project too (`EditorViewModel.load`), so shown zooms survive a chat re-record.
+- Without a method the agent hovered headings and parked the cursor on the navigation, and auto-zoom followed it;
+  three linear.app takes made that way had no flow. `show` moves the choice of what the viewer sees from the
+  cursor's rests to the plan.
 - `AVComposition` isn't Sendable; the GIF writer gets it through `nonisolated(unsafe)` since it's never changed
   once built.
 - Tilt is `-0.2 rad × tanh(speed / 1500 pt/s)` about the hot spot; the loop's glide is at most half the output.
@@ -778,6 +802,7 @@ cursor:        [{ time, location: [x,y] }]            // only when changed
 clicks:        [{ time, location, button, isDown, clickCount }]
 scrolls:       [{ time, location, delta: [dx,dy] }]
 keys:          [{ time, keyCode, modifiers: [..], isRepeat }]
+navigations:   [{ time, url }]                        // web takes: pages a click opened; missing → none
 cursorSprites: [{ id, kind?, size, hotspot, png: base64 }]
 cursorShapes:  [{ time, sprite }]
 ```
@@ -837,7 +862,7 @@ should hold but need re-measuring.
 | S4 agent recording (spec 0007): Record with AI Agent bar, no App Sandbox | Done and tested with fakes and real `/bin/sh` processes; the login-shell environment was read on this Mac (0.86 s). Not yet tried: any real agent run, the panel in the app (focus, Esc, picker menus, Reduce Motion/Transparency), the update from the sandboxed release (migration), Codex |
 | S5 agent chat and reliable web takes (spec 0008) | Done and tested: real Claude Code runs from the prompt and from the chat in the app (sent through accessibility), 60 s apple.com takes checked frame by frame. Not yet tried: Retry and Cancel by hand, VoiceOver, Reduce Motion, other agents |
 
-| Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop). Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
+| Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps, shown elements, playbook | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop); linear.app walkthroughs run from the app through `reco://record-agent`. Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
 
 What to build next and in what order: `docs/specs/0009-stand-out-roadmap.md` (October 2026). The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
 `docs/specs/0004-next-features.md`.
