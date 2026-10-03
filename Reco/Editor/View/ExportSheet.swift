@@ -7,13 +7,14 @@
 
 import SwiftUI
 
-/// Picks a format, size and frame rate and exports the edited video, with progress. Cancel stops
-/// a running export.
+/// Picks a format, size and frame rate and exports the edited video, with progress, then offers to
+/// share it or show it in Finder. Cancel stops a running export.
 struct ExportSheet: View {
     let viewModel: EditorViewModel
 
     @State private var settings: ExportSettings
     @State private var isExporting = false
+    @State private var exported: URL?
     @State private var error: (any Error)?
     @Environment(\.dismiss) private var dismiss
 
@@ -102,20 +103,44 @@ struct ExportSheet: View {
                     .transition(.opacity)
             }
 
+            if let exported {
+                Label("Exported \(Text(exported.lastPathComponent).monospaced())", systemImage: "checkmark.circle.fill")
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .transition(.opacity)
+            }
+
             HStack {
-                Spacer()
-                Button("Cancel") {
-                    dismiss()
+                if let exported {
+                    Button("Show in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([exported])
+                    }
+                    .buttonStyle(.editorGhost)
+                    Spacer()
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.editorGhost)
+                    ShareLink(item: exported) {
+                        Label("Share…", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.editorPrimary)
+                } else {
+                    Spacer()
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.editorGhost)
+                    Button("Export") {
+                        error = nil
+                        isExporting = true
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.editorPrimary)
+                    .disabled(isExporting)
                 }
-                .keyboardShortcut(.cancelAction)
-                .buttonStyle(.editorGhost)
-                Button("Export") {
-                    error = nil
-                    isExporting = true
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.editorPrimary)
-                .disabled(isExporting)
             }
         }
         .padding(EditorTheme.largeSpacing)
@@ -124,12 +149,17 @@ struct ExportSheet: View {
         .editorMotion(value: settings)
         .editorMotion(value: viewModel.exportProgress != nil)
         .editorMotion(value: error?.localizedDescription)
+        .editorMotion(value: exported)
+        // Another format or size is another file, exported again
+        .onChange(of: settings) {
+            exported = nil
+        }
         // Dismissing the sheet cancels the task, and with it the export
         .task(id: isExporting) {
             guard isExporting else { return }
             do {
-                try await viewModel.export(settings)
-                dismiss()
+                exported = try await viewModel.export(settings)
+                isExporting = false
             } catch {
                 guard !Task.isCancelled else { return }
                 self.error = error

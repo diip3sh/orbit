@@ -284,7 +284,8 @@ Key facts:
 
 Click highlights (a ring that grows and fades) and a keystroke chip, drawn live in the preview and
 into exports by one custom compositor. An inspector (toolbar toggle) holds their styles; **Export…**
-writes `<name>-edited.mp4` (HEVC, H.264) or `.mov` (ProRes 422) next to the recording and reveals it.
+writes `<name>-edited.mp4` (HEVC, H.264) or `.mov` (ProRes 422) next to the recording, then offers **Share…** (`ShareLink`: AirDrop, Mail, Messages…) and
+**Show in Finder**.
 
 | File | Role |
 |---|---|
@@ -685,8 +686,9 @@ chat: the toolbar's sidebar button and **AI Agent** each show theirs, or hide th
 output (`AgentStreamEvent`, measured formats) fills `AgentRecordingViewModel.transcript` with requests,
 replies and tool steps; a follow-up resumes the conversation (`--resume`). Reco's tools report what the
 agent inspects and plans (`AgentTools.onInspected`/`onPlanned`), so the preview highlights its elements,
-and its plan becomes the timeline as one undoable step and plays once in real time; the clips stay for the
-user to take over. **Play** (Space) in the timeline header plays any script in the page: the playhead moves
+and its plan becomes the timeline as one undoable step and plays once in real time. When the run succeeds
+with its plan staged (`AgentRecordingViewModel.onPlanStaged`), the window renders it and the movie opens in the
+editor; the clips stay for the user to change and render again. **Play** (Space) in the timeline header plays any script in the page: the playhead moves
 in real time, and a page move is skipped while the last is still busy, so it never queues up. Render progress
 sits in the timeline header, not over the page; the stage has no dot grid, only an edge and a soft shadow. Details and file map: `docs/specs/0008-agent-chat.md`.
 
@@ -706,8 +708,8 @@ Effects are properties of a web script's steps, previewed with Play and rendered
 - **Type:** `PointerClip.Action.type` + `text` clicks a field and types into it (`typedText(at:)`,
   `WebTypingScript` in an isolated world: native setter + `input`), in the take and the preview.
 - Agents get both through `record_page` (`zoom`, `type` + `text`). From the chat (`AgentRecordingRequest.rendersVideo`
-  false, `AgentTools.stagesPlans`) `record_page` only puts the plan on the timeline (status `planned`); the user plays,
-  changes and renders it. Stages 3–6 (spotlight, captions,
+  false, `AgentTools.stagesPlans`) `record_page` only puts the plan on the timeline (status `planned`); the window renders
+  it when the run ends, and the user can change and render it again. Stages 3–6 (spotlight, captions,
   narration, browser frame, speed, 9:16) are planned in the spec.
 
 ### Menu bar popover

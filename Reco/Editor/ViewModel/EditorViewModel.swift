@@ -5,7 +5,6 @@
 //  Created by Diip3sh on 26.09.26.
 //
 
-import AppKit
 import CoreGraphics
 import Foundation
 import OSLog
@@ -197,11 +196,11 @@ final class EditorViewModel {
         return CanvasLayout.size(for: source.naturalSize, aspect: project.canvas.aspect, shorterSide: resolution.map { CGFloat($0) })
     }
 
-    /// Exports the edited video as `<name>-edited` next to the recording and reveals it in Finder.
-    /// Cancelling the calling task cancels the export.
-    func export(_ settings: ExportSettings) async throws {
+    /// Exports the edited video as `<name>-edited` next to the recording and returns where, or `nil`
+    /// while the recording isn't loaded. Cancelling the calling task cancels the export.
+    func export(_ settings: ExportSettings) async throws -> URL? {
         await rebuild?.value
-        guard let source, var composition else { return }
+        guard let source, var composition else { return nil }
         // Drawn at the export's size, frame rate and dynamic range; otherwise the same as the preview
         let target = RenderTarget(shorterSide: settings.resolution.map { CGFloat($0) }, keepsHDR: settings.format.keepsHDR)
         let plan = await RenderPlan.build(project: project, source: source, resources: resources, target: target)
@@ -220,7 +219,7 @@ final class EditorViewModel {
             throw EditorError.exportFailed(error)
         }
         logger.info("Exported \(url.lastPathComponent)")
-        NSWorkspace.shared.activateFileViewerSelecting([url])
+        return url
     }
 
     /// Releases the player and filmstrip and saves pending edits. Called when the window closes.
