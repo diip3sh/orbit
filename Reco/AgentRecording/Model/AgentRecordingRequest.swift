@@ -34,7 +34,7 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
     private var finish: String {
         rendersVideo
             ? "Record it with record_page, then call render_status with its render_id until the status is done or failed."
-            : "Put it on the timeline with record_page (its status is planned): the user plays it, changes it and renders it."
+            : "Put it on the timeline with record_page (its status is planned): Reco renders it when you're done, and the user can change it and render again."
     }
 
     /// The task for the agent. It starts with a word so a command line can't read it as a flag.

@@ -371,3 +371,29 @@ struct AgentRecordingViewModelTests {
         #expect(model.menuBarText == nil)
     }
 }
+
+// MARK: - Chat
+
+extension AgentRecordingViewModelTests {
+
+    @Test func aChatRunThatEndsWithItsPlanOnTheTimelineAsksForItToBeRendered() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let tools = AgentTools(settings: SettingsStore(defaults: defaults.make())) { _ in }
+        let model = try makeModel(tools: tools) { _, _, _, _, _, _ in
+            await MainActor.run { tools.job = RenderStatus(renderID: "new", status: .planned, progress: 0) }
+            return AgentProcess.Result(end: .exited(0), stdout: "", stderr: "")
+        }
+        var staged = false
+        var succeeded = false
+        model.onPlanStaged = { staged = true }
+        model.onSucceeded = { succeeded = true }
+        await model.refreshAgents()
+
+        model.send("Show the pricing.", about: try #require(WebScript.url(from: "example.com")))
+        await finish(model)
+
+        #expect(model.phase == .idle)
+        #expect(staged)
+        #expect(!succeeded)
+    }
+}

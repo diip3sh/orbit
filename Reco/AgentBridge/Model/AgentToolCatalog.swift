@@ -61,7 +61,7 @@ nonisolated enum AgentToolCatalog {
                 boxes, sign-up forms); its duration defaults to the text's length. Rendering \
                 can take longer than a minute: this returns when the movie is done or after 45 s with status rendering and a \
                 render_id; then call render_status until it is done. From Reco's chat it returns status planned instead: the \
-                steps are on the user's timeline to play, change and render, so there is nothing to wait for. One render at a time. Steps are spaced automatically \
+                steps are on the user's timeline and Reco renders them when you're done, so there is nothing to wait for. One render at a time. Steps are spaced automatically \
                 (0.5 s apart) unless they give a start.
                 """,
             schema: #"""
@@ -149,4 +149,3 @@ nonisolated enum AgentToolCatalog {
         )
     ]
 }
-

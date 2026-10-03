@@ -63,6 +63,10 @@ final class AgentRecordingViewModel {
     /// Called when a run ends with a movie, which the editor has opened.
     @ObservationIgnored var onSucceeded: (() -> Void)?
 
+    /// Called when a chat run ends with its plan on the Web Recording window's timeline, for the window
+    /// to render it; the movie then opens in the editor like any render.
+    @ObservationIgnored var onPlanStaged: (() -> Void)?
+
     /// How a command line is run: executable, arguments, environment, working folder, time limit, and
     /// where each line it prints goes.
     typealias RunProcess = @Sendable (URL, [String], [String: String], URL, Duration, (@Sendable (Data) -> Void)?) async -> AgentProcess.Result
@@ -261,7 +265,12 @@ final class AgentRecordingViewModel {
         switch outcome {
         case .succeeded:
             phase = .idle
-            onSucceeded?()
+            // A success is this run's render, so a planned job is the plan the run staged
+            if tools.job?.status == .planned {
+                onPlanStaged?()
+            } else {
+                onSucceeded?()
+            }
         case .cancelled:
             phase = .idle
         case .failed(let reason):

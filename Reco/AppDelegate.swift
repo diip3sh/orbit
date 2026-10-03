@@ -38,7 +38,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         token: AgentBridgeServer.token()
     )
 
-
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "AppDelegate")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -59,6 +58,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The Web Recording window shows what an agent looks at and plans, as it does
         agentBridge.tools.onInspected = { [editorWindows] page in editorWindows.webRecordingViewModel?.showAgentInspection(page) }
         agentBridge.tools.onPlanned = { [editorWindows] script in editorWindows.webRecordingViewModel?.adoptAgentScript(script) }
+        // When the chat's agent is done, its plan is rendered and opens in the editor
+        agentRecording.onPlanStaged = { [editorWindows] in editorWindows.webRecordingViewModel?.render() }
         // The agent browses in the Web Recording window's live page, so the user sees it learn the site
         agentBridge.tools.browser = { [editorWindows] in editorWindows.webRecordingForAgent() }
         viewModel.notificationService.retryAgentRecording = { [agentRecording] in agentRecording.retry() }
