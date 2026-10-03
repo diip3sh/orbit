@@ -30,8 +30,9 @@ struct AgentToolsTests {
         var opened: [URL] = []
         let tools = tools { opened.append($0) }
 
-        // Nothing listens on port 1, so the load is refused at once
-        let reply = await tools.call("record_page", arguments: Data(##"{"url":"http://localhost:1","steps":[{"action":"hover","selector":"#a"}]}"##.utf8))
+        // Nothing listens on port 2, so the load is refused at once. Not port 1: WebKit blocks that port
+        // itself, and on CI (macOS 26) such a load didn't fail
+        let reply = await tools.call("record_page", arguments: Data(##"{"url":"http://localhost:2","steps":[{"action":"hover","selector":"#a"}]}"##.utf8))
 
         let failed = try status(reply)
         #expect(reply.isError)
@@ -44,7 +45,7 @@ struct AgentToolsTests {
 
     @Test func renderStatusReportsTheLatestRenderAndRefusesOthers() async throws {
         let tools = tools()
-        let failed = try status(await tools.call("record_page", arguments: Data(#"{"url":"http://localhost:1","steps":[]}"#.utf8)))
+        let failed = try status(await tools.call("record_page", arguments: Data(#"{"url":"http://localhost:2","steps":[]}"#.utf8)))
 
         let known = await tools.call("render_status", arguments: Data(#"{"render_id":"\#(failed.renderID)"}"#.utf8))
         let unknown = await tools.call("render_status", arguments: Data(#"{"render_id":"other"}"#.utf8))
@@ -56,9 +57,9 @@ struct AgentToolsTests {
 
     @Test func aFailedRenderDoesntBlockTheNextOne() async throws {
         let tools = tools()
-        let first = try status(await tools.call("record_page", arguments: Data(#"{"url":"http://localhost:1","steps":[]}"#.utf8)))
+        let first = try status(await tools.call("record_page", arguments: Data(#"{"url":"http://localhost:2","steps":[]}"#.utf8)))
 
-        let second = try status(await tools.call("record_page", arguments: Data(#"{"url":"http://localhost:1","steps":[]}"#.utf8)))
+        let second = try status(await tools.call("record_page", arguments: Data(#"{"url":"http://localhost:2","steps":[]}"#.utf8)))
 
         #expect(second.renderID != first.renderID)
         #expect(second.status == .failed)

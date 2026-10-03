@@ -168,7 +168,10 @@ struct WebPageRendererTests {
         #expect(buy.box.rect == CGRect(x: 100, y: 100, width: 200, height: 60))
         // Only what matched, in page pixels
         #expect(inspection.boxes?.keys.sorted() == ["#band"])
-        #expect(inspection.boxes?["#band"]?.rect == CGRect(x: 0, y: 500, width: 640, height: 400))
+        // The band is the page's width, less a scrollbar where the Mac always shows them (17 px on CI)
+        let band = try #require(inspection.boxes?["#band"]?.rect)
+        #expect(band.origin == CGPoint(x: 0, y: 500) && band.height == 400)
+        #expect((620...640).contains(band.width))
     }
 
     @Test func inspectingNamesRolesAndTextAndSkipsWhatIsntVisible() async throws {
