@@ -182,7 +182,11 @@ struct WebRecordingViewModelTests {
         viewModel.edit("Length") { $0.duration = 5 }
 
         viewModel.togglePlayback()
-        try await Task.sleep(for: .milliseconds(400))
+        // Playing from the start may load the page first, which takes as long as WebKit and the machine do
+        let deadline = ContinuousClock.now + .seconds(10)
+        while viewModel.playhead < 0.2, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
 
         #expect(viewModel.isPlaying)
         #expect((0.2...1.5).contains(viewModel.playhead))

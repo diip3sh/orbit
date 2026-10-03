@@ -97,3 +97,7 @@ Temporary Items
 
 # Snippets
 snippets/
+
+# Agent worktrees and coverage output
+.claude/worktrees/
+*.profraw

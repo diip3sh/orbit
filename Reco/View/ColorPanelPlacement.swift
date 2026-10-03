@@ -45,10 +45,10 @@ enum ColorPanelPlacement {
     /// stage left of the inspector; top-aligned below the title bar, kept on screen.
     static func origin(of size: CGSize, beside window: CGRect, in screen: CGRect, gap: CGFloat = 8, inset: CGFloat = 340) -> CGPoint {
         let outside = window.maxX + gap
-        let x = outside + size.width <= screen.maxX ? outside : window.maxX - inset - size.width - gap
+        let left = outside + size.width <= screen.maxX ? outside : window.maxX - inset - size.width - gap
         let top = window.maxY - 52
         return CGPoint(
-            x: min(max(x, screen.minX), screen.maxX - size.width),
+            x: min(max(left, screen.minX), screen.maxX - size.width),
             y: min(max(top - size.height, screen.minY), screen.maxY - size.height)
         )
     }

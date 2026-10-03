@@ -215,8 +215,8 @@ extension WebPreviewController {
         try await webView.callAsyncJavaScript(source, arguments: arguments, contentWorld: pickWorld)
     }
 
-    func scroll(toY y: Double) async {
-        _ = try? await evaluate("window.scrollTo({ left: 0, top: y, behavior: 'instant' })", arguments: ["y": y])
+    func scroll(toY offset: Double) async {
+        _ = try? await evaluate("window.scrollTo({ left: 0, top: y, behavior: 'instant' })", arguments: ["y": offset])
     }
 
     /// What the viewport shows, as a JPEG at most `maximumWidth` pixels wide: small enough to send an
