@@ -379,4 +379,18 @@ struct InputTelemetryTests {
         #expect(telemetry.capture.cursorInVideo)
         #expect(telemetry.cursorSprites.first?.kind == nil)
     }
+
+    @Test func readsAFileWrittenBeforeNavigationsWereRecorded() throws {
+        let json = #"""
+            { "version": 3, "keystrokesAvailable": true, "capture": { "kind": "web", "videoSize": [10, 10], "cursorInVideo": false },
+              "geometry": [], "cursor": [], "clicks": [], "scrolls": [], "keys": [] }
+            """#
+
+        let telemetry = try JSONDecoder().decode(InputTelemetry.self, from: Data(json.utf8))
+
+        #expect(telemetry.navigations.isEmpty)
+        var written = telemetry
+        written.navigations = [.init(time: 1, url: "https://example.com")]
+        #expect(try JSONDecoder().decode(InputTelemetry.self, from: try JSONEncoder().encode(written)) == written)
+    }
 }

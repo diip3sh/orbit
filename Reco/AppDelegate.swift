@@ -176,6 +176,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// `reco://record-agent?url=<page>&prompt=<what the video should show>`: opens the Record with AI
+    /// Agent panel with both filled in and starts the run with the remembered agent, once the agents
+    /// have been looked for. Without a `url`, it only opens the panel. The prompt is percent-encoded;
+    /// a `+` in it is a space.
+    private func recordWithAgent(_ url: URL) {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        agentRecording.address = items.first { $0.name == "url" }?.value ?? ""
+        // Form encoding writes spaces as pluses, which URLComponents leaves in
+        agentRecording.instructions = (items.first { $0.name == "prompt" }?.value ?? "").replacing("+", with: " ")
+        showAgentRecording()
+        guard !agentRecording.address.isEmpty else { return }
+        Task {
+            // The panel looks for agents as it opens; the remembered one is only offered once found
+            await agentRecording.refreshAgents()
+            if let field = agentRecording.submit() {
+                logger.warning("reco://record-agent didn't start: the \(String(describing: field)) is missing or invalid")
+            }
+        }
+    }
+
     // MARK: - URL Scheme
 
     private func handle(_ url: URL) {
@@ -205,6 +225,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         case "edit-last":
             editLastRecording()
+        case "record-agent":
+            recordWithAgent(url)
         case "open-recordings":
             let settings = viewModel.settings
             let didStart = settings.startAccessingOutputDirectory()

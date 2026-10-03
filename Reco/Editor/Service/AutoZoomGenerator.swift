@@ -59,7 +59,7 @@ nonisolated enum AutoZoomGenerator {
         var circleClosure = 0.5
 
         /// Whether a zoom on a rest lasts as long as the cursor stays, rather than from its arrival,
-        /// and ends ``scrollHold`` after the page starts to scroll under it.
+        /// and ends ``scrollHold`` after the page starts to scroll under it or is replaced.
         var holdsRests = false
 
         /// How long a held rest's zoom lasts once the page scrolls: about how long the spring takes
@@ -74,7 +74,8 @@ nonisolated enum AutoZoomGenerator {
         let configuration = configuration ?? Configuration(for: telemetry)
         let reach = configuration.usableFraction / configuration.scale
         let fits = { (group: Group) in group.bounds.width <= reach && group.bounds.height <= reach }
-        let scrolls = scrollStarts(in: telemetry)
+        // A page a click opens shows whole, like a page that scrolls: the zoom on the click ends
+        let scrolls = (scrollStarts(in: telemetry) + telemetry.navigations.map(\.time)).sorted()
 
         var groups: [Group] = []
         let stops = rests(in: telemetry, duration: duration, configuration: configuration).map { rest in

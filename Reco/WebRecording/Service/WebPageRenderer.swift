@@ -129,6 +129,8 @@ final class WebPageRenderer: NSObject {
             webView.sendPointer(.move, at: location)
         }
         let scrolled = take.scroll.map { CGVector(dx: $0.x - scroll.x, dy: $0.y - scroll.y) }
+        // The page after the first that replaced the last frame's; the first is the one asked for
+        let opened = take.page != nil && webView.url != take.page ? webView.url : nil
         (take.location, take.scroll, take.page) = (location, scroll, webView.url)
         // Not on a target the page doesn't have now: the press would land on whatever is there
         let presses = script.presses(after: take.time, through: time).filter { press in
@@ -156,7 +158,9 @@ final class WebPageRenderer: NSObject {
         if let selector = arriving?.target.selector {
             take.issues.check(selector, at: time, frame: page.boxes[selector], cover: cover)
         }
-        take.telemetry.record(time: time, cursor: location, presses: presses, shape: CursorKind(css: cursor), scrolled: scrolled, typed: typed)
+        take.telemetry.record(
+            time: time, cursor: location, presses: presses, shape: CursorKind(css: cursor), scrolled: scrolled, typed: typed, opened: opened
+        )
         take.time = time
     }
 

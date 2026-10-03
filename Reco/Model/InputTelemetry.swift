@@ -36,6 +36,10 @@ nonisolated struct InputTelemetry: Codable, Equatable, Sendable {
     var scrolls: [Scroll] = []
     var keys: [Key] = []
 
+    /// When the recorded page was replaced by another, in a web take: a click opened it. Empty for
+    /// screen recordings.
+    var navigations: [Navigation] = []
+
     /// Each distinct cursor image, stored once and referenced by ``cursorShapes``.
     var cursorSprites: [CursorSprite] = []
 
@@ -126,6 +130,12 @@ nonisolated struct InputTelemetry: Codable, Equatable, Sendable {
         var keyCode: Int
         var modifiers: [String]
         var isRepeat: Bool
+    }
+
+    /// A page replacing the one recorded, in a web take.
+    nonisolated struct Navigation: Codable, Equatable, Sendable {
+        var time: Double
+        var url: String
     }
 
     /// A cursor image, so an editor can redraw the cursor on a video recorded without it.
@@ -311,6 +321,7 @@ extension InputTelemetry {
         keys = try container.decode([Key].self, forKey: .keys)
         cursorSprites = try container.decodeIfPresent([CursorSprite].self, forKey: .cursorSprites) ?? []
         cursorShapes = try container.decodeIfPresent([CursorShape].self, forKey: .cursorShapes) ?? []
+        navigations = try container.decodeIfPresent([Navigation].self, forKey: .navigations) ?? []
     }
 }
 

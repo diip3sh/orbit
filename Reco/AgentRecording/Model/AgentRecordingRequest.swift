@@ -30,6 +30,27 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
     /// What the video shows when the user said nothing.
     static let defaultInstructions = "No instructions: hover and click the page's main call to action, then scroll through the page."
 
+    /// How a video is made from nothing: learn the product, plan the story, then record it. The
+    /// editor zooms where the cursor stops, so the steps say where to stop and for how long.
+    static let playbook = """
+        How to make it:
+        1. Research. Call inspect_page on the page, then on the two to four pages its product or features navigation links \
+        to (use their href), to learn what the product does and which features it shows best.
+        2. Plan. Write a shot list of four to six beats that tell one story: what the product is (its hero), its two or three \
+        strongest features, each on its own page or section, and the call to action at the end. For each beat decide the one \
+        thing the viewer should see and how to get there: a click on the link that opens the page, a scroll to the section.
+        3. Record with record_page. The video zooms in wherever the cursor stops, so stop it only on what the viewer should \
+        read: hover the feature's heading or the thing itself for 2 to 3 s, hover a menu to open it, click a link to open its \
+        page and then hover that page's heading. Never park the cursor on empty space or on the navigation while a page \
+        loads. Keep 1 s still at the start, 0.8 to 1 s between steps, and 45 to 60 s in all unless asked otherwise.
+        """
+
+    /// How a video is recorded again with a change (spec 0008).
+    static let changePlaybook = """
+        Record the whole video again with record_page, changing only what the user asks and keeping the other steps; reuse \
+        their selectors, and call inspect_page first only for elements they don't cover.
+        """
+
     /// The task for the agent. It starts with "Record" so a command line can't read it as a flag.
     var prompt: String {
         let wanted = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -41,12 +62,11 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
             parts.append("The conversation so far:\n" + conversation.map(Self.line).joined(separator: "\n"))
         }
         parts.append((take == nil ? "What the video should show:\n" : "What the user asks now:\n") + (wanted.isEmpty ? Self.defaultInstructions : wanted))
-        let change = take == nil ? "" : "Record the whole video again with record_page, changing only what the user asks and keeping "
-            + "the other steps; reuse their selectors, and call inspect_page first only for elements they don't cover. "
+        parts.append(take == nil ? Self.playbook : Self.changePlaybook)
         parts.append("""
-            Use only the reco MCP tools: call inspect_page, then record_page, then call render_status with its render_id until \
-            the status is done or failed. \(change)If the result has warnings, fix those steps and record once more. Don't ask \
-            questions; choose sensible steps yourself. When it's done, reply in one or two short sentences saying what the video \
+            Use only the reco MCP tools; render_status with the render_id until the status is done or failed. Don't ask questions; \
+            decide yourself. If the result has warnings, fix those steps and record once more, but only once: then stop and report, \
+            whatever the second result says. When it's done, reply in one or two short sentences saying what the video \
             shows\(take == nil ? "" : " and what changed"), without paths or selectors. If it fails, reply with the error.
             """)
         return parts.joined(separator: "\n\n")

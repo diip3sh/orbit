@@ -18,7 +18,9 @@ nonisolated enum AgentToolCatalog {
     static let instructions = """
         Call inspect_page to get selectors, then record_page; if it returns status rendering, \
         call render_status with its render_id until done. If the result has warnings, fix those steps and record again. \
-        For a finished file (MP4 or GIF) call export_recording with the movie.
+        For a finished file (MP4 or GIF) call export_recording with the movie. For a product walkthrough, inspect the pages \
+        the navigation links to first, plan the beats (hero, two or three features on their own pages, the call to action), \
+        then record: the video zooms wherever the cursor stops, so stop it only on what the viewer should read.
         """
 
     static let inspectPage = "inspect_page"

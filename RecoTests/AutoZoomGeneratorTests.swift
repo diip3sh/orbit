@@ -175,6 +175,21 @@ struct AutoZoomGeneratorTests {
         #expect(AutoZoomGenerator.segments(for: web, duration: 20, configuration: AutoZoomGenerator.Configuration()).map(\.range) == [0.5..<2.5])
     }
 
+    @Test func aWebTakesZoomOnAClickEndsWhenThePageItOpensAppears() throws {
+        // The cursor arrives on a link at 2 s and clicks it at 3 s; the new page shows at 3.1 s
+        var web = telemetry(clicks: [(3, CGPoint(x: 0.3, y: 0.1))], cursor: [(0, CGPoint(x: 0.5, y: 0.5)), (2, CGPoint(x: 0.3, y: 0.1))])
+        web.capture.kind = .web
+        var opened = web
+        opened.navigations = [.init(time: 3.1, url: "https://example.com/plan")]
+
+        let stays = zooms(web)
+        let moves = zooms(opened)
+
+        // On one page the zoom holds while the cursor rests there; the new page shows whole shortly after it appears
+        #expect(stays.map(\.range) == [1.5..<20])
+        #expect(moves.map(\.range) == [1.5..<3.4])
+    }
+
     @Test func isDeterministicWithZoomsSortedApartAndInsideTheRecording() {
         // Bursts of clicks around the screen, with pauses of varied length
         var seed: UInt64 = 42

@@ -21,9 +21,11 @@ struct AgentRecordingRequestTests {
         What the video should show:
         \(wanted)
 
-        Use only the reco MCP tools: call inspect_page, then record_page, then call render_status with its render_id until \
-        the status is done or failed. If the result has warnings, fix those steps and record once more. Don't ask \
-        questions; choose sensible steps yourself. When it's done, reply in one or two short sentences saying what the video \
+        \(AgentRecordingRequest.playbook)
+
+        Use only the reco MCP tools; render_status with the render_id until the status is done or failed. Don't ask questions; \
+        decide yourself. If the result has warnings, fix those steps and record once more, but only once: then stop and report, \
+        whatever the second result says. When it's done, reply in one or two short sentences saying what the video \
         shows, without paths or selectors. If it fails, reply with the error.
         """
     }

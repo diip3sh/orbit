@@ -87,4 +87,14 @@ struct WebTakeTelemetryTests {
         #expect(scrolls.map(\.location) == [CGPoint(x: 720, y: 450), CGPoint(x: 5, y: 6)])
         #expect(scrolls.map(\.delta.dy) == [-20, 30])
     }
+
+    @Test func recordsThePagesAClickOpened() {
+        var take = WebTakeTelemetry(script: WebScript())
+
+        take.record(time: 0, cursor: CGPoint(x: 5, y: 6), presses: [], shape: nil)
+        take.record(time: 1, cursor: CGPoint(x: 5, y: 6), presses: [], shape: nil, opened: URL(string: "https://example.com/plan"))
+        take.record(time: 2, cursor: CGPoint(x: 5, y: 6), presses: [], shape: nil)
+
+        #expect(take.telemetry.navigations == [.init(time: 1, url: "https://example.com/plan")])
+    }
 }

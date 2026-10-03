@@ -32,9 +32,14 @@ nonisolated struct WebTakeTelemetry: Sendable {
     /// delivered with it, the cursor's shape, `nil` for the arrow, and how far the page scrolled
     /// since the last frame, as a wheel would report it (negative going down the page). `typed` are
     /// the characters typed with it, recorded as the keys of a US keyboard; others are left out.
+    /// `opened` is the page that replaced the last frame's, if one did.
     mutating func record(
-        time: Double, cursor location: CGPoint?, presses: [WebScript.Press], shape: CursorKind?, scrolled: CGVector? = nil, typed: [Character] = []
+        time: Double, cursor location: CGPoint?, presses: [WebScript.Press], shape: CursorKind?, scrolled: CGVector? = nil, typed: [Character] = [],
+        opened: URL? = nil
     ) {
+        if let opened {
+            telemetry.navigations.append(.init(time: time, url: opened.absoluteString))
+        }
         for key in typed.compactMap(USKeyCodes.key) {
             telemetry.keys.append(.init(time: time, keyCode: key.keyCode, modifiers: key.shift ? ["shift"] : [], isRepeat: false))
         }
