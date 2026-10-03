@@ -207,37 +207,6 @@ struct MicrophoneExpandablePicker: View {
 // MARK: - Video Settings Section
 
 
-// MARK: - Audio Settings Section
-
-/// Audio settings section with header and inline content
-struct AudioSettingsSection: View {
-    @Bindable var settings: SettingsStore
-    let audioDeviceService: AudioDeviceService
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Separator before Audio section
-            SectionDivider()
-
-            SectionHeader(title: "Audio")
-
-            // System Audio Toggle
-            MenuBarToggle(name: "Capture System Audio", isOn: $settings.captureSystemAudio)
-
-            // Microphone Toggle
-            MenuBarToggle(name: "Capture Microphone", isOn: $settings.captureMicrophone)
-
-            // Microphone Source Picker (only shown when microphone is enabled)
-            if settings.captureMicrophone {
-                MicrophoneExpandablePicker(
-                    selectedID: $settings.selectedMicrophoneID,
-                    devices: audioDeviceService.availableDevices
-                )
-            }
-        }
-    }
-}
-
 // MARK: - Camera Expandable Picker
 
 /// A camera picker with device-style rows, matching the microphone picker pattern
@@ -289,50 +258,12 @@ struct CameraExpandablePicker: View {
     }
 }
 
-// MARK: - Presenter Overlay Settings Section
-
-/// Presenter Overlay toggle and camera picker
-struct PresenterOverlaySettingsSection: View {
-    @Bindable var settings: SettingsStore
-    let cameraDeviceService: CameraDeviceService
-    let permissionService: PermissionService
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SectionDivider()
-
-            SectionHeader(title: "Camera")
-
-            MenuBarToggle(name: "Presenter Overlay", isOn: $settings.presenterOverlayEnabled)
-
-            if settings.presenterOverlayEnabled {
-                CameraExpandablePicker(
-                    selectedID: $settings.selectedCameraID,
-                    devices: cameraDeviceService.availableDevices
-                )
-            }
-        }
-        .onChange(of: settings.presenterOverlayEnabled) { _, isEnabled in
-            // Ask up front rather than letting the first recording fail on a denied camera
-            guard isEnabled else { return }
-
-            Task {
-                await permissionService.requestCameraPermission()
-            }
-        }
-    }
-}
-
 // MARK: - Preview
 
 #Preview {
     VStack(spacing: 0) {
-        PresenterOverlaySettingsSection(
-            settings: SettingsStore(),
-            cameraDeviceService: CameraDeviceService(),
-            permissionService: PermissionService()
-        )
-        AudioSettingsSection(settings: SettingsStore(), audioDeviceService: AudioDeviceService())
+        MicrophoneExpandablePicker(selectedID: .constant(nil), devices: [])
+        CameraExpandablePicker(selectedID: .constant(nil), devices: [])
     }
     .frame(width: 320)
     .padding(.vertical, 8)

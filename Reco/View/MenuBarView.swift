@@ -111,18 +111,12 @@ struct MenuBarView: View {
             }
 
             // What each take captures; video formats and the content filter are in Settings → Video
-            Group {
-                AudioSettingsSection(
-                    settings: viewModel.settings,
-                    audioDeviceService: viewModel.audioDeviceService
-                )
-
-                PresenterOverlaySettingsSection(
-                    settings: viewModel.settings,
-                    cameraDeviceService: viewModel.cameraDeviceService,
-                    permissionService: viewModel.permissionService
-                )
-            }
+            CaptureSettingsSection(
+                settings: viewModel.settings,
+                audioDeviceService: viewModel.audioDeviceService,
+                cameraDeviceService: viewModel.cameraDeviceService,
+                permissionService: viewModel.permissionService
+            )
             // Fixed from the countdown until the file is saved
             .disabled(viewModel.state != .idle || viewModel.countdown.isRunning)
 
