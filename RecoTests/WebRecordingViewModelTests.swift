@@ -179,19 +179,23 @@ struct WebRecordingViewModelTests {
 
     @Test func playbackMovesThePlayheadInRealTimeUntilSomethingStopsIt() async throws {
         let viewModel = makeViewModel()
-        viewModel.edit("Length") { $0.duration = 5 }
+        // Long enough that playback is still going however late a busy machine lets this test look
+        viewModel.edit("Length") { $0.duration = 60 }
 
+        let started = ContinuousClock.now
         viewModel.togglePlayback()
         // Playing from the start may load the page first, which takes as long as WebKit and the machine do
-        let deadline = ContinuousClock.now + .seconds(10)
+        let deadline = started + .seconds(10)
         while viewModel.playhead < 0.2, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(50))
         }
+        let elapsed = started.duration(to: .now) / .seconds(1)
 
+        // Real time: moving, and never ahead of the clock (on CI the main actor stalled for 4 s once)
         #expect(viewModel.isPlaying)
-        #expect((0.2...1.5).contains(viewModel.playhead))
+        #expect(viewModel.playhead >= 0.2 && viewModel.playhead <= elapsed)
 
-        viewModel.edit("Length") { $0.duration = 6 }
+        viewModel.edit("Length") { $0.duration = 61 }
         #expect(!viewModel.isPlaying)
 
         viewModel.togglePlayback()
@@ -251,4 +255,3 @@ struct WebRecordingViewModelTests {
         #expect(viewModel.script == previous)
     }
 }
-
