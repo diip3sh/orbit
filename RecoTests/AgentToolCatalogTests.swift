@@ -11,10 +11,10 @@ import Testing
 @MainActor
 struct AgentToolCatalogTests {
 
-    @Test func theCatalogHasTheThreeToolsWithUniqueNames() {
+    @Test func theCatalogHasTheBrowsingAndRecordingToolsWithUniqueNames() {
         let names = AgentToolCatalog.tools.map(\.name)
 
-        #expect(names == ["inspect_page", "record_page", "render_status"])
+        #expect(names == ["open_page", "look", "read_page", "hover", "click", "type", "inspect_page", "record_page", "render_status"])
         #expect(Set(names).count == names.count)
     }
 
@@ -23,7 +23,8 @@ struct AgentToolCatalogTests {
             let schema = try JSONDecoder().decode(Value.self, from: Data(definition.schema.utf8))
             #expect(schema.objectValue?["type"]?.stringValue == "object", "\(definition.name)")
             #expect(schema.objectValue?["properties"]?.objectValue != nil, "\(definition.name)")
-            #expect(schema.objectValue?["required"]?.arrayValue?.isEmpty == false, "\(definition.name)")
+            // look and read_page need nothing
+            #expect(schema.objectValue?["required"]?.arrayValue != nil || ["look", "read_page"].contains(definition.name), "\(definition.name)")
         }
     }
 

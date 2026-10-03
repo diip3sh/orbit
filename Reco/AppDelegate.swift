@@ -38,14 +38,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         token: AgentBridgeServer.token()
     )
 
-    private lazy var agentRecordingPanel = AgentRecordingPanelController(viewModel: agentRecording)
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "AppDelegate")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerKeyboardShortcuts()
+        ColorPanelPlacement.start()
         agentBridge.start()
         viewModel.notificationService.editRecording = editorWindows.open
+        editorWindows.agentRecording = agentRecording
+        editorWindows.libraryActions = LibraryViewModel.Actions(
+            captureArea: { [screenshots] in Task { await screenshots.captureArea() } },
+            captureWindow: { [screenshots] in Task { await screenshots.captureWindow() } },
+            captureScreen: { [screenshots] in Task { await screenshots.captureScreen() } },
+            recordArea: { [viewModel] in Task { await viewModel.presentAreaSelection() } },
+            recordWindowOrDisplay: { [viewModel] in viewModel.presentPicker() },
+            newWebRecording: { [weak self] in self?.showWebRecording() },
+            recordWithAgent: { [weak self] in self?.showAgentRecording() }
+        )
+        // The Web Recording window shows what an agent looks at and plans, as it does
+        agentBridge.tools.onInspected = { [editorWindows] page in editorWindows.webRecordingViewModel?.showAgentInspection(page) }
+        agentBridge.tools.onPlanned = { [editorWindows] script in editorWindows.webRecordingViewModel?.adoptAgentScript(script) }
+        // The agent browses in the Web Recording window's live page, so the user sees it learn the site
+        agentBridge.tools.browser = { [editorWindows] in editorWindows.webRecordingForAgent() }
         viewModel.notificationService.retryAgentRecording = { [agentRecording] in agentRecording.retry() }
         viewModel.notificationService.showAgentRecording = { [weak self] in self?.showAgentRecording() }
 
@@ -70,19 +85,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editorWindows.open(url)
     }
 
-    /// Shows the output folder's recordings, to open one in the editor.
-    func showRecordings() {
-        editorWindows.showRecordings()
+    /// Shows the Library, Reco's main window: everything it made, and New.
+    func showLibrary() {
+        editorWindows.showLibrary()
     }
 
-    /// Shows the Web Recording window, to record a web page from a script.
+    /// Clicking Reco in the Dock, or opening it again, shows the Library when no window is open.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows {
+            showLibrary()
+        }
+        return true
+    }
+
+    /// Shows the Web Recording window with a blank script, to record a web page.
     func showWebRecording() {
-        editorWindows.showWebRecording()
+        editorWindows.showNewWebRecording()
     }
 
     /// Shows the Record with AI Agent panel, to have a coding agent record a web page.
     func showAgentRecording() {
-        agentRecordingPanel.show()
+        editorWindows.showAgentChat()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

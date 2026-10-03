@@ -28,6 +28,10 @@ struct AgentRunOutcomeTests {
         #expect(classify(.timedOut, job: render(.done)) == .succeeded(movie: "/new.mov"))
     }
 
+    @Test func aPlanPutOnTheTimelineIsASuccess() {
+        #expect(classify(.exited(0), job: render(.planned)) == .succeeded(movie: ""))
+    }
+
     @Test func theRenderThatWasThereBeforeIsNotTheRuns() {
         #expect(classify(.exited(0), job: before) == .failed(reason: "The agent finished without recording."))
     }

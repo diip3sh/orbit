@@ -24,11 +24,17 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
     let onMoveStart: (UUID, Double) -> Void
     let onMoveEnd: (UUID, Double) -> Void
 
+    /// The selected clip, whose trim handles show
+    var selection: UUID?
+
     /// A clip's block, told whether it's being dragged.
     @ViewBuilder let block: (Clip, Bool) -> Block
 
     /// The clip being dragged and how far it's shown moved, in points.
     @State private var drag: (id: UUID, offset: CGFloat)?
+
+    /// The clip under the pointer, whose trim handles show.
+    @State private var hovered: UUID?
 
     static var height: CGFloat { 24 }
 
@@ -46,9 +52,18 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                     // Where the block may go: its edges stay in the lane
                     let limits = -start...max(width - end, -start)
 
+                    let showsHandles = clip.id == hovered || clip.id == selection || drag?.id == clip.id
+
                     block(clip, drag?.id == clip.id)
                         .frame(width: end - start)
                         .offset(x: start + dragged)
+                        .onHover { isInside in
+                            if isInside {
+                                hovered = clip.id
+                            } else if hovered == clip.id {
+                                hovered = nil
+                            }
+                        }
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in
@@ -68,10 +83,10 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                                 }
                         )
 
-                    TrimHandle(edge: .leading, position: start, width: width) { position in
+                    TrimHandle(edge: .leading, position: start, width: width, isShown: showsHandles) { position in
                         onMoveStart(clip.id, position / width * duration)
                     }
-                    TrimHandle(edge: .trailing, position: end, width: width) { position in
+                    TrimHandle(edge: .trailing, position: end, width: width, isShown: showsHandles) { position in
                         onMoveEnd(clip.id, position / width * duration)
                     }
                 }

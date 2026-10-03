@@ -24,7 +24,6 @@ struct EditorView: View {
                     EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
                         .padding(.horizontal, EditorTheme.largeSpacing)
                         .padding(.vertical, EditorTheme.spacing)
-                        .background(EditorTheme.panel.opacity(0.6))
                         .overlay(alignment: .top) {
                             Rectangle()
                                 .fill(EditorTheme.hairline)
@@ -42,6 +41,7 @@ struct EditorView: View {
                         }
                         .labelStyle(.titleAndIcon)
                         .buttonStyle(.editorPrimary)
+                        .keyboardShortcut("e")
                         .help("Export the edited video")
                     }
                     .hidingSharedBackground()
@@ -60,17 +60,23 @@ struct EditorView: View {
                 }
                 .transition(.opacity)
             } else if let error = viewModel.error {
-                ContentUnavailableView(
-                    "Can't Open Recording",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text(error.localizedDescription)
-                )
+                ContentUnavailableView {
+                    Label("Can't Open Recording", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error.localizedDescription)
+                } actions: {
+                    Button("Show in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([viewModel.videoURL])
+                    }
+                    .buttonStyle(.editorGhost)
+                }
             } else {
-                ProgressView()
+                ProgressView("Opening…")
                     .controlSize(.small)
             }
         }
-        .frame(minWidth: 560, minHeight: 440)
+        // Room for the inspector and a preview beside it, and the transport on one row
+        .frame(minWidth: 900, minHeight: 560)
         .editorWindowBackground()
         .editorMotion(.smooth, value: viewModel.source == nil)
         .task {

@@ -397,6 +397,34 @@ struct SettingsStoreTests {
         #expect(store.hasCustomOutputDirectory == false)
     }
 
+    // MARK: - Screenshot Directory
+
+    @Test func screenshotsGoToTheDesktopByDefault() {
+        let store = makeStore()
+        #expect(store.screenshotDirectory.path(percentEncoded: false) == URL.userHome.path(percentEncoded: false) + "/Desktop/")
+        #expect(!store.hasCustomScreenshotDirectory)
+    }
+
+    @Test func aChosenScreenshotDirectoryPersistsUntilReset() {
+        let suite = defaults.make()
+        let folder = URL(filePath: "/tmp/Reco Shots", directoryHint: .isDirectory)
+        SettingsStore(defaults: suite).screenshotDirectory = folder
+
+        let store = SettingsStore(defaults: suite)
+        #expect(store.screenshotDirectory == folder)
+        #expect(store.hasCustomScreenshotDirectory)
+
+        store.resetScreenshotDirectory()
+        #expect(store.screenshotDirectory == SettingsStore.defaultScreenshotDirectory)
+    }
+
+    @Test func choosingTheDesktopAgainIsNotACustomFolder() {
+        let store = makeStore()
+        // An open panel's folder URL ends in a slash; the default is built without one
+        store.screenshotDirectory = URL(filePath: URL.userHome.path(percentEncoded: false) + "/Desktop/")
+        #expect(!store.hasCustomScreenshotDirectory)
+    }
+
     // MARK: - Setting Persistence
 
     @Test func frameRatePersists() {

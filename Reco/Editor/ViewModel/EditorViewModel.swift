@@ -35,7 +35,7 @@ final class EditorViewModel {
     private(set) var thumbnails: [CGImage?] = []
 
     /// Why the recording couldn't be opened, while ``source`` is `nil`, or why edits weren't saved.
-    private(set) var error: EditorError?
+    var error: EditorError?
 
     /// How far an export is, from 0 to 1, or `nil` when none is running.
     private(set) var exportProgress: Double?

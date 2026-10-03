@@ -6,31 +6,56 @@
 import SwiftUI
 
 /// The Web Recording window's content: the live page on the stage, the script's timeline under it,
-/// the inspector, and Render.
+/// the inspector or the agent chat beside them (spec 0008), and Render.
 struct WebRecordingView: View {
     let viewModel: WebRecordingViewModel
 
-    @State private var showsInspector = true
+    /// The agent chat's runs; `nil` leaves the window without an Agent tab.
+    let agent: AgentRecordingViewModel?
 
     var body: some View {
+        @Bindable var viewModel = viewModel
         VStack(spacing: 0) {
             WebStage(viewModel: viewModel)
 
             WebTimelineView(viewModel: viewModel)
                 .padding(.horizontal, EditorTheme.largeSpacing)
                 .padding(.vertical, EditorTheme.spacing)
-                .background(EditorTheme.panel.opacity(0.6))
                 .overlay(alignment: .top) {
                     Rectangle()
                         .fill(EditorTheme.hairline)
                         .frame(height: 1)
                 }
         }
-        .inspector(isPresented: $showsInspector) {
-            WebRecordingInspector(viewModel: viewModel)
-                .inspectorColumnWidth(min: 260, ideal: 300, max: 380)
+        .inspector(isPresented: $viewModel.showsSidePanel) {
+            Group {
+                if viewModel.sidePanel == .agent, let agent {
+                    AgentChatView(model: agent, page: viewModel.script.url)
+                } else {
+                    WebRecordingInspector(viewModel: viewModel)
+                        .disabled(!viewModel.isEditable)
+                }
+            }
+            // One width for both panels, so switching doesn't move the page
+            .inspectorColumnWidth(Self.sidePanelWidth)
         }
+
         .toolbar {
+            if agent != nil {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("AI Agent", systemImage: "sparkles") {
+                        viewModel.toggle(.agent)
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .buttonStyle(.editorGhost)
+                    .background(viewModel.isShowing(.agent) ? EditorTheme.softHairline : .clear, in: .capsule)
+                    .help(viewModel.isShowing(.agent) ? "Hide the agent" : "Have a coding agent script and record this page")
+                }
+                .hidingSharedBackground()
+                if #available(macOS 26, *) {
+                    ToolbarSpacer(.fixed, placement: .primaryAction)
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button("Render", systemImage: "film") {
                     viewModel.render()
@@ -38,7 +63,8 @@ struct WebRecordingView: View {
                 .labelStyle(.titleAndIcon)
                 .buttonStyle(.editorPrimary)
                 .help("Render the script into a recording and open it in the editor")
-                .disabled(!viewModel.canRender)
+                // One render at a time: the agent's uses the same renderer
+                .disabled(!viewModel.canRender || agent?.isRunning == true)
             }
             .hidingSharedBackground()
             if #available(macOS 26, *) {
@@ -46,12 +72,15 @@ struct WebRecordingView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Button("Inspector", systemImage: "sidebar.trailing") {
-                    showsInspector.toggle()
+                    viewModel.toggle(.inspector)
                 }
-                .help(showsInspector ? "Hide the inspector" : "Show the inspector")
+                .help(viewModel.isShowing(.inspector) ? "Hide the inspector" : "Show the inspector")
             }
         }
-        .frame(minWidth: 760, minHeight: 560)
+        .frame(minWidth: 900, minHeight: 560)
         .editorWindowBackground()
     }
+
+    /// Wide enough for the chat's messages and the inspector's controls.
+    private static let sidePanelWidth: CGFloat = 340
 }

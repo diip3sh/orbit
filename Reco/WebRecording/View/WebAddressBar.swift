@@ -27,6 +27,8 @@ struct WebAddressBar: View {
             .help("Load the script's page again")
             .disabled(viewModel.script.url == nil)
         }
+        // The script's page stays put while it renders
+        .disabled(!viewModel.isEditable)
         .padding(.horizontal, EditorTheme.mediumSpacing)
         .frame(maxWidth: 560, minHeight: 32)
         .editorGlass(in: .capsule)

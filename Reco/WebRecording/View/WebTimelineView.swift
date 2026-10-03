@@ -46,26 +46,41 @@ struct WebTimelineView: View {
 
                     TimelineLane(
                         clips: script.pointer, duration: duration, width: width,
-                        onSelect: select, onMove: viewModel.moveClip, onMoveStart: viewModel.moveClipStart, onMoveEnd: viewModel.moveClipEnd
+                        onSelect: select, onMove: viewModel.moveClip, onMoveStart: viewModel.moveClipStart, onMoveEnd: viewModel.moveClipEnd,
+                        selection: viewModel.selection
                     ) { clip, isDragged in
+                        let symbol = clip.action.symbol
                         TimelineBlock(isSelected: clip.id == viewModel.selection, isDragged: isDragged) {
-                            Label(Self.name(of: clip.target), systemImage: clip.action == .click ? "cursorarrow.click" : "cursorarrow")
+                            // The icon alone on a clip too short for its name, rather than a cut-off name
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: EditorTheme.tightSpacing) {
+                                    Label(Self.name(of: clip), systemImage: symbol)
+                                    if clip.zoom != nil {
+                                        Image(systemName: "plus.magnifyingglass")
+                                            .accessibilityLabel("Zoomed")
+                                    }
+                                }
+                                Image(systemName: clip.zoom == nil ? symbol : "plus.magnifyingglass")
+                            }
                         }
+                        .help(Self.name(of: clip))
                     }
                     .help("Hovers and clicks: the cursor is on the clip's target from its start to its end")
 
                     TimelineLane(
                         clips: script.scrolls, duration: duration, width: width,
-                        onSelect: select, onMove: viewModel.moveClip, onMoveStart: viewModel.moveClipStart, onMoveEnd: viewModel.moveClipEnd
+                        onSelect: select, onMove: viewModel.moveClip, onMoveStart: viewModel.moveClipStart, onMoveEnd: viewModel.moveClipEnd,
+                        selection: viewModel.selection
                     ) { clip, isDragged in
                         let start = script.scrollOffset(at: clip.range.lowerBound).y
+                        let span = Text("\(start, format: .number.precision(.fractionLength(0))) → \(clip.offset.y, format: .number.precision(.fractionLength(0)))")
                         TimelineBlock(isSelected: clip.id == viewModel.selection, isDragged: isDragged) {
-                            Label {
-                                Text("\(start, format: .number.precision(.fractionLength(0))) → \(clip.offset.y, format: .number.precision(.fractionLength(0)))")
-                            } icon: {
+                            ViewThatFits(in: .horizontal) {
+                                Label { span } icon: { Image(systemName: "arrow.up.arrow.down") }
                                 Image(systemName: "arrow.up.arrow.down")
                             }
                         }
+                        .help(span)
                     }
                     .help("Scrolls: the page moves from where the previous one ended")
                 }
@@ -108,6 +123,14 @@ struct WebTimelineView: View {
         viewModel.selection = id
     }
 
+    /// What a type clip types, in quotes; otherwise its target.
+    private static func name(of clip: PointerClip) -> String {
+        if clip.action == .type {
+            return "“\(clip.text ?? "")”"
+        }
+        return name(of: clip.target)
+    }
+
     /// The target's element as the last step of its selector, e.g. `button.buy`, or its point.
     private static func name(of target: WebTarget) -> String {
         if let selector = target.selector, let last = selector.split(separator: " > ").last {
@@ -117,7 +140,8 @@ struct WebTimelineView: View {
     }
 }
 
-/// Buttons that add a hover, click or scroll at the playhead, and the playhead's time.
+/// Buttons that add a hover, click or scroll at the playhead; the render's progress while one runs;
+/// Play and the playhead's time.
 private struct WebTimelineHeader: View {
     let viewModel: WebRecordingViewModel
 
@@ -135,6 +159,12 @@ private struct WebTimelineHeader: View {
             .help("Add a click at the playhead, then click its element in the page")
             .disabled(!viewModel.canAddPointerClip)
 
+            Button("Type", systemImage: "keyboard") {
+                viewModel.addPointerClip(.type)
+            }
+            .help("Add typing at the playhead, then click its field in the page")
+            .disabled(!viewModel.canAddPointerClip)
+
             Button("Scroll", systemImage: "arrow.up.arrow.down") {
                 Task {
                     await viewModel.addScrollClip()
@@ -144,6 +174,33 @@ private struct WebTimelineHeader: View {
             .disabled(!viewModel.canAddScrollClip)
 
             Spacer()
+
+            // Here rather than over the page, which stays in view while it renders
+            if let progress = viewModel.renderProgress {
+                HStack(spacing: EditorTheme.smallSpacing) {
+                    Text("Rendering \(progress, format: .percent.precision(.fractionLength(0)))")
+                        .font(.callout)
+                        .monospacedDigit()
+                        .foregroundStyle(EditorTheme.dim)
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                        .frame(width: 120)
+                    Button("Cancel") {
+                        viewModel.cancelRender()
+                    }
+                    .keyboardShortcut(.cancelAction)
+                }
+                .transition(.opacity)
+            }
+
+            Button(viewModel.isPlaying ? "Pause" : "Play", systemImage: viewModel.isPlaying ? "pause.fill" : "play.fill") {
+                viewModel.togglePlayback()
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.editorProminentIcon)
+            .keyboardShortcut(.space, modifiers: [])
+            .help(viewModel.isPlaying ? "Pause (Space)" : "Play the script in the page (Space)")
+            .disabled(!viewModel.canPlay)
 
             HStack(spacing: EditorTheme.tightSpacing) {
                 Text(Self.format(viewModel.playhead))
@@ -155,6 +212,7 @@ private struct WebTimelineHeader: View {
         }
         .buttonStyle(.editorGhost)
         .labelStyle(.titleAndIcon)
+        .editorMotion(value: viewModel.renderProgress == nil)
     }
 
     /// "0:02.50"

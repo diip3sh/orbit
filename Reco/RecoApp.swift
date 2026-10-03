@@ -24,7 +24,7 @@ struct RecoApp: App {
                 viewModel: viewModel,
                 screenshots: appDelegate.screenshots,
                 editLastRecording: appDelegate.editLastRecording,
-                showRecordings: appDelegate.showRecordings,
+                showLibrary: appDelegate.showLibrary,
                 showWebRecording: appDelegate.showWebRecording,
                 showAgentRecording: appDelegate.showAgentRecording,
                 agentRecording: appDelegate.agentRecording
@@ -57,6 +57,9 @@ struct MenuBarLabel: View {
             // Render the duration into a fixed-size image so the
             // NSStatusItem never recalculates its width on each tick.
             Image(nsImage: timerImage)
+        } else if viewModel.state == .stopping {
+            Image(systemName: "ellipsis.circle")
+                .accessibilityLabel("Saving recording")
         } else if let remaining = viewModel.countdown.remaining {
             Image(systemName: "\(remaining).circle")
         } else if let text = agentRecording.menuBarText {

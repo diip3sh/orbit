@@ -46,7 +46,7 @@ What changed:
 - `Info.plist` loses `SUEnableInstallerLauncherService`, which is for sandboxed apps only.
 - Paths: `URL.userHome` (from `getpwuid`, which ignores `$HOME`) and `URL.recoSupport`
   (`~/Library/Application Support/com.diip3sh.Reco`), which holds `WebScript.json` and `agent.sock`.
-  Recordings still go to `~/Movies/Reco` and screenshots to `~/Pictures/Reco`.
+  Recordings still go to `~/Movies/Reco` and screenshots to the Desktop (or the folder chosen in Settings → General).
 - `SettingsStore.setCustomOutputDirectory` and the stale-bookmark refresh used to give up when
   `startAccessingSecurityScopedResource()` returned false. Unsandboxed, a plain `NSOpenPanel` URL
   returns false, so "Change…" would silently do nothing. They now keep going whatever it returns.

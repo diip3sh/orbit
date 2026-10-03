@@ -7,8 +7,8 @@
 
 import SwiftUI
 
-/// The Quick Access card: the screenshot in its own shape on a thin glass edge. Under the pointer it dims
-/// and shows Copy and Save, with Close, Recognize Text and Pin in its corners. Drag the screenshot into
+/// The Quick Access card: the screenshot in its own shape on a thin glass edge, with Copy and Save along
+/// its bottom, which confirm on the button. Under the pointer it dims and shows Close, Recognize Text and Pin in its corners. Drag the screenshot into
 /// another app; drag the edge to move the card, or flick it away. It grows from `anchor`, the corner
 /// nearest where it opened.
 struct QuickAccessView: View {
@@ -42,7 +42,7 @@ struct QuickAccessView: View {
 }
 
 /// The screenshot, filling the card unless it's smaller; drag it into another app. Feedback shows over
-/// its bottom edge.
+/// its middle, clear of Copy and Save.
 private struct QuickAccessPreview: View {
 
     let model: QuickAccessViewModel
@@ -62,15 +62,19 @@ private struct QuickAccessPreview: View {
                 shape.fill(.black.opacity(showsControls ? 0.45 : 0))
                     .allowsHitTesting(false)
             }
-            // Kept in the hierarchy while hidden, so ⌘C and ⌘S work without the pointer on the card
             .overlay {
                 QuickAccessControls(model: model)
                     // Light buttons on the dimmed shot in either appearance
                     .environment(\.colorScheme, .dark)
                     .opacity(showsControls ? 1 : 0)
             }
+            // Always shown, so ⌘C and ⌘S work without the pointer on the card
             .overlay(alignment: .bottom) {
-                if let feedback = model.feedback {
+                QuickAccessActions(model: model)
+                    .environment(\.colorScheme, .dark)
+            }
+            .overlay {
+                if let feedback = model.feedback, feedback.isToast {
                     Text(feedback.message)
                         .font(.caption)
                         .foregroundStyle(.white)
@@ -86,84 +90,85 @@ private struct QuickAccessPreview: View {
     }
 }
 
-/// Close top-left, Recognize Text and Pin top-right, Copy and Save in the middle. Space between them
-/// isn't hit-tested, so a drag there starts on the screenshot.
+/// Close top-left, Recognize Text and Pin top-right. Space between them isn't hit-tested, so a drag
+/// there starts on the screenshot.
 private struct QuickAccessControls: View {
 
     let model: QuickAccessViewModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: EditorTheme.tightSpacing) {
-                Button("Close", systemImage: "xmark", action: model.close)
-                    .help("Close")
-                Spacer()
-                // Annotate goes first once annotation exists:
-                // Button("Annotate", systemImage: "pencil", action: model.annotate)
-                Button("Recognize Text", systemImage: "text.viewfinder") { Task { await model.recognizeText() } }
-                    .help("Recognize Text")
-                    .disabled(model.isRecognizingText)
-                Button("Pin", systemImage: "pin", action: model.pin)
-                    .help("Pin")
+        HStack(spacing: EditorTheme.tightSpacing) {
+            Button(action: model.close) { Label { Text("Close") } icon: { LineIcon(.iconsaxClose) } }
+                .help("Close")
+            Spacer()
+            // Annotate goes first once annotation exists:
+            // Button("Annotate", systemImage: "pencil", action: model.annotate)
+            Button { Task { await model.recognizeText() } } label: {
+                Label { Text("Recognize Text") } icon: { LineIcon(.iconsaxTextScan) }
             }
-            .labelStyle(.iconOnly)
-            .buttonStyle(CornerButtonStyle())
-            Spacer(minLength: 0)
-            HStack(spacing: EditorTheme.smallSpacing) {
-                Button { Task { await model.copy() } } label: { ShortcutLabel(title: "Copy", keys: "⌘C") }
-                    .keyboardShortcut("c", modifiers: .command)
-                Button { Task { await model.save() } } label: { ShortcutLabel(title: "Save", keys: "⌘S") }
-                    .keyboardShortcut("s", modifiers: .command)
-            }
-            .buttonStyle(.editorPrimary)
-            Spacer(minLength: 0)
+            .help("Recognize Text")
+            .disabled(model.isRecognizingText)
+            Button(action: model.pin) { Label { Text("Pin") } icon: { LineIcon(.tablerPin) } }
+                .help("Pin")
         }
+        .labelStyle(.iconOnly)
+        .buttonStyle(CornerButtonStyle())
+        .padding(6)
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+}
+
+/// Copy and Save along the bottom edge
+private struct QuickAccessActions: View {
+
+    let model: QuickAccessViewModel
+
+    var body: some View {
+        HStack(spacing: EditorTheme.smallSpacing) {
+            Button { Task { await model.copy() } } label: {
+                ShortcutLabel(title: "Copy", keys: "⌘C", confirmation: "Copied", isConfirmed: model.feedback == .copied)
+            }
+            .keyboardShortcut("c", modifiers: .command)
+            Button { Task { await model.save() } } label: {
+                ShortcutLabel(title: "Save", keys: "⌘S", confirmation: "Saved", isConfirmed: model.feedback == .saved)
+            }
+            .keyboardShortcut("s", modifiers: .command)
+        }
+        .buttonStyle(.editorPrimary)
         .padding(6)
     }
 }
 
-/// A button's title with its shortcut beside it, dimmer. VoiceOver reads the shortcut from the button.
+/// A button's title with its shortcut beside it, dimmer, or a tick and `confirmation` once done. Both are
+/// always laid out, so the button is as wide as the wider one and never wraps or jumps when it confirms.
+/// VoiceOver reads the shortcut from the button.
 private struct ShortcutLabel: View {
 
     let title: String
     let keys: String
+    let confirmation: String
+    let isConfirmed: Bool
 
     var body: some View {
-        HStack(spacing: EditorTheme.tightSpacing) {
-            Text(title)
-            Text(keys)
-                .opacity(0.5)
-                .accessibilityHidden(true)
+        ZStack {
+            HStack(spacing: EditorTheme.tightSpacing) {
+                Text(title)
+                Text(keys)
+                    .opacity(0.5)
+                    .accessibilityHidden(true)
+            }
+            .opacity(isConfirmed ? 0 : 1)
+            .accessibilityHidden(isConfirmed)
+            HStack(spacing: EditorTheme.tightSpacing) {
+                LineIcon(.iconsaxTickCircle)
+                    .accessibilityHidden(true)
+                Text(confirmation)
+            }
+            .opacity(isConfirmed ? 1 : 0)
+            .accessibilityHidden(!isConfirmed)
         }
-    }
-}
-
-/// A small dark circle with a white symbol, legible over any screenshot
-private struct CornerButtonStyle: ButtonStyle {
-
-    func makeBody(configuration: Configuration) -> some View {
-        CornerButton(configuration: configuration)
-    }
-}
-
-private struct CornerButton: View {
-    let configuration: ButtonStyleConfiguration
-
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var isHovered = false
-
-    var body: some View {
-        let isLit = isEnabled && (isHovered || configuration.isPressed)
-
-        configuration.label
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.white)
-            .frame(width: 24, height: 24)
-            .background(.black.opacity(isLit ? 0.8 : 0.55), in: .circle)
-            .contentShape(.circle)
-            .opacity(isEnabled ? 1 : 0.4)
-            .onHover { isHovered = $0 }
-            // The press shows on the frame it lands; only the release eases
-            .editorMotion(configuration.isPressed ? nil : EditorTheme.quickMotion, value: isLit)
+        .lineLimit(1)
+        .fixedSize()
+        .editorMotion(EditorTheme.quickMotion, value: isConfirmed)
     }
 }

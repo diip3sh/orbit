@@ -23,6 +23,8 @@ nonisolated struct RenderStatus: Codable, Equatable, Sendable {
 
     nonisolated enum Status: String, Codable, Sendable {
         case rendering
+        /// On the Web Recording window's timeline, for the user to render.
+        case planned
         case done
         case failed
     }

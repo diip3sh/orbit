@@ -98,9 +98,10 @@ struct ExportServiceTests {
         defer { CVPixelBufferUnlockBaseAddress(frame, .readOnly) }
         let pixels = try #require(CVPixelBufferGetBaseAddress(frame)).assumingMemoryBound(to: UInt8.self)
         let rowBytes = CVPixelBufferGetBytesPerRow(frame)
-        // Alpha, the fourth byte: clear in the padding, opaque in the video
+        // Alpha, the fourth byte: clear in the padding, opaque in the video (ProRes 4444 rounds it to
+        // 254 on macOS 26.6)
         #expect(pixels[2 * rowBytes + 2 * 4 + 3] == 0)
-        #expect(pixels[120 * rowBytes + 160 * 4 + 3] == 255)
+        #expect(pixels[120 * rowBytes + 160 * 4 + 3] >= 254)
     }
 
     @Test func keepsHDRUnlessTheFormatIsH264() async throws {

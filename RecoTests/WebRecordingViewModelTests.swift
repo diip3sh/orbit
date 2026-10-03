@@ -140,4 +140,111 @@ struct WebRecordingViewModelTests {
         #expect(reopened.script == viewModel.script)
         #expect(reopened.address == "https://example.com")
     }
+
+    // MARK: - Agent
+
+    private func agentScript(url: String = "https://buildonto.dev") throws -> WebScript {
+        var script = WebScript()
+        script.url = URL(string: url)
+        script.duration = 8
+        script.scrolls = [ScrollClip(range: 2..<4, offset: CGPoint(x: 0, y: 600))]
+        return script
+    }
+
+    @Test func anAgentsPlanBecomesTheScriptAsOneUndoableStep() throws {
+        let viewModel = makeViewModel()
+        step(viewModel) { viewModel.addPointerClip(.hover) }
+        let before = viewModel.script
+        let planned = try agentScript()
+
+        step(viewModel) { viewModel.adoptAgentScript(planned) }
+
+        #expect(viewModel.script == planned)
+        #expect(viewModel.selection == nil)
+        #expect(!viewModel.isPicking)
+        #expect(viewModel.address == "https://buildonto.dev")
+        viewModel.undoManager.undo()
+        #expect(viewModel.script == before)
+    }
+
+    @Test func anAgentsPlanPlaysAtOnce() throws {
+        let viewModel = makeViewModel()
+
+        viewModel.adoptAgentScript(try agentScript())
+
+        #expect(viewModel.isPlaying)
+        viewModel.togglePlayback()
+        #expect(!viewModel.isPlaying)
+    }
+
+    @Test func playbackMovesThePlayheadInRealTimeUntilSomethingStopsIt() async throws {
+        let viewModel = makeViewModel()
+        viewModel.edit("Length") { $0.duration = 5 }
+
+        viewModel.togglePlayback()
+        try await Task.sleep(for: .milliseconds(400))
+
+        #expect(viewModel.isPlaying)
+        #expect((0.2...1.5).contains(viewModel.playhead))
+
+        viewModel.edit("Length") { $0.duration = 6 }
+        #expect(!viewModel.isPlaying)
+
+        viewModel.togglePlayback()
+        viewModel.seek(to: 1)
+        #expect(!viewModel.isPlaying)
+        #expect(viewModel.playhead == 1)
+    }
+
+    @Test func playingFromTheEndStartsOver() async throws {
+        let viewModel = makeViewModel()
+        viewModel.edit("Length") { $0.duration = 2 }
+        viewModel.seek(to: 2)
+
+        viewModel.togglePlayback()
+
+        #expect(viewModel.isPlaying)
+        #expect(viewModel.playhead < 0.5)
+        viewModel.stopPlaying()
+    }
+
+    @Test func whatAnAgentFoundLightsUpOnlyOnThisPage() throws {
+        let viewModel = makeViewModel()
+        viewModel.adoptAgentScript(try agentScript())
+        let box = PageInspection.Box(left: 10, top: 20, width: 100, height: 30)
+        let below = PageInspection.Box(left: 10, top: 2000, width: 100, height: 30)
+        var page = PageInspection(
+            title: "Onto", url: "https://buildonto.dev/", viewport: .init(width: 1440, height: 900), pageHeight: 3000,
+            elements: [
+                .init(selector: "a.pricing", role: "link", text: "Pricing", box: box),
+                .init(selector: "footer a", role: "link", text: "Docs", box: below)
+            ],
+            truncated: false
+        )
+
+        viewModel.showAgentInspection(page)
+        #expect(viewModel.agentHighlights == [box.rect])
+
+        page.url = "https://example.com/"
+        let other = makeViewModel()
+        other.adoptAgentScript(try agentScript())
+        other.showAgentInspection(page)
+        #expect(other.agentHighlights.isEmpty)
+    }
+
+    @Test func newWebRecordingStartsBlankAndUndoBringsTheLastBack() throws {
+        let viewModel = makeViewModel()
+        let planned = try agentScript()
+        step(viewModel) { viewModel.adoptAgentScript(planned) }
+        let previous = viewModel.script
+
+        step(viewModel) { viewModel.startNew() }
+
+        #expect(viewModel.script == WebScript())
+        #expect(viewModel.address.isEmpty)
+        #expect(!viewModel.isPlaying)
+        viewModel.undoManager.undo()
+        #expect(viewModel.script == previous)
+    }
 }
+

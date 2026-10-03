@@ -13,14 +13,12 @@ struct MenuBarView: View {
     @Bindable var viewModel: RecorderViewModel
     let screenshots: ScreenshotController
     let editLastRecording: () -> Void
-    let showRecordings: () -> Void
+    let showLibrary: () -> Void
     let showWebRecording: () -> Void
     let showAgentRecording: () -> Void
     let agentRecording: AgentRecordingViewModel
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
-    @State private var currentPreview: NSImage?
-
     private var isRecording: Bool { viewModel.isRecording }
 
     var body: some View {
@@ -38,7 +36,14 @@ struct MenuBarView: View {
                 MenuBarDivider()
             }
 
-            // Recording button (stop + timer) or Start button
+            // Why the last recording failed, until dismissed: notifications may be off
+            if let error = viewModel.lastError, !isRecording {
+                MenuBarErrorRow(message: error.localizedDescription, dismiss: viewModel.dismissError)
+                MenuBarDivider()
+            }
+
+            // Stop and pause while recording; saving; the countdown's cancel; otherwise what to
+            // record, and Start once it's chosen
             if isRecording {
                 RecordingButton(
                     duration: viewModel.formattedDuration
@@ -51,10 +56,24 @@ struct MenuBarView: View {
 
                 MenuBarActionButton(
                     title: viewModel.isPaused ? "Resume Recording" : "Pause Recording",
-                    systemImage: viewModel.isPaused ? "play.circle" : "pause.circle"
+                    systemImage: viewModel.isPaused ? "play.circle" : "pause.circle",
+                    shortcut: .pauseRecording
                 ) {
                     viewModel.togglePause()
                 }
+            } else if viewModel.state == .stopping {
+                // Finishing the file takes a moment; nothing can start meanwhile
+                HStack(spacing: EditorTheme.mediumSpacing) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 20)
+                    Text("Saving Recording…")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, EditorTheme.mediumSpacing)
+                .padding(.vertical, EditorTheme.smallSpacing)
+                .padding(.top, EditorTheme.smallSpacing)
             } else if let remaining = viewModel.countdown.remaining {
                 MenuBarActionButton(
                     title: "Cancel Countdown (\(remaining))",
@@ -64,95 +83,61 @@ struct MenuBarView: View {
                 }
                 .padding(.top, 8)
             } else {
-                MenuBarActionButton(
-                    title: "Start Recording",
-                    systemImage: "record.circle",
-                    isDisabled: !viewModel.canStartRecording
-                ) {
-                    Task {
-                        await viewModel.startRecordingWithCountdown()
+                SectionHeader(title: "Record")
+                    .padding(.top, 8)
+                if viewModel.hasContentSelected {
+                    MenuBarActionButton(title: "Start Recording", systemImage: "record.circle", isDisabled: !viewModel.canStartRecording, shortcut: .toggleRecording) {
+                        Task {
+                            await viewModel.startRecordingWithCountdown()
+                            dismiss()
+                        }
+                    }
+                    ContentSelectionButton(viewModel: viewModel) { dismiss() }
+                    SelectedContentPreview(viewModel: viewModel)
+                } else {
+                    // Choosing is the first step, so it's what the menu offers; Start follows it
+                    MenuBarActionButton(title: "Record Area…", systemImage: "rectangle.dashed.badge.record", shortcut: .selectArea) {
                         dismiss()
+                        Task { await viewModel.presentAreaSelection() }
+                    }
+                    MenuBarActionButton(title: "Record Window or Display…", systemImage: "macwindow", shortcut: .selectContent) {
+                        viewModel.presentPicker()
                     }
                 }
-                .padding(.top, 8)
+
+                SectionHeader(title: "Screenshot")
+                    .padding(.top, 4)
                 ScreenshotButtons(controller: screenshots, recorder: viewModel)
             }
 
-            MenuBarDivider()
-
-            // Content Selection
-            ContentSelectionButton(viewModel: viewModel) { dismiss() }
-                .disabled(isRecording)
-
-            // Preview thumbnail
-            if viewModel.hasContentSelected {
-                PreviewThumbnailView(
-                    previewImage: currentPreview,
-                    isLivePreviewActive: viewModel.previewService.isCapturing,
-                    onStartLivePreview: {
-                        Task {
-                            await viewModel.startPreview()
-                        }
-                    },
-                    onStopLivePreview: {
-                        Task {
-                            await viewModel.stopPreview()
-                        }
-                    }
-                )
-                .onChange(of: viewModel.previewService.previewImage) { _, newImage in
-                    currentPreview = newImage
-                }
-                .onAppear {
-                    currentPreview = viewModel.previewService.previewImage
-                }
-
-                Button {
-                    Task {
-                        await viewModel.resetSelection()
-                    }
-                } label: {
-                    Text("Reset Selection")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(.gray.opacity(0.15), in: .rect(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .disabled(isRecording)
-            }
-
-            MenuBarDivider()
-
-            // Settings Sections
+            // What each take captures; video formats and the content filter are in Settings → Video
             Group {
-                VideoSettingsSection(settings: viewModel.settings)
+                AudioSettingsSection(
+                    settings: viewModel.settings,
+                    audioDeviceService: viewModel.audioDeviceService
+                )
 
                 PresenterOverlaySettingsSection(
                     settings: viewModel.settings,
                     cameraDeviceService: viewModel.cameraDeviceService,
                     permissionService: viewModel.permissionService
                 )
-
-                AudioSettingsSection(
-                    settings: viewModel.settings,
-                    audioDeviceService: viewModel.audioDeviceService
-                )
             }
-            .disabled(isRecording)
+            // Fixed from the countdown until the file is saved
+            .disabled(viewModel.state != .idle || viewModel.countdown.isRunning)
 
             MenuBarDivider()
 
             // Bottom Actions
-            MenuBarActionButton(title: "Edit Last Recording", systemImage: "film", isDisabled: viewModel.lastRecordingURL == nil) {
-                editLastRecording()
-                dismiss()
+            if viewModel.lastRecordingURL != nil {
+                MenuBarActionButton(title: "Edit Last Recording", systemImage: "film") {
+                    editLastRecording()
+                    dismiss()
+                }
             }
 
-            MenuBarActionButton(title: "Recordings…", systemImage: "film.stack") {
-                showRecordings()
+            MenuBarActionButton(title: "Library…", systemImage: "square.grid.2x2") {
+                showLibrary()
                 dismiss()
             }
 
@@ -166,35 +151,101 @@ struct MenuBarView: View {
                     agentRecording.cancel()
                 }
             } else {
-                MenuBarActionButton(title: "Record with AI Agent…", systemImage: "sparkles") {
+                MenuBarActionButton(title: "Record with AI Agent…", systemImage: "sparkles", shortcut: .recordWithAgent) {
                     showAgentRecording()
                     dismiss()
                 }
             }
 
-            MenuBarActionButton(title: "Open Output Folder", systemImage: "folder") {
-                let settings = viewModel.settings
-                let didStart = settings.startAccessingOutputDirectory()
-                defer {
-                    if didStart {
-                        settings.stopAccessingOutputDirectory()
-                    }
-                }
-                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: settings.outputDirectory.path)
-            }
+            MenuBarDivider()
 
-            MenuBarActionButton(title: "Settings...", systemImage: "gear") {
+            MenuBarActionButton(title: "Settings…", systemImage: "gear") {
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 openSettings()
             }
 
-            MenuBarActionButton(title: "Quit...", systemImage: "power") {
+            MenuBarActionButton(title: "Quit Reco", systemImage: "power") {
                 NSApplication.shared.terminate(nil)
             }
             .padding(.bottom, 8)
         }
         .frame(width: 320)
         .background(.ultraThinMaterial)
+    }
+}
+
+// MARK: - Error
+
+/// The last recording failure, in the popover's row layout, with a button to put it away.
+struct MenuBarErrorRow: View {
+    let message: String
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: EditorTheme.mediumSpacing) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .symbolRenderingMode(.multicolor)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.callout)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button("Dismiss", systemImage: "xmark", action: dismiss)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, EditorTheme.mediumSpacing)
+        .padding(.vertical, EditorTheme.smallSpacing)
+        .padding(.top, EditorTheme.tightSpacing)
+    }
+}
+
+// MARK: - Selected Content
+
+/// What's selected to record, as a picture, live on request, and Reset to choose again.
+struct SelectedContentPreview: View {
+    let viewModel: RecorderViewModel
+    @State private var currentPreview: NSImage?
+
+    var body: some View {
+        PreviewThumbnailView(
+            previewImage: currentPreview,
+            isLivePreviewActive: viewModel.previewService.isCapturing,
+            onStartLivePreview: {
+                Task {
+                    await viewModel.startPreview()
+                }
+            },
+            onStopLivePreview: {
+                Task {
+                    await viewModel.stopPreview()
+                }
+            }
+        )
+        .onChange(of: viewModel.previewService.previewImage) { _, newImage in
+            currentPreview = newImage
+        }
+        .onAppear {
+            currentPreview = viewModel.previewService.previewImage
+        }
+
+        Button {
+            Task {
+                await viewModel.resetSelection()
+            }
+        } label: {
+            Text("Reset Selection")
+                .font(.body.weight(.medium))
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(.gray.opacity(0.15), in: .rect(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 4)
     }
 }
 
@@ -251,7 +302,7 @@ struct ContentSelectionButton: View {
     }
 
     private var buttonLabel: String {
-        hasActiveSelection ? "Change \(mode.label.split(separator: " ").last, default: "Content")..." : "\(mode.label)..."
+        hasActiveSelection ? "Change \(mode.label.split(separator: " ").last, default: "Content")…" : "\(mode.label)…"
     }
 
     var body: some View {
@@ -417,7 +468,7 @@ struct PermissionRow: View {
         viewModel: RecorderViewModel(),
         screenshots: .init(settings: SettingsStore(), notificationService: .init(settings: SettingsStore())),
         editLastRecording: {},
-        showRecordings: {},
+        showLibrary: {},
         showWebRecording: {},
         showAgentRecording: {},
         agentRecording: AgentRecordingViewModel(

@@ -43,7 +43,8 @@ struct AgentRecordingViewModelTests {
         defaults suite: UserDefaults? = nil,
         failures: Calls = Calls(),
         environment: Result<[String: String], any Error>? = nil,
-        run: @escaping AgentRecordingViewModel.RunProcess = { _, _, _, _, _ in AgentProcess.Result(end: .exited(0), stdout: "", stderr: "") }
+        installed: Set<String> = ["/opt/bin/claude"],
+        run: @escaping AgentRecordingViewModel.RunProcess = { _, _, _, _, _, _ in AgentProcess.Result(end: .exited(0), stdout: "", stderr: "") }
     ) throws -> AgentRecordingViewModel {
         let tools = tools ?? AgentTools(settings: SettingsStore(defaults: defaults.make())) { _ in }
         let environment = environment ?? .success(loginEnvironment)
@@ -55,7 +56,7 @@ struct AgentRecordingViewModelTests {
             store: try store ?? connectedStore(),
             directory: home.appending(path: "run"),
             loadEnvironment: { try environment.get() },
-            isExecutable: { $0 == "/opt/bin/claude" },
+            isExecutable: { installed.contains($0) },
             runProcess: run
         )
     }
@@ -67,7 +68,7 @@ struct AgentRecordingViewModelTests {
     }
 
     /// Blocks until cancelled, like a long agent run.
-    private static let hanging: AgentRecordingViewModel.RunProcess = { _, _, _, _, _ in
+    private static let hanging: AgentRecordingViewModel.RunProcess = { _, _, _, _, _, _ in
         try? await Task.sleep(for: .seconds(60))
         return AgentProcess.Result(end: .cancelled, stdout: "", stderr: "")
     }
@@ -89,19 +90,32 @@ struct AgentRecordingViewModelTests {
         #expect(model.unavailableReason == nil)
     }
 
-    @Test func withNoConnectedAgentTheReasonSaysWhichToConnect() async throws {
-        defer { try? FileManager.default.removeItem(at: home) }
+    private func unconnectedStore() throws -> AgentConfigStore {
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
-        let store = AgentConfigStore(home: home, command: AgentServerCommand(executable: "/x", token: token), bundlePath: "/Applications/Reco.app")
-        let model = try makeModel(store: store)
+        return AgentConfigStore(home: home, command: AgentServerCommand(executable: "/x", token: token), bundlePath: "/Applications/Reco.app")
+    }
+
+    @Test func installedClaudeCodeAndCursorAreReadyWithoutSetup() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let model = try makeModel(store: unconnectedStore(), installed: ["/opt/bin/claude", "/opt/bin/cursor-agent"])
+
+        await model.refreshAgents()
+
+        #expect(model.available == [.claudeCode, .cursor])
+        #expect(model.unavailableReason == nil)
+    }
+
+    @Test func anInstalledAgentThatNeedsSetupSaysToConnectIt() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let model = try makeModel(store: unconnectedStore(), installed: ["/opt/bin/codex"])
 
         await model.refreshAgents()
 
         #expect(model.available.isEmpty)
-        #expect(model.unavailableReason?.hasPrefix("Connect an agent with a command-line tool first") == true)
+        #expect(model.unavailableReason == "Connect Codex in Settings → Agents.")
     }
 
-    @Test func anOutdatedConnectionAsksToReconnect() async throws {
+    @Test func anOutdatedClaudeConnectionDoesntMatterSinceItsRunsBringTheServer() async throws {
         defer { try? FileManager.default.removeItem(at: home) }
         _ = try connectedStore()
         let moved = AgentConfigStore(home: home, command: AgentServerCommand(executable: "/Elsewhere/Reco", token: token), bundlePath: "/Applications/Reco.app")
@@ -109,18 +123,17 @@ struct AgentRecordingViewModelTests {
 
         await model.refreshAgents()
 
-        #expect(model.available.isEmpty)
-        #expect(model.unavailableReason == "Reconnect Claude Code in Settings → Agents.")
+        #expect(model.available == [.claudeCode])
     }
 
-    @Test func aCommandMissingFromTheLoginShellIsSaidSo() async throws {
+    @Test func withNoAgentInstalledTheReasonSaysToInstallOne() async throws {
         defer { try? FileManager.default.removeItem(at: home) }
         let model = try makeModel(environment: .success(["PATH": "/usr/bin"]))
 
         await model.refreshAgents()
 
         #expect(model.available.isEmpty)
-        #expect(model.unavailableReason == "Claude Code is connected, but Reco couldn't find `claude` in your login shell.")
+        #expect(model.unavailableReason?.hasPrefix("Install a coding agent's command line first") == true)
     }
 
     @Test func aShellThatCantBeReadIsTheReason() async throws {
@@ -173,7 +186,7 @@ struct AgentRecordingViewModelTests {
         let calls = Calls()
         let tools = AgentTools(settings: SettingsStore(defaults: defaults.make())) { _ in }
         let environments = Mutex<[String: String]>([:])
-        let model = try makeModel(tools: tools) { executable, arguments, environment, _, _ in
+        let model = try makeModel(tools: tools) { executable, arguments, environment, _, _, _ in
             calls.record([executable.path(percentEncoded: false)] + arguments)
             environments.withLock { $0 = environment }
             await MainActor.run { tools.job = RenderStatus(renderID: "new", status: .done, progress: 1, movie: "/tmp/new.mov") }
@@ -202,7 +215,7 @@ struct AgentRecordingViewModelTests {
         defer { try? FileManager.default.removeItem(at: home) }
         let existed = Mutex(false)
         // Claude Code gets no support files, so nothing else creates the folder
-        let model = try makeModel { _, _, _, directory, _ in
+        let model = try makeModel { _, _, _, directory, _, _ in
             existed.withLock { $0 = FileManager.default.fileExists(atPath: directory.path(percentEncoded: false)) }
             return AgentProcess.Result(end: .exited(0), stdout: "", stderr: "")
         }
@@ -218,9 +231,9 @@ struct AgentRecordingViewModelTests {
     @Test func aSecondRunIsRefusedWhileOneIsGoing() async throws {
         defer { try? FileManager.default.removeItem(at: home) }
         let calls = Calls()
-        let model = try makeModel { _, arguments, _, _, _ in
+        let model = try makeModel { _, arguments, _, _, _, _ in
             calls.record(arguments)
-            return await Self.hanging(URL(filePath: "/"), [], [:], URL(filePath: "/"), .seconds(1))
+            return await Self.hanging(URL(filePath: "/"), [], [:], URL(filePath: "/"), .seconds(1), nil)
         }
         await model.refreshAgents()
 
@@ -239,7 +252,7 @@ struct AgentRecordingViewModelTests {
         defer { try? FileManager.default.removeItem(at: home) }
         let calls = Calls()
         let failures = Calls()
-        let model = try makeModel(failures: failures) { _, arguments, _, _, _ in
+        let model = try makeModel(failures: failures) { _, arguments, _, _, _, _ in
             calls.record(arguments)
             return AgentProcess.Result(end: .exited(1), stdout: "", stderr: "Not logged in. Token \(token) was rejected")
         }
@@ -277,6 +290,44 @@ struct AgentRecordingViewModelTests {
 
         #expect(model.phase == .idle)
         #expect(failures.arguments.isEmpty)
+    }
+
+    @Test func aChatRunFillsTheTranscriptAndAFollowUpResumesIt() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let calls = Calls()
+        let model = try makeModel { _, arguments, _, _, _, onOutputLine in
+            calls.record(arguments)
+            for line in [
+                #"{"type":"system","subtype":"init","session_id":"s1"}"#,
+                #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__reco__inspect_page","input":{"url":"https://example.com"}}]}}"#,
+                #"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}"#,
+                #"{"type":"assistant","message":{"content":[{"type":"text","text":"Recorded the hero."}]}}"#,
+                #"{"type":"result","subtype":"success","is_error":false}"#
+            ] {
+                onOutputLine?(Data(line.utf8))
+            }
+            return AgentProcess.Result(end: .exited(0), stdout: "", stderr: "")
+        }
+        await model.refreshAgents()
+        let page = try #require(URL(string: "https://example.com"))
+
+        model.send("Show the hero", about: page)
+        await finish(model)
+
+        #expect(model.transcript.entries.map(\.text) == ["Show the hero", "Looking at example.com", "Recorded the hero."])
+        #expect(model.transcript.sessionID(for: .claudeCode) == "s1")
+        #expect(!(calls.arguments.first?.contains("--resume") ?? true))
+
+        model.send("Slower scroll", about: page)
+        await finish(model)
+
+        let second = try #require(calls.arguments.last)
+        let index = try #require(second.firstIndex(of: "--resume"))
+        #expect(second[index + 1] == "s1")
+
+        model.startNewChat()
+        #expect(model.transcript.entries.isEmpty)
+        #expect(model.transcript.sessionID(for: .claudeCode) == nil)
     }
 
     @Test func theMenuBarShowsAIThenTheRendersPercent() async throws {

@@ -27,15 +27,35 @@ struct AgentInvocationTests {
         let plain = try invocation(.claudeCode)
         let chosen = try invocation(.claudeCode, model: "opus")
 
-        let expected: [String] = ["-p", prompt, "--tools", "", "--allowedTools", "mcp__reco__*", "--permission-mode", "dontAsk",
-                                  "--no-session-persistence", "--output-format", "text"]
-        let expectedWithModel: [String] = ["-p", prompt, "--tools", "", "--allowedTools", "mcp__reco__*", "--permission-mode", "dontAsk",
-                                           "--no-session-persistence", "--model", "opus", "--output-format", "text"]
+        let head: [String] = ["-p", prompt, "--tools", "", "--allowedTools", "mcp__reco__*", "--permission-mode", "dontAsk",
+                              "--mcp-config", directory.appending(path: "reco-mcp.json").path(percentEncoded: false),
+                              "--strict-mcp-config"]
+        let streaming = ["--output-format", "stream-json", "--verbose"]
         #expect(plain.executableName == "claude")
-        #expect(plain.arguments == expected)
-        #expect(chosen.arguments == expectedWithModel)
+        #expect(plain.arguments == head + streaming)
+        #expect(chosen.arguments == head + ["--model", "opus"] + streaming)
         #expect(plain.arguments.prefix(2) == ["-p", prompt])
-        #expect(plain.environment.isEmpty && plain.files.isEmpty)
+        #expect(plain.environment.isEmpty)
+    }
+
+    @Test func aFollowUpResumesTheConversationForClaudeCodeAndCursor() throws {
+        for agent in [AgentKind.claudeCode, .cursor] {
+            var followUp = try request(agent)
+            followUp.resuming = "session-1"
+            let arguments = try #require(AgentInvocation.make(for: followUp, in: directory, server: server)).arguments
+
+            let index = try #require(arguments.firstIndex(of: "--resume"))
+            #expect(arguments[index + 1] == "session-1")
+            #expect(!(try invocation(agent).arguments.contains("--resume")))
+        }
+    }
+
+    @Test func claudeCodeBringsRecosServerSoItWorksBeforeSetup() throws {
+        let file = try #require(try invocation(.claudeCode).files["reco-mcp.json"])
+        let object = try #require(JSONSerialization.jsonObject(with: Data(file.utf8)) as? [String: [String: [String: Any]]])
+        let reco = try #require(object["mcpServers"]?["reco"])
+
+        #expect(NSDictionary(dictionary: reco).isEqual(to: AgentKind.claudeCode.jsonEntry(for: server)))
     }
 
     @Test func codexRunsReadOnlyAndApprovesRecosToolsInOneArgument() throws {
@@ -101,7 +121,7 @@ struct AgentInvocationTests {
         let plain = try invocation(.cursor)
         let chosen = try invocation(.cursor, model: "sonnet-4-thinking")
 
-        let head: [String] = ["-p", "--trust", "--approve-mcps", "--output-format", "text"]
+        let head: [String] = ["-p", "--trust", "--approve-mcps", "--output-format", "stream-json"]
         let expected: [String] = head + [prompt]
         let expectedWithModel: [String] = head + ["--model", "sonnet-4-thinking", prompt]
         #expect(plain.executableName == "cursor-agent")
@@ -109,7 +129,8 @@ struct AgentInvocationTests {
         #expect(chosen.arguments == expectedWithModel)
         let file = try #require(plain.files[".cursor/cli.json"])
         let object = try #require(JSONSerialization.jsonObject(with: Data(file.utf8)) as? [String: [String: [String]]])
-        #expect(object["permissions"]?["allow"] == ["Mcp(reco:inspect_page)", "Mcp(reco:record_page)", "Mcp(reco:render_status)"])
+        #expect(object["permissions"]?["allow"] == AgentToolCatalog.names.map { "Mcp(reco:\($0))" })
+        #expect(object["permissions"]?["allow"]?.contains("Mcp(reco:open_page)") == true)
         #expect(object["permissions"]?["deny"] == ["Shell(*)", "Write(**)", "WebFetch(*)"])
     }
 

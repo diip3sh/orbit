@@ -619,8 +619,9 @@ extension RecorderViewModel: CaptureEngineDelegate {
                     await stopRecording()
                 }
             } else {
-                // Stream error during recording - try to save what we have
+                // Stream error during recording - try to save what we have, and say why it stopped
                 logger.warning("Stream stopped unexpectedly, attempting to save recording...")
+                notificationService.sendRecordingStoppedNotification(error: error)
                 Task {
                     await stopRecording()
                 }
@@ -669,5 +670,15 @@ extension RecorderViewModel: PreviewServiceDelegate {
         // Clear the content filter in capture engine and deactivate picker
         captureEngine.clearSelection()
         captureEngine.deactivatePicker()
+    }
+}
+
+// MARK: - Errors
+
+extension RecorderViewModel {
+
+    /// Puts away the last failure the popover shows; the next start clears it too.
+    func dismissError() {
+        lastError = nil
     }
 }

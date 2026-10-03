@@ -167,7 +167,7 @@ returning nil, sprites are simply empty; nothing else breaks.
 
 ### F4 — Pause / resume (`feat/pause-resume`, upstream issue #174)
 
-Menu bar **Pause/Resume** button, global shortcut **Pause/Resume Recording** (no default), and
+Menu bar **Pause/Resume** button, global shortcut **Pause/Resume Recording** (⌘7), and
 `reco://pause`. The SCStream keeps running while paused (instant resume, macOS recording
 indicator stays on); every sample is dropped and the paused time is cut from the file.
 
@@ -209,9 +209,9 @@ A CleanShot-style card for each screenshot. After Capture Area it opens beside t
 ended, on the pointer's sides facing away from the captured area (`Screenshot.region`,
 `panelFrame(in:size:pointer:awayFrom:)`). Otherwise it opens in the bottom-left corner of the screen under the
 mouse (clear of notifications and the menu bar popover, top-right). The card takes the screenshot's shape
-(`cardSize(for:)`: fitted in 260×220, never enlarged, at least 200×120) on an 8 pt glass edge. Under the pointer
-the shot dims and shows **Copy ⌘C** and **Save ⌘S** (the shortcut shown dimmed in the button), with Close, **Recognize Text** and **Pin** as small
-icons in its corners; hidden, they stay in the view so the shortcuts still work. The card takes key when it appears, without
+(`cardSize(for:)`: fitted in 260×220, never enlarged, at least 200×120) on an 8 pt glass edge. **Copy ⌘C** and
+**Save ⌘S** (the shortcut shown dimmed in the button) always sit along its bottom edge; under the pointer the shot
+dims and shows Close, **Recognize Text** and **Pin** as small icons in its corners. The card takes key when it appears, without
 activating the app, so the shortcuts work until another window is clicked; typing goes to the card meanwhile.
 It grows from the card's corner nearest the pointer (`QuickAccessController.anchor(for:pointer:)`, the
 bottom-left without a region) and shrinks back there when closed, copied, saved or pinned; `hide()` and
@@ -224,8 +224,9 @@ closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate`
 `ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and `onDidCapture` to
 `show(_:)` for a new screenshot or `restore()` (same card, same place) when the capture is cancelled or fails.
 
-- **Copy** (C14): PNG data only, then closes. **Save**: writes to `~/Pictures/Reco`, then closes; on
-  failure the card stays and the Screenshot Failed notification is sent. **Recognize Text** (C7): the
+- **Copy** (C14): PNG data only; the button turns to ✓ Copied as the card starts closing, so it confirms during the
+  fade. **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed
+  notification is sent. **Recognize Text** (C7): the
   image's text to the clipboard. **Pin** (C8): the image in its own panel, then closes. Recognize Text
   confirms on the card for 1.5 s.
 
@@ -233,8 +234,10 @@ closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate`
 |---|---|
 | `QuickAccess/View/QuickAccessController.swift`, `QuickAccessPanel.swift` | Non-activating borderless `.floating` dark panel (key on appearing, `hidesOnDeactivate = false`), enter/exit through `panelPresentation` (`exitDelay` before ordering out; leaving panels are tracked so `hide()` clears them too), placement (`panelFrame`), owns the card's view model and the pins |
 | `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin` |
-| `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius), hover scrim and controls (`.editorPrimary` Copy/Save, dark corner icons), a solid toast; a `DragGesture` on the edge drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the shot. Annotate goes first in the top-right corner once it exists (one line) |
-| `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, close on hover; appears from and closes into its bottom-left corner (`panelPresentation`, a `PanelPresence` per pin) |
+| `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius), hover scrim and controls (`.editorPrimary` Copy/Save, dark corner icons), a solid toast; icons are 1.5 pt line
+SVGs in `Assets.xcassets/LineIcons` as template vectors, drawn by `LineIcon` in `CornerButtonStyle`'s dark circles (both shared with pins): Iconsax Linear (MIT) for close, tick and
+the text scan (its scan frame around text lines), Tabler's pin (MIT) since Iconsax has none; a `DragGesture` on the edge drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the shot. Annotate goes first in the top-right corner once it exists (one line) |
+| `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, 8 pt rounded corners with a faint edge, the card's close button on hover; appears from and closes into its bottom-left corner (`panelPresentation`, a `PanelPresence` per pin) |
 | `QuickAccess/Service/ImageDownsampler.swift` | Card preview drawn from the captured `CGImage` off the main actor |
 | `Screenshot/Service/TextRecognizer.swift` | Vision `RecognizeTextRequest` (accurate, automatic language) off the main actor; `joined(_:)` orders lines top to bottom |
 | `Service/ImagePasteboard.swift` | PNG data on the pasteboard (Slack, Messages, Figma, Preview) |
@@ -245,7 +248,7 @@ Key facts:
 - Drag-out offers the file URL and PNG data. The file is written in the background to
   `temporaryDirectory/<UUID>/<save name>` when the card appears (a drop reads the URL at once, so it must
   exist first) and deleted when the card closes.
-- The card and pins are Reco windows, so captures leave them out unless Show Reco is on.
+- The card is hidden as a capture starts (`onWillCapture`); pins and other Reco windows are in the shot.
 - A window shadow doesn't follow the fade, so pins have it off while entering and leaving and turn it on
   (`invalidateShadow()`) once settled. The card has none.
 
@@ -411,8 +414,8 @@ Key facts:
 The recording sits on a canvas: a shape (original, 16:9, 9:16, 1:1, 4:3), a gradient, color,
 picture or transparent background, padding, rounded corners and a shadow. New projects get the
 styled default. Export picks a size and frame rate, and adds ProRes 4444, which keeps a
-transparent background; HDR recordings stay HDR in HEVC and ProRes. **Recordings…** in the menu
-bar lists the output folder's recordings with pictures; a click opens one in the editor.
+transparent background; HDR recordings stay HDR in HEVC and ProRes. The Library (S7) lists
+the recordings with pictures; a click opens one in the editor.
 
 | File | Role |
 |---|---|
@@ -423,7 +426,6 @@ bar lists the output folder's recordings with pictures; a click opens one in the
 | `Editor/Render/HDREditorCompositor.swift`, `Editor/Model/DynamicRange.swift` | 10-bit or half-float frames in, half-float out; SDR, PQ or HLG from the track's transfer function |
 | `Editor/Service/BackgroundImageLoader.swift` | Security-scoped bookmark to the chosen picture, read upright, in sRGB, at most 4096 px |
 | `Editor/Model/ExportSettings.swift`, `Editor/View/ExportSheet.swift` | Format, size (a shorter side) and frame rate; only smaller ones are offered |
-| `Editor/Service/RecordingLibrary.swift`, `Editor/ViewModel/RecordingsViewModel.swift`, `Editor/View/RecordingsView.swift` | The Recordings window, opened by `EditorWindowManager.showRecordings()` |
 
 Key facts:
 - The canvas keeps the video's shorter side (9:16 from 4K is 2160×3840), and padding (8%), corner
@@ -444,12 +446,10 @@ Key facts:
   a color-managed context; SDR took 3–3.5 in the same runs. Converting the backdrop costs 9–11 ms
   more per HDR plan (20 the first time), alongside the camera and cursor. The composition is
   tagged BT.2020 and the recording's PQ or HLG; H.264 exports are SDR.
-- The Recordings window lists movies in the output folder, newest first, without `-edited`
-  exports, reads the list whenever it comes forward, and holds the folder's scope while open.
 
 ### S1 — Editor design (`feat/editor-shell`)
 
-The editor and Recordings windows use the system's colors, so they follow the user's appearance (light
+The editor, Library and Web Recording windows use the system's colors, so they follow the user's appearance (light
 or dark) and accent color: the window background (80%) the desktop frosts through, text in the label
 tones (ink, dim, faint), separators instead of boxes, a label-colored Export button, and the accent
 (`EditorTheme.accent`, `Color.accentColor`; the asset catalog's AccentColor is empty) for the playhead and
@@ -495,13 +495,19 @@ Key facts:
   Confirm and Cancel are system buttons (glass on macOS 26) with Return and Esc as key equivalents.
 - Skipped on purpose: Settings, the menu bar label, the export sheet, momentum on timeline edits, rubber-banding
   area selection, pin flick, scrubbing.
+- Clips in a lane (`TimelineLane`: zooms, web cursor and scroll clips) are window-coloured chips on a hairline and
+  show their trim handles only when hovered, selected or dragged (`TrimHandle.isShown`): on a 1 s clip two
+  always-on 8 pt handles hid the clip. The Web Recording timeline has no grey band behind it.
+- Optional bindings use `Binding(unwrapping:)` (`View/Binding+Unwrapping.swift`), never `Binding($optional)`: views
+  under an `if let` read the binding once more after a selected clip or zoom is deleted, and `Binding(_:)`'s
+  force-unwrap crashed the app (three crashes on 2026-10-02, one mid agent run).
 - `ImageRenderer` can't draw glass content, AppKit controls, `ScrollView`s or the player, and
   `screencapture`/`cacheDisplay` need permission or miss SwiftUI; check the look in the app.
 
 ### C1 — Screenshots
 
 Menu bar **Capture Area / Capture Window / Capture Screen** and global shortcuts of the same names
-(Settings → Shortcuts → Screenshots, no defaults; no URLs yet). Both follow `canCapture(alongside:)`: idle only,
+(Settings → Shortcuts → Screenshots, ⌘1 / ⌘2 / ⌘3; no URLs yet). Defaults are ⌘1–⌘7: capture area, window, screen, select content, select area, toggle and pause recording (`KeyboardShortcutNames.swift`); global, so they take ⌘1–⌘7 from every app until changed. The popover shows each row's shortcut dimmed (`MenuBarActionButton.shortcut`). Both follow `canCapture(alongside:)`: idle only,
 so a shortcut pressed while recording, counting down or capturing is ignored and logged.
 Capture Area freezes the screen first: every display is captured when it starts (`ScreenshotService.captureDisplays`),
 the overlay shows that picture (`AreaSelectionPanel.show(_:over:)`), and the area is cut from it
@@ -512,17 +518,18 @@ takes key, so a menu or dropdown open in another app stays open and lands in the
 global hotkey, as in the countdown. macOS ignores cursor changes from an app that isn't frontmost, so
 `BackgroundCursor` turns on the window server's private `SetsCursorInBackground` switch while the overlay is up
 (looked up at run time; without it the pointer just stays an arrow). Not yet seen working in the app. Recording keeps drag, adjust and Confirm, and takes the keyboard for Return.
-Captures at native pixels with the recording visibility settings into memory (`Screenshot`: image, scale,
+Captures at native pixels exactly what is on screen (Reco's windows and menus, wallpaper, Dock and menu bar included; the popover, `MenuBarExtraWindow`, too when the shortcut is used; left out only when the capture starts from it, so no wait for its fade) into memory (`Screenshot`: image, scale,
 capture time) and hands it to `ScreenshotController.onDidCapture` (the Quick Access card, C2). Nothing is
 written until the card's **Save**: `ScreenshotController.save(_:)` writes
-`Reco_Screenshot_<capture time>.png` into `~/Pictures/Reco` (`ScreenshotService.directory`), whichever folder
-recordings go to.
+`Reco_Screenshot_<capture time>.png` into `SettingsStore.screenshotDirectory`: the Desktop unless the user picks
+another folder in **Settings → General → Output Location → Screenshots** (a plain path; unsandboxed, no bookmark).
+macOS asks once for Desktop access the first time a screenshot is saved there.
 
 | File | Role |
 |---|---|
 | `Screenshot/Model/Screenshot.swift` | The captured `CGImage`, its scale and capture time; `filename`, `pointSize` |
 | `Screenshot/ViewModel/ScreenshotController.swift` | Owned by `AppDelegate` (which registers the shortcuts); permission check, selection, `isCapturing`, `canCapture`, `onWillCapture`/`onDidCapture`, `save(_:)` with the failure notification |
-| `Screenshot/Service/ScreenshotService.swift` | Display lookup, `SCScreenshotManager.captureImage`, save into `~/Pictures/Reco`, PNG via ImageIO (`@concurrent`) |
+| `Screenshot/Service/ScreenshotService.swift` | Display lookup, `SCScreenshotManager.captureImage`, save into the folder it's given, PNG via ImageIO (`@concurrent`) |
 | `Screenshot/Service/WindowPicker.swift` | System `SCContentSharingPicker` in `.window` mode, observed only while picking |
 | `Screenshot/View/ScreenshotButtons.swift` | The three popover rows |
 | `Service/SCContentFilter+CaptureScale.swift` | Window-scale fix shared with recording (moved from `RecorderViewModel`) |
@@ -533,14 +540,14 @@ Key facts:
 - `SCContentSharingPicker.shared` reports results to every observer. `CaptureEngine.isPickingContent`
   makes the recording selection ignore picks it didn't ask for.
 - Cursor follows `showCursor`, not `capturesCursor`: there's no editor to redraw it.
-- Capture Screen waits 250 ms for the popover's close animation (only matters with Show Reco on).
 - Window shots use the window recording config: SCK fits window + shadow into the window's frame, so
   shadow padding is uneven (same as recordings).
 - Verified on an M2 (1710×1112 pt, 2×): screen 3420×2224, window and area at 2×, sRGB, no Reco UI.
 
 ### S2 — Web recordings (`feat/web-recordings`, spec 0005)
 
-**New Web Recording…** in the menu bar opens a window with a live web page at a viewport preset, a
+**New Web Recording…** in the menu bar (and the Library's New) opens a window with a blank script (`startNew()`,
+one undoable step, so ⌘Z brings the last back) and a live web page at a viewport preset, a
 timeline with a Cursor lane (Hover, Click) and a Scroll lane, and an inspector. **Hover** and
 **Click** add a clip at the playhead and start pick mode: the next click in the page aims the clip at
 that element. **Scroll** adds a clip ending where the page is scrolled now. **Render** plays the
@@ -564,9 +571,9 @@ recording.
 Key facts (measured on an M5, macOS 26.5, spec 0005):
 - **Hover:** WebKit hit-tests a plain mouse move only in an active window; otherwise it goes to
   scrollbars alone. `WKWebView.sendPointer(.move, at:)` sends a right-button drag, which is always
-  hit-tested; the page sees `buttons: 0` and no press. Clicks are real mouse downs and ups. A move
-  is also sent when the page scrolls or changes under a resting pointer: WebKit's own move after a
-  scroll needs an active window.
+  hit-tested; the page sees `buttons: 0` and no press. Clicks are real mouse downs and ups. A move is
+  sent only when the cursor moves, so what scrolls under a resting cursor (a sticky nav's menu) doesn't
+  react (a nav menu opened mid-take on buildonto.dev); the preview's Play sends the same moves and presses.
 - **Visibility:** a page in an occluded or offscreen window is hidden (rAF stops, pages pause
   media). `OffscreenWebWindow` reports its `occlusionState` as visible.
 - **Clock:** follows real time while the page loads (freezing it from the start broke linear.app),
@@ -590,7 +597,8 @@ Key facts (measured on an M5, macOS 26.5, spec 0005):
 
 Coding agents (Claude Code, Codex, OpenCode, Cursor, Gemini CLI, Claude Desktop, Grok Build) record a
 web page from its address. **Settings → Agents** finds the installed ones and adds a server named `reco` to
-each one's own settings. The agent then calls three MCP tools: `inspect_page` (selectors and boxes of a
+each one's own settings, on its own when the tab opens for agents that can run here (command line on the login `PATH`,
+or Claude Desktop's app; a leftover settings folder isn't enough), except agents the user disconnected (`declinedAgents`). The agent then calls three MCP tools: `inspect_page` (selectors and boxes of a
 page), `record_page` (hover, click and scroll steps rendered like spec 0005, opened in the editor) and
 `render_status`. Started with `--mcp`, the app only pipes stdio to the running app's Unix socket, and
 starts the app first if needed.
@@ -626,9 +634,9 @@ Key facts:
 
 ### S4 — Agent recording (`feat/agent-bridge`, spec 0007)
 
-**Record with AI Agent…** in the menu bar, and the shortcut of the same name (Settings → Shortcuts →
-Web Recording, no default), open a Spotlight-style bar: website address, a description of the video,
-an agent, a model and **Record**. Reco runs the agent's command line headlessly with only its own
+**Record with AI Agent…** in the menu bar and the Library, and the shortcut of the same name (Settings → Shortcuts →
+Web Recording, no default), open the Web Recording window on its Agent chat (`EditorWindowManager.showAgentChat()`,
+S5); the Spotlight-style bar it used to open was removed on 2026-10-02. Reco runs the agent's command line headlessly with only its own
 three MCP tools allowed; the agent records through the bridge (S3) and the editor opens. While it
 runs the bar and the menu bar (a sparkle, "AI", then the render's percent) show it; **Cancel** stops
 the command line. A failure shows its reason with **Retry** in the bar and in a notification.
@@ -639,7 +647,7 @@ the command line. A failure shows its reason with **Retry** in the bar and in a 
 | `AgentRecording/Model/AgentModelCatalog.swift`, `AgentRunOutcome.swift`, `OutputTail.swift`, `LoginEnvironment.swift` | Pure: model lists; process end + render → outcome; the last 16 KB and the reason shown; login shell environment parsing and `PATH` lookup |
 | `AgentRecording/Service/AgentProcess.swift` | `Process` with pipes, time limit, cancel (SIGTERM, SIGKILL after 3 s); `loginEnvironment()` |
 | `AgentRecording/ViewModel/AgentRecordingViewModel.swift` | Fields, remembered agent and model, `refreshAgents()`, `run`/`retry`/`cancel`, `menuBarText`; watches `AgentTools.job` |
-| `AgentRecording/View/AgentRecordingPanelController.swift`, `AgentRecordingView.swift`, `AgentRecordingFooter.swift`, `AgentRecordingFailure.swift` | The non-activating `QuickAccessPanel`, its content, footer by state, failure row |
+| `AgentRecording/View/AgentRecordingFailure.swift` | The failure row, in the chat |
 | `Service/ContainerMigration.swift`, `Service/URL+RecoPaths.swift` | One-time move from the old sandbox container; `userHome` and `recoSupport` |
 | `Service/NotificationService.swift` | `AGENT_RECORDING_FAILED` category with Retry |
 | `RecoApp.swift` (`MenuBarLabel`) | `fixedWidthImage(_:reference:symbol:)`, shared by the timer and the agent state |
@@ -648,6 +656,12 @@ Key facts:
 - Commands run with the user's **login shell environment** (`$SHELL -l -i -c "printf marker; env -0"`, 10 s,
   read again each time the bar opens; 0.86 s here), never through a shell string; binaries are found on
   that `PATH`. Claude Desktop has no command line and isn't offered.
+- Claude Code and Cursor get Reco's server with each run (`--mcp-config reco-mcp.json --strict-mcp-config`, and
+  the workspace `.cursor/mcp.json`), so they record before Settings → Agents has connected them; the other agents
+  need that setup first. Claude without it ran with no Reco tools and ended "without a render".
+- The bar lists every agent whose command line is on the login shell's `PATH` (`refreshAgents`), ready when
+  `AgentInvocation.bringsServer(for:)` or connected; otherwise it says which to connect. Antigravity (`agy`) is left
+  out: its headless mode has no per-run tool allowlist, only `--dangerously-skip-permissions` (checked 2026-10-02).
 - Only Reco's tools run: Claude `--tools "" --allowedTools mcp__reco__*`, Codex `approve` mode and a
   read-only sandbox, OpenCode inline permission config, Gemini policy file, Grok `dontAsk` (its read-only
   built-ins remain), Cursor workspace `cli.json`. Codex wasn't run (not installed).
@@ -660,6 +674,80 @@ Key facts:
   Agents tab to the `settingsTab` default.
 - The panel's motion follows the apple-design skill: one `isPresented` flag drives a bounce-free spring,
   so closing and reopening mid-animation retargets; Reduce Motion cross-fades, Reduce Transparency is solid.
+
+### S5 — Agent chat (`feat/ui-polish`, spec 0008)
+
+The Web Recording window's right column, one fixed width (340 pt), holds the **Inspector** or the **Agent**
+chat: the toolbar's sidebar button and **AI Agent** each show theirs, or hide the column if it's showing: a chat with Claude Code or Cursor about the window's page. Their `stream-json`
+output (`AgentStreamEvent`, measured formats) fills `AgentRecordingViewModel.transcript` with requests,
+replies and tool steps; a follow-up resumes the conversation (`--resume`). Reco's tools report what the
+agent inspects and plans (`AgentTools.onInspected`/`onPlanned`), so the preview highlights its elements,
+and its plan becomes the timeline as one undoable step and plays once in real time; the clips stay for the
+user to take over. **Play** (Space) in the timeline header plays any script in the page: the playhead moves
+in real time, and a page move is skipped while the last is still busy, so it never queues up. Render progress
+sits in the timeline header, not over the page; the stage has no dot grid, only an edge and a soft shadow. Details and file map: `docs/specs/0008-agent-chat.md`.
+
+- **Tests and a running Reco:** the test host is Reco, so a test run takes the bridge's socket from the
+  running app. An agent run going at the time loses Reco, and its `--mcp` client starts a second copy.
+  Don't run tests during an agent run; relaunch Reco after testing. `AgentToolsTests` render into a
+  temporary folder (they used to fill `~/Movies/Reco` with 1 s movies).
+- `aPageThatCantBeLoadedFailsTheRenderWithAReason` and `aFailedRenderDoesntBlockTheNextOne` fail on this
+  Mac (macOS 26.6) with or without the chat changes: rendering `http://localhost:1` succeeds instead of
+  failing. Not yet looked into.
+
+### S6 — Walkthrough editor (`feat/ui-polish`, spec 0009)
+
+Effects are properties of a web script's steps, previewed with Play and rendered by the editor.
+- **Zoom per step:** `PointerClip.zoom`; `WebCamera` times it (in 0.4 s before, out 0.6 s after), `WebStage`
+  previews it, and `renderTake` writes the exact zooms into `<movie>.edit.json` (none → the editor auto-zooms).
+- **Type:** `PointerClip.Action.type` + `text` clicks a field and types into it (`typedText(at:)`,
+  `WebTypingScript` in an isolated world: native setter + `input`), in the take and the preview.
+- Agents get both through `record_page` (`zoom`, `type` + `text`). From the chat (`AgentRecordingRequest.rendersVideo`
+  false, `AgentTools.stagesPlans`) `record_page` only puts the plan on the timeline (status `planned`); the user plays,
+  changes and renders it. Stages 3–6 (spotlight, captions,
+  narration, browser frame, speed, 9:16) are planned in the spec.
+
+### Menu bar popover
+
+Kept to what a take needs: **Record Area…** / **Record Window or Display…** until something is chosen,
+then Start Recording, Change and the preview (`SelectedContentPreview`); Screenshot; Audio (system audio,
+microphone and its device) and Camera (presenter overlay); then Library…, New Web Recording…, Record with
+AI Agent…, Settings… and Quit. Frame rate, codecs, container, alpha, HDR and the content filter are in
+Settings → Video, the audio codec in Settings → Audio; Edit Last Recording shows only when there is one.
+
+### S7 — Library, the main window (`feat/ui-polish`, spec 0010)
+
+**Library…** in the menu bar, and clicking Reco in the Dock (`applicationShouldHandleReopen`), open Reco's
+main window, which stays open unlike the popover: a sidebar (All, Recordings, Web Recordings, Exports,
+Screenshots, with counts), a grid of pictures, search, and **New** (Capture Area/Window/Screen, Record
+Area…, Record Window or Display…, New Web Recording…, Record with AI Agent…). A click opens a movie in the
+editor and a screenshot in Preview; the context menu shows in Finder, copies (a screenshot as PNG, a movie
+as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`.
+
+| File | Role |
+|---|---|
+| `Library/Model/LibraryItem.swift` | Pure: kinds by name and type (`Reco_Web_` web, `-edited` export, `Reco_Screenshot_` PNG), companions, `LibrarySection` |
+| `Library/Service/LibraryStore.swift` | Lists the recordings and screenshot folders (once when they're the same), thumbnails (movie frame or `CGImageSource`), trash |
+| `Library/Service/FolderWatcher.swift` | `DispatchSource` vnode writes on both folders, 0.3 s settle, so new saves show at once |
+| `Library/ViewModel/LibraryViewModel.swift`, `Library/View/` | Sections, search, intents; `Actions` wired in `AppDelegate`; window in `EditorWindowManager.showLibrary()` |
+
+- The screenshot folder is the Desktop by default, so only `Reco_Screenshot_*.png` there are listed; reading
+  it is what asks for Desktop access the first time.
+- Tests trash through an injected remover: an app can't list the Trash (it needs Full Disk Access) to clean up.
+
+### S8 — Agent browsing (`feat/ui-polish`, spec 0011)
+
+Before recording, the agent learns the site as Claude in Chrome does: `open_page`, `look`, `read_page`,
+`hover`, `click` and `type` act on the Web Recording window's live preview and each returns JSON plus a JPEG
+screenshot (MCP image content). The prompt (`AgentRecordingRequest.prompt`) asks it to explore every section first.
+
+| File | Role |
+|---|---|
+| `AgentBridge/Service/AgentTools.swift` | `browse()`: routes the six tools, returns `Reply` (text, image, isError); waits 600 ms and for navigation after an action |
+| `AgentBridge/Model/BrowseRequest.swift`, `AgentToolCatalog.swift` | Arguments; tool schemas, `names`, instructions |
+| `WebRecording/Service/WebPreviewController.swift`, `WebBrowseScript.swift` | `waitUntilLoaded`, `screenshot`, `hover`/`click` via `sendPointer`; locate, read, position scripts in the `RecoPick` world |
+| `WebRecording/ViewModel/WebRecordingViewModel.swift` | `agentOpen`, `showAgentTarget` (refused while rendering) |
+| `Editor/View/EditorWindowManager.swift` | `webRecordingForAgent()`: the window, ordered front without focus |
 
 ### Telemetry JSON (version 3)
 
@@ -721,11 +809,12 @@ should hold but need re-measuring.
 | S1 editor phase 3: trim, split and cut, audio volume | Done; trimming, cutting and clicks at cuts still need a check in the app on a real recording |
 | S1 editor phase 4: auto-zoom, zoom lane, camera | Done; auto-zoom placement, full-frame-rate transitions and editing zooms on the timeline still need a check in the app on real recordings |
 | S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
-| S1 editor phase 6: canvas and export polish | Done; the canvas, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags), transparent exports and the Recordings window still need a check in the app |
+| S1 editor phase 6: canvas and export polish | Done; the canvas, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags) and transparent exports still need a check in the app |
 | S1 editor design: system colors, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 | S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |
 | S3 agent bridge (spec 0006): MCP server for coding agents | Done; tested over the real socket (token, `initialize`, `tools/list`, error calls), the `--mcp` process (`AgentBridgeClientTests`), config editors and plans. Not yet tried: real agents connected by hand, a real `record_page` render, Gatekeeper on another Mac |
+| S7 Library (spec 0010): main window | Done and tested (`LibraryTests`); the window itself still needs a look in the app |
 | S4 agent recording (spec 0007): Record with AI Agent bar, no App Sandbox | Done and tested with fakes and real `/bin/sh` processes; the login-shell environment was read on this Mac (0.86 s). Not yet tried: any real agent run, the panel in the app (focus, Esc, picker menus, Reduce Motion/Transparency), the update from the sandboxed release (migration), Codex |
 
 What to build next, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

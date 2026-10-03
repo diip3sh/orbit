@@ -101,7 +101,7 @@ struct RecordPageRequestTests {
             (request(steps: [scroll()]), "either a selector or y"),
             (request(steps: [scroll(selector: "#a", y: 5)]), "either a selector or y"),
             (request(steps: [scroll(y: -1)]), "0 or more"),
-            (request(steps: [Step(action: "drag", selector: "#a")]), "hover, click or scroll"),
+            (request(steps: [Step(action: "drag", selector: "#a")]), "hover, click, type or scroll"),
             (request(steps: [hover(start: -1)]), "start"),
             (request(steps: [hover(duration: 0.1)]), "at least 0.2"),
             (request(steps: [scroll(y: 1, duration: 0.1)]), "at least 0.2")

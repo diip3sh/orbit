@@ -44,7 +44,8 @@ struct TimelineRuler: View {
                         .monospaced()
                         .foregroundStyle(EditorTheme.dim)
                 )
-                let origin = CGPoint(x: time * pointsPerSecond + 4, y: 0)
+                // Clear of the playhead's knob, which rests on the first tick
+                let origin = CGPoint(x: time * pointsPerSecond + Playhead.knobWidth / 2 + 3, y: 0)
                 // The last label only when it fits
                 guard origin.x + label.measure(in: size).width <= size.width else { continue }
                 context.draw(label, at: origin, anchor: .topLeading)

@@ -12,7 +12,8 @@ struct AgentRecordingFailure: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: EditorTheme.smallSpacing) {
-            Image(systemName: "exclamationmark.triangle")
+            Image(systemName: "exclamationmark.triangle.fill")
+                .symbolRenderingMode(.multicolor)
                 .foregroundStyle(EditorTheme.dim)
                 .accessibilityHidden(true)
             Text(reason)

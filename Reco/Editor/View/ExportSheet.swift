@@ -98,7 +98,7 @@ struct ExportSheet: View {
 
             if let error {
                 Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                    .symbolRenderingMode(.multicolor)
                     .transition(.opacity)
             }
 

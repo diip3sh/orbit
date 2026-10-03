@@ -15,16 +15,29 @@ import UniformTypeIdentifiers
 @Observable
 final class QuickAccessViewModel {
 
-    /// A short confirmation shown on the card
+    /// A short confirmation shown on the card: on the Copy or Save button, or as a toast for text
     enum Feedback {
+        case copied
+        case saved
         case textCopied
         case noTextFound
+        case copyFailed
+        case textFailed
 
         var message: String {
             switch self {
+            case .copied: "Copied"
+            case .saved: "Saved"
             case .textCopied: "Text Copied"
             case .noTextFound: "No Text Found"
+            case .copyFailed: "Couldn't Copy"
+            case .textFailed: "Couldn't Read the Text"
             }
+        }
+
+        /// Copied and Saved show on their own button instead
+        var isToast: Bool {
+            self != .copied && self != .saved
         }
     }
 
@@ -68,21 +81,22 @@ final class QuickAccessViewModel {
         onClose?()
     }
 
-    /// Copies the full image as PNG, then closes
+    /// Copies the full image as PNG, confirms on the button, then closes
     func copy() async {
         do {
             let png = try await ScreenshotService.pngData(of: screenshot.image)
             ImagePasteboard.copy(png: png, to: pasteboard)
-            onClose?()
+            confirmThenClose(.copied)
         } catch {
             logger.error("Couldn't encode the screenshot to copy: \(error.localizedDescription)")
+            show(.copyFailed)
         }
     }
 
-    /// Saves into the output folder, then closes; a failed save keeps the card open
+    /// Saves into the output folder, confirms on the button, then closes; a failed save keeps the card open
     func save() async {
         if await saveScreenshot(screenshot) {
-            onClose?()
+            confirmThenClose(.saved)
         }
     }
 
@@ -101,6 +115,7 @@ final class QuickAccessViewModel {
             show(.textCopied)
         } catch {
             logger.error("Text recognition failed: \(error.localizedDescription)")
+            show(.textFailed)
         }
     }
 
@@ -151,6 +166,13 @@ final class QuickAccessViewModel {
                 logger.error("Couldn't write the drag-out file: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// Shows Copied or Saved and closes in the same moment: the button confirms while the card fades out,
+    /// so nothing waits on a pause
+    private func confirmThenClose(_ feedback: Feedback) {
+        show(feedback)
+        onClose?()
     }
 
     /// Shows `feedback` for 1.5 s and announces it to VoiceOver

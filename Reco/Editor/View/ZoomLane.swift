@@ -25,6 +25,7 @@ struct ZoomLane: View {
             onMove: { viewModel.moveZoom($0, by: $1) },
             onMoveStart: { viewModel.moveZoomStart($0, to: $1) },
             onMoveEnd: { viewModel.moveZoomEnd($0, to: $1) },
+            selection: selected,
             block: { zoom, isDragged in
                 ZoomBlock(zoom: zoom, isSelected: zoom.id == selected, isDragged: isDragged)
             }

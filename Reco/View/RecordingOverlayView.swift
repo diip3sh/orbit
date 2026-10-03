@@ -82,6 +82,7 @@ struct RecordingOverlayView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.editorPrimary)
+            .keyboardShortcut(.defaultAction)
 
             Button {
                 onDismiss()
@@ -90,6 +91,7 @@ struct RecordingOverlayView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.editorGhost)
+            .keyboardShortcut(.cancelAction)
         }
         .padding(.top, 10)
     }

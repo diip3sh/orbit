@@ -74,9 +74,9 @@ final class WebPageRenderer: NSObject {
         var pointer = PointerTrack(script: script)
         do {
             var location: CGPoint?
-            var scroll: CGPoint?
-            var page: URL?
             var previousTime = -Double.infinity
+            // What each type clip's field was last given, so the page hears only new letters
+            var typed: [UUID: String] = [:]
             for frame in 0..<script.frameCount {
                 try Task.checkCancellation()
                 let time = Double(frame) / Double(WebScript.frameRate)
@@ -84,18 +84,25 @@ final class WebPageRenderer: NSObject {
 
                 let elementFrames = try await advance(to: time, scroll: newScroll, selectors: pointer.selectors(at: time))
                 let newLocation = pointer.location(at: time, elementFrames: elementFrames)
-                // WebKit hit-tests only on a move, and a window that's never active gets none of its
-                // own when the page scrolls or changes under the pointer
-                if let newLocation, newLocation != location || newScroll != scroll || webView.url != page {
+                // Only when the cursor moves: WebKit hit-tests only on a move, so what scrolls under a
+                // resting cursor (a sticky nav's menu) doesn't react, as only the script's targets should
+                if let newLocation, newLocation != location {
                     webView.sendPointer(.move, at: newLocation)
                 }
                 location = newLocation
-                scroll = newScroll
-                page = webView.url
                 let presses = script.presses(after: previousTime, through: time)
                 if let location {
                     for press in presses {
                         webView.sendPointer(press.isDown ? .press : .release, at: location)
+                    }
+                }
+                let typing = script.typing(at: time).filter { $0.text != typed[$0.clip, default: ""] }
+                if !typing.isEmpty {
+                    _ = try? await webView.callAsyncJavaScript(
+                        WebTypingScript.source, arguments: ["fields": WebTypingScript.fields(typing)], contentWorld: .defaultClient
+                    )
+                    for field in typing {
+                        typed[field.clip] = field.text
                     }
                 }
                 let cursor = await hold(at: location)
@@ -267,6 +274,11 @@ extension WebPageRenderer {
                 to: movie, bitsPerPixel: VideoQuality.high.hevcBitsPerPixel, progress: progress
             )
             try JSONEncoder().encode(telemetry).write(to: InputTelemetry.sidecarURL(for: movie), options: .atomic)
+            // The script's zooms, exactly, for the editor; without any it auto-zooms as on any recording
+            let zooms = WebCamera.segments(for: script, telemetry: telemetry)
+            if !zooms.isEmpty {
+                try await ProjectStore.write(EditorProject(zooms: zooms), for: movie)
+            }
             Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "WebPageRenderer").info("Rendered \(filename)")
             return movie
         } catch {

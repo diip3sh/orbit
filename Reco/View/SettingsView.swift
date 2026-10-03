@@ -252,41 +252,23 @@ struct GeneralSettingsView: View {
     @Bindable var settings: SettingsStore
     @Bindable var updaterService: UpdaterService
 
-    /// Formats the output directory path for display
-    private var displayPath: String {
-        let path = settings.outputDirectory.path(percentEncoded: false)
-        // Replace home directory with ~ for cleaner display
-        let home = FileManager.default.homeDirectoryForCurrentUser.path(percentEncoded: false)
-        if path.hasPrefix(home) {
-            return "~" + path.dropFirst(home.count)
-        }
-        return path
-    }
-
     var body: some View {
         Form {
             Section("Output Location") {
-                LabeledContent {
-                    HStack {
-                        Button("Change...") {
-                            selectOutputDirectory()
-                        }
-
-                        if settings.hasCustomOutputDirectory {
-                            Button("Reset", role: .destructive) {
-                                settings.resetOutputDirectory()
-                            }
-                        }
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: "folder")
-                        Text(displayPath)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                }
+                FolderSettingRow(
+                    title: "Recordings",
+                    folder: settings.outputDirectory,
+                    isCustom: settings.hasCustomOutputDirectory,
+                    change: selectOutputDirectory,
+                    reset: settings.resetOutputDirectory
+                )
+                FolderSettingRow(
+                    title: "Screenshots",
+                    folder: settings.screenshotDirectory,
+                    isCustom: settings.hasCustomScreenshotDirectory,
+                    change: selectScreenshotDirectory,
+                    reset: settings.resetScreenshotDirectory
+                )
             }
 
             Section("Recording") {
@@ -298,10 +280,10 @@ struct GeneralSettingsView: View {
             }
 
             Section("Software Updates") {
-                Toggle("Automatically check for updates", isOn: $updaterService.automaticallyChecksForUpdates)
+                Toggle("Automatically Check for Updates", isOn: $updaterService.automaticallyChecksForUpdates)
 
                 LabeledContent("Updates") {
-                    Button("Check for Update") {
+                    Button("Check for Updates…") {
                         updaterService.checkForUpdates()
                     }
                     .disabled(!updaterService.canCheckForUpdates)
@@ -327,6 +309,66 @@ struct GeneralSettingsView: View {
 
         if panel.runModal() == .OK, let url = panel.url {
             settings.setCustomOutputDirectory(url)
+        }
+    }
+
+    private func selectScreenshotDirectory() {
+        let panel = NSOpenPanel()
+        panel.title = "Select Screenshot Folder"
+        panel.message = "Choose where screenshots will be saved"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = settings.screenshotDirectory
+
+        if panel.runModal() == .OK, let url = panel.url {
+            settings.screenshotDirectory = url
+        }
+    }
+}
+
+/// A save folder: its path, with Change… and, once changed, Reset
+private struct FolderSettingRow: View {
+
+    let title: String
+    let folder: URL
+    let isCustom: Bool
+    let change: () -> Void
+    let reset: () -> Void
+
+    /// The path with the home folder as ~
+    private var displayPath: String {
+        let path = folder.path(percentEncoded: false)
+        let home = FileManager.default.homeDirectoryForCurrentUser.path(percentEncoded: false)
+        if path.hasPrefix(home) {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
+    }
+
+    var body: some View {
+        LabeledContent {
+            HStack {
+                Button("Change…", action: change)
+
+                if isCustom {
+                    Button("Reset", role: .destructive, action: reset)
+                }
+            }
+        } label: {
+            VStack(alignment: .leading) {
+                Text(title)
+                Label {
+                    Text(displayPath)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } icon: {
+                    Image(systemName: "folder")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
         }
     }
 }

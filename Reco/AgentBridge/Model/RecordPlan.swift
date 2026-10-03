@@ -26,6 +26,12 @@ nonisolated struct RecordPlan: Equatable, Sendable {
         /// Where a scroll goes, in CSS pixels from the page's top, when it has no selector.
         var offset: Double?
         var range: Range<Double>
+
+        /// How much the camera magnifies a hover, click or type's element.
+        var zoom: Double?
+
+        /// What a type step types.
+        var text: String?
     }
 
     /// The first step starts this many seconds in, so the page shows before anything moves.
@@ -87,7 +93,7 @@ nonisolated struct RecordPlan: Equatable, Sendable {
                 unmatched.append(selector)
             }
             let target = WebTarget(selector: selector, point: point)
-            script.pointer = script.pointer.inserting(PointerClip(range: step.range, action: action, target: target))
+            script.pointer = script.pointer.inserting(PointerClip(range: step.range, action: action, target: target, zoom: step.zoom, text: step.text))
         }
         return (script, unmatched)
     }

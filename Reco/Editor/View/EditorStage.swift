@@ -46,13 +46,8 @@ struct EditorStage: View {
         }
         .overlay(alignment: .top) {
             if let error = viewModel.error {
-                Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
-                    .symbolRenderingMode(.multicolor)
-                    .padding(.horizontal, EditorTheme.mediumSpacing)
-                    .padding(.vertical, EditorTheme.smallSpacing)
-                    .editorGlass(in: .capsule)
+                StatusBanner(message: error.localizedDescription) { viewModel.error = nil }
                     .padding(.top, EditorTheme.mediumSpacing)
-                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .editorMotion(value: viewModel.error?.localizedDescription)

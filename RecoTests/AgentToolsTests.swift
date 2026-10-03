@@ -10,11 +10,19 @@ import Testing
 @MainActor
 struct AgentToolsTests {
 
+    private let defaults = TemporaryDefaults()
+
+    /// Renders go to a temporary folder, not the user's recordings
+    private let output = URL.temporaryDirectory.appending(path: "AgentToolsTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+
     private func tools(onRendered: @escaping (URL) -> Void = { _ in }) -> AgentTools {
-        AgentTools(settings: SettingsStore(), onRendered: onRendered)
+        let settings = SettingsStore(defaults: defaults.make())
+        try? FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        settings.setCustomOutputDirectory(output)
+        return AgentTools(settings: settings, onRendered: onRendered)
     }
 
-    private func status(_ reply: (text: String, isError: Bool)) throws -> RenderStatus {
+    private func status(_ reply: AgentTools.Reply) throws -> RenderStatus {
         try JSONDecoder().decode(RenderStatus.self, from: Data(reply.text.utf8))
     }
 
@@ -70,4 +78,19 @@ struct AgentToolsTests {
         #expect(unknown.isError && unknown.text.contains("inspect_page"))
         #expect(tools.job == nil)
     }
+
+    @Test func browsingWithoutAWindowSaysSoAndOthersAreChecked() async {
+        let tools = tools()
+
+        let open = await tools.call("open_page", arguments: Data(#"{"url":"example.com"}"#.utf8))
+        #expect(open.isError)
+        #expect(open.text.contains("Web Recording window"))
+        #expect(open.image == nil)
+    }
+
+    @Test func everyToolIsListedOnce() {
+        #expect(Set(AgentToolCatalog.names).count == AgentToolCatalog.names.count)
+        #expect(Set(AgentToolCatalog.names).isSuperset(of: ["open_page", "look", "read_page", "hover", "click", "type", "inspect_page", "record_page", "render_status"]))
+    }
 }
+

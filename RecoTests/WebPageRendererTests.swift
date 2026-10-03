@@ -76,11 +76,11 @@ struct WebPageRendererTests {
         #expect(try await pixel(at: CGPoint(x: 150, y: 110), frame: 0, of: asset).isClose(to: [0, 0, 255]))
         #expect(try await pixel(at: CGPoint(x: 150, y: 110), frame: 9, of: asset).isClose(to: [128, 0, 128]))
         #expect(try await pixel(at: CGPoint(x: 150, y: 110), frame: 20, of: asset).isClose(to: [255, 0, 0]))
-        // The click, whose release at 0.6 s is frame 36, then the scroll down to the band, which is
-        // hovered once it passes under the resting cursor
+        // The click, whose release at 0.6 s is frame 36, then the scroll down to the band, which isn't
+        // hovered though it passes under the resting cursor: only the script's targets react
         #expect(try await pixel(at: CGPoint(x: 20, y: 20), frame: 35, of: asset).isClose(to: [255, 255, 255]))
         #expect(try await pixel(at: CGPoint(x: 20, y: 20), frame: 36, of: asset).isClose(to: [0, 255, 0]))
-        #expect(try await pixel(at: CGPoint(x: 20, y: 200), frame: 59, of: asset).isClose(to: [0, 255, 255]))
+        #expect(try await pixel(at: CGPoint(x: 20, y: 200), frame: 59, of: asset).isClose(to: [255, 255, 0]))
 
         #expect(telemetry.capture.kind == .web)
         #expect(telemetry.clicks.map(\.time) == [0.5, 0.6])

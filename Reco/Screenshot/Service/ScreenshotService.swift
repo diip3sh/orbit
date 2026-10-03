@@ -24,30 +24,39 @@ final class ScreenshotService {
         }
     }
 
-    /// The ScreenCaptureKit display showing a screen
-    func display(for screen: NSScreen) async throws -> SCDisplay {
+    /// A screen as the user sees it, Reco's windows and menus included; without the menu bar popover
+    /// when the screenshot was started from it (it may still be fading out)
+    func screenFilter(for screen: NSScreen, leavingPopover: Bool) async throws -> SCContentFilter {
         let content = try await SCShareableContent.current
         guard let display = content.displays.first(where: { $0.displayID == screen.displayID }) else {
             throw CaptureError.selectedDisplayDisconnected
         }
-        return display
+        return Self.screenFilter(display, content: content, leavingPopover: leavingPopover)
     }
 
     /// Every display as it is now, by display ID, for an area cut from a frozen screen
-    func captureDisplays(settings: SettingsStore) async throws -> [CGDirectDisplayID: Screenshot] {
+    func captureDisplays(leavingPopover: Bool, settings: SettingsStore) async throws -> [CGDirectDisplayID: Screenshot] {
+        let content = try await SCShareableContent.current
         var shots: [CGDirectDisplayID: Screenshot] = [:]
         // ponytail: one display after another; capture them together if several displays make the start slow
-        for display in try await SCShareableContent.current.displays {
-            let filter = SCContentFilter(display: display, excludingWindows: [])
-            shots[display.displayID] = try await capture(filter, sourceRect: nil, settings: settings)
+        for display in content.displays {
+            shots[display.displayID] = try await capture(Self.screenFilter(display, content: content, leavingPopover: leavingPopover), sourceRect: nil, settings: settings)
         }
         return shots
     }
 
-    /// Captures at native resolution with the user's visibility settings. Nothing is written.
+    private static func screenFilter(_ display: SCDisplay, content: SCShareableContent, leavingPopover: Bool) -> SCContentFilter {
+        // SwiftUI's `MenuBarExtraWindow` holds the popover
+        let popovers = !leavingPopover ? [] : Set(NSApp.windows.filter { String(describing: type(of: $0)).contains("MenuBarExtra") }.map(\.windowNumber))
+        let filter = SCContentFilter(display: display, excludingWindows: content.windows.filter { popovers.contains(Int($0.windowID)) })
+        filter.includeMenuBar = true
+        return filter
+    }
+
+    /// Captures at native resolution exactly what the filter shows: unlike recordings, screenshots
+    /// don't hide the wallpaper, Dock or Reco, since they're of what the user sees. Nothing is written.
     /// - Parameter sourceRect: The area to capture (display points, top-left origin), or nil for the whole filter
     func capture(_ filter: SCContentFilter, sourceRect: CGRect?, settings: SettingsStore) async throws -> Screenshot {
-        let filter = try await contentFilterService.applySettings(to: filter, settings: settings)
         let scale = filter.captureScale
         let pixelSize = CaptureSizeCalculator.videoSize(
             contentRect: sourceRect ?? filter.contentRect,
@@ -64,13 +73,10 @@ final class ScreenshotService {
         return Screenshot(image: image, scale: scale, date: .now)
     }
 
-    /// Where saved screenshots go, as recordings go to `Movies/Reco`
-    static let directory = URL.homeDirectory.appending(path: "Pictures/Reco")
-
-    /// Writes the screenshot into `directory`
+    /// Writes the screenshot into `directory` (`SettingsStore.screenshotDirectory`)
     /// - Returns: The saved file, `Reco_Screenshot_<capture time>.png`
-    func save(_ screenshot: Screenshot) async throws -> URL {
-        let url = Self.directory.appending(path: screenshot.filename)
+    func save(_ screenshot: Screenshot, in directory: URL) async throws -> URL {
+        let url = directory.appending(path: screenshot.filename)
         try await Self.writePNG(screenshot.image, to: url)
         return url
     }

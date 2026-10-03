@@ -44,16 +44,25 @@ nonisolated enum AgentProcess {
         let stdout: Mutex<OutputTail>
         let stderr = Mutex(OutputTail())
         private let stopped = Mutex<AgentProcessEnd?>(nil)
+        private let lines = Mutex(LineBuffer())
+        private let onOutputLine: (@Sendable (Data) -> Void)?
 
-        init(outputLimit: Int) {
+        init(outputLimit: Int, onOutputLine: (@Sendable (Data) -> Void)?) {
             stdout = Mutex(OutputTail(limit: outputLimit))
+            self.onOutputLine = onOutputLine
         }
 
         func append(_ data: Data, toErrors: Bool) {
             if toErrors {
                 stderr.withLock { $0.append(data) }
-            } else {
-                stdout.withLock { $0.append(data) }
+                return
+            }
+            stdout.withLock { $0.append(data) }
+            if let onOutputLine {
+                // Called outside the lock: the handler hands the line on and returns
+                for line in lines.withLock({ $0.append(data) }) {
+                    onOutputLine(line)
+                }
             }
         }
 
@@ -76,12 +85,13 @@ nonisolated enum AgentProcess {
         }
     }
 
-    /// Runs `executable` in `directory` with exactly `environment`, and nothing on stdin.
+    /// Runs `executable` in `directory` with exactly `environment`, and nothing on stdin. Each line it
+    /// prints goes to `onOutputLine` as it comes, on a pipe's thread, for the agent chat (spec 0008).
     static func run(
         executable: URL, arguments: [String], environment: [String: String], directory: URL,
-        timeout: Duration, outputLimit: Int = OutputTail.defaultLimit
+        timeout: Duration, outputLimit: Int = OutputTail.defaultLimit, onOutputLine: (@Sendable (Data) -> Void)? = nil
     ) async -> Result {
-        let child = Child(outputLimit: outputLimit)
+        let child = Child(outputLimit: outputLimit, onOutputLine: onOutputLine)
         let process = child.process
         process.executableURL = executable
         process.arguments = arguments

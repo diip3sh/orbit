@@ -19,17 +19,17 @@ struct ScreenshotButtons: View {
 
     var body: some View {
         // Each closes the popover first so it never lands in the screenshot
-        MenuBarActionButton(title: "Capture Area", systemImage: "rectangle.dashed", isDisabled: isDisabled) {
+        MenuBarActionButton(title: "Capture Area", systemImage: "rectangle.dashed", isDisabled: isDisabled, shortcut: .captureArea) {
             dismiss()
-            Task { await controller.captureArea() }
+            Task { await controller.captureArea(leavingPopover: true) }
         }
-        MenuBarActionButton(title: "Capture Window", systemImage: "macwindow", isDisabled: isDisabled) {
+        MenuBarActionButton(title: "Capture Window", systemImage: "macwindow", isDisabled: isDisabled, shortcut: .captureWindow) {
             dismiss()
             Task { await controller.captureWindow() }
         }
-        MenuBarActionButton(title: "Capture Screen", systemImage: "display", isDisabled: isDisabled) {
+        MenuBarActionButton(title: "Capture Screen", systemImage: "display", isDisabled: isDisabled, shortcut: .captureScreen) {
             dismiss()
-            Task { await controller.captureScreen() }
+            Task { await controller.captureScreen(leavingPopover: true) }
         }
     }
 }

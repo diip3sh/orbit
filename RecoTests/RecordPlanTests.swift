@@ -112,4 +112,50 @@ struct RecordPlanTests {
 
         #expect(try plan(steps).selectors == ["#b", "#a"])
     }
+
+    @Test func aStepsZoomReachesItsClip() throws {
+        let boxes = ["#buy": PageInspection.Box(left: 100, top: 100, width: 200, height: 60)]
+
+        let script = try plan([Step(action: "hover", selector: "#buy", zoom: 2)]).script(page: page(boxes: boxes)).script
+
+        #expect(script.pointer.first?.zoom == 2)
+    }
+
+    @Test func zoomIsCheckedAndOnlyForTheCursor() {
+        #expect(throws: AgentToolError.self) { try plan([Step(action: "click", selector: "#a", zoom: 10)]) }
+        #expect(throws: AgentToolError.self) { try plan([Step(action: "click", selector: "#a", zoom: 1)]) }
+        #expect(throws: AgentToolError.self) { try plan([Step(action: "scroll", offset: 100, zoom: 2)]) }
+        #expect((try? plan([Step(action: "click", selector: "#a", zoom: 4)])) != nil)
+    }
+
+    @Test func zoomDecodesFromTheToolsArguments() throws {
+        let json = Data(##"{"url":"example.com","steps":[{"action":"click","selector":"#a","zoom":1.5}]}"##.utf8)
+
+        let request = try JSONDecoder().decode(RecordPageRequest.self, from: json)
+
+        #expect(request.steps.first?.zoom == 1.5)
+    }
+
+    @Test func aTypeStepTypesItsTextAndLastsAsLongAsIt() throws {
+        let boxes = ["#q": PageInspection.Box(left: 100, top: 100, width: 300, height: 40)]
+        let text = String(repeating: "x", count: 20)
+
+        let script = try plan([Step(action: "type", selector: "#q", zoom: 2, text: text)]).script(page: page(boxes: boxes)).script
+
+        let clip = try #require(script.pointer.first)
+        #expect(clip.action == .type)
+        #expect(clip.text == text)
+        #expect(clip.zoom == 2)
+        #expect(abs((clip.range.upperBound - clip.range.lowerBound) - PointerClip.typingDuration(for: text)) < 1e-9)
+    }
+
+    @Test func textIsCheckedAndOnlyForTyping() {
+        #expect(throws: AgentToolError.self) { try plan([Step(action: "type", selector: "#q")]) }
+        #expect(throws: AgentToolError.self) { try plan([Step(action: "type", selector: "#q", text: "")]) }
+        #expect(throws: AgentToolError.self) { try plan([Step(action: "type", selector: "#q", text: String(repeating: "x", count: 501))]) }
+        #expect(throws: AgentToolError.self) { try plan([Step(action: "click", selector: "#q", text: "hi")]) }
+        #expect(throws: AgentToolError.self) { try plan([Step(action: "scroll", offset: 10, text: "hi")]) }
+        #expect(throws: AgentToolError.self) { try plan([Step(action: "type", text: "hi")]) }
+    }
 }
+

@@ -18,7 +18,9 @@ struct TransportBar: View {
         let duration = viewModel.timeMap.outputDuration
 
         EditorGlassGroup {
-            HStack {
+            // Three groups side by side, never stacked: an overlay put Play over the tools in a
+            // narrow window, and the time wrapped onto two lines
+            HStack(spacing: EditorTheme.smallSpacing) {
                 HStack(spacing: EditorTheme.tightSpacing) {
                     Button("Split at Playhead", systemImage: "scissors") {
                         viewModel.split()
@@ -43,23 +45,8 @@ struct TransportBar: View {
                 }
                 .padding(EditorTheme.tightSpacing)
                 .editorGlass(in: .capsule)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer()
-
-                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !playback.isPlaying)) { _ in
-                    HStack(spacing: EditorTheme.tightSpacing) {
-                        Text(Self.format(playback.currentTime))
-                        Text("/ \(Self.format(duration))")
-                            .foregroundStyle(EditorTheme.dim)
-                    }
-                    .font(.callout)
-                    .monospaced()
-                }
-                .padding(.horizontal, EditorTheme.spacing)
-                .frame(height: 38)
-                .editorGlass(in: .capsule)
-            }
-            .overlay {
                 HStack(spacing: EditorTheme.tightSpacing) {
                     Button("Previous Frame", systemImage: "backward.frame.fill") {
                         playback.step(by: -1)
@@ -80,6 +67,23 @@ struct TransportBar: View {
                 }
                 .padding(EditorTheme.tightSpacing)
                 .editorGlass(in: .capsule)
+                .fixedSize()
+
+                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !playback.isPlaying)) { _ in
+                    HStack(spacing: EditorTheme.tightSpacing) {
+                        Text(Self.format(playback.currentTime))
+                        Text("/ \(Self.format(duration))")
+                            .foregroundStyle(EditorTheme.dim)
+                    }
+                    .font(.callout)
+                    .monospaced()
+                    .lineLimit(1)
+                    .fixedSize()
+                }
+                .padding(.horizontal, EditorTheme.spacing)
+                .frame(height: 38)
+                .editorGlass(in: .capsule)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         .buttonStyle(.editorIcon)

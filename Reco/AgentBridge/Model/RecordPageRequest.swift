@@ -16,7 +16,7 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
 
     nonisolated struct Step: Codable, Equatable, Sendable {
 
-        /// `hover`, `click` or `scroll`.
+        /// `hover`, `click`, `type` or `scroll`.
         var action: String
         var selector: String?
 
@@ -25,12 +25,21 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         var start: Double?
         var duration: Double?
 
+        /// Hover, click and type only: how much the camera magnifies the element around the step.
+        var zoom: Double?
+
+        /// Type only: what to type into the field.
+        var text: String?
+
         // swiftlint:disable:next nesting - the schema's key is y, too short a name for a property
         private enum CodingKeys: String, CodingKey {
             case offset = "y"
-            case action, selector, start, duration
+            case action, selector, start, duration, zoom, text
         }
     }
+
+    /// The most a type step may type: a form field's worth, not a document.
+    static let maximumTextLength = 500
 
     /// Times the steps and checks everything that doesn't need the page.
     func plan() throws(AgentToolError) -> RecordPlan {
@@ -72,29 +81,43 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         let minimum: Double
         let fallback: Double
         switch step.action {
-        case "hover", "click":
+        case "hover", "click", "type":
             guard hasSelector else { throw .invalidArgument("\(name): \(step.action) needs a selector from inspect_page.") }
             guard step.offset == nil else { throw .invalidArgument("\(name): y is for scroll only.") }
+            if let zoom = step.zoom, !WebCamera.scaleRange.contains(zoom) {
+                throw .invalidArgument("\(name): zoom must be from \(WebCamera.scaleRange.lowerBound) to \(WebCamera.scaleRange.upperBound).")
+            }
+            if step.action == "type" {
+                guard let text = step.text, !text.isEmpty, text.count <= Self.maximumTextLength else {
+                    throw .invalidArgument("\(name): type needs text, at most \(Self.maximumTextLength) characters.")
+                }
+            } else if step.text != nil {
+                throw .invalidArgument("\(name): text is for type only.")
+            }
             action = PointerClip.Action(rawValue: step.action)
             minimum = PointerClip.minimumDuration
-            fallback = PointerClip.defaultDuration
+            fallback = step.text.map(PointerClip.typingDuration(for:)) ?? PointerClip.defaultDuration
         case "scroll":
             guard hasSelector != (step.offset != nil) else { throw .invalidArgument("\(name): scroll needs either a selector or y, not both.") }
             if let offset = step.offset, offset < 0 {
                 throw .invalidArgument("\(name): y must be 0 or more.")
             }
+            guard step.zoom == nil, step.text == nil else { throw .invalidArgument("\(name): zoom and text aren't for scroll.") }
             action = nil
             minimum = ScrollClip.minimumDuration
             fallback = ScrollClip.defaultDuration
         default:
-            throw .invalidArgument("\(name): action must be hover, click or scroll.")
+            throw .invalidArgument("\(name): action must be hover, click, type or scroll.")
         }
 
         let start = step.start ?? previousEnd.map { $0 + RecordPlan.gap } ?? RecordPlan.leadIn
         guard start >= 0 else { throw .invalidArgument("\(name): start must be 0 or more.") }
         let length = step.duration ?? fallback
         guard length >= minimum else { throw .invalidArgument("\(name): duration must be at least \(minimum) s.") }
-        return RecordPlan.TimedStep(index: index, action: action, selector: hasSelector ? selector : nil, offset: step.offset, range: start..<start + length)
+        return RecordPlan.TimedStep(
+            index: index, action: action, selector: hasSelector ? selector : nil, offset: step.offset, range: start..<start + length,
+            zoom: step.zoom, text: step.text
+        )
     }
 
     // MARK: - Shared with inspect_page

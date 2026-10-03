@@ -74,7 +74,7 @@ struct AgentBridgeClientTests {
         }
         let names = try await listing.value
         watchdog.cancel()
-        #expect(names == ["inspect_page", "record_page", "render_status"])
+        #expect(names == AgentToolCatalog.names)
 
         try input.fileHandleForWriting.close()
         let status = await exitStatus(of: process, within: .seconds(5))

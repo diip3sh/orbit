@@ -16,12 +16,12 @@ extension View {
         modifier(EditorGlass(shape: shape))
     }
 
-    /// The window's ground: the desktop frosted through at the shell's 80%, in ink.
+    /// The window's ground: the system's window colour, solid, with ink text.
     func editorWindowBackground() -> some View {
         foregroundStyle(EditorTheme.ink)
+            // Solid, as a document window: see-through, it read as an overlay over the apps behind it
             .background {
-                EditorTheme.stage.opacity(0.8)
-                    .background(EditorBackdrop())
+                EditorTheme.stage
                     .ignoresSafeArea()
             }
     }

@@ -6,8 +6,8 @@
 import AppKit
 import SwiftUI
 
-/// The address bar over the live page, raised off the dark stage like the editor's preview, with the
-/// script's cursor at the playhead, and banners for a failed render and pick mode.
+/// The address bar over the live page, with the script's cursor at the playhead, what an agent found,
+/// and banners for a failed render and pick mode.
 struct WebStage: View {
     @Bindable var viewModel: WebRecordingViewModel
 
@@ -19,12 +19,30 @@ struct WebStage: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Self.cornerRadius)
         let viewport = viewModel.script.viewport
+        let camera = Self.camera(for: viewModel)
 
         VStack(spacing: EditorTheme.spacing) {
             WebAddressBar(viewModel: viewModel)
 
             WebPreviewView(controller: viewModel.preview)
                 .background(.white)
+                .overlay {
+                    if viewModel.script.url == nil {
+                        ContentUnavailableView {
+                            Label("Enter a Web Address", systemImage: "globe")
+                        } description: {
+                            Text("Type an address above and press Return. Then add hovers, clicks, typing and scrolls on the timeline, or ask the AI Agent to.")
+                        }
+                        // Over the whole blank page, not a box on it
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(EditorTheme.stage)
+                    }
+                }
+                .overlay(alignment: .topLeading) {
+                    if pageSize.width > 0 {
+                        WebAgentHighlights(rects: viewModel.agentHighlights, scale: pageSize.width / viewport.width)
+                    }
+                }
                 .overlay(alignment: .topLeading) {
                     if let location = viewModel.cursorPreview, pageSize.width > 0 {
                         WebCursorMarker(scale: pageSize.width / viewport.width)
@@ -32,37 +50,30 @@ struct WebStage: View {
                             .allowsHitTesting(false)
                     }
                 }
+                // The camera, as the editor will draw it: magnified with its focus moved to the middle
+                .scaleEffect(camera.scale)
+                .offset(x: (0.5 - camera.focus.x) * pageSize.width * camera.scale, y: (0.5 - camera.focus.y) * pageSize.height * camera.scale)
+                .editorMotion(value: [camera.scale, camera.focus.x, camera.focus.y])
                 .clipShape(shape)
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { pageSize = $0 }
-                .shadow(color: .black.opacity(0.7), radius: 24, y: 24)
+                // The page sits in the window like the browser it stands for: an edge and a soft
+                // shadow, not lifted off a backdrop
                 .overlay {
-                    shape.strokeBorder(viewModel.isPicking ? EditorTheme.accent : .white.opacity(0.1), lineWidth: viewModel.isPicking ? 2 : 1)
+                    shape.strokeBorder(viewModel.isPicking ? EditorTheme.accent : EditorTheme.hairline, lineWidth: viewModel.isPicking ? 2 : 1)
                 }
+                .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
                 .aspectRatio(viewport, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding([.horizontal, .top], EditorTheme.largeSpacing)
         .padding(.bottom, EditorTheme.spacing)
-        .background {
-            StageDotGrid()
-        }
         .overlay(alignment: .bottom) {
             VStack(spacing: EditorTheme.smallSpacing) {
+                if let error = viewModel.pageError {
+                    StatusBanner(message: error) { viewModel.pageError = nil }
+                }
                 if let error = viewModel.renderError {
-                    HStack(spacing: EditorTheme.smallSpacing) {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .symbolRenderingMode(.multicolor)
-                        Button("Dismiss", systemImage: "xmark") {
-                            viewModel.renderError = nil
-                        }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(EditorTheme.dim)
-                    }
-                    .padding(.horizontal, EditorTheme.mediumSpacing)
-                    .padding(.vertical, EditorTheme.smallSpacing)
-                    .editorGlass(in: .capsule)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    StatusBanner(message: error) { viewModel.renderError = nil }
                 }
                 if viewModel.isPicking {
                     HStack(spacing: EditorTheme.mediumSpacing) {
@@ -81,25 +92,47 @@ struct WebStage: View {
             }
             .padding(.bottom, EditorTheme.largeSpacing)
         }
-        .overlay {
-            if let progress = viewModel.renderProgress {
-                VStack(alignment: .trailing, spacing: EditorTheme.mediumSpacing) {
-                    ExportProgressBar(progress: progress, title: "Rendering…")
-                    Button("Cancel") {
-                        viewModel.cancelRender()
-                    }
-                    .buttonStyle(.editorGhost)
-                    .keyboardShortcut(.cancelAction)
-                }
-                .frame(width: 280)
-                .padding(EditorTheme.spacing)
-                .editorGlass(in: .rect(cornerRadius: 16))
-                .transition(.opacity)
+        .editorMotion(value: viewModel.agentHighlights)
+        .editorMotion(value: viewModel.isPicking)
+        .editorMotion(value: viewModel.renderError)
+        .editorMotion(value: viewModel.pageError)
+    }
+}
+
+extension WebStage {
+
+    /// The camera at the playhead: the zoom in effect and its focus, as fractions of the page, kept
+    /// where the magnified view stays inside it. Unzoomed, the whole page, and always while picking: the
+    /// web view's clicks don't follow a SwiftUI transform, so a pick would land beside its element.
+    static func camera(for viewModel: WebRecordingViewModel) -> (scale: Double, focus: CGPoint) {
+        let script = viewModel.script
+        guard !viewModel.isPicking, let zoom = WebCamera.zoom(at: viewModel.playhead, in: script) else { return (1, CGPoint(x: 0.5, y: 0.5)) }
+        let point = viewModel.cursorPreview ?? zoom.clip.target.point
+        let focus = CGPoint(x: point.x / script.viewport.width, y: point.y / script.viewport.height)
+        return (zoom.scale, ZoomSegment.clamped(focus, scale: zoom.scale))
+    }
+}
+
+/// The elements an agent found, outlined in the accent at the page's scale (spec 0008).
+private struct WebAgentHighlights: View {
+    let rects: [CGRect]
+    let scale: CGFloat
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(rects.indices, id: \.self) { index in
+                let rect = rects[index]
+                let shape = RoundedRectangle(cornerRadius: 4)
+                shape
+                    .fill(EditorTheme.accent.opacity(0.12))
+                    .overlay { shape.strokeBorder(EditorTheme.accent, lineWidth: 1.5) }
+                    .frame(width: rect.width * scale, height: rect.height * scale)
+                    .offset(x: rect.minX * scale, y: rect.minY * scale)
+                    .transition(.opacity)
             }
         }
-        .editorMotion(value: viewModel.isPicking)
-        .editorMotion(value: viewModel.renderProgress == nil)
-        .editorMotion(value: viewModel.renderError)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

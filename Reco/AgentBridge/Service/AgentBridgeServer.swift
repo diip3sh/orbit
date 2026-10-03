@@ -134,7 +134,12 @@ final class AgentBridgeServer {
         await server.withMethodHandler(CallTool.self) { parameters in
             let arguments = try JSONEncoder().encode(parameters.arguments ?? [:])
             let reply = await tools.call(parameters.name, arguments: arguments)
-            return CallTool.Result(content: [.text(text: reply.text, annotations: nil, _meta: nil)], isError: reply.isError)
+            var content: [Tool.Content] = [.text(text: reply.text, annotations: nil, _meta: nil)]
+            if let image = reply.image {
+                // What the page looks like now, for the agent to see
+                content.append(.image(data: image.base64EncodedString(), mimeType: "image/jpeg", annotations: nil, _meta: nil))
+            }
+            return CallTool.Result(content: content, isError: reply.isError)
         }
         return server
     }

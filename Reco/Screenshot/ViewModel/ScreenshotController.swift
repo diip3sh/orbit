@@ -20,8 +20,9 @@ final class ScreenshotController {
     /// Called as a screenshot ends, with nil when it was cancelled or failed; nothing is written until `save(_:)`
     @ObservationIgnored var onDidCapture: (@MainActor (Screenshot?) -> Void)?
 
-    /// Whether a screenshot is being selected or captured
-    private(set) var isCapturing = false
+    /// Whether a screenshot is being selected or captured. Not observed: the popover would dim its rows
+    /// a frame before the screen is grabbed, and a shot of the popover would show them dimmed.
+    @ObservationIgnored private(set) var isCapturing = false
 
     private let settings: SettingsStore
     private let notificationService: NotificationService
@@ -46,9 +47,11 @@ final class ScreenshotController {
 
     /// Freezes every display first and cuts the area from that, so what the overlay would take away
     /// from the apps under it (hover states, tooltips, open menus) is still in the shot
-    func captureArea() async {
+    /// - Parameter leavingPopover: Started from the menu bar popover, which is closing and stays out of
+    ///   the shot; from a shortcut, the popover is in it like everything else on screen
+    func captureArea(leavingPopover: Bool = false) async {
         await capture {
-            let frozen = try await service.captureDisplays(settings: settings)
+            let frozen = try await service.captureDisplays(leavingPopover: leavingPopover, settings: settings)
             guard let selection = await areaSelectionOverlay.present(confirmsOnRelease: true, frozen: frozen.mapValues(\.image)) else {
                 return nil
             }
@@ -73,23 +76,20 @@ final class ScreenshotController {
         }
     }
 
-    func captureScreen() async {
+    func captureScreen(leavingPopover: Bool = false) async {
         await capture {
-            // ponytail: fixed wait for the popover's close animation, which only matters with Show
-            // Reco on (otherwise its windows are filtered out). Measure and tune, or wait on the window.
-            try? await Task.sleep(for: .milliseconds(250))
             let mouse = NSEvent.mouseLocation
             guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main else { return nil }
-            let filter = SCContentFilter(display: try await service.display(for: screen), excludingWindows: [])
+            let filter = try await service.screenFilter(for: screen, leavingPopover: leavingPopover)
             return try await service.capture(filter, sourceRect: nil, settings: settings)
         }
     }
 
-    /// Writes the screenshot into `~/Pictures/Reco`; logs and notifies when that fails
+    /// Writes the screenshot into `SettingsStore.screenshotDirectory`; logs and notifies when that fails
     /// - Returns: Whether it was saved
     func save(_ screenshot: Screenshot) async -> Bool {
         do {
-            let url = try await service.save(screenshot)
+            let url = try await service.save(screenshot, in: settings.screenshotDirectory)
             logger.info("Screenshot saved: \(url.lastPathComponent)")
             return true
         } catch {

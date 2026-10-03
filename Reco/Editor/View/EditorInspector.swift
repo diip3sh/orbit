@@ -31,20 +31,15 @@ struct EditorInspector: View {
                 CanvasInspectorSection(viewModel: viewModel)
 
                 InspectorSection("Zoom") {
-                    if let zoom = Binding($viewModel.selectedZoom) {
+                    if let zoom = Binding(unwrapping: $viewModel.selectedZoom) {
                         InspectorSlider("Scale", value: zoom.scale, in: 1.25...4) {
                             Text("\($0, format: .number.precision(.fractionLength(0...2)))×")
                         }
                         InspectorField("Focus") {
-                            Picker("Focus", selection: zoom.followsCursor) {
-                                Text("Follow Cursor").tag(true)
-                                Text("Fixed").tag(false)
-                            }
-                            .pickerStyle(.segmented)
-                            .labelsHidden()
+                            SegmentedChoice(selection: zoom.followsCursor, options: [(true, "Follow Cursor"), (false, "Fixed")])
                             .disabled(telemetry == nil)
                         }
-                        if let center = Binding(zoom.fixedCenter), let videoSize = viewModel.source?.naturalSize {
+                        if let center = Binding(unwrapping: zoom.fixedCenter), let videoSize = viewModel.source?.naturalSize {
                             ZoomFocusPad(
                                 image: viewModel.thumbnail(at: zoom.wrappedValue.range.lowerBound),
                                 videoSize: videoSize,
@@ -97,13 +92,7 @@ struct EditorInspector: View {
                         Text("\($0, format: .number.precision(.fractionLength(1)))×")
                     }
                     InspectorField("Movement") {
-                        Picker("Movement", selection: $viewModel.cursor.smoothing) {
-                            Text("Mellow").tag(CursorStyle.Smoothing.mellow)
-                            Text("Smooth").tag(CursorStyle.Smoothing.smooth)
-                            Text("Fast").tag(CursorStyle.Smoothing.fast)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
+                        SegmentedChoice(selection: $viewModel.cursor.smoothing, options: [(.mellow, "Mellow"), (.smooth, "Smooth"), (.fast, "Fast")])
                     }
                     Toggle("Shrink on Click", isOn: $viewModel.cursor.animatesClicks)
                     Toggle("Hide When Idle", isOn: $viewModel.cursor.hidesWhenIdle)
@@ -127,13 +116,7 @@ struct EditorInspector: View {
                         Text("\($0, format: .number.precision(.fractionLength(1))) s")
                     }
                     InspectorField("Buttons") {
-                        Picker("Buttons", selection: $viewModel.clickHighlights.buttons) {
-                            Text("All").tag(ClickHighlightStyle.Buttons.all)
-                            Text("Left Only").tag(ClickHighlightStyle.Buttons.left)
-                            Text("Right Only").tag(ClickHighlightStyle.Buttons.right)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
+                        SegmentedChoice(selection: $viewModel.clickHighlights.buttons, options: [(.all, "All"), (.left, "Left Only"), (.right, "Right Only")])
                     }
                 }
                 .disabled(telemetry == nil)

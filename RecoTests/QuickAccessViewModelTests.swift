@@ -13,7 +13,7 @@ import Testing
 @MainActor
 struct QuickAccessViewModelTests {
 
-    @Test func copyPutsThePNGOnThePasteboardAndClosesTheCard() async throws {
+    @Test func copyPutsThePNGOnThePasteboardConfirmsAndCloses() async throws {
         let pasteboard = NSPasteboard(name: .init("QuickAccessViewModelTests-\(UUID())"))
         defer { pasteboard.releaseGlobally() }
         let probe = CardProbe()
@@ -25,10 +25,11 @@ struct QuickAccessViewModelTests {
         let png = try #require(pasteboard.data(forType: .png))
         let source = try #require(CGImageSourceCreateWithData(png as CFData, nil))
         #expect(CGImageSourceCreateImageAtIndex(source, 0, nil)?.width == 40)
+        #expect(model.feedback == .copied)
         #expect(probe.closed == 1)
     }
 
-    @Test func saveClosesTheCardOnceSaved() async throws {
+    @Test func saveConfirmsAndClosesOnceSaved() async throws {
         let probe = CardProbe()
         let model = try probe.makeModel()
         defer { model.removeDragFile() }
@@ -36,6 +37,7 @@ struct QuickAccessViewModelTests {
         await model.save()
 
         #expect(probe.saved == [model.screenshot.date])
+        #expect(model.feedback == .saved)
         #expect(probe.closed == 1)
     }
 
@@ -47,6 +49,7 @@ struct QuickAccessViewModelTests {
         await model.save()
 
         #expect(probe.saved.count == 1)
+        #expect(model.feedback == nil)
         #expect(probe.closed == 0)
     }
 

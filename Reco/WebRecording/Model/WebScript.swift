@@ -98,6 +98,19 @@ nonisolated extension WebScript {
     }
 
     /// A press or release of the button, for a click clip.
+    /// What every type clip's field holds at `time`, for the take and the preview: empty before it
+    /// starts, so scrubbing back clears it.
+    func typing(at time: Double) -> [Typing] {
+        pointer.filter { $0.action == .type }.map { Typing(clip: $0.id, selector: $0.target.selector, text: $0.typedText(at: time)) }
+    }
+
+    /// A field's text, by the clip that types it.
+    struct Typing: Equatable, Sendable {
+        var clip: UUID
+        var selector: String?
+        var text: String
+    }
+
     struct Press: Equatable, Sendable {
         var time: Double
         var isDown: Bool
@@ -149,7 +162,7 @@ nonisolated extension WebScript {
     /// The presses and releases after `start` and up to and including `end`, give or take
     /// ``pressTolerance``, in time order.
     func presses(after start: Double, through end: Double) -> [Press] {
-        pointer.filter { $0.action == .click }.flatMap { clip in
+        pointer.filter(\.action.presses).flatMap { clip in
             let press = clip.range.lowerBound
             let release = min(press + PointerClip.pressDuration, clip.range.upperBound)
             return [Press(time: press, isDown: true, target: clip.target), Press(time: release, isDown: false, target: clip.target)]

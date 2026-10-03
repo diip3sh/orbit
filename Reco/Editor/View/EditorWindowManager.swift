@@ -8,7 +8,7 @@
 import AppKit
 import SwiftUI
 
-/// Opens one editor window per recording, the Recordings window and the Web Recording window, and
+/// Opens one editor window per recording, the Library window and the Web Recording window, and
 /// keeps the app in the Dock while any is open.
 ///
 /// The app is a menu bar app (`LSUIElement`), and its entry points - notifications, URLs, the menu
@@ -24,9 +24,10 @@ final class EditorWindowManager: NSObject {
         let accessesOutputDirectory: Bool
     }
 
-    private struct Recordings {
+    private struct Library {
         let window: NSWindow
-        let viewModel: RecordingsViewModel
+        let viewModel: LibraryViewModel
+        let watcher: FolderWatcher
         let accessesOutputDirectory: Bool
     }
 
@@ -37,8 +38,30 @@ final class EditorWindowManager: NSObject {
 
     private let settings: SettingsStore
     private var editors: [URL: Editor] = [:]
-    private var recordings: Recordings?
+    private var library: Library?
     private var webRecording: WebRecording?
+
+    /// What the Library's New menu starts; set by `AppDelegate`
+    var libraryActions = LibraryViewModel.Actions()
+
+    /// The agent runs the Web Recording window's Agent tab shows and starts; set by `AppDelegate`
+    var agentRecording: AgentRecordingViewModel?
+
+    /// The open Web Recording window's state, which follows what an agent does (spec 0008)
+    var webRecordingViewModel: WebRecordingViewModel? {
+        webRecording?.viewModel
+    }
+
+    /// The Web Recording window for an agent to browse in (spec 0011): the open one, or opened with its
+    /// last script, without taking focus from the agent's window.
+    func webRecordingForAgent() -> WebRecordingViewModel? {
+        if let webRecording {
+            return webRecording.viewModel
+        }
+        let webRecording = makeWebRecording()
+        webRecording.window.orderFront(nil)
+        return webRecording.viewModel
+    }
 
     init(settings: SettingsStore) {
         self.settings = settings
@@ -70,45 +93,71 @@ final class EditorWindowManager: NSObject {
         activate(window)
     }
 
-    /// Shows the output folder's recordings, or brings their window forward.
-    func showRecordings() {
-        if let recordings {
-            activate(recordings.window)
+    /// Shows the Library, Reco's main window, or brings it forward (spec 0010).
+    func showLibrary() {
+        if let library {
+            activate(library.window)
             return
         }
 
         // Held while the window is open: it lists the folder and reads the recordings' pictures
         let accessesOutputDirectory = settings.startAccessingOutputDirectory()
-        let viewModel = RecordingsViewModel(folder: settings.outputDirectory) { [weak self] url in
+        let settings = settings
+        let viewModel = LibraryViewModel(
+            folders: { (settings.outputDirectory, settings.screenshotDirectory) },
+            actions: libraryActions
+        ) { [weak self] url in
             self?.open(url)
         }
-        let hostingController = NSHostingController(rootView: RecordingsView(viewModel: viewModel))
+        let hostingController = NSHostingController(rootView: LibraryView(viewModel: viewModel))
         hostingController.sizingOptions = .minSize
-        let window = makeWindow(hostingController, title: "Recordings", size: NSSize(width: 860, height: 600))
-        recordings = Recordings(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
+        hostingController.sceneBridgingOptions = [.toolbars]
+        let window = makeWindow(hostingController, title: "Reco", size: NSSize(width: 1100, height: 720))
+        library = Library(window: window, viewModel: viewModel, watcher: FolderWatcher(), accessesOutputDirectory: accessesOutputDirectory)
 
         NSApp.setActivationPolicy(.regular)
         activate(window)
     }
 
-    /// Shows the Web Recording window, or brings it forward. Each render opens in the editor.
-    func showWebRecording() {
+    /// Shows the Web Recording window with a blank script, as New Web Recording means; the last one is
+    /// an undo away. Each render opens in the editor.
+    func showNewWebRecording() {
         if let webRecording {
+            webRecording.viewModel.startNew()
             activate(webRecording.window)
             return
         }
 
+        let webRecording = makeWebRecording()
+        webRecording.viewModel.startNew()
+        activate(webRecording.window)
+    }
+
+    /// The Web Recording window on its agent chat, where Record with AI Agent… starts: a blank page and a
+    /// new conversation, unless an agent is still running in it.
+    func showAgentChat() {
+        let webRecording = webRecording ?? makeWebRecording()
+        if agentRecording?.isRunning != true {
+            webRecording.viewModel.startNew()
+            agentRecording?.startNewChat()
+        }
+        webRecording.viewModel.show(.agent)
+        activate(webRecording.window)
+    }
+
+    /// The Web Recording window with its last script, kept until it closes. Each render opens in the editor.
+    private func makeWebRecording() -> WebRecording {
         let viewModel = WebRecordingViewModel(settings: settings) { [weak self] url in
             self?.open(url)
         }
-        let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel))
+        let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel, agent: agentRecording))
         hostingController.sizingOptions = .minSize
         hostingController.sceneBridgingOptions = [.toolbars]
         let window = makeWindow(hostingController, title: "Web Recording", size: NSSize(width: 1280, height: 860))
-        webRecording = WebRecording(window: window, viewModel: viewModel)
-
+        let webRecording = WebRecording(window: window, viewModel: viewModel)
+        self.webRecording = webRecording
         NSApp.setActivationPolicy(.regular)
-        activate(window)
+        return webRecording
     }
 
     /// A centred window in the editor's look: the content running under a transparent title bar and toolbar.
@@ -148,19 +197,35 @@ extension EditorWindowManager: NSWindowDelegate {
         return editor(for: window)?.editor.viewModel.undoManager
     }
 
-    /// The list is read whenever it comes forward, so recordings saved meanwhile show.
+    /// The Library is read whenever it comes forward, and its folders watched, which Settings may have
+    /// changed meanwhile.
     func windowDidBecomeKey(_ notification: Notification) {
-        guard let recordings, notification.object as? NSWindow === recordings.window else { return }
-        Task {
-            await recordings.viewModel.reload()
+        guard let library, notification.object as? NSWindow === library.window else { return }
+        library.watcher.watch(library.viewModel.watchedFolders) {
+            Task { await library.viewModel.reload() }
         }
+        Task {
+            await library.viewModel.reload()
+        }
+    }
+
+    /// Closing the Web Recording window stops its render, so it asks first while one runs.
+    func windowShouldClose(_ window: NSWindow) -> Bool {
+        guard let webRecording, window === webRecording.window, !webRecording.viewModel.isEditable else { return true }
+        let alert = NSAlert()
+        alert.messageText = "Stop Rendering?"
+        alert.informativeText = "Closing the window stops the render. Nothing is saved."
+        alert.addButton(withTitle: "Keep Rendering")
+        alert.addButton(withTitle: "Stop and Close").hasDestructiveAction = true
+        return alert.runModal() == .alertSecondButtonReturn
     }
 
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
-        if let recordings, window === recordings.window {
-            self.recordings = nil
-            if recordings.accessesOutputDirectory {
+        if let library, window === library.window {
+            self.library = nil
+            library.watcher.stop()
+            if library.accessesOutputDirectory {
                 settings.stopAccessingOutputDirectory()
             }
         } else if let webRecording, window === webRecording.window {
@@ -177,7 +242,7 @@ extension EditorWindowManager: NSWindowDelegate {
                 }
             }
         }
-        if editors.isEmpty, recordings == nil, webRecording == nil {
+        if editors.isEmpty, library == nil, webRecording == nil {
             NSApp.setActivationPolicy(.accessory)
         }
     }

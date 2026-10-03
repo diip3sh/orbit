@@ -41,7 +41,7 @@ nonisolated enum AgentRunOutcome: Equatable, Sendable {
         if end == .cancelled {
             return .cancelled
         }
-        if let render, render.status == .done {
+        if let render, render.status == .done || render.status == .planned {
             return .succeeded(movie: render.movie ?? "")
         }
         switch end {

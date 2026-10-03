@@ -51,7 +51,7 @@ struct AgentsSettingsView: View {
         }
         .formStyle(.grouped)
         .padding()
-        .task { viewModel.refresh() }
+        .task { await viewModel.connectUsableAgents() }
         .alert("Couldn't Update the Agent", isPresented: errorShown) {
             Button("OK") {}
         } message: {

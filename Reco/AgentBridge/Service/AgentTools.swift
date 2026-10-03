@@ -3,6 +3,7 @@
 //  Reco
 //
 
+import CoreGraphics
 import Foundation
 
 /// Runs the tools an agent calls (spec 0006): inspect a page, record it, and follow the render.
@@ -16,6 +17,33 @@ final class AgentTools {
 
     /// The latest render, or `nil` before the first. Only this type sets it, except in tests.
     var job: RenderStatus?
+
+    /// Called with each page an agent inspects, for the Web Recording window to show (spec 0008).
+    @ObservationIgnored var onInspected: ((PageInspection) -> Void)?
+
+    /// Called with each script an agent's plan became, before it renders, for the window to adopt.
+    @ObservationIgnored var onPlanned: ((WebScript) -> Void)?
+
+    /// Whether `record_page` only puts the plan on the window's timeline, for the user to render: for
+    /// the chat, where the user reviews and edits before rendering.
+    @ObservationIgnored var stagesPlans = false
+
+    /// The Web Recording window, opened if it isn't, whose live page an agent browses (spec 0011).
+    @ObservationIgnored var browser: (() -> WebRecordingViewModel?)?
+
+    /// A tool's answer: JSON text for the agent, and what the page looks like after a browsing step.
+    struct Reply {
+        var text: String
+        var image: Data?
+        var isError: Bool
+    }
+
+    /// How long a browsing step waits for the page to react before it looks: menus open, a click's
+    /// page starts loading. A guess that covers typical transitions; not measured.
+    static let settleTime = Duration.milliseconds(600)
+
+    /// How much page text `read_page` returns, about 3,000 words.
+    static let readLimit = 15_000
 
     @ObservationIgnored private var renderTask: Task<Void, Never>?
     @ObservationIgnored private let settings: SettingsStore
@@ -38,22 +66,25 @@ final class AgentTools {
 
     /// Runs tool `name` with its JSON `arguments`. The text is JSON for the agent; a failure is
     /// reported as an error text, not thrown.
-    func call(_ name: String, arguments: Data) async -> (text: String, isError: Bool) {
+    func call(_ name: String, arguments: Data) async -> Reply {
         do {
             switch name {
             case AgentToolCatalog.inspectPage:
-                return (try Self.encode(try await inspect(arguments)), false)
+                return Reply(text: try Self.encode(try await inspect(arguments)), isError: false)
             case AgentToolCatalog.recordPage:
                 let status = try await record(arguments)
-                return (try Self.encode(status), status.status == .failed)
+                return Reply(text: try Self.encode(status), isError: status.status == .failed)
             case AgentToolCatalog.renderStatus:
                 let status = try await status(arguments)
-                return (try Self.encode(status), status.status == .failed)
+                return Reply(text: try Self.encode(status), isError: status.status == .failed)
+            case AgentToolCatalog.openPage, AgentToolCatalog.look, AgentToolCatalog.readPage, AgentToolCatalog.click,
+                 AgentToolCatalog.hover, AgentToolCatalog.type:
+                return try await browse(name, arguments: arguments)
             default:
                 throw AgentToolError.unknownTool(name)
             }
         } catch {
-            return (error.localizedDescription, true)
+            return Reply(text: error.localizedDescription, isError: true)
         }
     }
 
@@ -61,9 +92,11 @@ final class AgentTools {
 
     private func inspect(_ arguments: Data) async throws -> PageInspection {
         let script = try Self.decode(InspectPageRequest.self, from: arguments).validated()
-        return try await Self.withDeadline(Self.inspectLimit) {
+        let page = try await Self.withDeadline(Self.inspectLimit) {
             try await WebPageRenderer(script: script).inspect(selectors: [])
         }
+        onInspected?(page)
+        return page
     }
 
     private func record(_ arguments: Data) async throws -> RenderStatus {
@@ -72,6 +105,14 @@ final class AgentTools {
             throw AgentToolError.busy(renderID: job.renderID)
         }
         let id = UUID().uuidString
+        if stagesPlans {
+            let (script, unmatched) = try await script(for: plan)
+            var planned = RenderStatus(renderID: id, status: .planned, progress: 0)
+            planned.unmatchedSelectors = unmatched.isEmpty ? nil : unmatched
+            job = planned
+            onPlanned?(script)
+            return planned
+        }
         job = RenderStatus(renderID: id, status: .rendering, progress: 0)
         renderTask = Task { await render(plan, id: id) }
         return try await wait(for: id)
@@ -86,9 +127,9 @@ final class AgentTools {
     /// Looks at the page to aim the plan, renders it and records the outcome in ``job``.
     private func render(_ plan: RecordPlan, id: String) async {
         do {
-            let page = try await WebPageRenderer(script: plan.inspectionScript).inspect(selectors: plan.selectors)
-            let (script, unmatched) = try plan.script(page: page)
+            let (script, unmatched) = try await script(for: plan)
             job?.unmatchedSelectors = unmatched.isEmpty ? nil : unmatched
+            onPlanned?(script)
             let movie = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
                 self?.job?.progress = progress
             }
@@ -103,6 +144,12 @@ final class AgentTools {
         }
     }
 
+    /// The plan as a script, aimed by looking at the page, and the selectors it found no match for.
+    private func script(for plan: RecordPlan) async throws -> (WebScript, [String]) {
+        let page = try await WebPageRenderer(script: plan.inspectionScript).inspect(selectors: plan.selectors)
+        return try plan.script(page: page)
+    }
+
     /// The render `id` once it's over, or as it is after ``waitLimit``.
     private func wait(for id: String) async throws -> RenderStatus {
         let deadline = ContinuousClock.now + Self.waitLimit
@@ -111,6 +158,64 @@ final class AgentTools {
         }
         guard let job, job.renderID == id else { throw AgentToolError.unknownRender }
         return job
+    }
+
+    // MARK: - Browsing
+
+    /// One step of an agent learning a site in the window's live page: what it did, as JSON, and a
+    /// picture of the page after it.
+    private func browse(_ name: String, arguments: Data) async throws -> Reply {
+        guard let window = browser?() else { throw AgentToolError.invalidArgument("The Web Recording window isn't available.") }
+        let preview = window.preview
+        let request = try Self.decode(BrowseRequest.self, from: arguments)
+        var result: [String: Any] = [:]
+        switch name {
+        case AgentToolCatalog.openPage:
+            let url = try RecordPageRequest.pageURL(request.url ?? "")
+            let viewport = try RecordPageRequest.viewportSize(request.viewport)
+            try await window.agentOpen(url, viewport: viewport)
+            try await Task.sleep(for: Self.settleTime)
+            let json = try await preview.evaluate(WebInspectScript.source, arguments: ["selectors": [String]()]) as? String ?? ""
+            let page = try Self.decode(PageInspection.self, from: Data(json.utf8))
+            window.showAgentInspection(page)
+            return Reply(text: try Self.encode(page), image: try await preview.screenshot(), isError: false)
+        case AgentToolCatalog.look:
+            await preview.scroll(toY: max(0, request.y ?? 0))
+        case AgentToolCatalog.readPage:
+            let text = try await preview.evaluate(WebBrowseScript.read, arguments: ["limit": Self.readLimit]) as? String ?? "{}"
+            return Reply(text: text, isError: false)
+        case AgentToolCatalog.click, AgentToolCatalog.hover, AgentToolCatalog.type:
+            let selector = try request.requiredSelector(for: name)
+            guard let found = try await preview.evaluate(WebBrowseScript.locate, arguments: ["selector": selector]) as? [Any], found.count == 5,
+                  let x = found[0] as? Double, let y = found[1] as? Double, let width = found[2] as? Double, let height = found[3] as? Double else {
+                throw AgentToolError.invalidArgument("No element matches \"\(selector)\". Use a selector from open_page or inspect_page.")
+            }
+            let frame = CGRect(x: x, y: y, width: width, height: height)
+            let center = CGPoint(x: frame.midX, y: frame.midY)
+            window.showAgentTarget(frame)
+            if name == AgentToolCatalog.hover {
+                preview.hover(at: center)
+            } else {
+                preview.click(at: center)
+            }
+            if name == AgentToolCatalog.type {
+                guard let text = request.text, !text.isEmpty else { throw AgentToolError.invalidArgument("type needs text.") }
+                let typing = [WebScript.Typing(clip: UUID(), selector: selector, text: text)]
+                _ = try await preview.evaluate(WebTypingScript.source, arguments: ["fields": WebTypingScript.fields(typing)])
+            }
+            result["element"] = found[4] as? String ?? ""
+        default:
+            throw AgentToolError.unknownTool(name)
+        }
+        try await Task.sleep(for: Self.settleTime)
+        // A click may have opened another page: wait for it, and say so
+        try await preview.waitUntilLoaded()
+        if let position = try await preview.evaluate(WebBrowseScript.position) as? String,
+           let object = try? JSONSerialization.jsonObject(with: Data(position.utf8)) as? [String: Any] {
+            result.merge(object) { current, _ in current }
+        }
+        let text = String(data: try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys, .withoutEscapingSlashes]), encoding: .utf8) ?? "{}"
+        return Reply(text: text, image: try await preview.screenshot(), isError: false)
     }
 
     // MARK: - JSON
