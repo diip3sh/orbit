@@ -67,7 +67,9 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in
-                                    drag = (clip.id, GesturePhysics.rubberbanded(value.translation.width, in: limits, dimension: width))
+                                    // Typed in full: Xcode 26.6 won't convert a Double into a labeled tuple's CGFloat
+                                    let offset = CGFloat(GesturePhysics.rubberbanded(value.translation.width, in: limits, dimension: width))
+                                    drag = (id: clip.id, offset: offset)
                                 }
                                 .onEnded { value in
                                     let shown = drag?.offset ?? value.translation.width
