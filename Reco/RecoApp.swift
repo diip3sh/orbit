@@ -22,7 +22,8 @@ struct RecoApp: App {
         MenuBarExtra {
             MenuBarView(
                 viewModel: viewModel,
-                screenshots: appDelegate.screenshots,
+                showScreenshotToolbar: { appDelegate.showCaptureToolbar(records: false) },
+                showRecordingToolbar: { appDelegate.showCaptureToolbar(records: true) },
                 editLastRecording: appDelegate.editLastRecording,
                 showLibrary: appDelegate.showLibrary,
                 showWebRecording: appDelegate.showWebRecording,

@@ -126,7 +126,7 @@ struct CaptureGroupRow: View {
                     .rotationEffect(.degrees(isExpanded ? 90 : 0))
             }
             .padding(.horizontal, EditorTheme.mediumSpacing)
-            .padding(.vertical, EditorTheme.tightSpacing)
+            .padding(.vertical, 6)
         }
         .buttonStyle(.menuRow)
     }

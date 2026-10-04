@@ -68,13 +68,9 @@ struct MenuBarToggle: View {
                 .disabled(isDisabled)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .contentShape(.rect)
-        .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.primary.opacity(isHovered && !isDisabled && isEnabled ? 0.08 : 0))
-                .padding(.horizontal, 4)
-        )
+        .background(MenuRowHighlight(opacity: isHovered && !isDisabled && isEnabled ? 0.1 : 0))
         .onHover { hovering in
             isHovered = hovering
         }
@@ -145,7 +141,7 @@ struct DeviceRow: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 4)
+            .padding(.vertical, 6)
         }
         .buttonStyle(.menuRow)
     }

@@ -5,7 +5,19 @@
 
 import SwiftUI
 
-/// A row of the menu bar popover: a rounded fill, inset 4 pt from the edges, that steps to a
+/// The fill behind a hovered popover row, as Control Center's: the row's full height, inset from the
+/// popover's edge, with soft corners that follow its rounded ones.
+struct MenuRowHighlight: View {
+    let opacity: Double
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(Color.primary.opacity(opacity))
+            .padding(.horizontal, 6)
+    }
+}
+
+/// A row of the menu bar popover: a `MenuRowHighlight` that steps to a
 /// light tone under the pointer and a stronger one the moment it's pressed. Only the press lands
 /// at once; hover and release ease. Disabled rows dim and don't react.
 struct MenuRowButtonStyle: ButtonStyle {
@@ -27,11 +39,7 @@ private struct MenuRow: View {
     var body: some View {
         configuration.label
             .contentShape(.rect)
-            .background {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.primary.opacity(fill))
-                    .padding(.horizontal, 4)
-            }
+            .background { MenuRowHighlight(opacity: fill) }
             .opacity(isEnabled ? 1 : 0.4)
             .onHover { isHovered = $0 }
             .editorMotion(configuration.isPressed ? nil : EditorTheme.quickMotion, value: fill)
@@ -39,6 +47,6 @@ private struct MenuRow: View {
 
     private var fill: Double {
         guard isEnabled else { return 0 }
-        return configuration.isPressed ? 0.14 : isHovered ? 0.08 : 0
+        return configuration.isPressed ? 0.16 : isHovered ? 0.1 : 0
     }
 }

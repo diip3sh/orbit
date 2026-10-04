@@ -11,7 +11,8 @@ import ScreenCaptureKit
 /// The main menu bar interface for Reco
 struct MenuBarView: View {
     @Bindable var viewModel: RecorderViewModel
-    let screenshots: ScreenshotController
+    let showScreenshotToolbar: () -> Void
+    let showRecordingToolbar: () -> Void
     let editLastRecording: () -> Void
     let showLibrary: () -> Void
     let showWebRecording: () -> Void
@@ -42,26 +43,8 @@ struct MenuBarView: View {
                 MenuBarDivider()
             }
 
-            // Stop and pause while recording; saving; the countdown's cancel; otherwise what to
-            // record, and Start once it's chosen
-            if isRecording {
-                RecordingButton(
-                    duration: viewModel.formattedDuration
-                ) {
-                    Task {
-                        await viewModel.stopRecording()
-                    }
-                }
-                .padding(.top, 8)
-
-                MenuBarActionButton(
-                    title: viewModel.isPaused ? "Resume Recording" : "Pause Recording",
-                    systemImage: viewModel.isPaused ? "play.circle" : "pause.circle",
-                    shortcut: .pauseRecording
-                ) {
-                    viewModel.togglePause()
-                }
-            } else if viewModel.state == .stopping {
+            // Saving; the take's controls, and choosing what to capture, are on the capture toolbar
+            if viewModel.state == .stopping {
                 // Finishing the file takes a moment; nothing can start meanwhile
                 HStack(spacing: EditorTheme.mediumSpacing) {
                     ProgressView()
@@ -74,40 +57,16 @@ struct MenuBarView: View {
                 .padding(.horizontal, EditorTheme.mediumSpacing)
                 .padding(.vertical, EditorTheme.smallSpacing)
                 .padding(.top, EditorTheme.smallSpacing)
-            } else if let remaining = viewModel.countdown.remaining {
-                MenuBarActionButton(
-                    title: "Cancel Countdown (\(remaining))",
-                    systemImage: "xmark.circle"
-                ) {
-                    viewModel.cancelCountdown()
+            } else if viewModel.state == .idle {
+                MenuBarActionButton(title: "Take Screenshot…", systemImage: "camera.viewfinder", isDisabled: viewModel.countdown.isRunning) {
+                    dismiss()
+                    showScreenshotToolbar()
                 }
                 .padding(.top, 8)
-            } else {
-                SectionHeader(title: "Record")
-                    .padding(.top, 8)
-                if viewModel.hasContentSelected {
-                    MenuBarActionButton(title: "Start Recording", systemImage: "record.circle", isDisabled: !viewModel.canStartRecording, shortcut: .toggleRecording) {
-                        Task {
-                            await viewModel.startRecordingWithCountdown()
-                            dismiss()
-                        }
-                    }
-                    ContentSelectionButton(viewModel: viewModel) { dismiss() }
-                    SelectedContentPreview(viewModel: viewModel)
-                } else {
-                    // Choosing is the first step, so it's what the menu offers; Start follows it
-                    MenuBarActionButton(title: "Record Area…", systemImage: "rectangle.dashed.badge.record", shortcut: .selectArea) {
-                        dismiss()
-                        Task { await viewModel.presentAreaSelection() }
-                    }
-                    MenuBarActionButton(title: "Record Window or Display…", systemImage: "macwindow", shortcut: .selectContent) {
-                        viewModel.presentPicker()
-                    }
+                MenuBarActionButton(title: "Record Screen…", systemImage: "record.circle", isDisabled: viewModel.countdown.isRunning) {
+                    dismiss()
+                    showRecordingToolbar()
                 }
-
-                SectionHeader(title: "Screenshot")
-                    .padding(.top, 4)
-                ScreenshotButtons(controller: screenshots, recorder: viewModel)
             }
 
             // What each take captures; video formats and the content filter are in Settings → Video
@@ -196,183 +155,6 @@ struct MenuBarErrorRow: View {
     }
 }
 
-// MARK: - Selected Content
-
-/// What's selected to record, as a picture, live on request, and Reset to choose again.
-struct SelectedContentPreview: View {
-    let viewModel: RecorderViewModel
-    @State private var currentPreview: NSImage?
-
-    var body: some View {
-        PreviewThumbnailView(
-            previewImage: currentPreview,
-            isLivePreviewActive: viewModel.previewService.isCapturing,
-            onStartLivePreview: {
-                Task {
-                    await viewModel.startPreview()
-                }
-            },
-            onStopLivePreview: {
-                Task {
-                    await viewModel.stopPreview()
-                }
-            }
-        )
-        .onChange(of: viewModel.previewService.previewImage) { _, newImage in
-            currentPreview = newImage
-        }
-        .onAppear {
-            currentPreview = viewModel.previewService.previewImage
-        }
-
-        Button {
-            Task {
-                await viewModel.resetSelection()
-            }
-        } label: {
-            Text("Reset Selection")
-                .font(.body.weight(.medium))
-                .foregroundStyle(.red)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(.gray.opacity(0.15), in: .rect(cornerRadius: 6))
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 4)
-    }
-}
-
-// MARK: - Recording Button
-
-/// A combined button that shows recording status and allows stopping. The red is the one color
-/// in the popover: it means stop.
-struct RecordingButton: View {
-    let duration: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: "stop.circle")
-                    .foregroundStyle(.red)
-                    .frame(width: 20)
-
-                Text("Stop Recording")
-                    .font(.body.weight(.semibold))
-
-                Spacer()
-
-                Text(duration)
-                    .font(.body.weight(.medium).monospaced())
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-        }
-        .buttonStyle(.menuRow)
-    }
-}
-
-// MARK: - Content Selection Button
-
-/// A split button that triggers the active content selection mode, with a dropdown chevron to switch modes.
-/// The left portion triggers the action; the right chevron opens a dropdown to change the mode.
-/// Styled consistently with other menu bar rows.
-struct ContentSelectionButton: View {
-    let viewModel: RecorderViewModel
-    var onDismissPanel: (() -> Void)?
-    @AppStorage(ContentSelectionMode.storageKey) private var mode: ContentSelectionMode = .pickContent
-    @State private var isDropdownExpanded = false
-
-    /// Whether content has been selected via the currently active mode
-    private var hasActiveSelection: Bool {
-        switch mode {
-        case .pickContent:
-            viewModel.hasContentSelected && !viewModel.isAreaSelection
-        case .selectArea:
-            viewModel.isAreaSelection
-        }
-    }
-
-    private var buttonLabel: String {
-        hasActiveSelection ? "Change \(mode.label.split(separator: " ").last, default: "Content")…" : "\(mode.label)…"
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Main button row: the action, and beside it the chevron that opens the modes
-            HStack(spacing: 0) {
-                Button {
-                    triggerAction()
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: mode.icon)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20)
-
-                        Text(buttonLabel)
-                            .font(.body.weight(.medium))
-
-                        Spacer()
-                    }
-                    .padding(.leading, 12)
-                    .padding(.vertical, 4)
-                }
-                .buttonStyle(.menuRow)
-
-                Button {
-                    withMotion { isDropdownExpanded.toggle() }
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isDropdownExpanded ? 90 : 0))
-                        .frame(width: 36, height: 28)
-                }
-                .buttonStyle(.menuRow)
-            }
-
-            // Dropdown options
-            if isDropdownExpanded {
-                VStack(spacing: 0) {
-                    DeviceRow(
-                        name: ContentSelectionMode.pickContent.label,
-                        icon: ContentSelectionMode.pickContent.icon,
-                        isSelected: mode == .pickContent
-                    ) {
-                        mode = .pickContent
-                        withMotion { isDropdownExpanded = false }
-                    }
-
-                    DeviceRow(
-                        name: ContentSelectionMode.selectArea.label,
-                        icon: ContentSelectionMode.selectArea.icon,
-                        isSelected: mode == .selectArea
-                    ) {
-                        mode = .selectArea
-                        withMotion { isDropdownExpanded = false }
-                    }
-                }
-                .padding(.leading, 12)
-                .background(.quaternary.opacity(0.3))
-            }
-        }
-    }
-
-    private func triggerAction() {
-        switch mode {
-        case .pickContent:
-            viewModel.presentPicker()
-        case .selectArea:
-            onDismissPanel?()
-            Task {
-                await viewModel.presentAreaSelection()
-            }
-        }
-    }
-}
-
 // MARK: - Permission Status Banner
 
 /// A banner showing missing permissions with buttons to open System Settings
@@ -449,7 +231,7 @@ struct PermissionRow: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 4)
+            .padding(.vertical, 6)
         }
         .buttonStyle(.menuRow)
     }
@@ -460,7 +242,8 @@ struct PermissionRow: View {
 #Preview {
     MenuBarView(
         viewModel: RecorderViewModel(),
-        screenshots: .init(settings: SettingsStore(), notificationService: .init(settings: SettingsStore())),
+        showScreenshotToolbar: {},
+        showRecordingToolbar: {},
         editLastRecording: {},
         showLibrary: {},
         showWebRecording: {},

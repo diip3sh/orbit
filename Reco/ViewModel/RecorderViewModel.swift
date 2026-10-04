@@ -99,7 +99,9 @@ final class RecorderViewModel {
     private var videoSize: CGSize = .zero
     private let areaSelectionOverlay = AreaSelectionOverlay()
     private let selectionBorderFrame = SelectionBorderFrame()
-    private let recordingOverlay = RecordingOverlayCoordinator()
+
+    /// Called when content is chosen to record, or the picker is cancelled, so the capture toolbar can follow
+    @ObservationIgnored var onSelectionChange: (() -> Void)?
 
     /// The countdown before a user-started recording; read by the menu bar UI
     let countdown = RecordingCountdown()
@@ -170,6 +172,13 @@ final class RecorderViewModel {
         captureEngine.presentPicker()
     }
 
+    /// Selects content chosen in Reco's own picker, as if the system picker had chosen it
+    func selectContent(_ filter: SCContentFilter) async {
+        // Throws only while capturing, and content is chosen only when idle
+        try? await captureEngine.updateFilter(filter)
+        captureEngine(captureEngine, didUpdateFilter: filter)
+    }
+
     /// Presents the area selection overlay on the display under the cursor
     func presentAreaSelection() async {
         // Dismiss any existing border frame so it doesn't overlap the selection overlay
@@ -219,8 +228,7 @@ final class RecorderViewModel {
             // Update preview with the display filter and source rect
             await previewService.setContentFilter(filter, sourceRect: sourceRect)
 
-            // Show the recording overlay on the screen where the area was selected
-            recordingOverlay.show(viewModel: self, screen: selectedScreen)
+            onSelectionChange?()
 
         } catch {
             selectionBorderFrame.dismiss()
@@ -234,9 +242,6 @@ final class RecorderViewModel {
             logger.warning("Cannot start recording: no content selected or already recording")
             return
         }
-
-        // Dismiss the recording overlay if it's still visible
-        recordingOverlay.dismiss()
 
         do {
             state = .recording
@@ -393,20 +398,8 @@ final class RecorderViewModel {
         selectedContentFilter = nil
         captureEngine.clearSelection()
         selectionBorderFrame.dismiss()
-        recordingOverlay.dismiss()
         await previewService.stopPreview()
         previewService.clearPreview()
-    }
-
-    /// Starts the live preview stream (call when menu bar window opens)
-    func startPreview() async {
-        guard !isRecording else { return }
-        await previewService.startPreview()
-    }
-
-    /// Stops the live preview stream (call when menu bar window closes)
-    func stopPreview() async {
-        await previewService.stopPreview()
     }
 
     // MARK: - Timer Management
@@ -539,7 +532,6 @@ extension RecorderViewModel {
             return
         }
 
-        recordingOverlay.dismiss()
         countdownOverlay.show(countdown: countdown, center: countdownCenter) { [weak self] in
             self?.cancelCountdown()
         }
@@ -596,9 +588,7 @@ extension RecorderViewModel: CaptureEngineDelegate {
             await previewService.setContentFilter(filter)
         }
 
-        // Show the recording overlay. For picker selections there is no stored screen
-        // (selectedScreen is nil), so the overlay positions itself below the status item.
-        recordingOverlay.show(viewModel: self, screen: selectedScreen)
+        onSelectionChange?()
     }
 
     func captureEngine(_ engine: CaptureEngine, didStopWithError error: Error?) {
@@ -646,8 +636,7 @@ extension RecorderViewModel: CaptureEngineDelegate {
         // Clear the selected content filter
         selectedContentFilter = nil
 
-        // Dismiss the overlay if it was shown after a previous selection
-        recordingOverlay.dismiss()
+        onSelectionChange?()
 
         // Stop and clear the preview
         Task {

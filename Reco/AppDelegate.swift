@@ -25,6 +25,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shares the recorder's settings and notifications
     lazy var screenshots = ScreenshotController(settings: viewModel.settings, notificationService: viewModel.notificationService)
 
+    /// Every control for a screenshot or a take, on screen under the status item
+    private lazy var captureToolbar = CaptureToolbarController(viewModel: CaptureToolbarViewModel(recorder: viewModel, screenshots: screenshots))
+
     private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
     private lazy var quickAccess = QuickAccessController { [screenshots] screenshot in await screenshots.save(screenshot) }
 
@@ -42,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerKeyboardShortcuts()
+        // Made now so it follows selections and takes started before it is first shown
+        _ = captureToolbar
         ColorPanelPlacement.start()
         agentBridge.start()
         viewModel.notificationService.editRecording = editorWindows.open
@@ -65,16 +70,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.notificationService.retryAgentRecording = { [agentRecording] in agentRecording.retry() }
         viewModel.notificationService.showAgentRecording = { [weak self] in self?.showAgentRecording() }
 
-        // Hidden first so the last card never lands in the next shot, even with Show Reco on;
-        // a new shot replaces it, a cancelled or failed one brings it back
-        screenshots.onWillCapture = { [quickAccess] in quickAccess.hide() }
-        screenshots.onDidCapture = { [quickAccess] screenshot in
+        // Hidden first so the last card and the capture toolbar never land in the next shot, even with
+        // Show Reco on; a cancelled or failed capture brings them back
+        screenshots.onWillCapture = { [quickAccess, captureToolbar] in
+            quickAccess.hide()
+            captureToolbar.hide(animated: false)
+        }
+        screenshots.onDidCapture = { [quickAccess, captureToolbar] screenshot in
             if let screenshot {
                 quickAccess.show(screenshot)
             } else {
                 quickAccess.restore()
+                captureToolbar.show()
             }
         }
+    }
+
+    /// Shows the capture toolbar for a screenshot, or for a recording (`records`).
+    func showCaptureToolbar(records: Bool) {
+        captureToolbar.viewModel.open(records: records)
+        captureToolbar.show()
     }
 
     /// Opens the last recording saved since launch in the editor.
