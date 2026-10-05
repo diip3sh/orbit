@@ -40,7 +40,7 @@ final class LibraryViewModel {
     /// A tile's picture at most, in pixels: 16:9 at twice its width on screen.
     static let thumbnailSize = CGSize(width: 480, height: 270)
 
-    @ObservationIgnored private let folders: () -> (recordings: URL, screenshots: URL)
+    @ObservationIgnored private let folders: () -> LibraryFolders
     @ObservationIgnored private let openMovie: (URL) -> Void
     @ObservationIgnored private let openFile: (URL) -> Void
     @ObservationIgnored private let pasteboard: NSPasteboard
@@ -48,12 +48,12 @@ final class LibraryViewModel {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "LibraryViewModel")
 
     /// - Parameters:
-    ///   - folders: Where recordings and screenshots are saved, read on every reload since Settings can
-    ///     change them.
+    ///   - folders: Where recordings and screenshots are saved, and the screenshot history, read on every
+    ///     reload since Settings can change them.
     ///   - openMovie: Opens a recording in the editor.
     ///   - openFile: Opens a screenshot in the system's viewer.
     init(
-        folders: @escaping () -> (recordings: URL, screenshots: URL),
+        folders: @escaping () -> LibraryFolders,
         actions: Actions = Actions(),
         openMovie: @escaping (URL) -> Void,
         openFile: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
@@ -73,6 +73,11 @@ final class LibraryViewModel {
         (items ?? []).filter { section.contains($0) && (search.isEmpty || $0.name.localizedStandardContains(search)) }
     }
 
+    /// `shown` under date headers
+    var shownGroups: [LibraryDateGroup] {
+        LibraryDateGroup.groups(of: shown, now: .now, calendar: .current)
+    }
+
     func count(in section: LibrarySection) -> Int {
         (items ?? []).count { section.contains($0) }
     }
@@ -80,7 +85,7 @@ final class LibraryViewModel {
     /// The folders being listed, e.g. to watch them.
     var watchedFolders: [URL] {
         let folders = folders()
-        return [folders.recordings, folders.screenshots]
+        return [folders.recordings, folders.screenshots, folders.history]
     }
 
     // MARK: - Intents
@@ -89,7 +94,7 @@ final class LibraryViewModel {
     func reload() async {
         let folders = folders()
         do {
-            items = try await LibraryStore.items(recordings: folders.recordings, screenshots: folders.screenshots)
+            items = try await LibraryStore.items(recordings: folders.recordings, screenshots: folders.screenshots, history: folders.history)
             error = nil
         } catch {
             logger.error("Couldn't list the library: \(error.localizedDescription)")

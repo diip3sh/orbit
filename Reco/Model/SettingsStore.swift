@@ -243,7 +243,7 @@ final class SettingsStore {
 
     // MARK: - Dependencies
 
-    private let defaults: UserDefaults
+    let defaults: UserDefaults
 
     // MARK: - Initialization
 

@@ -104,7 +104,7 @@ final class EditorWindowManager: NSObject {
         let accessesOutputDirectory = settings.startAccessingOutputDirectory()
         let settings = settings
         let viewModel = LibraryViewModel(
-            folders: { (settings.outputDirectory, settings.screenshotDirectory) },
+            folders: { LibraryFolders(recordings: settings.outputDirectory, screenshots: settings.screenshotDirectory, history: ScreenshotHistory.directory) },
             actions: libraryActions
         ) { [weak self] url in
             self?.open(url)

@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
     private lazy var quickAccess = QuickAccessController { [screenshots] screenshot in await screenshots.save(screenshot) }
+    private lazy var notchShelf = NotchShelfController(settings: viewModel.settings)
 
     /// Serves the tools coding agents record web pages with; a movie it renders opens in the editor.
     lazy var agentBridge = AgentBridgeServer(tools: AgentTools(settings: viewModel.settings) { [editorWindows] url in editorWindows.open(url) })
@@ -44,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerKeyboardShortcuts()
         ColorPanelPlacement.start()
+        notchShelf.start()
         agentBridge.start()
         viewModel.notificationService.editRecording = editorWindows.open
         editorWindows.agentRecording = agentRecording
@@ -66,8 +68,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Hidden first so the last card never lands in the next shot, even with Show Reco on;
         // a new shot replaces it, a cancelled or failed one brings it back
-        screenshots.onWillCapture = { [quickAccess] in quickAccess.hide() }
-        screenshots.onDidCapture = { [quickAccess] screenshot in
+        screenshots.onWillCapture = { [quickAccess, notchShelf] in
+            quickAccess.hide()
+            notchShelf.hide()
+        }
+        screenshots.onDidCapture = { [quickAccess, notchShelf] screenshot in
+            notchShelf.restore()
             if let screenshot {
                 quickAccess.show(screenshot)
             } else {

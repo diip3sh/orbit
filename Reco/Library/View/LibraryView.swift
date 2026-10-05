@@ -63,11 +63,20 @@ private struct LibraryGrid: View {
             } else {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: EditorTheme.largeSpacing)], spacing: EditorTheme.largeSpacing) {
-                        ForEach(shown) { item in
-                            LibraryTile(item: item, thumbnail: viewModel.thumbnails[item.url], viewModel: viewModel)
-                                .task {
-                                    await viewModel.loadThumbnail(for: item)
+                        ForEach(viewModel.shownGroups) { group in
+                            Section {
+                                ForEach(group.items) { item in
+                                    LibraryTile(item: item, thumbnail: viewModel.thumbnails[item.url], viewModel: viewModel)
+                                        .task {
+                                            await viewModel.loadThumbnail(for: item)
+                                        }
                                 }
+                            } header: {
+                                Text(group.title)
+                                    .font(.subheadline)
+                                    .foregroundStyle(EditorTheme.dim)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
                     }
                     .padding(EditorTheme.largeSpacing)

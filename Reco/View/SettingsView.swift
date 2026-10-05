@@ -251,6 +251,7 @@ struct AudioSettingsView: View {
 struct GeneralSettingsView: View {
     @Bindable var settings: SettingsStore
     @Bindable var updaterService: UpdaterService
+    @State private var confirmsClearingHistory = false
 
     var body: some View {
         Form {
@@ -269,6 +270,29 @@ struct GeneralSettingsView: View {
                     change: selectScreenshotDirectory,
                     reset: settings.resetScreenshotDirectory
                 )
+            }
+
+            Section {
+                Picker("Keep Screenshots", selection: $settings.screenshotHistoryRetention) {
+                    ForEach(ScreenshotHistoryRetention.allCases) { retention in
+                        Text(retention.displayName).tag(retention)
+                    }
+                }
+                Toggle("Show Screenshots in the Notch", isOn: $settings.showsScreenshotsInNotch)
+                Button("Clear History…") {
+                    confirmsClearingHistory = true
+                }
+            } header: {
+                Text("Screenshot History")
+            } footer: {
+                Text("Every screenshot you take is kept for this long, then deleted, unless you save it. Screenshots you save stay in your folder.")
+            }
+            .confirmationDialog("Clear screenshot history?", isPresented: $confirmsClearingHistory) {
+                Button("Clear History", role: .destructive) {
+                    Task { await ScreenshotHistory.clear() }
+                }
+            } message: {
+                Text("Screenshots you haven't saved are deleted for good.")
             }
 
             Section("Recording") {

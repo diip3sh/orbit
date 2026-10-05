@@ -1,0 +1,167 @@
+//
+//  NotchShelfView.swift
+//  Reco
+//
+
+import SwiftUI
+
+/// The notch shelf (spec 0013): a black shape at the top of the screen that is the notch (or a pill),
+/// peeks a little when the pointer is on it, and grows into a strip of the newest screenshots when it stays.
+/// Pure black like the notch, in light and dark appearance alike, so the content uses the dark scheme.
+///
+/// Size, radii and shadow all follow two flags under one spring each (`NotchMotion`), so the shape visibly
+/// grows out of the notch. With Reduce Motion nothing moves: the shape changes at once and the content
+/// cross-fades.
+struct NotchShelfView: View {
+    let viewModel: NotchShelfViewModel
+
+    @Environment(\.accessibilityReduceMotion) private var reducesMotion
+
+    var body: some View {
+        let geometry = viewModel.geometry
+        let isExpanded = viewModel.isExpanded
+        let isPeeking = viewModel.isPeeking
+        let size: CGSize = isExpanded ? geometry.expanded.size : isPeeking ? geometry.peek.size : geometry.collapsed.size
+        let shadowOpacity: Double = isExpanded ? NotchMotion.expandedShadowOpacity : isPeeking ? NotchMotion.peekShadowOpacity : 0
+        let shape = NotchShape(
+            topRadius: isExpanded ? NotchMotion.expandedTopRadius : NotchMotion.collapsedTopRadius,
+            bottomRadius: isExpanded ? NotchMotion.expandedBottomRadius : NotchMotion.collapsedBottomRadius
+        )
+
+        shape
+            .fill(.black)
+            .frame(width: size.width, height: size.height)
+            .overlay(alignment: .top) {
+                // Laid out at its full size whatever the shape's, so it doesn't reflow as the shape grows
+                NotchShelfContent(viewModel: viewModel, isShown: isExpanded)
+                    .frame(width: geometry.expanded.width, height: geometry.expanded.height, alignment: .top)
+            }
+            .clipShape(shape)
+            .shadow(color: .black.opacity(shadowOpacity), radius: NotchMotion.shadowRadius)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            // Where both change at once (the pointer stayed: the peek ends as it opens) the first, nearer modifier wins
+            .animation(reducesMotion ? nil : isExpanded ? NotchMotion.expand : NotchMotion.collapse, value: isExpanded)
+            .animation(reducesMotion ? nil : isPeeking ? NotchMotion.peekIn : NotchMotion.peekOut, value: isPeeking)
+            .environment(\.colorScheme, .dark)
+    }
+}
+
+/// The header and the strip of screenshots, each arriving and leaving on its own transition
+private struct NotchShelfContent: View {
+    let viewModel: NotchShelfViewModel
+    let isShown: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reducesMotion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
+            if isShown {
+                NotchShelfHeader(count: viewModel.items?.count)
+                    .transition(reducesMotion ? Self.fade : NotchMotion.headerTransition)
+                NotchShelfStrip(viewModel: viewModel)
+                    .transition(reducesMotion ? Self.fade : NotchMotion.bodyTransition)
+            }
+        }
+        .padding(.top, viewModel.geometry.contentTopInset)
+        .padding(.horizontal, NotchMotion.expandedTopRadius + EditorTheme.mediumSpacing)
+        .padding(.bottom, EditorTheme.spacing)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private static let fade = AnyTransition.opacity.animation(EditorTheme.fadeMotion)
+}
+
+private struct NotchShelfHeader: View {
+    let count: Int?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: EditorTheme.tightSpacing) {
+            Text("Screenshots")
+                .font(.subheadline.bold())
+            if let count, count > 0 {
+                Text(count, format: .number)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(height: 20)
+    }
+}
+
+private struct NotchShelfStrip: View {
+    let viewModel: NotchShelfViewModel
+
+    var body: some View {
+        if let items = viewModel.items, items.isEmpty {
+            Text("No screenshots yet")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: NotchShelfTile.size.height)
+        } else {
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: EditorTheme.smallSpacing) {
+                    ForEach(viewModel.items ?? []) { item in
+                        NotchShelfTile(item: item, thumbnail: viewModel.thumbnails[item.url], isCopied: viewModel.copiedURL == item.url) {
+                            Task { await viewModel.copy(item) }
+                        }
+                        .task {
+                            await viewModel.loadThumbnail(for: item)
+                        }
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+            .frame(height: NotchShelfTile.size.height)
+        }
+    }
+}
+
+/// One screenshot: click to copy, drag to drop the file into an app
+private struct NotchShelfTile: View {
+    nonisolated static let size = CGSize(width: 140, height: 88)
+
+    let item: LibraryItem
+    let thumbnail: CGImage?
+    let isCopied: Bool
+    let copy: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 10)
+
+        ZStack {
+            Color.white.opacity(0.08)
+            if let thumbnail {
+                Image(decorative: thumbnail, scale: 2)
+                    .resizable()
+                    .scaledToFill()
+            }
+            // Hover is a step in brightness, not a lift
+            Color.white.opacity(isHovered && !isCopied ? 0.14 : 0)
+            if isCopied {
+                Color.black.opacity(0.6)
+                Label("Copied", systemImage: "checkmark")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white)
+            }
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(.white.opacity(0.12)))
+        .contentShape(shape)
+        .onHover { isHovered = $0 }
+        .editorMotion(EditorTheme.quickMotion, value: isHovered)
+        .editorMotion(EditorTheme.quickMotion, value: isCopied)
+        // Not a Button: its press tracking would swallow the mouse-down that starts a drag
+        .onTapGesture(perform: copy)
+        .onDrag {
+            NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
+        }
+        .accessibilityElement()
+        .accessibilityLabel(item.name)
+        .accessibilityHint("Copies the screenshot")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default, copy)
+    }
+}
