@@ -36,7 +36,9 @@ private final class NotchPanel: NSPanel {
 ///
 /// An `.activeAlways` tracking area delivers enter and exit while Reco isn't the active app, and needs no
 /// Accessibility permission, unlike a global `NSEvent` monitor.
-private final class NotchHostingView<Content: View>: NSHostingView<Content> {
+/// Not generic for the same reason as FirstMouseHostingView in CaptureToolbarController: Xcode 26.6's
+/// Release optimizer crashes inlining the deinit of an `NSHostingView<Content>` subclass.
+private final class NotchHostingView: NSHostingView<AnyView> {
     var activeRect: () -> CGRect = { .zero }
     var onEnter: (() -> Void)?
     var onExit: (() -> Void)?
@@ -80,14 +82,14 @@ private final class NotchHostingView<Content: View>: NSHostingView<Content> {
 private final class NotchShelf {
     let panel = NotchPanel()
     let viewModel: NotchShelfViewModel
-    private let hostingView: NotchHostingView<NotchShelfView>
+    private let hostingView: NotchHostingView
 
     init(screen: NSScreen, settings: SettingsStore) {
         let geometry = NotchGeometry(screenFrame: screen.frame, leftArea: screen.auxiliaryTopLeftArea, rightArea: screen.auxiliaryTopRightArea)
         let viewModel = NotchShelfViewModel(geometry: geometry) { [settings] in (settings.screenshotDirectory, ScreenshotHistory.directory) }
         self.viewModel = viewModel
 
-        hostingView = NotchHostingView(rootView: NotchShelfView(viewModel: viewModel))
+        hostingView = NotchHostingView(rootView: AnyView(NotchShelfView(viewModel: viewModel)))
         hostingView.sizingOptions = []
         hostingView.activeRect = { [weak viewModel] in viewModel?.activeRect ?? .zero }
         hostingView.onEnter = { [weak viewModel] in viewModel?.pointerEntered() }
@@ -127,7 +129,7 @@ private final class NotchShelf {
         guard panel.isVisible else { return }
         // A tracking area made around a pointer that is already inside sends no enter, and one made away
         // from it no exit: say so ourselves when the pointer and the view model disagree.
-        let isInside = NotchHostingView<NotchShelfView>.contains(viewModel.activeRect, NSEvent.mouseLocation)
+        let isInside = NotchHostingView.contains(viewModel.activeRect, NSEvent.mouseLocation)
         if isInside && !viewModel.isHovering {
             viewModel.pointerEntered()
         } else if !isInside && viewModel.isHovering {

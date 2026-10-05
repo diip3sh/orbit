@@ -46,8 +46,10 @@ private final class CaptureTooltipPanel: NSPanel {
     }
 }
 
-/// Clicks land on the first press although the panel isn't key during a take.
-private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+/// Clicks land on the first press although the panel isn't key during a take. Erased content rather
+/// than a generic subclass: Xcode 26.6's Release optimizer crashes inlining the deinit of an
+/// `NSHostingView<Content>` subclass (Swift 6.3.3, EarlyPerfInliner, measured 2026-10-05).
+private final class FirstMouseHostingView: NSHostingView<AnyView> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
@@ -170,7 +172,7 @@ final class CaptureToolbarController {
             onDrag: { [weak self] in self?.drag() },
             onDragEnd: { [weak self] in self?.endDrag() }
         )
-        let hostingView = FirstMouseHostingView(rootView: view)
+        let hostingView = FirstMouseHostingView(rootView: AnyView(view))
         // The panel is sized here, and narrows only after the bar's animation
         hostingView.sizingOptions = []
         panel.contentView = hostingView
