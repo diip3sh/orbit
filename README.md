@@ -1,83 +1,121 @@
-# Reco
+# Orbit
 
-A free, open-source macOS screen recorder and screenshot tool, forked from
-[BetterCapture](https://github.com/jsattler/BetterCapture).
+A free, open-source macOS screen recorder, screenshot tool and video editor: a free alternative
+to Screen Studio and CleanShot X. Orbit records your screen together with your cursor, clicks
+and keystrokes, then turns the take into a polished video with automatic zooms, a smooth cursor
+and a styled background. It lives in the menu bar.
 
-## Features
-
-- **Screen recording:** record a screen, window or area, with system audio and microphone
-  controls, a countdown, and pause/resume.
-- **Capture toolbar:** floating controls, keyboard shortcuts, window thumbnails and
-  a live recording timer.
-- **Screenshots:** capture a screen, window or area; copy, save, recognize text or pin
-  the result. Screenshot history and the notch shelf keep recent captures handy.
-- **Video editor:** trim and cut recordings, add automatic or manual zooms, smooth the
-  recorded cursor, highlight clicks, show keystrokes and adjust audio.
-- **Canvas and export:** backgrounds, aspect ratios, padding, rounded corners and shadows;
-  export HEVC, H.264 or ProRes, including transparent backgrounds with ProRes 4444.
-- **Web recordings:** script hovers, clicks, typing and scrolling on a live page, preview
-  the sequence, then render it into a recording.
-- **AI agent integration:** compatible coding agents can inspect and record web pages
-  through Reco's MCP bridge. The Web Recording window also includes an agent chat.
-- **Library:** browse recordings and screenshots, then open recordings in the editor.
-
-The editor and Web Recording window follow macOS light/dark appearance and your system
-accent colour. Settings stay in the right-hand inspector. Timelines use labelled time
-units, and sliders show tick marks and their current values.
+Orbit is a fork of [BetterCapture](https://github.com/jsattler/BetterCapture), built with
+ScreenCaptureKit, AVFoundation and SwiftUI.
 
 ## Install
 
-Requires **macOS 15.2 or later**. Release builds support Apple silicon and Intel Macs.
+Requires **macOS 15.2 or later**, on Apple silicon or Intel.
 
-1. Download the DMG from the [latest release](https://github.com/diip3sh/reco/releases/latest).
-2. Move Reco to Applications.
+1. Download the DMG from the [latest release](https://github.com/diip3sh/orbit/releases/latest).
+2. Open it and drag the app to **Applications**.
 3. The build is signed but **not notarized**. If macOS blocks the first launch, open
-   **System Settings → Privacy & Security → Open Anyway**.
+   **System Settings → Privacy & Security** and click **Open Anyway**.
+4. Grant **Screen Recording** when asked. Microphone and camera ask when you first turn them on.
 
-Subsequent releases are delivered through the app's updater.
+Updates arrive automatically through the app's built-in updater.
 
-## Getting started
+## Features
 
-Open Reco from Applications, then use its menu bar icon:
+### Working now
 
-- **Take Screenshot…** or **Record Screen…** opens the capture toolbar.
-- **Library…** opens saved recordings and screenshots.
-- **New Web Recording…** opens the web scripting editor.
-- **Settings…** configures capture, output folders, shortcuts and agents.
+- **Screen recording:** a screen, a window or an area, with system audio, microphone and camera,
+  a 3/5/10 s countdown, and pause/resume. HEVC, H.264 or ProRes, HDR and alpha.
+- **Capture toolbar:** one floating bar for screenshots and recordings, with window thumbnails to
+  pick from, a live timer, pause and stop.
+- **Screenshots:** capture a screen, window or area, with the screen frozen while you select.
+  Each shot opens a Quick Access card: copy, save, recognize text (OCR), pin it on screen, or
+  drag it into any app.
+- **Screenshot history:** every shot is kept for a week, a month or three months, and the newest
+  ones open from the notch.
+- **Input telemetry (optional):** cursor positions, clicks, scrolls, keystrokes (key codes only,
+  never typed text) and cursor shapes, saved next to each recording.
+- **Video editor:** trim, split and cut, and set volume per audio track. Automatic zooms on
+  clicks, typing and where the cursor rests, plus manual zooms on their own lane. The recorded
+  cursor is redrawn smoothed, sharp when zoomed, and can hide when idle. Click highlights and a
+  keystroke overlay. Undo and redo throughout.
+- **Canvas and export:** 16:9, 9:16, 1:1 and 4:3 canvases, gradient, colour, picture or
+  transparent backgrounds, padding, rounded corners and shadow. Export HEVC, H.264, ProRes 422
+  or ProRes 4444 (keeps transparency) at the size and frame rate you pick, then share.
+- **Web recordings:** script hovers, clicks, typing, scrolling and zooms on a live web page,
+  preview it, and render a frame-perfect video into the editor.
+- **AI agents:** Claude Code, Codex, Cursor, Gemini CLI, OpenCode and others can inspect,
+  browse and record web pages through Orbit's local MCP server, or chat with you about the page
+  from the Web Recording window.
+- **Library:** every recording, export and screenshot, grouped by date, with search.
 
-Grant Screen Recording permission when requested. Microphone recording needs microphone
-permission. Input telemetry is optional and off by default; click, scroll and keystroke
-capture may also require Input Monitoring or Accessibility permission.
+### In progress
 
-Telemetry stores key codes and modifiers, not typed characters. The editor shows only
-shortcuts and special keys unless **Show All Keys** is enabled.
+- Audio: switching microphones mid-recording, input gain and level meters.
+- Remembering the last selected window or area between recordings.
+- Web recordings: spotlight, captions, narration, browser frame, speed changes and 9:16 output.
+- Editor: motion blur, click sounds, voice enhancement, transcripts and captions (SRT/VTT),
+  removing silences, speed per part, blur and pixelate masks, crop, GIF export.
+- Screenshots: annotation, backgrounds, scrolling capture.
+- Camera as its own editable track.
 
-### Default shortcuts
+## Keyboard shortcuts
 
-These shortcuts are global and can be changed in Settings → Shortcuts.
+### Global
+
+These work from any app and can be changed in **Settings → Shortcuts**.
 
 | Action | Shortcut |
 |---|---|
 | Capture area / window / screen | ⌘1 / ⌘2 / ⌘3 |
 | Select recording content / area | ⌘4 / ⌘5 |
-| Toggle recording | ⌘6 |
+| Start/stop recording | ⌘6 |
 | Pause/resume recording | ⌘7 |
 | Open screenshot / recording toolbar | ⇧⌘1 / ⇧⌘2 |
+| Cancel the countdown | Esc |
 
-In the video editor, Space plays/pauses, ←/→ steps a frame, **S** splits,
-**Z** adds a zoom, and Delete removes the selection. ⌘Z undoes an edit.
+### Capture toolbar
 
-## Known limitations
+| Action | Key |
+|---|---|
+| Screen / window / area | 1 / 2 / 3 |
+| System audio / microphone / camera | A / M / C |
+| Capture or record | ↩ |
+| Settings | ⌘, |
+| Close | Esc |
 
-- macOS can draw its purple sharing indicator into window recordings. ScreenCaptureKit
-  provides no setting to suppress it; whole-display capture does not trigger that window pill.
-- Rendering web recordings is frame-by-frame and can take longer than playback on complex pages.
-- Transparent exports require ProRes 4444. Other formats render transparent backgrounds black.
+### Quick Access card
 
-## Development
+| Action | Shortcut |
+|---|---|
+| Copy | ⌘C |
+| Save | ⌘S |
 
-Open `Reco.xcodeproj` in Xcode. Use an Apple Development certificate for local builds;
-ad-hoc signing can cause macOS to request capture permission again after rebuilding.
+### Video editor
+
+| Action | Shortcut |
+|---|---|
+| Play/pause | Space |
+| Previous/next frame | ← / → |
+| Split at the playhead | S |
+| Add a zoom | Z |
+| Delete the selection | ⌫ |
+| Undo / redo | ⌘Z / ⇧⌘Z |
+
+### Automation
+
+| URL | Action |
+|---|---|
+| `reco://toggle` | Start or stop recording, without a countdown |
+| `reco://toggle-copy` | The same, and copy the file when it is saved |
+| `reco://pause` | Pause or resume |
+| `reco://edit-last` | Open the last recording in the editor |
+
+## Development & contribution
+
+Open `Reco.xcodeproj` in Xcode 26. Sign local builds with your own Apple Development
+certificate: an ad-hoc signed build makes macOS ask for Screen Recording again after every
+rebuild.
 
 ```sh
 xcodebuild -scheme Reco -configuration Debug \
@@ -87,13 +125,21 @@ xcodebuild -scheme Reco -configuration Debug \
   CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER="" build
 ```
 
-Replace `build` with `test` to run the test suite. Release changes must also compile with
-Xcode 26.6, the CI toolchain.
+Replace `build` with `test` to run the test suite. Every push to `main` is built, tested and
+released to users, so read [docs/RELEASE.md](docs/RELEASE.md) first.
 
-See [CLAUDE.md](CLAUDE.md) for build details, [AGENTS.md](AGENTS.md) for coding conventions,
-[CONTRIBUTING.md](CONTRIBUTING.md) for contributing, and
-[docs/RELEASE.md](docs/RELEASE.md) for the automatic release process.
+Contributions are welcome:
+
+- **Bugs:** [open an issue](https://github.com/diip3sh/orbit/issues) with steps to reproduce,
+  your macOS version and your Mac.
+- **Features:** [start a discussion](https://github.com/diip3sh/orbit/discussions) before
+  opening a pull request.
+- **Pull requests:** branch from `main`, follow [AGENTS.md](AGENTS.md), add tests for new logic,
+  and keep SwiftLint clean.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details and [CLAUDE.md](CLAUDE.md) for the
+architecture and build notes.
 
 ## License
 
-See [LICENSE](LICENSE). Reco builds on the work of BetterCapture's upstream contributors.
+[MIT](LICENSE). Orbit builds on BetterCapture by Joshua Sattler and its contributors.

@@ -67,7 +67,7 @@ struct MenuBarLabel: View {
             Image(nsImage: fixedWidthImage(text, reference: "100%", symbol: "sparkles"))
                 .accessibilityLabel(agentRecording.progress.map { "Recording with an agent, \(Int(($0 * 100).rounded())) percent" } ?? "Recording with an agent")
         } else {
-            Image(systemName: "record.circle")
+            Image(.menuBarIcon)
         }
     }
 

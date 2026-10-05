@@ -12,7 +12,7 @@ Every push to `main` that touches the app is released automatically by
 
 1. Runs the tests. A failing test stops the release.
 2. Builds a universal (Intel and Apple silicon) app, signed with the Apple Development certificate.
-3. Packs it into a DMG and signs the DMG with the Sparkle key.
+3. Packs it into a DMG whose volume icon is the app's, and signs the DMG with the Sparkle key.
 4. Publishes a GitHub Release with the DMG and `appcast.xml`, Sparkle's update feed.
 
 Installed copies read that feed (`SUFeedURL` in `Info.plist`) and offer the new version.
