@@ -84,7 +84,7 @@ final class EditorWindowManager: NSObject {
         hostingController.sizingOptions = .minSize
         // The export and inspector buttons are SwiftUI toolbar items
         hostingController.sceneBridgingOptions = [.toolbars]
-        let window = makeWindow(hostingController, title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1280, height: 800))
+        let window = makeWindow(hostingController, title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1533, height: 943))
         window.representedURL = videoURL
         editors[videoURL] = Editor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
 
@@ -103,12 +103,14 @@ final class EditorWindowManager: NSObject {
         // Held while the window is open: it lists the folder and reads the recordings' pictures
         let accessesOutputDirectory = settings.startAccessingOutputDirectory()
         let settings = settings
-        let viewModel = LibraryViewModel(
-            folders: { LibraryFolders(recordings: settings.outputDirectory, screenshots: settings.screenshotDirectory, history: ScreenshotHistory.directory) },
-            actions: libraryActions
-        ) { [weak self] url in
+        let openMovie: (URL) -> Void = { [weak self] url in
             self?.open(url)
         }
+        let viewModel = LibraryViewModel(
+            folders: { LibraryFolders(recordings: settings.outputDirectory, screenshots: settings.screenshotDirectory, history: ScreenshotHistory.directory) },
+            actions: libraryActions,
+            openMovie: openMovie
+        )
         let hostingController = NSHostingController(rootView: LibraryView(viewModel: viewModel))
         hostingController.sizingOptions = .minSize
         hostingController.sceneBridgingOptions = [.toolbars]
@@ -153,7 +155,7 @@ final class EditorWindowManager: NSObject {
         let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel, agent: agentRecording))
         hostingController.sizingOptions = .minSize
         hostingController.sceneBridgingOptions = [.toolbars]
-        let window = makeWindow(hostingController, title: "Web Recording", size: NSSize(width: 1280, height: 860))
+        let window = makeWindow(hostingController, title: "Web Recording", size: NSSize(width: 1533, height: 943))
         let webRecording = WebRecording(window: window, viewModel: viewModel)
         self.webRecording = webRecording
         NSApp.setActivationPolicy(.regular)
@@ -171,7 +173,9 @@ final class EditorWindowManager: NSObject {
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.setContentSize(size)
+        // Never larger than the screen it opens on, with a little desktop showing around it.
+        let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame.size ?? size
+        window.setContentSize(NSSize(width: min(size.width, visible.width - 40), height: min(size.height, visible.height - 40)))
         window.center()
         return window
     }

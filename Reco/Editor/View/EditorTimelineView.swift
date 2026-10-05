@@ -56,7 +56,9 @@ struct EditorTimelineView: View {
                     .clipped()
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: Self.filmstripHeight, maxHeight: Self.filmstripHeight, alignment: .leading)
+            // minWidth 0: tiles sized from the last width would otherwise make it the window's minimum
+            // (`sizingOptions = .minSize`), so showing the inspector grew the window on every toggle
+            .frame(minWidth: 0, maxWidth: .infinity, minHeight: Self.filmstripHeight, maxHeight: Self.filmstripHeight, alignment: .leading)
             .background(EditorTheme.softHairline)
             .clipShape(.rect(cornerRadius: 6))
             .overlay {

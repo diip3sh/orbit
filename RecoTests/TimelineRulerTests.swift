@@ -25,10 +25,13 @@ struct TimelineRulerTests {
         #expect(TimelineRuler.scale(duration: 10 * 3600, width: 800) == (3600, 600))
     }
 
-    @Test func labelsShowTenthsOnlyWhenLabelsAreUnderASecondApart() {
-        #expect(TimelineRuler.label(for: 5, major: 5) == "0:05")
-        #expect(TimelineRuler.label(for: 90, major: 30) == "1:30")
-        #expect(TimelineRuler.label(for: 1.5, major: 0.5) == "0:01.5")
-        #expect(TimelineRuler.label(for: 3600, major: 600) == "1:00:00")
+    @Test func labelsCarryTheirUnitsAndTenthsOnlyWhenUnderASecondApart() {
+        #expect(TimelineRuler.label(for: 0, major: 0.5) == "0s")
+        #expect(TimelineRuler.label(for: 1.5, major: 0.5) == "1.5s")
+        #expect(TimelineRuler.label(for: 1, major: 0.5) == "1s")
+        #expect(TimelineRuler.label(for: 5, major: 5) == "5s")
+        #expect(TimelineRuler.label(for: 90, major: 30) == "1m 30s")
+        #expect(TimelineRuler.label(for: 120, major: 60) == "2m")
+        #expect(TimelineRuler.label(for: 5400, major: 1800) == "1h 30m")
     }
 }

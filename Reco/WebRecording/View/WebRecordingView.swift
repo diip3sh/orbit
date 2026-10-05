@@ -20,7 +20,8 @@ struct WebRecordingView: View {
 
             WebTimelineView(viewModel: viewModel)
                 .padding(.horizontal, EditorTheme.largeSpacing)
-                .padding(.vertical, EditorTheme.spacing)
+                .padding(.top, EditorTheme.smallSpacing)
+                .padding(.bottom, EditorTheme.spacing)
                 .overlay(alignment: .top) {
                     Rectangle()
                         .fill(EditorTheme.hairline)
@@ -61,7 +62,7 @@ struct WebRecordingView: View {
                     viewModel.render()
                 }
                 .labelStyle(.titleAndIcon)
-                .buttonStyle(.editorPrimary)
+                .buttonStyle(.editorAccent)
                 .help("Render the script into a recording and open it in the editor")
                 // One render at a time: the agent's uses the same renderer
                 .disabled(!viewModel.canRender || agent?.isRunning == true)
@@ -77,7 +78,8 @@ struct WebRecordingView: View {
                 .help(viewModel.isShowing(.inspector) ? "Hide the inspector" : "Show the inspector")
             }
         }
-        .frame(minWidth: 900, minHeight: 560)
+        // Filling the window, like the editor's root, so SwiftUI never fits the window down to it
+        .frame(minWidth: 900, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)
         .editorWindowBackground()
     }
 

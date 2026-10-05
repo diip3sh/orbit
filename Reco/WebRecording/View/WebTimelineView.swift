@@ -24,7 +24,7 @@ struct WebTimelineView: View {
         let script = viewModel.script
         let duration = script.duration
 
-        VStack(alignment: .leading, spacing: EditorTheme.mediumSpacing) {
+        VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
             WebTimelineHeader(viewModel: viewModel)
 
             HStack(alignment: .top, spacing: Self.spacing) {
@@ -140,83 +140,96 @@ struct WebTimelineView: View {
     }
 }
 
-/// Buttons that add a hover, click or scroll at the playhead; the render's progress while one runs;
-/// Play and the playhead's time.
+/// Laid out like the editor's transport: buttons that add a hover, click, typing or scroll at the
+/// playhead; Play in the middle; the render's progress while one runs, and the playhead's time.
 private struct WebTimelineHeader: View {
     let viewModel: WebRecordingViewModel
 
     var body: some View {
         HStack(spacing: EditorTheme.smallSpacing) {
-            Button("Hover", systemImage: "cursorarrow") {
-                viewModel.addPointerClip(.hover)
-            }
-            .help("Add a hover at the playhead, then click its element in the page")
-            .disabled(!viewModel.canAddPointerClip)
-
-            Button("Click", systemImage: "cursorarrow.click") {
-                viewModel.addPointerClip(.click)
-            }
-            .help("Add a click at the playhead, then click its element in the page")
-            .disabled(!viewModel.canAddPointerClip)
-
-            Button("Type", systemImage: "keyboard") {
-                viewModel.addPointerClip(.type)
-            }
-            .help("Add typing at the playhead, then click its field in the page")
-            .disabled(!viewModel.canAddPointerClip)
-
-            Button("Scroll", systemImage: "arrow.up.arrow.down") {
-                Task {
-                    await viewModel.addScrollClip()
+            HStack(spacing: EditorTheme.tightSpacing) {
+                Button("Add Hover", systemImage: "cursorarrow") {
+                    viewModel.addPointerClip(.hover)
                 }
-            }
-            .help("Add a scroll at the playhead to where the page is scrolled now")
-            .disabled(!viewModel.canAddScrollClip)
+                .help("Add a hover at the playhead, then click its element in the page")
+                .disabled(!viewModel.canAddPointerClip)
 
-            Spacer()
+                Button("Add Click", systemImage: "cursorarrow.click") {
+                    viewModel.addPointerClip(.click)
+                }
+                .help("Add a click at the playhead, then click its element in the page")
+                .disabled(!viewModel.canAddPointerClip)
 
-            // Here rather than over the page, which stays in view while it renders
-            if let progress = viewModel.renderProgress {
-                HStack(spacing: EditorTheme.smallSpacing) {
-                    Text("Rendering \(progress, format: .percent.precision(.fractionLength(0)))")
-                        .font(.callout)
-                        .monospacedDigit()
-                        .foregroundStyle(EditorTheme.dim)
-                    ProgressView(value: progress)
-                        .progressViewStyle(.linear)
-                        .frame(width: 120)
-                    Button("Cancel") {
-                        viewModel.cancelRender()
+                Button("Add Typing", systemImage: "keyboard") {
+                    viewModel.addPointerClip(.type)
+                }
+                .help("Add typing at the playhead, then click its field in the page")
+                .disabled(!viewModel.canAddPointerClip)
+
+                Button("Add Scroll", systemImage: "arrow.up.arrow.down") {
+                    Task {
+                        await viewModel.addScrollClip()
                     }
-                    .keyboardShortcut(.cancelAction)
                 }
-                .transition(.opacity)
+                .help("Add a scroll at the playhead to where the page is scrolled now")
+                .disabled(!viewModel.canAddScrollClip)
+
+                Button("Delete Clip", systemImage: "trash") {
+                    viewModel.deleteSelection()
+                }
+                .help("Delete the selected clip (⌫)")
+                .disabled(viewModel.selection == nil)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Button(viewModel.isPlaying ? "Pause" : "Play", systemImage: viewModel.isPlaying ? "pause.fill" : "play.fill") {
                 viewModel.togglePlayback()
             }
-            .labelStyle(.iconOnly)
             .buttonStyle(.editorProminentIcon)
+            .contentTransition(.symbolEffect(.replace))
             .keyboardShortcut(.space, modifiers: [])
             .help(viewModel.isPlaying ? "Pause (Space)" : "Play the script in the page (Space)")
             .disabled(!viewModel.canPlay)
 
-            HStack(spacing: EditorTheme.tightSpacing) {
-                Text(Self.format(viewModel.playhead))
-                Text("/ \(Self.format(viewModel.script.duration))")
-                    .foregroundStyle(EditorTheme.dim)
+            HStack(spacing: EditorTheme.mediumSpacing) {
+                // Here rather than over the page, which stays in view while it renders
+                if let progress = viewModel.renderProgress {
+                    // Short enough to sit beside the time at the window's smallest width with the inspector open
+                    HStack(spacing: EditorTheme.smallSpacing) {
+                        ProgressView(value: progress)
+                            .progressViewStyle(.linear)
+                            .frame(width: 80)
+                            .accessibilityLabel("Rendering")
+                        Text(progress, format: .percent.precision(.fractionLength(0)))
+                            .monospacedDigit()
+                            .foregroundStyle(EditorTheme.dim)
+                        Button("Cancel Render", systemImage: "xmark") {
+                            viewModel.cancelRender()
+                        }
+                        .keyboardShortcut(.cancelAction)
+                        .help("Cancel the render (Esc)")
+                    }
+                    .transition(.opacity)
+                }
+
+                HStack(spacing: EditorTheme.tightSpacing) {
+                    Text(Self.format(viewModel.playhead))
+                    Text("/ \(Self.format(viewModel.script.duration))")
+                        .foregroundStyle(EditorTheme.dim)
+                }
+                .monospaced()
             }
             .font(.callout)
-            .monospaced()
+            .lineLimit(1)
+            .fixedSize()
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .buttonStyle(.editorGhost)
-        .labelStyle(.titleAndIcon)
+        .buttonStyle(.editorIcon)
         .editorMotion(value: viewModel.renderProgress == nil)
     }
 
-    /// "0:02.50"
+    /// "00:02.50", as the editor's transport writes it.
     private static func format(_ time: Double) -> String {
-        Duration.seconds(time).formatted(.time(pattern: .minuteSecond(padMinuteToLength: 1, fractionalSecondsLength: 2)))
+        Duration.seconds(time).formatted(.time(pattern: .minuteSecond(padMinuteToLength: 2, fractionalSecondsLength: 2)))
     }
 }

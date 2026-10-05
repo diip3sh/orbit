@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// A slider under its title and current value.
+/// A tick-mark slider under its title and current value.
 struct InspectorSlider: View {
     let title: LocalizedStringKey
     @Binding var value: Double
@@ -33,8 +33,7 @@ struct InspectorSlider: View {
                     .monospaced()
                     .foregroundStyle(EditorTheme.dim)
             }
-            Slider(value: $value, in: range)
-                .labelsHidden()
+            TickSlider(title: title, value: $value, range: range, valueLabel: label(value))
         }
     }
 }

@@ -31,9 +31,13 @@ struct AudioTrackRow: View {
                 .labelStyle(.iconOnly)
                 .contentTransition(.symbolEffect(.replace))
             }
-            Slider(value: $settings.volume, in: 0...1)
-                .labelsHidden()
-                .disabled(settings.isMuted)
+            TickSlider(
+                title: "\(name) Volume",
+                value: $settings.volume,
+                range: 0...1,
+                valueLabel: Text(settings.volume, format: .percent.precision(.fractionLength(0)))
+            )
+            .disabled(settings.isMuted)
         }
     }
 }

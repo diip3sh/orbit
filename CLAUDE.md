@@ -43,6 +43,11 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   extensions for type_body_length, so new logic goes in same-file extensions or new types.
 - Keep build output outside the repo (`/tmp/bc-build`). If the build fails with "There is no
   XCFramework found", `rm -rf /tmp/bc-build` and rebuild (moved DerivedData breaks SPM paths).
+- Incremental builds can keep a stale layout of a generic view: on 2026-10-05 `InspectorSection`'s stored
+  properties changed and changed back, its users weren't recompiled (`WebRecordingInspector.o` stayed older than
+  `InspectorSection.swift`), and opening Web Recording crashed with `EXC_BAD_ACCESS` in an "outlined copy" of it.
+  A crash in compiler-generated copy code right after such an edit: `rm -rf
+  /tmp/bc-build/dd/Build/Intermediates.noindex/Reco.build` and rebuild.
 - **Never launch an ad-hoc signed build.** Its designated requirement is pinned to its cdhash
   (`designated => cdhash H"…"`), which changes on every build, while TCC stores the cert-anchored
   requirement (`anchor apple generic and certificate leaf[subject.CN] = "Apple Development: …"`). So
@@ -313,7 +318,7 @@ writes `<name>-edited.mp4` (HEVC, H.264) or `.mov` (ProRes 422) next to the reco
 | `Editor/Render/EditorCompositor.swift`, `EditorInstruction.swift`, `CompositionBuilder.swift` | `AVVideoCompositing` with one shared `CIContext`; the instruction carries the plan; the same video composition feeds `AVPlayerItem` and `AVAssetExportSession` |
 | `Editor/Service/KeyLabelFormatter.swift` | Key code + modifiers → "⇧⌘K" with the current layout (`UCKeyTranslate`); TIS is read on the main actor only |
 | `Editor/Service/ExportService.swift` | `AVAssetExportSession.export(to:as:)` + `states(updateInterval:)`; cancelling the task cancels it |
-| `Editor/View/EditorInspector.swift`, `ExportSheet.swift` | Style controls (bound through `EditorViewModel.clickHighlights`/`keystrokes`), format + progress |
+| `Editor/View/EditorInspectorSections.swift`, `ExportSheet.swift` | Style controls (bound through `EditorViewModel.clickHighlights`/`keystrokes`), format + progress |
 
 Key facts:
 - **Privacy:** keystrokes show only shortcuts (⌘/⌃/⌥) and special keys unless "Show All Keys" is on.
@@ -475,10 +480,13 @@ Key facts:
 
 The editor, Library and Web Recording windows use the system's colors, so they follow the user's appearance (light
 or dark) and accent color: the window background (80%) the desktop frosts through, text in the label
-tones (ink, dim, faint), separators instead of boxes, a label-colored Export button, and the accent
-(`EditorTheme.accent`, `Color.accentColor`; the asset catalog's AccentColor is empty) for the playhead and
-the selection. No panel forces an appearance. The preview sits on a faint dot grid, the transport floats on
-glass under it. Nothing else is colored: clicks, keys and zooms are greys, and the default canvas is a
+tones (ink, dim, faint), separators instead of boxes, and the accent
+(`EditorTheme.accent`, `Color.accentColor`; the asset catalog's AccentColor is empty) for the Export button, the playhead,
+the selection and the sliders' fill. No panel forces an appearance (a dark-only studio look was considered from the
+Pinterest moodboard on 2026-10-05 and turned down). The preview sits on a faint dot grid; the inspector (toolbar toggle) holds every
+setting on the right, and the transport (cut, zoom, ⌫; frame steps and play; the time) sits in the timeline's header,
+without glass. A chip row under the preview in place of the inspector was tried on 2026-10-05 and turned down: the
+settings stay visible in the column. Nothing else is colored: clicks, keys and zooms are greys, and the default canvas is a
 slate gradient.
 
 | File | Role |
@@ -486,14 +494,14 @@ slate gradient.
 | `Editor/View/EditorTheme.swift` | System colors by role, spacing on a 4-point grid, and the motion tokens: `motion` (spring, response 0.35, critically damped: every state change), `quickMotion` (0.15: hover, release), `momentumMotion` (damping 0.8: only after a flick), `fadeMotion` (Reduce Motion's cross-fade) and `release(velocity:distance:)` (a drag's release speed handed to a spring) |
 | `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `GlassEffectContainer`), a material with a hairline before; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on (`nil` skips it); `withMotion { }` is the same for code with no environment; Increase Contrast adds a `dim` edge to every glass surface |
 | `Editor/View/EditorBackdrop.swift`, `StageDotGrid.swift` | The frosted desktop behind the window; the dot grid behind the preview, fading out before the stage's edges |
-| `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white), `.editorAccent` (white on the accent colour, for the floating capture panels) and `.editorGhost` (hairline) text buttons; every press shows on the frame it lands, only hover and release ease |
+| `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white), `.editorAccent` (white on the accent colour: the floating capture panels and the editor's Export) and `.editorGhost` (hairline) text buttons; every press shows on the frame it lands, only hover and release ease |
 | `View/PanelPresentation.swift`, `PanelPresence.swift` | `panelPresentation(isPresented:anchor:motion:blur:)`: a floating panel fades and, with `blur`, pops in where it is from that many points out of focus — no direction, where a scale has one, since the corner furthest from the anchor travels the most and the eye reads the panel as growing from that corner (the capture toolbar and its picker use `blur`; the card, pins, agent bar and countdown use the scale). Only opacity, blur and scale are animated, so a window resize in the same update isn't. Opacity only with Reduce Motion; `exitDelay` is how long its window stays; `PanelPresence` carries the flag for controllers whose view model can't |
 | `View/MenuRowButtonStyle.swift` | `.menuRow` for the popover's rows, and `MenuRowHighlight` (also under `MenuBarToggle`): Control Center's highlight, a 10 pt continuous rounded fill the row's full height, 6 pt in from the sides, 0.1 on hover, 0.16 the moment it's pressed, dimmed when disabled |
 | `Model/GesturePhysics.swift` | Pure: `project` (momentum), `rubberband`/`rubberbanded` (resistance past a boundary), `relativeVelocity`, `velocityMatchedDuration`, `flickExit`, and `VelocityTracker` (the last 0.1 s of a drag) |
-| `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar |
-| `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the glass transport |
-| `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart), the playhead's knob, the zoom blocks |
-| `Editor/View/Inspector*.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | Sections that fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides; a notice on top when the telemetry is missing |
+| `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar, centred, never larger than the screen less 40 pt; the editor and Web Recording open at 1533×943 (the size picked by hand on 2026-10-05) |
+| `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the transport in the timeline's header |
+| `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart; a line at each label, dots between; labels carry their units, "0.5s", "1m 30s", "1h", since a clock's "0:00.5" didn't say what it counted), the playhead's knob, the zoom blocks |
+| `Editor/View/Inspector*.swift`, `EditorInspectorSections.swift`, `TickSlider.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | `EditorInspector` and its sections, which fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides. Every slider is a `TickSlider`: a track with ticks, accent fill up to a bar at the value, dragged 1:1 from the grab (a press away from the bar takes it there first), VoiceOver adjustable in 20 steps, without a focus ring |
 | `Editor/View/ExportSheet.swift`, `ExportProgressBar.swift` | Native pickers in a grid with a line on what the format is for; progress |
 
 Key facts:
@@ -505,8 +513,18 @@ Key facts:
   toolbar's pills that read as the controls sliding in diagonally, whatever the panel's own animation
   did. Every `captureToolbarPill` therefore sets `.glassEffectTransition(.identity)` and leaves the
   entrance to its caller (the bar's blur pop-in, the countdown disc's settle).
-- The inspector keeps the system `.inspector`, which macOS 26 draws as glass, so it has no background.
+- The inspectors keep the system `.inspector`, which macOS 26 draws as glass, so it has no background.
 - Text is ink by default, so it doesn't dim when disabled: `InspectorSection` fades disabled content.
+- Editor windows take their minimum size from SwiftUI (`sizingOptions = .minSize`), so anything laid out in points of
+  a measured width (filmstrip tiles, lane blocks) sits in a `frame(minWidth: 0, …)`: without it the timeline's last
+  width became the window's minimum and every inspector toggle grew the window past the screen. The other way round,
+  SwiftUI also fits the window down to the root's largest size as it lays out (`NSHostingView.updateAnimatedWindowSize`,
+  even with `sizingOptions = []`): the editor's root, the "Opening…" spinner in a frame with only a minimum, had a
+  largest size of 900×560, so every editor opened at 900×592. Roots fill the window (`maxWidth/maxHeight: .infinity`).
+- **macOS's purple sharing pill** replaces a window's traffic lights while a stream targets it, and is drawn into the
+  frames. Measured 2026-10-05 (macOS 27) by streaming a real window: `desktopIndependentWindow`, an app filter and
+  `display(including: [window])` all show it; the whole display, or the display excluding every other window,
+  doesn't. ScreenCaptureKit has no setting for it. Window recordings (`desktopIndependentWindow`) have it today.
 - Avoid what reads as generated: no gradients or glows in the chrome, no second accent, no cards
   and badges where a native control works, no all-caps titles, hover as a fill step (no lifts or
   scaling).
@@ -723,7 +741,9 @@ and its plan becomes the timeline as one undoable step and plays once in real ti
 with its plan staged (`AgentRecordingViewModel.onPlanStaged`), the window renders it and the movie opens in the
 editor; the clips stay for the user to change and render again. **Play** (Space) in the timeline header plays any script in the page: the playhead moves
 in real time, and a page move is skipped while the last is still busy, so it never queues up. Render progress
-sits in the timeline header, not over the page; the stage has no dot grid, only an edge and a soft shadow. Details and file map: `docs/specs/0008-agent-chat.md`.
+sits in the timeline header, not over the page. The header is laid out like the editor's transport: icon buttons
+that add a hover, click, typing or scroll (and delete the selected clip) on the left, Play in the middle, progress and
+the time on the right; Render is the accent button, like Export. The stage has no dot grid, only an edge and a soft shadow. Details and file map: `docs/specs/0008-agent-chat.md`.
 
 - **Tests and a running Reco:** the test host is Reco, so a test run takes the bridge's socket from the
   running app. An agent run going at the time loses Reco, and its `--mcp` client starts a second copy.

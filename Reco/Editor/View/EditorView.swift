@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// An editor window's content: the preview and transport on a dark stage, the timeline under them,
+/// An editor window's content: the preview on the stage, the transport and the timeline under it,
 /// and the inspector.
 struct EditorView: View {
     let viewModel: EditorViewModel
@@ -21,14 +21,18 @@ struct EditorView: View {
                 VStack(spacing: 0) {
                     EditorStage(viewModel: viewModel)
 
-                    EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
-                        .padding(.horizontal, EditorTheme.largeSpacing)
-                        .padding(.vertical, EditorTheme.spacing)
-                        .overlay(alignment: .top) {
-                            Rectangle()
-                                .fill(EditorTheme.hairline)
-                                .frame(height: 1)
-                        }
+                    VStack(spacing: EditorTheme.smallSpacing) {
+                        TransportBar(viewModel: viewModel)
+                        EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
+                    }
+                    .padding(.horizontal, EditorTheme.largeSpacing)
+                    .padding(.top, EditorTheme.smallSpacing)
+                    .padding(.bottom, EditorTheme.spacing)
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(EditorTheme.hairline)
+                            .frame(height: 1)
+                    }
                 }
                 .inspector(isPresented: $showsInspector) {
                     EditorInspector(viewModel: viewModel)
@@ -40,7 +44,7 @@ struct EditorView: View {
                             showsExport = true
                         }
                         .labelStyle(.titleAndIcon)
-                        .buttonStyle(.editorPrimary)
+                        .buttonStyle(.editorAccent)
                         .keyboardShortcut("e")
                         .help("Export the edited video")
                     }
@@ -75,8 +79,10 @@ struct EditorView: View {
                     .controlSize(.small)
             }
         }
-        // Room for the inspector and a preview beside it, and the transport on one row
-        .frame(minWidth: 900, minHeight: 560)
+        // Room for the inspector and a preview beside it, and the transport on one row. Filling the window:
+        // with only a minimum, the "Opening…" spinner made that minimum the root's largest size too, and
+        // SwiftUI shrank the window to it (900×592) as it opened, whatever size it was given
+        .frame(minWidth: 900, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)
         .editorWindowBackground()
         .editorMotion(.smooth, value: viewModel.source == nil)
         .task {
