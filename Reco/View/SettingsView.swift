@@ -49,6 +49,11 @@ struct SettingsView: View {
 struct ShortcutsSettingsView: View {
     var body: some View {
         Form {
+            Section("Capture Toolbar") {
+                KeyboardShortcuts.Recorder("Take Screenshot…", name: .showScreenshotToolbar)
+                KeyboardShortcuts.Recorder("Record Screen…", name: .showRecordingToolbar)
+            }
+
             Section("Recording") {
                 KeyboardShortcuts.Recorder("Toggle Recording", name: .toggleRecording)
                 KeyboardShortcuts.Recorder("Pause/Resume Recording", name: .pauseRecording)

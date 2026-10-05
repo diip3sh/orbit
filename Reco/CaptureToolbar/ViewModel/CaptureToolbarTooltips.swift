@@ -27,8 +27,11 @@ final class CaptureToolbarTooltips {
     nonisolated static let switchGrace = Duration.milliseconds(80)
 
     struct Target: Equatable {
+        /// What the control does, in a word or two
         var text: String
         let midX: CGFloat
+        /// The key that does it, written as menus write it (`esc`, `⌘,`)
+        var shortcut: String?
     }
 
     /// The control under the pointer; kept until another is hovered
@@ -52,11 +55,11 @@ final class CaptureToolbarTooltips {
         return Self.restDelay
     }
 
-    func hover(_ text: String, at midX: CGFloat) {
+    func hover(_ text: String, shortcut: String? = nil, at midX: CGFloat) {
         guard !isDragging else { return }
         pendingHide?.cancel()
         pendingHide = nil
-        target = Target(text: text, midX: midX)
+        target = Target(text: text, midX: midX, shortcut: shortcut)
         isShown = true
     }
 

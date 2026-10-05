@@ -12,18 +12,45 @@ import SwiftUI
 ///
 /// It shares the toolbar's window rather than sitting in one of its own — a second window would take
 /// key from the bar and macOS would draw the bar's controls as inactive while it was open.
+///
+/// It slides up out of the bar on a spring and its tiles follow one after another, then all of it slides
+/// back down into the bar the same way. Reduce Motion fades it instead.
 struct CaptureSourcePickerView: View {
     let picker: CaptureSourcePicker
 
     private typealias Grid = CaptureSourceGrid
 
+    /// How far below its place the frost, and each tile on it, starts
+    static let rise: CGFloat = 16
+
+    /// A little bounce, so the row lands rather than stops
+    static let motion = Animation.spring(response: 0.38, dampingFraction: 0.8)
+
+    /// Between one tile's start and the next's, arriving; leaving is quicker
+    static let stagger = 0.035
+    /// Tiles past this many start with the last of them, so a long row doesn't trail
+    static let staggeredTiles = 5
+
+    /// How long it stays mounted after it closes: the spring plus the leaving stagger
+    nonisolated static let exitDelay = Duration.milliseconds(450)
+
+    @State private var hasAppeared = false
+    @Environment(\.accessibilityReduceMotion) private var reducesMotion
+
     var body: some View {
+        let isShown = hasAppeared && picker.isOpen
         content
-            .frame(width: panelSize.width - Grid.padding * 2, height: panelSize.height - Grid.padding * 2)
-            .padding(Grid.padding)
+            .frame(width: panelSize.width, height: panelSize.height)
+            .clipShape(.rect(cornerRadius: PickerBackdrop.cornerRadius, style: .continuous))
             .pickerBackdrop()
             .environment(\.colorScheme, .dark)
-            .panelPresentation(isPresented: picker.isOpen, anchor: .bottom, motion: EditorTheme.quickMotion)
+            // Scoped, so the window growing around it in the same update isn't animated
+            .animation(reducesMotion ? EditorTheme.fadeMotion : Self.motion) { view in
+                view
+                    .opacity(isShown ? 1 : 0)
+                    .offset(y: isShown || reducesMotion ? 0 : Self.rise)
+            }
+            .onAppear { hasAppeared = true }
     }
 
     /// What the tiles take up, padding included, so the bar's window can be measured around it
@@ -40,7 +67,7 @@ struct CaptureSourcePickerView: View {
             if sources.isEmpty {
                 notice(picker.kind == .display ? "No displays to record." : "No windows to record.")
             } else {
-                grid(sources)
+                row(sources)
             }
         } else {
             // Only a load slow enough to be noticed: a warm one shows the tiles straight away
@@ -50,27 +77,78 @@ struct CaptureSourcePickerView: View {
         }
     }
 
-    private func grid(_ sources: [CaptureSource]) -> some View {
-        ScrollView {
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.fixed(Grid.tileWidth), spacing: Grid.spacing), count: Grid.columns(for: sources.count)),
-                spacing: Grid.spacing
-            ) {
-                ForEach(sources) { source in
-                    CaptureSourceTile(source: source, thumbnail: picker.thumbnails[source.id]) {
-                        picker.pick(source)
+    /// One row, scrolled sideways past four tiles. The scroll view spans the frost, so tiles scroll
+    /// out under its edges rather than being cut off inside its padding.
+    private func row(_ sources: [CaptureSource]) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                // Not lazy: every tile takes part in the entrance, and their thumbnails are drawn anyway
+                HStack(spacing: Grid.spacing) {
+                    ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+                        CaptureSourceTile(
+                            source: source,
+                            thumbnail: picker.thumbnails[source.id],
+                            isHighlighted: picker.highlighted == source.id,
+                            onHover: { picker.highlight(source.id) },
+                            action: { picker.pick(source) }
+                        )
+                        .id(source.id)
+                        .modifier(StaggeredEntrance(index: index, isPresented: picker.isOpen))
                     }
                 }
+                .padding(.vertical, Grid.padding)
+            }
+            .contentMargins(.horizontal, Grid.padding, for: .scrollContent)
+            .scrollIndicators(.automatic)
+            .scrollBounceBehavior(.basedOnSize)
+            // A tile moved to with the keyboard is scrolled into view
+            .onChange(of: picker.highlighted) { _, id in
+                guard let id else { return }
+                withMotion { proxy.scrollTo(id) }
             }
         }
-        .scrollIndicators(.automatic)
-        .scrollBounceBehavior(.basedOnSize)
+        // ← and → move the highlight; Return (the bar's action) records it
+        .background {
+            Group {
+                Button("Previous") { picker.moveHighlight(by: -1) }
+                    .keyboardShortcut(.leftArrow, modifiers: [])
+                Button("Next") { picker.moveHighlight(by: 1) }
+                    .keyboardShortcut(.rightArrow, modifiers: [])
+            }
+            .opacity(0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 
     private func notice(_ text: String) -> some View {
         Text(text)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
+            .padding(Grid.padding)
+    }
+}
+
+/// A tile comes up after the one before it, and goes back down the same way, a little quicker. It runs
+/// from the tile's own appearance, so tiles that arrive after a slow load still come up in turn.
+private struct StaggeredEntrance: ViewModifier {
+    let index: Int
+    let isPresented: Bool
+
+    @State private var hasAppeared = false
+    @Environment(\.accessibilityReduceMotion) private var reducesMotion
+
+    func body(content: Content) -> some View {
+        let isShown = hasAppeared && isPresented
+        let step = isShown ? CaptureSourcePickerView.stagger : CaptureSourcePickerView.stagger / 2
+        let delay = Double(min(index, CaptureSourcePickerView.staggeredTiles)) * step
+        content
+            .animation(reducesMotion ? EditorTheme.fadeMotion : CaptureSourcePickerView.motion.delay(delay)) { view in
+                view
+                    .opacity(isShown ? 1 : 0)
+                    .offset(y: isShown || reducesMotion ? 0 : CaptureSourcePickerView.rise)
+            }
+            .onAppear { hasAppeared = true }
     }
 }
 
@@ -86,11 +164,13 @@ extension View {
 /// the bar's glass, so it reads as one surface with the bar rather than a second panel. Solid with Reduce
 /// Transparency, which has no blur to fall back on.
 private struct PickerBackdrop: ViewModifier {
+    static let cornerRadius: CGFloat = 20
+
     @Environment(\.accessibilityReduceTransparency) private var reducesTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
         content
             .background {
                 if reducesTransparency {
@@ -109,39 +189,26 @@ private struct PickerBackdrop: ViewModifier {
     }
 }
 
-/// One window or display: its picture, then its app's icon, title and subtitle. A ring marks it under
-/// the pointer; the press shows at once.
+/// One window or display: its picture, then its app's icon, title and subtitle. A ring marks the
+/// highlighted one (the pointer's, or where ← → moved it); the press shows at once.
 private struct CaptureSourceTile: View {
     let source: CaptureSource
     let thumbnail: CGImage?
+    let isHighlighted: Bool
+    let onHover: () -> Void
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
-                picture
+                CaptureSourcePicture(thumbnail: thumbnail, isHighlighted: isHighlighted)
                 label
             }
         }
         .buttonStyle(CaptureSourceTileStyle())
+        .onHover { if $0 { onHover() } }
         .accessibilityLabel(source.subtitle.isEmpty ? source.title : "\(source.title), \(source.subtitle)")
-    }
-
-    private var picture: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(.white.opacity(0.06))
-            if let thumbnail {
-                Image(decorative: thumbnail, scale: 2)
-                    .resizable()
-                    .scaledToFit()
-                    .clipShape(.rect(cornerRadius: 4, style: .continuous))
-                    .padding(8)
-                    .transition(.opacity)
-            }
-        }
-        .frame(width: CaptureSourceGrid.tileWidth, height: CaptureSourceGrid.thumbnailHeight)
-        .editorMotion(EditorTheme.quickMotion, value: thumbnail == nil)
+        .accessibilityAddTraits(isHighlighted ? .isSelected : [])
     }
 
     private var label: some View {
@@ -167,28 +234,51 @@ private struct CaptureSourceTile: View {
     }
 }
 
-private struct CaptureSourceTileStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        CaptureSourceTileBody(configuration: configuration)
+/// The window's picture at its own shape, fitted into the tile and sitting on its name. No box around
+/// it: a box in the tile's 16:10 left a wide or tall window small inside a bigger frame.
+private struct CaptureSourcePicture: View {
+    let thumbnail: CGImage?
+    let isHighlighted: Bool
+
+    // Set by the tile's button style, inside the label, so it is read here and not on the tile
+    @Environment(\.isTilePressed) private var isPressed
+
+    private static let cornerRadius: CGFloat = 8
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+        Group {
+            if let thumbnail {
+                Image(decorative: thumbnail, scale: 2)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(shape)
+                    .transition(.opacity)
+            } else {
+                // Until it is drawn, the tile's shape stands in
+                shape.fill(.white.opacity(0.06))
+            }
+        }
+        .overlay {
+            // The accent, as the toolbar marks what is chosen: full on press, softer when highlighted
+            shape.strokeBorder(CaptureToolbarView.live.opacity(isPressed ? 1 : isHighlighted ? 0.7 : 0), lineWidth: 2)
+        }
+        .frame(width: CaptureSourceGrid.tileWidth, height: CaptureSourceGrid.thumbnailHeight, alignment: .bottom)
+        .editorMotion(EditorTheme.quickMotion, value: thumbnail == nil)
+        // Only the press lands at once; the highlight eases
+        .editorMotion(isPressed ? nil : EditorTheme.quickMotion, value: isHighlighted || isPressed)
     }
 }
 
-private struct CaptureSourceTileBody: View {
-    let configuration: ButtonStyleConfiguration
-    @State private var isHovered = false
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+/// Hands the press to the tile's label, which draws the ring around the picture alone
+private struct CaptureSourceTileStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .overlay(alignment: .top) {
-                shape
-                    // The accent, as the toolbar marks what is chosen: full on press, softer under the pointer
-                    .strokeBorder(CaptureToolbarView.live.opacity(configuration.isPressed ? 1 : isHovered ? 0.7 : 0), lineWidth: 2)
-                    .frame(height: CaptureSourceGrid.thumbnailHeight)
-            }
+            .environment(\.isTilePressed, configuration.isPressed)
             .contentShape(.rect)
-            .onHover { isHovered = $0 }
-            // Only the press lands at once; hover and release ease
-            .editorMotion(configuration.isPressed ? nil : EditorTheme.quickMotion, value: isHovered || configuration.isPressed)
     }
+}
+
+extension EnvironmentValues {
+    @Entry fileprivate var isTilePressed = false
 }

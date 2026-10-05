@@ -58,12 +58,18 @@ struct MenuBarView: View {
                 .padding(.vertical, EditorTheme.smallSpacing)
                 .padding(.top, EditorTheme.smallSpacing)
             } else if viewModel.state == .idle {
-                MenuBarActionButton(title: "Take Screenshot…", systemImage: "camera.viewfinder", isDisabled: viewModel.countdown.isRunning) {
+                MenuBarActionButton(
+                    title: "Take Screenshot…", systemImage: "camera.viewfinder", isDisabled: viewModel.countdown.isRunning,
+                    shortcut: .showScreenshotToolbar
+                ) {
                     dismiss()
                     showScreenshotToolbar()
                 }
                 .padding(.top, 8)
-                MenuBarActionButton(title: "Record Screen…", systemImage: "record.circle", isDisabled: viewModel.countdown.isRunning) {
+                MenuBarActionButton(
+                    title: "Record Screen…", systemImage: "record.circle", isDisabled: viewModel.countdown.isRunning,
+                    shortcut: .showRecordingToolbar
+                ) {
                     dismiss()
                     showRecordingToolbar()
                 }

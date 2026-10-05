@@ -43,7 +43,13 @@ private struct CaptureToolbarPill<S: InsettableShape>: ViewModifier {
         if reducesTransparency {
             content.background(tint.opacity(1), in: shape)
         } else if #available(macOS 26, *) {
-            content.glassEffect(.regular.tint(tint.opacity(0.6)).interactive(isInteractive), in: shape)
+            content
+                .glassEffect(.regular.tint(tint.opacity(0.6)).interactive(isInteractive), in: shape)
+                // Every surface this draws already has an entrance of its own (the bar pops in from a
+                // blur, the countdown disc settles from its centre). Glass animates itself by default, growing
+                // the shape as it appears, and that second motion is what read as the controls sliding
+                // in diagonally: `.identity` leaves the entrance to the caller.
+                .glassEffectTransition(.identity)
         } else {
             content
                 .background(tint.opacity(0.75), in: shape)

@@ -103,6 +103,7 @@ final class RecorderViewModel {
 
     /// Called when content is chosen to record, or the picker is cancelled, so the capture toolbar can follow
     @ObservationIgnored var onSelectionChange: (() -> Void)?
+    @ObservationIgnored var onRecordingFinished: ((URL) -> Void)?
 
     /// The countdown before a user-started recording; read by the menu bar UI
     let countdown = RecordingCountdown()
@@ -371,7 +372,7 @@ final class RecorderViewModel {
             // Brief delay to ensure screen sharing mode has fully stopped before sending notification
             try? await Task.sleep(for: .milliseconds(100))
 
-            reportSaved(outputURL, videoFrameCount: videoFrameCount, cursorLeftToEditor: cursorLeftToEditor)
+            reportSaved(outputURL, videoFrameCount: videoFrameCount, cursorLeftToEditor: cursorLeftToEditor, copied: copyToClipboard)
 
             if copyToClipboard {
                 copyFileToClipboard(outputURL)
@@ -474,17 +475,19 @@ final class RecorderViewModel {
 
 extension RecorderViewModel {
 
-    /// Notifies the user of a saved recording, and keeps it for Edit Last Recording when it has video.
-    ///
-    /// The file is kept either way - an audio-only recording is still worth more than a deleted
-    /// one - but the user has to be told about it.
-    private func reportSaved(_ outputURL: URL, videoFrameCount: Int, cursorLeftToEditor: Bool) {
-        if videoFrameCount == 0 {
+    /// Opens a recording with video in the editor, or only notifies when it was copied for automation
+    /// (`reco://toggle-copy`), so a script isn't interrupted. An audio-only file is kept, and reported.
+    private func reportSaved(_ outputURL: URL, videoFrameCount: Int, cursorLeftToEditor: Bool, copied: Bool) {
+        guard videoFrameCount > 0 else {
             logger.error("Recording contains no video frames: \(outputURL.lastPathComponent)")
             notificationService.sendRecordingMissingVideoNotification(fileURL: outputURL)
-        } else {
-            lastRecordingURL = outputURL
+            return
+        }
+        lastRecordingURL = outputURL
+        if copied || onRecordingFinished == nil {
             notificationService.sendRecordingSavedNotification(fileURL: outputURL, opensEditor: cursorLeftToEditor)
+        } else {
+            onRecordingFinished?(outputURL)
         }
     }
 }

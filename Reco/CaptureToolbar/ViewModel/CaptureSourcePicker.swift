@@ -21,6 +21,9 @@ final class CaptureSourcePicker {
     private(set) var thumbnails: [CaptureSource.ID: CGImage] = [:]
     private(set) var failed = false
 
+    /// The tile Return records: the first once loaded, then where ← → or the pointer put it
+    private(set) var highlighted: CaptureSource.ID?
+
     /// Set when loading has run long enough to need a spinner: a warm open shows the tiles instead, so
     /// the picker arrives in one move rather than as a spinner that is replaced a moment later
     private(set) var isWaiting = false
@@ -56,6 +59,43 @@ final class CaptureSourcePicker {
         onPick?(filter)
     }
 
+    func highlight(_ id: CaptureSource.ID) {
+        guard sources?.contains(where: { $0.id == id }) == true else { return }
+        highlighted = id
+    }
+
+    /// ← and →: the tile before or after the highlighted one, stopping at the ends
+    func moveHighlight(by offset: Int) {
+        guard let sources else { return }
+        highlighted = CaptureSourceGrid.neighbour(of: highlighted, by: offset, in: sources.map(\.id))
+    }
+
+    /// Return: records the highlighted tile
+    func pickHighlighted() {
+        guard let source = sources?.first(where: { $0.id == highlighted }) else { return }
+        pick(source)
+    }
+
+    /// Picks a display without showing anything: `id`'s, or the first when it is nil or gone
+    func pickDisplay(_ id: CGDirectDisplayID?) {
+        reset()
+        loading.append(Task {
+            do {
+                let entries = try await CaptureSourceLoader.entries(of: .display)
+                guard !Task.isCancelled else { return }
+                guard let entry = entries.first(where: { $0.source.id == id }) ?? entries.first else {
+                    onCancel?()
+                    return
+                }
+                onPick?(entry.filter)
+            } catch {
+                guard !Task.isCancelled else { return }
+                CGRequestScreenCaptureAccess()
+                onCancel?()
+            }
+        })
+    }
+
     /// Closes without a choice
     func cancel() {
         guard isOpen else { return }
@@ -72,6 +112,13 @@ final class CaptureSourcePicker {
         filters = [:]
         failed = false
         isWaiting = false
+        highlighted = nil
+    }
+
+    /// Lays out the loaded tiles with the first highlighted, so Return records it straight away
+    func show(_ sources: [CaptureSource]) {
+        self.sources = sources
+        highlighted = sources.first?.id
     }
 
     private func load(_ kind: CaptureSource.Kind) async {
@@ -88,7 +135,7 @@ final class CaptureSourcePicker {
         guard !Task.isCancelled else { return }
 
         filters = Dictionary(entries.map { ($0.source.id, $0.filter) }) { first, _ in first }
-        sources = entries.map(\.source)
+        show(entries.map(\.source))
         // Each thumbnail shows as soon as it is drawn; ScreenCaptureKit draws them side by side
         for entry in entries {
             let id = entry.source.id

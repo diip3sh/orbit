@@ -10,12 +10,10 @@ import Testing
 @MainActor
 struct CaptureToolbarTests {
 
-    private let defaults = TemporaryDefaults()
-
     private func makeViewModel() -> CaptureToolbarViewModel {
         let recorder = RecorderViewModel()
         let screenshots = ScreenshotController(settings: recorder.settings, notificationService: recorder.notificationService)
-        return CaptureToolbarViewModel(recorder: recorder, screenshots: screenshots, defaults: defaults.make())
+        return CaptureToolbarViewModel(recorder: recorder, screenshots: screenshots)
     }
 
     @Test func modesAreInTheSystemToolbarsOrder() {
@@ -34,31 +32,18 @@ struct CaptureToolbarTests {
         #expect(CaptureToolbarMode.recording(isArea: false, isDisplay: false) == .recordWindow)
     }
 
-    @Test func startsOnRecordAreaAndRemembersTheMode() {
-        let suite = defaults.make()
-        let recorder = RecorderViewModel()
-        let screenshots = ScreenshotController(settings: recorder.settings, notificationService: recorder.notificationService)
-
-        let first = CaptureToolbarViewModel(recorder: recorder, screenshots: screenshots, defaults: suite)
-        #expect(first.mode == .recordArea)
-        first.select(.recordWindow)
-        first.select(.captureScreen)
-
-        let second = CaptureToolbarViewModel(recorder: recorder, screenshots: screenshots, defaults: suite)
-        #expect(second.mode == .recordWindow)
-        second.open(records: false)
-        #expect(second.mode == .captureScreen)
-    }
-
-    @Test func screenshotsAndRecordingsOpenTheirOwnToolbar() {
+    /// Each toolbar opens on its area mode every time, whatever it was left on
+    @Test func eachToolbarAlwaysOpensOnItsAreaMode() {
         let viewModel = makeViewModel()
+        #expect(viewModel.mode == .recordArea)
         viewModel.open(records: false)
         #expect(viewModel.mode == .captureArea)
         viewModel.select(.captureWindow)
+        viewModel.open(records: false)
+        #expect(viewModel.mode == .captureArea)
+        viewModel.select(.captureScreen)
         viewModel.open(records: true)
         #expect(viewModel.mode == .recordArea)
-        viewModel.open(records: false)
-        #expect(viewModel.mode == .captureWindow)
     }
 
     @Test func eitherKindOfActionCanRunWhenIdle() {
@@ -70,7 +55,7 @@ struct CaptureToolbarTests {
 
     // MARK: - Cancelling
 
-    /// Esc and the close control reach the innermost thing open, so a picker goes on its own and the
+    /// Esc reaches the innermost thing open, so a picker goes on its own and the
     /// toolbar only with the next press
     @Test func theCloseControlClosesWhatIsOpenFirst() async {
         let viewModel = makeViewModel()
@@ -89,6 +74,20 @@ struct CaptureToolbarTests {
         #expect(hides == [true])
     }
 
+    /// The close control takes everything away at once, the picker with the toolbar
+    @Test func theCloseControlClosesEverything() async {
+        let viewModel = makeViewModel()
+        var hides: [Bool] = []
+        viewModel.onHide = { hides.append($0) }
+
+        await viewModel.pick(.recordWindow)
+        #expect(viewModel.sources.isOpen)
+        await viewModel.close()
+
+        #expect(!viewModel.sources.isOpen)
+        #expect(hides == [true])
+    }
+
     /// Choosing a mode on the bar opens what records it, so Record isn't a step on the way to the picker
     @Test func choosingARecordingModeOpensWhatRecordsIt() async {
         let viewModel = makeViewModel()
@@ -96,8 +95,10 @@ struct CaptureToolbarTests {
         await viewModel.pick(.recordWindow)
         #expect(viewModel.sources.kind == .window)
 
+        // The screen has nothing to choose: Record takes the one the bar is on
         await viewModel.pick(.recordScreen)
-        #expect(viewModel.sources.kind == .display)
+        #expect(!viewModel.sources.isOpen)
+        #expect(viewModel.mode == .recordScreen)
 
         // A screenshot only switches: Capture commits, so nothing opens
         await viewModel.pick(.captureWindow)
@@ -208,17 +209,43 @@ struct CaptureToolbarTests {
         #expect(CaptureSource.title(windowTitle: nil, appName: "Mail") == "Mail")
     }
 
-    @Test func theGridShowsFourAcrossAndTwoRows() {
+    /// One row, up to four tiles wide; the rest scroll sideways inside that width
+    @Test func theRowShowsFourTilesAtMost() {
         let one = CaptureSourceGrid.size(for: 1)
         let four = CaptureSourceGrid.size(for: 4)
-        let five = CaptureSourceGrid.size(for: 5)
         let twenty = CaptureSourceGrid.size(for: 20)
         #expect(one.width < four.width)
-        #expect(four.width == five.width)
-        #expect(five.height > four.height)
-        #expect(twenty == five)
+        #expect(twenty == four)
         #expect(one.height == four.height)
         #expect(CaptureSourceGrid.messageSize.width == CaptureSourceGrid.size(for: 2).width)
+    }
+
+    /// ← and → step through the row and stop at its ends; nothing highlighted starts from the first
+    @Test func theHighlightStepsThroughTheRowAndStopsAtItsEnds() {
+        let ids: [UInt32] = [7, 8, 9]
+        #expect(CaptureSourceGrid.neighbour(of: 7, by: 1, in: ids) == 8)
+        #expect(CaptureSourceGrid.neighbour(of: 9, by: 1, in: ids) == 9)
+        #expect(CaptureSourceGrid.neighbour(of: 7, by: -1, in: ids) == 7)
+        #expect(CaptureSourceGrid.neighbour(of: nil, by: 1, in: ids) == 7)
+        #expect(CaptureSourceGrid.neighbour(of: 42, by: -1, in: ids) == 7)
+        #expect(CaptureSourceGrid.neighbour(of: 7, by: 1, in: [UInt32]()) == nil)
+    }
+
+    /// The first window is highlighted as the tiles land, so Return records it straight away; the
+    /// pointer and the arrows move the same highlight
+    @Test func theFirstTileIsHighlightedAndThePointerMovesIt() {
+        let picker = CaptureSourcePicker()
+        let sources = [1, 2, 3].map { CaptureSource(id: $0, title: "W\($0)", subtitle: "App", processID: nil) }
+
+        picker.show(sources)
+        #expect(picker.highlighted == 1)
+        picker.moveHighlight(by: 1)
+        #expect(picker.highlighted == 2)
+        picker.highlight(3)
+        #expect(picker.highlighted == 3)
+        // Not one of the tiles
+        picker.highlight(99)
+        #expect(picker.highlighted == 3)
     }
 
     @Test func aClosedPickerHoldsNothing() {

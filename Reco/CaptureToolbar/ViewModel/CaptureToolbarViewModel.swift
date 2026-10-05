@@ -15,26 +15,23 @@ final class CaptureToolbarViewModel {
     let recorder: RecorderViewModel
     let screenshots: ScreenshotController
 
-    private(set) var mode: CaptureToolbarMode {
-        didSet { defaults.set(mode.rawValue, forKey: CaptureToolbarMode.storageKey(records: mode.records)) }
-    }
+    private(set) var mode: CaptureToolbarMode = .initial(records: true)
 
     /// Takes the toolbar away; `animated` is false before a screenshot, so it is gone from the shot
     @ObservationIgnored var onHide: ((_ animated: Bool) -> Void)?
 
+    /// The display the bar is on, which Record Screen records
+    @ObservationIgnored var currentDisplayID: (() -> CGDirectDisplayID?)?
+
     /// Set while a selection Record asked for is being made: the take starts as soon as it is chosen
     @ObservationIgnored private var startsOnSelection = false
-
-    @ObservationIgnored private let defaults: UserDefaults
 
     /// The windows or displays Record Window and Record Screen choose from, above the bar
     let sources = CaptureSourcePicker()
 
-    init(recorder: RecorderViewModel, screenshots: ScreenshotController, defaults: UserDefaults = .standard) {
+    init(recorder: RecorderViewModel, screenshots: ScreenshotController) {
         self.recorder = recorder
         self.screenshots = screenshots
-        self.defaults = defaults
-        mode = Self.rememberedMode(records: true, in: defaults)
         // The choice reaches `selectionDidChange()` through the recorder, which starts the take
         sources.onPick = { [recorder] filter in Task { await recorder.selectContent(filter) } }
         sources.onCancel = { [weak self] in self?.startsOnSelection = false }
@@ -52,18 +49,11 @@ final class CaptureToolbarViewModel {
     /// above it so it stays clickable)
     var areaSelection: AreaSelectionOverlay { recorder.areaSelectionOverlay }
 
-    private static func rememberedMode(records: Bool, in defaults: UserDefaults) -> CaptureToolbarMode {
-        defaults.string(forKey: CaptureToolbarMode.storageKey(records: records))
-            .flatMap(CaptureToolbarMode.init(rawValue:))
-            .flatMap { $0.records == records ? $0 : nil } ?? .initial(records: records)
-    }
-
     // MARK: - Intents
 
-    /// Shows the screenshot toolbar or the recording one, on the mode each was last left in
+    /// Shows the screenshot toolbar or the recording one, always on its area mode
     func open(records: Bool) {
-        guard mode.records != records else { return }
-        select(Self.rememberedMode(records: records, in: defaults))
+        select(.initial(records: records))
     }
 
     /// Switches mode. A selection made for another mode is dropped, so Record never starts something
@@ -79,10 +69,11 @@ final class CaptureToolbarViewModel {
     }
 
     /// A mode was chosen on the bar: switch to it and start choosing what to record, so Record isn't a
-    /// second click on the way to the picker. Screenshot modes only switch; Capture commits.
+    /// second click on the way to the picker. Screenshot modes and Record Screen, which have nothing to
+    /// choose, only switch; their action commits.
     func pick(_ newMode: CaptureToolbarMode) async {
         select(newMode)
-        guard newMode.records, !recorder.hasContentSelected else { return }
+        guard newMode.records, newMode != .recordScreen, !recorder.hasContentSelected else { return }
         await chooseSource(for: newMode)
     }
 
@@ -93,6 +84,11 @@ final class CaptureToolbarViewModel {
         // The area is being chosen: Record takes the one drawn, and the take starts from it
         if areaSelection.isPresented {
             areaSelection.confirm()
+            return
+        }
+        // The picker is up: Record (and Return) takes the highlighted window
+        if sources.isOpen {
+            sources.pickHighlighted()
             return
         }
         switch mode {
@@ -114,13 +110,14 @@ final class CaptureToolbarViewModel {
         }
     }
 
-    /// Opens the mode's own way of choosing what to record: Reco's picker for a window or a display, the
-    /// area overlay to draw on. A choice then starts the take, through `selectionDidChange()`.
+    /// Opens the mode's own way of choosing what to record: Reco's picker for a window, the area overlay to
+    /// draw on, and for the screen no choice at all, the one the bar is on. A choice then starts the take,
+    /// through `selectionDidChange()`.
     private func chooseSource(for mode: CaptureToolbarMode) async {
         startsOnSelection = true
         switch mode {
         case .recordScreen:
-            sources.open(.display)
+            sources.pickDisplay(currentDisplayID?())
         case .recordWindow:
             sources.open(.window)
         default:
@@ -161,8 +158,8 @@ final class CaptureToolbarViewModel {
         onHide?(true)
     }
 
-    /// What Esc and the close control do: the innermost thing open first, so a picker or a half-drawn
-    /// area goes on its own and the toolbar only with the next press.
+    /// What Esc does: the innermost thing open first, so a picker or a half-drawn area goes on its own
+    /// and the toolbar only with the next press. The close control always closes everything.
     func cancel() async {
         if areaSelection.isPresented {
             areaSelection.cancel()
@@ -173,12 +170,6 @@ final class CaptureToolbarViewModel {
             return
         }
         await close()
-    }
-
-    /// What the close control says it will do, which follows what it is about to close
-    var cancelTitle: String {
-        if areaSelection.isPresented { return "Cancel Selection" }
-        return sources.isOpen ? "Close Picker" : "Close"
     }
 
     /// Follows a selection made here or elsewhere: shows it as the mode, and starts the take Record asked for

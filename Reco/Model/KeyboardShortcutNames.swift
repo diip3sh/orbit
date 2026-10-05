@@ -19,4 +19,7 @@ extension KeyboardShortcuts.Name {
     static let toggleRecording = Self("toggleRecording", initial: .init(.six, modifiers: .command))
     static let pauseRecording = Self("pauseRecording", initial: .init(.seven, modifiers: .command))
     static let recordWithAgent = Self("recordWithAgent")
+    // The capture toolbars, ⇧⌘1 and ⇧⌘2 beside the captures they lead to (⇧⌘3–5 are the system's)
+    static let showScreenshotToolbar = Self("showScreenshotToolbar", initial: .init(.one, modifiers: [.command, .shift]))
+    static let showRecordingToolbar = Self("showRecordingToolbar", initial: .init(.two, modifiers: [.command, .shift]))
 }

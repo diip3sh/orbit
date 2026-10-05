@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notchShelf.start()
         agentBridge.start()
         viewModel.notificationService.editRecording = editorWindows.open
+        viewModel.onRecordingFinished = editorWindows.open
         editorWindows.agentRecording = agentRecording
         editorWindows.libraryActions = LibraryViewModel.Actions(
             captureArea: { [screenshots] in Task { await screenshots.captureArea() } },
@@ -169,6 +170,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         KeyboardShortcuts.onKeyUp(for: .selectArea) { [viewModel] in
             Task { @MainActor in
                 await viewModel.presentAreaSelection()
+            }
+        }
+
+        // Like the menu's rows, only while nothing is recording, counting down or capturing
+        for (name, records) in [(KeyboardShortcuts.Name.showScreenshotToolbar, false), (.showRecordingToolbar, true)] {
+            KeyboardShortcuts.onKeyUp(for: name) { [weak self, viewModel, screenshots] in
+                Task { @MainActor in
+                    guard screenshots.canCapture(alongside: viewModel) else { return }
+                    self?.showCaptureToolbar(records: records)
+                }
             }
         }
 

@@ -34,20 +34,43 @@ struct CaptureToolbarOptions: View {
         .menuIndicator(.hidden)
         .buttonStyle(.captureToolbar)
         .fixedSize()
-        .captureToolbarTooltip("Countdown: \(settings.countdownDuration == .off ? "Off" : "\(settings.countdownDuration.rawValue)s")")
+        .captureToolbarTooltip("Countdown")
 
-        option("System Audio", icon: .toolbarSystemAudio, isOn: settings.captureSystemAudio, action: viewModel.toggleSystemAudio)
-        option("Microphone", icon: .toolbarMic, isOn: settings.captureMicrophone, action: viewModel.toggleMicrophone)
-        option("Camera", icon: .toolbarCamera, isOn: settings.presenterOverlayEnabled, action: viewModel.toggleCamera)
+        // Each tooltip says what a click does now
+        CaptureToolbarSwitch(
+            title: "System Audio", icon: .toolbarSystemAudio, isOn: settings.captureSystemAudio,
+            tooltip: settings.captureSystemAudio ? "Mute Audio" : "Record Audio", shortcut: .systemAudio,
+            action: viewModel.toggleSystemAudio
+        )
+        CaptureToolbarSwitch(
+            title: "Microphone", icon: .toolbarMic, isOn: settings.captureMicrophone,
+            tooltip: settings.captureMicrophone ? "Mute Mic" : "Record Mic", shortcut: .microphone,
+            action: viewModel.toggleMicrophone
+        )
+        CaptureToolbarSwitch(
+            title: "Camera", icon: .toolbarCamera, isOn: settings.presenterOverlayEnabled,
+            tooltip: settings.presenterOverlayEnabled ? "Hide Camera" : "Show Camera", shortcut: .camera,
+            action: viewModel.toggleCamera
+        )
     }
+}
 
-    private func option(_ title: String, icon: ImageResource, isOn: Bool, action: @escaping () -> Void) -> some View {
+/// One of what the take records, as a switch with its key
+private struct CaptureToolbarSwitch: View {
+    let title: String
+    let icon: ImageResource
+    let isOn: Bool
+    let tooltip: String
+    let shortcut: CaptureToolbarShortcut
+    let action: () -> Void
+
+    var body: some View {
         Button(action: action) {
             Label { Text(title) } icon: { ToolbarIcon(icon) }
                 .labelStyle(.iconOnly)
         }
         .buttonStyle(.captureToolbar(isOn: isOn))
-        .captureToolbarTooltip("\(title): \(isOn ? "On" : "Off")")
+        .captureToolbarTooltip(tooltip, shortcut: shortcut)
         .accessibilityValue(isOn ? "On" : "Off")
     }
 }

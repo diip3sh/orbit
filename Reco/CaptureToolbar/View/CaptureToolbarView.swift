@@ -37,6 +37,12 @@ struct CaptureToolbarView: View {
     /// Room around the bar for its glass's edge and shadow
     static let margin: CGFloat = 12
 
+    /// How out of focus the bar pops in from. Under `margin`, so the blur's spread stays in the window.
+    static let entranceBlur: CGFloat = 8
+
+    /// Between the picker and the bar, so the tiles read as their own layer rather than the bar's top
+    static let pickerGap: CGFloat = 10
+
     /// The bar's own coordinate space: controls report their mid-x in it, so tooltips centre on them
     nonisolated static let barSpaceName = "capture-toolbar-bar"
 
@@ -53,7 +59,7 @@ struct CaptureToolbarView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: Self.pickerGap) {
             // Kept mounted while its exit plays, then taken away so the window shrinks back
             if pickerPresence.isShown {
                 CaptureSourcePickerView(picker: viewModel.sources)
@@ -61,10 +67,15 @@ struct CaptureToolbarView: View {
             bar
         }
         .fixedSize()
+        // Pops in where it is, from a blur, with no direction; inside the margin so the blur isn't clipped
+        .panelPresentation(isPresented: presence.isShown, anchor: .bottom, blur: Self.entranceBlur)
         .padding(Self.margin)
         // The panel's size: the bar, and the picker while it is up
         .onGeometryChange(for: CGSize.self, of: \.size) { onSizeChange($0) }
-        .panelPresentation(isPresented: presence.isShown, anchor: .bottom)
+        // Held to the window's bottom, where placement puts the bar. The window narrows only after the
+        // change has played, so for that moment it is taller than its content (the picker just went),
+        // and centred the bar rose by half the picker's height, then dropped back as the window shrank.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
     }
 
     /// The bar itself: the groups of pills, and what a drag moves
@@ -119,8 +130,7 @@ struct CaptureToolbarView: View {
                 recorder.cancelCountdown()
             }
             .buttonStyle(.captureToolbar)
-            .keyboardShortcut(.cancelAction)
-            .captureToolbarTooltip("Cancel Countdown")
+            .captureToolbarTooltip("Cancel", shortcut: .close)
         }
         .captureToolbarPill()
     }

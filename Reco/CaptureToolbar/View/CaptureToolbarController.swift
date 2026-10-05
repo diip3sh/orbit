@@ -106,6 +106,7 @@ final class CaptureToolbarController {
     init(viewModel: CaptureToolbarViewModel) {
         self.viewModel = viewModel
         viewModel.onHide = { [weak self] animated in self?.hide(animated: animated) }
+        viewModel.currentDisplayID = { [weak self] in (self?.panel?.screen ?? self?.screenUnderPointer)?.displayID }
         viewModel.recorder.onSelectionChange = { [weak self] in
             guard let self else { return }
             viewModel.selectionDidChange()
@@ -374,13 +375,18 @@ extension CaptureToolbarController {
         tooltipRemoval?.cancel()
         let panel = tooltipPanel ?? makeTooltipPanel()
 
+        // From the bar itself: its window reaches `margin` past it (and over the picker while that is up)
+        let bar = CGRect(
+            origin: CaptureToolbarPlacement.barOrigin(inWindow: barPanel.frame, barSize: barSize, margin: margin),
+            size: barSize
+        )
         let frame = CaptureToolbarPlacement.rectAbove(
-            barFrame: barPanel.frame,
-            size: CaptureToolbarTooltipView.size(for: target.text),
-            midX: barPanel.frame.minX + margin + target.midX,
+            barFrame: bar,
+            size: CaptureToolbarTooltipView.size(for: target),
+            midX: bar.minX + target.midX,
             in: (barPanel.screen ?? screenUnderPointer).visibleFrame
         )
-        tooltips.pointsUp = frame.maxY <= barPanel.frame.minY
+        tooltips.pointsUp = frame.maxY <= bar.minY
         panel.setFrame(frame, display: false)
         panel.orderFrontRegardless()
     }
@@ -451,7 +457,7 @@ extension CaptureToolbarController {
         guard pickerPresence.isShown else { return }
         pickerRemoval?.cancel()
         pickerRemoval = Task {
-            try? await Task.sleep(for: PanelPresentation.exitDelay)
+            try? await Task.sleep(for: CaptureSourcePickerView.exitDelay)
             guard !Task.isCancelled else { return }
             pickerPresence.isShown = false
         }

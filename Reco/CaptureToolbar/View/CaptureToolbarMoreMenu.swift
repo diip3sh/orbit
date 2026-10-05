@@ -15,10 +15,7 @@ struct CaptureToolbarMoreMenu: View {
                 // The editor draws the cursor instead
                 .disabled(settings.leavesCursorToEditor)
             Divider()
-            Button("Settings…") {
-                NSApp.activate()
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            }
+            Button("Settings…", action: Self.openSettings)
         } label: {
             Label { Text("More Options") } icon: { ToolbarIcon(.toolbarSettings) }
                 .labelStyle(.iconOnly)
@@ -27,6 +24,19 @@ struct CaptureToolbarMoreMenu: View {
         .menuIndicator(.hidden)
         .buttonStyle(.captureToolbar)
         .fixedSize()
-        .captureToolbarTooltip("More Options")
+        .captureToolbarTooltip("Settings", shortcut: CaptureToolbarShortcut.settings.symbol)
+        // A menu can't carry a key equivalent of its own, so ⌘, is a button behind it
+        .background {
+            Button("Settings…", action: Self.openSettings)
+                .keyboardShortcut(CaptureToolbarShortcut.settings.key, modifiers: CaptureToolbarShortcut.settings.modifiers)
+                .opacity(0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private static func openSettings() {
+        NSApp.activate()
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 }

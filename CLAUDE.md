@@ -276,9 +276,11 @@ Key facts:
 ### S1 — Editor, phase 1: shell and playback (`feat/editor-shell`, spec 0003)
 
 Opens a recording in its own window with the preview, transport controls and a timeline (filmstrip,
-click/key lanes, playhead, scrubbing). Entry points: **Edit** on the recording-saved notification (its
-default action when the cursor was left out of the video), **Edit Last Recording** in the menu bar, and
-`reco://edit-last`. Keys: space play/pause, ←/→ step a frame, ⌘Z/⇧⌘Z undo/redo.
+click/key lanes, playhead, scrubbing). Every recording with video opens in it as soon as it is saved
+(`RecorderViewModel.onRecordingFinished`, wired to `EditorWindowManager.open` in `AppDelegate`), with no
+Recording Saved notification; a take copied by `reco://toggle-copy` keeps the notification instead, so automation
+isn't interrupted. Also **Edit** on that notification (its default action when the cursor was left out of the
+video), **Edit Last Recording** in the menu bar, and `reco://edit-last`. Keys: space play/pause, ←/→ step a frame, ⌘Z/⇧⌘Z undo/redo.
 
 | File | Role |
 |---|---|
@@ -485,7 +487,7 @@ slate gradient.
 | `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `GlassEffectContainer`), a material with a hairline before; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on (`nil` skips it); `withMotion { }` is the same for code with no environment; Increase Contrast adds a `dim` edge to every glass surface |
 | `Editor/View/EditorBackdrop.swift`, `StageDotGrid.swift` | The frosted desktop behind the window; the dot grid behind the preview, fading out before the stage's edges |
 | `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white), `.editorAccent` (white on the accent colour, for the floating capture panels) and `.editorGhost` (hairline) text buttons; every press shows on the frame it lands, only hover and release ease |
-| `View/PanelPresentation.swift`, `PanelPresence.swift` | `panelPresentation(isPresented:anchor:)`: a floating panel fades and settles from 0.96 anchored at its source and goes back there (opacity only with Reduce Motion); `exitDelay` is how long its window stays; `PanelPresence` carries the flag for controllers whose view model can't. Used by the agent bar, Quick Access card, pins, capture toolbar and countdown |
+| `View/PanelPresentation.swift`, `PanelPresence.swift` | `panelPresentation(isPresented:anchor:motion:blur:)`: a floating panel fades and, with `blur`, pops in where it is from that many points out of focus — no direction, where a scale has one, since the corner furthest from the anchor travels the most and the eye reads the panel as growing from that corner (the capture toolbar and its picker use `blur`; the card, pins, agent bar and countdown use the scale). Only opacity, blur and scale are animated, so a window resize in the same update isn't. Opacity only with Reduce Motion; `exitDelay` is how long its window stays; `PanelPresence` carries the flag for controllers whose view model can't |
 | `View/MenuRowButtonStyle.swift` | `.menuRow` for the popover's rows, and `MenuRowHighlight` (also under `MenuBarToggle`): Control Center's highlight, a 10 pt continuous rounded fill the row's full height, 6 pt in from the sides, 0.1 on hover, 0.16 the moment it's pressed, dimmed when disabled |
 | `Model/GesturePhysics.swift` | Pure: `project` (momentum), `rubberband`/`rubberbanded` (resistance past a boundary), `relativeVelocity`, `velocityMatchedDuration`, `flickExit`, and `VelocityTracker` (the last 0.1 s of a drag) |
 | `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar |
@@ -497,6 +499,12 @@ slate gradient.
 Key facts:
 - Glass only on controls over the stage, never on the timeline (content) or over the live video:
   each glass shape costs a sampling pass on the GPU the compositor also uses.
+- **Glass animates itself unless told not to.** `glassEffect` grows its shape as it appears (Apple's
+  own transition, `GlassEffectTransition` in SwiftUICore with `.matchedGeometry`, `.materialize` and
+  `.identity`), so a surface with its own entrance gets a *second* motion on top — for the capture
+  toolbar's pills that read as the controls sliding in diagonally, whatever the panel's own animation
+  did. Every `captureToolbarPill` therefore sets `.glassEffectTransition(.identity)` and leaves the
+  entrance to its caller (the bar's blur pop-in, the countdown disc's settle).
 - The inspector keeps the system `.inspector`, which macOS 26 draws as glass, so it has no background.
 - Text is ink by default, so it doesn't dim when disabled: `InspectorSection` fades disabled content.
 - Avoid what reads as generated: no gradients or glows in the chrome, no second accent, no cards
@@ -749,24 +757,38 @@ Settings → Video, the audio codec in Settings → Audio; Edit Last Recording s
 
 Replaces the pre-record overlay and the popover's recording rows: a floating bar at the bottom centre of the
 screen under the pointer, above the Dock, in the system Screenshot toolbar's order. Idle, its groups sit as
-dark Liquid Glass pills. The screenshot toolbar: close; Capture Screen / Window / Area; a more menu (Show
-Cursor, Settings…); and **Capture**. The recording toolbar: close; Record Screen / Window / Area; the options (a
-countdown chip with its value, then system audio, microphone and camera as switches); more; and **Record**. Each
-kind remembers its own mode (`CaptureToolbarViewModel.open(records:)`); a selection made elsewhere opens the
-recording one. What is live, chosen or on is the system accent colour (`CaptureToolbarView.live`): the action's
+dark Liquid Glass pills. The screenshot toolbar: close and a settings menu (Show Cursor, Settings…) in one pill;
+Capture Screen / Window / Area; and **Capture ↩**. The recording toolbar: close and settings; Record Screen /
+Window / Area; the options (a countdown chip with its value, then system audio, microphone and camera as
+switches); and **Record ↩**, its key in its label. Each
+always opens on its area mode (`CaptureToolbarViewModel.open(records:)`, `CaptureToolbarMode.initial`), never the
+one it was left on; a selection made elsewhere opens the recording one on its mode. **Take Screenshot…** and
+**Record Screen…** open them, from the popover or their global shortcuts ⇧⌘1 / ⇧⌘2 (`showScreenshotToolbar`,
+`showRecordingToolbar`, Settings → Shortcuts → Capture Toolbar; idle only, like the rows). What is live, chosen or on is the system accent colour (`CaptureToolbarView.live`): the action's
 pill, the mode's highlight (sliding to the one chosen), switches that are on (filled, white icon); a switch that is
 off keeps a faint fill so it still reads as one.
 
 **Choosing what to record** opens the mode's own control straight away, whether from a mode icon
 (`pick(_:)`) or from Record (`performAction()`), both through `chooseSource(for:)`: Reco's picker for a window
-or a display (not the system's full-screen one), the area overlay to drag on. A choice then starts the
-countdown. The picker is the windows or displays as thumbnails above the bar, up to four across and two rows,
-the rest scrolled to, each with its app icon, title and app name, on a light frost of its own
+(not the system's full-screen one), the area overlay to drag on. Record Screen has nothing to choose: its icon
+only switches mode, and Record takes the display the bar is on (`CaptureSourcePicker.pickDisplay(_:)`, through
+`currentDisplayID`, the first display if that one is gone). A choice then starts the countdown. The picker is the
+windows as thumbnails above the bar in one row, at most four tiles wide (`CaptureSourceGrid.maximumColumns`), the
+rest scrolled to sideways under the frost's edges, each with its app icon, title and app name, on a light frost of its own
 (`pickerBackdrop()`; solid with Reduce Transparency) and **nothing else** — no panel with a title, no button.
-Esc and the close control cancel the innermost thing open first (`cancel()`, so its tooltip follows: Close,
-Close Picker, Cancel Selection). It waits until it has something to show (`hasSomethingToShow`, a spinner only
-after `waitingDelay`), so a warm open lays out the finished tiles in one move, and it arrives on
-`EditorTheme.quickMotion` through `panelPresentation(…, motion:)`, not the panels' 0.35 s spring.
+Each picture is the window at its own shape, fitted into the tile and sitting on its name, with the ring around
+the picture itself (`CaptureSourcePicture`): a 16:10 box behind it left wide and tall windows small inside a
+bigger frame. One highlight (`CaptureSourcePicker.highlighted`) is on the first tile when they land, and the
+pointer and ← → move it (`CaptureSourceGrid.neighbour`, stopping at the ends, scrolled into view); Return or
+Record records it (`performAction()` → `pickHighlighted()`). It sits `CaptureToolbarView.pickerGap` (10 pt) above the bar. Esc cancels the innermost thing open first
+(`cancel()`: the picker or a half-drawn area, then the toolbar); the close control always closes everything
+(`close()`). It waits until it has something to show (`hasSomethingToShow`, a spinner only
+after `waitingDelay`), so a warm open lays out the finished tiles in one move. It slides up 16 pt out of the bar
+on a spring with a little bounce (`CaptureSourcePickerView.motion`, response 0.38, damping 0.8) and its tiles follow
+35 ms apart (`StaggeredEntrance`, from each tile's own appearance so tiles after a slow load still come in turn;
+past the fifth they start together); closing slides it all back down, tiles 17.5 ms apart, and it is unmounted
+after `CaptureSourcePickerView.exitDelay` (450 ms). Opacity and offset only, scoped (`.animation(_:body:)`), so the
+window growing in the same update isn't animated. Reduce Motion fades it.
 
 **It is drawn in the bar's own window**, above the bar (`CaptureToolbarView`), never one of its own: a second
 window that took key would have macOS draw the bar's controls as inactive for as long as it was open. So the
@@ -774,7 +796,10 @@ panel is sized to the bar plus the picker while it is up (`onSizeChange` measure
 the bar, which is what placement works from —
 `CaptureToolbarPlacement.barOrigin(inWindow:barSize:margin:)` and `windowOrigin(for:windowSize:barSize:margin:)`),
 the frame is set rather than animated, and a click elsewhere closes the picker through the bar's own
-`didResignKey`. It stays mounted until its exit has played, then the window shrinks back around the bar.
+`didResignKey`. It stays mounted until its exit has played, then the window shrinks back around the bar. The
+content is held to the window's bottom (`.frame(…, alignment: .bottom)`): the window narrows only after the
+change has played, and while it was taller than its content the hosting view centred the bar, which jumped up
+by half the picker's height and back down on every close.
 
 **The area selection Record opened has no
 Confirm/Cancel buttons of its own** (`presentAreaSelection(showsActions: false)`, from the toolbar only;
@@ -784,20 +809,30 @@ an area is drawn and then takes it (`AreaSelectionOverlay.isPresented`/`canConfi
 switching mode or closing the bar cancels the selection (`cancel()`). Return and Esc still work, on the
 overlay's own key handling. During the take the bar
 shows what it records (fixed until it ends) and the live pill: the time in red, on a red-tinted pill, dim while paused, pause,
-and a white stop square, for any start (menu, shortcut, `reco://`); it goes once the file is saved.
+and a white stop square, for any start (menu, shortcut, `reco://`); it goes once the file is saved, as the editor opens on it.
 
 - **Motion:** dragged from anywhere between its controls, it follows the pointer 1:1 from where it was
   grabbed, resists past the screen's edges (`GesturePhysics.rubberbanded`) and, on release, comes to rest
   where its momentum carries it, at the release speed, or home when that lands within 64 pt. A drop is
   remembered per screen; the bar doesn't follow the pointer to another one. Reduce Motion places it without
-  the release animation. Enter and exit run through `panelPresentation` anchored at the bar's bottom centre.
+  the release animation. Enter and exit run through `panelPresentation` with `blur`
+  (`CaptureToolbarView.entranceBlur`, 8 pt, under the 12 pt `margin` so the blur isn't clipped): the bar pops in
+  where it is, from out of focus to sharp with a fade, with no offset or scale and so no direction at all. The
+  animation is scoped to opacity, blur and scale (`.animation(_:body:)`), so the window's resize and the
+  content's re-centring in the same update are never animated; that move is what slid the bar in diagonally.
 - **Key:** the panel takes key only while idle, so Return (action) and Esc (close) reach it without
   activating Reco; a take gives key back to the app in front (`orderOut`/`orderFrontRegardless`), and
   clicks still land through `acceptsFirstMouse`, so pause and stop never steal focus.
 - **Icons:** Hugeicons stroke-rounded (MIT), generated as template PNGs in `Assets.xcassets/ToolbarIcons`
   (`toolbar-*`), drawn by `ToolbarIcon` at the text size; recording modes carry a record badge cut out of
   the picture under it (`CaptureModeIcon`).
-- **Tooltips:** every control names itself, in a Dock-style bubble in its own window (`CaptureTooltipPanel`,
+- **Keys:** while the bar has key every control answers one, named dimmed after its tooltip's text
+  (`CaptureToolbarShortcut`): esc close (one layer at a time), ⌘, settings, 1 / 2 / 3 screen, window, area,
+  A / M / C system audio, mic, camera, ↩ the action. Plain keys, as in the system's Screenshot toolbar. A menu
+  can't carry a key equivalent, so esc and ⌘, are invisible buttons behind the close control and the gear. During
+  a take the bar isn't key, so pause and stop show the global shortcuts (Pause/Resume and Toggle Recording).
+- **Tooltips:** every control says what it does in two words at most (`CaptureToolbarMode.shortTitle`, "Mute
+  Mic" / "Record Mic"), in a Dock-style bubble in its own window (`CaptureTooltipPanel`,
   never key, `ignoresMouseEvents` so it never blocks anything): white medium text on translucent grey with a
   hairline edge, and a rounded tail pointing at the control — down at the bar from above, or up from below when
   the bar sits at the top of the screen (`pointsUp`). As the system's help tags: the first waits for the pointer
@@ -805,12 +840,13 @@ and a white stop square, for any start (menu, shortcut, `reco://`); it goes once
   80 ms before hiding, so crossing to its neighbour swaps the text and place without a fade. It only fades (in
   0.12 s, out 0.08 s), with Reduce Motion too, since nothing moves. While hovered the text follows what the
   control does (Pause ↔ Resume, On ↔ Off), swapped in place. The window is sized from the bubble measured for
-  its text (`CaptureToolbarTooltipView.size(for:)`). Dragging the bar keeps tooltips away until
+  its text (`CaptureToolbarTooltipView.size(for:)`), and placed from the bar's own frame, not its window's
+  (which reaches the 12 pt margin past it, and the picker), so the tail's tip is 6 pt clear of the glass. Dragging the bar keeps tooltips away until
   the pointer moves again, and a screenshot's instant hide takes the tooltip with it.
 
 | File | Role |
 |---|---|
-| `CaptureToolbar/Model/CaptureToolbarMode.swift` | The six modes; screenshots and recordings each remember theirs (`storageKey(records:)`) |
+| `CaptureToolbar/Model/CaptureToolbarMode.swift` | The six modes; each toolbar opens on its area mode (`initial(records:)`) |
 | `CaptureToolbar/Model/CaptureToolbarPlacement.swift` | Pure: home (bottom centre, 48 pt above the Dock), drag resistance, where a release comes to rest, the snap-home distance, where a tooltip sits, and where the bar sits inside its window and the window around the bar |
 | `CaptureToolbar/ViewModel/CaptureToolbarViewModel.swift` | Mode, `pick()`/`chooseSource()`/`performAction()`, `cancel()`/`close()`, `selectionDidChange()` (from `RecorderViewModel.onSelectionChange`), option toggles (permission asked when the mic/camera is turned on) |
 | `CaptureToolbar/Model/CaptureSource.swift` | Pure: which windows are offered (layer 0, on screen, ≥ 64 pt, not Reco), an untitled window's name, the grid's size |
@@ -822,6 +858,7 @@ and a white stop square, for any start (menu, shortcut, `reco://`); it goes once
 | `CaptureToolbar/View/CaptureToolbarView.swift` | The picker above the bar, then idle / counting down (with Cancel) / recording / saving, all in the studio's dark scheme; reports the window's and the bar's own sizes |
 | `CaptureToolbar/View/CaptureToolbarIdleControls.swift`, `CaptureToolbarLiveControls.swift` | The idle groups with the sliding mode highlight; the live indicators and pill |
 | `CaptureToolbar/View/CaptureToolbarOptions.swift`, `CaptureToolbarMoreMenu.swift` | Countdown chip menu; system audio / mic / camera switches; Show Cursor and Settings… |
+| `CaptureToolbar/View/CaptureToolbarShortcut.swift` | The keys the bar answers while it has key, and how tooltips write them |
 | `CaptureToolbar/View/CaptureToolbarPill.swift`, `CaptureToolbarButtonStyle.swift`, `ToolbarIcon.swift`, `CaptureModeIcon.swift` | The glass pill (solid with Reduce Transparency, defined edge with Increase Contrast), the press/hover/isOn button styles, the icons |
 
 - The bar is left out of display and area recordings because it is on screen when the filter is built and

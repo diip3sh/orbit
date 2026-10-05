@@ -5,24 +5,36 @@
 
 import SwiftUI
 
-/// Before a screenshot or a take, in groups: close; the three screenshot modes or the three recording
-/// modes; for a take, its options; more; and the action. One highlight in the accent colour marks the
-/// mode and slides to the one chosen.
+/// Before a screenshot or a take, in groups: close and settings; the three screenshot modes or the three
+/// recording modes; for a take, its options; and the action. One highlight in the accent colour marks the
+/// mode and slides to the one chosen. Every control answers a key while the bar has key, named in its tooltip.
 struct CaptureToolbarIdleControls: View {
     let viewModel: CaptureToolbarViewModel
 
     @Namespace private var selection
 
     var body: some View {
-        Button {
-            Task { await viewModel.cancel() }
-        } label: {
-            Label { Text("Close") } icon: { ToolbarIcon(.toolbarClose) }
-                .labelStyle(.iconOnly)
+        HStack(spacing: 2) {
+            Button {
+                Task { await viewModel.close() }
+            } label: {
+                Label { Text("Close") } icon: { ToolbarIcon(.toolbarClose) }
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.captureToolbar)
+            // Esc steps back one thing at a time (the picker, a half-drawn area, then the bar), where
+            // clicking takes everything away at once
+            .captureToolbarTooltip("Close", shortcut: CaptureToolbarShortcut.close.symbol)
+            .background {
+                Button("Cancel") { Task { await viewModel.cancel() } }
+                    .keyboardShortcut(CaptureToolbarShortcut.close.key, modifiers: [])
+                    .opacity(0)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+
+            CaptureToolbarMoreMenu(settings: viewModel.settings)
         }
-        .buttonStyle(.captureToolbar)
-        .keyboardShortcut(.cancelAction)
-        .captureToolbarTooltip(viewModel.cancelTitle)
         .captureToolbarPill()
 
         modeGroup(CaptureToolbarMode.allCases.filter { $0.records == viewModel.mode.records })
@@ -35,16 +47,20 @@ struct CaptureToolbarIdleControls: View {
             .captureToolbarPill()
         }
 
-        CaptureToolbarMoreMenu(settings: viewModel.settings)
-            .captureToolbarPill()
-
-        Button(viewModel.mode.actionTitle) {
+        Button {
             Task { await viewModel.performAction() }
+        } label: {
+            // Its key in the label, so it needs no tooltip
+            HStack(spacing: EditorTheme.tightSpacing) {
+                Text(viewModel.mode.actionTitle)
+                Text(CaptureToolbarShortcut.action.symbol)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .accessibilityHidden(true)
+            }
         }
         .buttonStyle(.captureToolbarAction)
-        .keyboardShortcut(.defaultAction)
+        .keyboardShortcut(CaptureToolbarShortcut.action.key, modifiers: [])
         .disabled(!viewModel.canPerformAction)
-        .captureToolbarTooltip(viewModel.mode.title)
         .captureToolbarPill(tint: CaptureToolbarView.live)
     }
 
@@ -68,7 +84,7 @@ struct CaptureToolbarIdleControls: View {
                     }
                 }
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
-                .captureToolbarTooltip(mode.title)
+                .captureToolbarTooltip(mode.shortTitle, shortcut: .mode(mode))
             }
         }
         .editorMotion(value: viewModel.mode)

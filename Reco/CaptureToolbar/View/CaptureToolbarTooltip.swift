@@ -7,11 +7,17 @@ import SwiftUI
 
 extension View {
 
-    /// The tooltip that names this control, above the bar: what it is, or what it does now. Ours, not
-    /// the system's, so it appears sooner, follows what the control does, and moves straight to the
-    /// next control the pointer rests on.
-    func captureToolbarTooltip(_ text: @autoclosure @escaping () -> String) -> some View {
-        modifier(CaptureToolbarTooltipModifier(text: text))
+    /// The tooltip above the bar: what this control does now, in a word or two, and the key that does
+    /// it. Ours, not the system's, so it appears sooner, follows what the control does, and moves
+    /// straight to the next control the pointer rests on.
+    func captureToolbarTooltip(_ text: @autoclosure @escaping () -> String, shortcut: String? = nil) -> some View {
+        modifier(CaptureToolbarTooltipModifier(text: text, shortcut: shortcut))
+    }
+
+    /// Answers `shortcut` while the bar has key, and names its key in the tooltip
+    func captureToolbarTooltip(_ text: @autoclosure @escaping () -> String, shortcut: CaptureToolbarShortcut) -> some View {
+        keyboardShortcut(shortcut.key, modifiers: shortcut.modifiers)
+            .modifier(CaptureToolbarTooltipModifier(text: text, shortcut: shortcut.symbol))
     }
 }
 
@@ -20,6 +26,7 @@ extension View {
 /// so the tooltip follows what the control does (Pause becomes Resume, On becomes Off).
 private struct CaptureToolbarTooltipModifier: ViewModifier {
     let text: () -> String
+    let shortcut: String?
 
     @Environment(CaptureToolbarTooltips.self) private var tooltips
     @State private var midX: CGFloat = .zero
@@ -36,13 +43,13 @@ private struct CaptureToolbarTooltipModifier: ViewModifier {
                 if hovering {
                     let delay = tooltips.appearDelay()
                     guard delay > .zero else {
-                        tooltips.hover(text(), at: midX)
+                        tooltips.hover(text(), shortcut: shortcut, at: midX)
                         return
                     }
                     appearTask = Task {
                         try? await Task.sleep(for: delay)
                         guard !Task.isCancelled else { return }
-                        tooltips.hover(text(), at: midX)
+                        tooltips.hover(text(), shortcut: shortcut, at: midX)
                     }
                 } else {
                     tooltips.unhover()
@@ -65,17 +72,18 @@ struct CaptureToolbarTooltipView: View {
     /// Room for the bubble's shadow, inside the window
     static let margin: CGFloat = 6
 
-    /// The window's size for `text`, measured from the bubble itself: the view's own fitting size still
+    /// The window's size for `target`, measured from the bubble itself: the view's own fitting size still
     /// holds the previous text when a hover lands, so a window sized from it let the bubble spill over the bar.
-    static func size(for text: String) -> CGSize {
-        let fitted = NSHostingView(rootView: CaptureToolbarTooltipBubble(text: text, pointsUp: false)).fittingSize
+    static func size(for target: CaptureToolbarTooltips.Target) -> CGSize {
+        let bubble = CaptureToolbarTooltipBubble(text: target.text, shortcut: target.shortcut, pointsUp: false)
+        let fitted = NSHostingView(rootView: bubble).fittingSize
         return CGSize(width: fitted.width.rounded(.up) + margin * 2, height: fitted.height.rounded(.up) + margin * 2)
     }
 
     var body: some View {
         ZStack {
             if let target = tooltips.target, tooltips.isShown {
-                CaptureToolbarTooltipBubble(text: target.text, pointsUp: tooltips.pointsUp)
+                CaptureToolbarTooltipBubble(text: target.text, shortcut: target.shortcut, pointsUp: tooltips.pointsUp)
                     .transition(.opacity)
             }
         }
@@ -87,24 +95,32 @@ struct CaptureToolbarTooltipView: View {
     }
 }
 
-/// The Dock's tooltip: white medium text on translucent grey, a hairline edge, and a tail
+/// The Dock's tooltip: white medium text on translucent grey, a hairline edge, and a tail; the key that
+/// does the same, dimmed after it, as a menu shows it
 private struct CaptureToolbarTooltipBubble: View {
     let text: String
+    let shortcut: String?
     let pointsUp: Bool
 
     var body: some View {
         let shape = TooltipBubbleShape(pointsUp: pointsUp)
-        Text(text)
-            .font(.body.weight(.medium))
-            .foregroundStyle(.white)
-            .lineLimit(1)
-            .padding(.horizontal, EditorTheme.mediumSpacing)
-            .padding(.vertical, 6)
-            .padding(pointsUp ? .top : .bottom, TooltipBubbleShape.tailHeight)
-            .background(Color(white: 0.26).opacity(0.85), in: shape)
-            .background(.ultraThinMaterial, in: shape)
-            .overlay(shape.stroke(.white.opacity(0.14), lineWidth: 0.5))
-            .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
+        HStack(spacing: 6) {
+            Text(text)
+                .foregroundStyle(.white)
+            if let shortcut {
+                Text(shortcut)
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+        }
+        .font(.body.weight(.medium))
+        .lineLimit(1)
+        .padding(.horizontal, EditorTheme.mediumSpacing)
+        .padding(.vertical, 6)
+        .padding(pointsUp ? .top : .bottom, TooltipBubbleShape.tailHeight)
+        .background(Color(white: 0.26).opacity(0.85), in: shape)
+        .background(.ultraThinMaterial, in: shape)
+        .overlay(shape.stroke(.white.opacity(0.14), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
     }
 }
 

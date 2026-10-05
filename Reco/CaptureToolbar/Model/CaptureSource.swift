@@ -41,7 +41,7 @@ nonisolated struct CaptureSource: Identifiable, Equatable, Sendable {
     }
 }
 
-/// The picker's grid of tiles: up to four across, two rows shown, the rest scrolled to.
+/// The picker's row of tiles: up to four shown, the rest scrolled to sideways.
 nonisolated enum CaptureSourceGrid {
 
     static let tileWidth: CGFloat = 208
@@ -53,7 +53,6 @@ nonisolated enum CaptureSourceGrid {
     /// The tiles' room inside the frost around them
     static let padding: CGFloat = 10
     static let maximumColumns = 4
-    static let visibleRows = 2
 
     static var tileHeight: CGFloat { thumbnailHeight + 6 + labelHeight }
 
@@ -63,16 +62,21 @@ nonisolated enum CaptureSourceGrid {
         CGSize(width: tileWidth * 2 + spacing + padding * 2, height: 120)
     }
 
+    /// The tile `offset` places from `id` in the row, kept inside it; the first when nothing is highlighted
+    static func neighbour<ID: Equatable>(of id: ID?, by offset: Int, in ids: [ID]) -> ID? {
+        guard !ids.isEmpty else { return nil }
+        guard let id, let index = ids.firstIndex(of: id) else { return ids.first }
+        return ids[min(max(index + offset, 0), ids.count - 1)]
+    }
+
     static func columns(for count: Int) -> Int {
         min(max(count, 1), maximumColumns)
     }
 
-    /// The grid's own size for `count` tiles
+    /// The row's own size for `count` tiles: one row, never wider than `maximumColumns` tiles
     static func size(for count: Int) -> CGSize {
         let columns = columns(for: count)
-        let rows = min(max(1, Int((Double(count) / Double(maximumColumns)).rounded(.up))), visibleRows)
         let width = CGFloat(columns) * tileWidth + CGFloat(columns - 1) * spacing + padding * 2
-        let height = CGFloat(rows) * tileHeight + CGFloat(rows - 1) * spacing + padding * 2
-        return CGSize(width: width, height: height)
+        return CGSize(width: width, height: tileHeight + padding * 2)
     }
 }

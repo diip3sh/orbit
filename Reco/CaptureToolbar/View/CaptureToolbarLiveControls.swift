@@ -3,6 +3,7 @@
 //  Reco
 //
 
+import KeyboardShortcuts
 import SwiftUI
 
 /// During a take: what it records, shown but fixed until it ends, and the live pill with the time,
@@ -14,9 +15,9 @@ struct CaptureToolbarLiveControls: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            indicator("System Audio", icon: .toolbarSystemAudio, isOn: settings.captureSystemAudio)
-            indicator("Microphone", icon: .toolbarMic, isOn: settings.captureMicrophone)
-            indicator("Camera", icon: .toolbarCamera, isOn: settings.presenterOverlayEnabled)
+            indicator("System Audio", short: "Audio", icon: .toolbarSystemAudio, isOn: settings.captureSystemAudio)
+            indicator("Microphone", short: "Mic", icon: .toolbarMic, isOn: settings.captureMicrophone)
+            indicator("Camera", short: "Camera", icon: .toolbarCamera, isOn: settings.presenterOverlayEnabled)
         }
         .captureToolbarPill()
 
@@ -45,7 +46,8 @@ struct CaptureToolbarLiveControls: View {
                 .labelStyle(.iconOnly)
             }
             .buttonStyle(.captureToolbar)
-            .captureToolbarTooltip(recorder.isPaused ? "Resume Recording" : "Pause Recording")
+            // The bar doesn't take key during a take, so the keys shown are the global shortcuts
+            .captureToolbarTooltip(recorder.isPaused ? "Resume" : "Pause", shortcut: Self.shortcut(for: .pauseRecording))
 
             Button {
                 Task { await recorder.stopRecording() }
@@ -54,18 +56,22 @@ struct CaptureToolbarLiveControls: View {
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(CaptureToolbarStopButtonStyle())
-            .captureToolbarTooltip("Stop Recording")
+            .captureToolbarTooltip("Stop", shortcut: Self.shortcut(for: .toggleRecording))
         }
         .captureToolbarPill(tint: CaptureToolbarView.recording.mix(with: CaptureToolbarView.ground, by: recorder.isPaused ? 0.9 : 0.7))
     }
 
-    private func indicator(_ title: String, icon: ImageResource, isOn: Bool) -> some View {
+    private func indicator(_ title: String, short: String, icon: ImageResource, isOn: Bool) -> some View {
         ToolbarIcon(icon)
             .foregroundStyle(isOn ? CaptureToolbarView.live : .secondary)
             .opacity(isOn ? 1 : 0.5)
             .frame(width: 36, height: 36)
             .accessibilityLabel("\(title): \(isOn ? "On" : "Off")")
-            .captureToolbarTooltip("\(title): \(isOn ? "On" : "Off")")
+            .captureToolbarTooltip("\(short) \(isOn ? "On" : "Off")")
+    }
+
+    private static func shortcut(for name: KeyboardShortcuts.Name) -> String? {
+        KeyboardShortcuts.getShortcut(for: name)?.description
     }
 }
 

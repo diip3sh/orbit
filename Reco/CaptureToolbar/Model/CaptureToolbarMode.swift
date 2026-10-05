@@ -15,11 +15,7 @@ nonisolated enum CaptureToolbarMode: String, CaseIterable, Identifiable, Sendabl
     case recordWindow
     case recordArea
 
-    /// Screenshots and recordings each remember their own mode, as each opens its own toolbar
-    static func storageKey(records: Bool) -> String {
-        records ? "captureToolbarRecordingMode" : "captureToolbarScreenshotMode"
-    }
-
+    /// What each toolbar opens on, every time: the area, the most common capture
     static func initial(records: Bool) -> Self {
         records ? .recordArea : .captureArea
     }
@@ -41,6 +37,15 @@ nonisolated enum CaptureToolbarMode: String, CaseIterable, Identifiable, Sendabl
         case .recordScreen: "Record Entire Screen"
         case .recordWindow: "Record Selected Window"
         case .recordArea: "Record Selected Portion"
+        }
+    }
+
+    /// The tooltip's name for it: two words at most, the toolbar already says capture or record
+    var shortTitle: String {
+        switch self {
+        case .captureScreen, .recordScreen: "Entire Screen"
+        case .captureWindow, .recordWindow: "Window"
+        case .captureArea, .recordArea: "Selected Area"
         }
     }
 

@@ -18,9 +18,10 @@ nonisolated enum CaptureToolbarPlacement {
     /// A release whose projected centre lands this close to home goes home
     static let homeSnapDistance: CGFloat = 64
 
-    /// Between the bar's window and the tooltip window above it. The tooltip view adds its own 6 pt
-    /// margin inside its window, so the chip ends up about 8 pt clear of the bar.
-    static let tooltipGap: CGFloat = 2
+    /// Between the bar and the tooltip window above it. The tooltip view adds its own 6 pt margin inside
+    /// its window, so the tail's tip ends up 6 pt clear of the bar's glass. Measured from the bar's window
+    /// it was 20 pt, since that reaches the bar's 12 pt margin past it.
+    static let tooltipGap: CGFloat = 0
 
     /// The bar's own origin inside its window: the bar sits centred at the window's bottom, `margin` in
     /// from its edges. The window can be wider than the bar and taller, since the picker for a window or
