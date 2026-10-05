@@ -134,7 +134,9 @@ struct WebPageRendererTests {
 
         let movie = try await render(script).movie
 
-        #expect(try await pixel(at: CGPoint(x: 20, y: 20), frame: 0, of: movie).isClose(to: [0, 255, 0]))
+        // The page turns green 100 ms after it loads; frame 0 only catches that when the load
+        // settles late, so look a sixth of a second in, past the timeout on the take's own clock
+        #expect(try await pixel(at: CGPoint(x: 20, y: 20), frame: 10, of: movie).isClose(to: [0, 255, 0]))
     }
 
     @Test func rendersIntoAFolderThatDoesNotExistYet() async throws {

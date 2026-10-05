@@ -299,12 +299,10 @@ struct AssetWriterTests {
         let track = try #require(await asset.loadTracks(withMediaType: .video).first)
 
         let reader = try AVAssetReader(asset: asset)
-        let output = AVAssetReaderTrackOutput(
-            track: track,
-            outputSettings: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-            ]
-        )
+        // Undecoded samples, so a loaded CI runner's decoder can't stop partway through the file
+        // (a readback there once returned a single frame). The encoder reorders its frames, so they
+        // arrive in decode order; sorted, they are the track's presentation times.
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
         reader.add(output)
         #expect(reader.startReading())
 
@@ -314,7 +312,7 @@ struct AssetWriterTests {
             times.append(CMSampleBufferGetPresentationTimeStamp(sample))
         }
 
-        return times
+        return times.sorted()
     }
 
     /// Creates a SettingsStore backed by a fresh, empty UserDefaults suite.

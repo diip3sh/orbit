@@ -307,8 +307,9 @@ struct CaptureToolbarTests {
         tooltips.hover("Close", at: 30)
         tooltips.unhover()
         #expect(tooltips.isShown)
-        // The main actor runs late under a parallel test run, so wait for the hide rather than a fixed time
-        let deadline = ContinuousClock.now + .seconds(5)
+        // The main actor runs late under a parallel test run, so wait for the hide rather than a
+        // fixed time. 30 s because GitHub's macOS runner starved it for more than the 5 s this had
+        let deadline = ContinuousClock.now + .seconds(30)
         while tooltips.isShown, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(20))
         }
