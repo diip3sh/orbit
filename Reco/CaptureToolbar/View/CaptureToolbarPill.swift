@@ -12,18 +12,22 @@ extension View {
     /// Transparency, with a defined edge with Increase Contrast.
     /// `isInteractive` false for a surface that holds controls rather than being pressed itself
     func captureToolbarPill(tint: Color = CaptureToolbarView.ground, isInteractive: Bool = true) -> some View {
-        modifier(CaptureToolbarPill(tint: tint, isInteractive: isInteractive))
+        captureToolbarPill(in: RoundedRectangle(cornerRadius: 16, style: .continuous), tint: tint, isInteractive: isInteractive)
+    }
+
+    /// The same surface in another shape, for the floating panels that share the toolbar's look
+    func captureToolbarPill(in shape: some InsettableShape, tint: Color = CaptureToolbarView.ground, isInteractive: Bool = true) -> some View {
+        modifier(CaptureToolbarPill(tint: tint, isInteractive: isInteractive, shape: shape))
     }
 }
 
-private struct CaptureToolbarPill: ViewModifier {
+private struct CaptureToolbarPill<S: InsettableShape>: ViewModifier {
     let tint: Color
     let isInteractive: Bool
+    let shape: S
 
     @Environment(\.accessibilityReduceTransparency) private var reducesTransparency
     @Environment(\.colorSchemeContrast) private var contrast
-
-    private let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
 
     func body(content: Content) -> some View {
         surface(content.padding(4))

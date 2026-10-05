@@ -37,14 +37,31 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
 
 - Tests: same command with `test` instead of `build -quiet` (Swift Testing, 581 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
-  `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
-  `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
+  `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
+  `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
+  (file_length, type_body_length). Don't make them worse; SwiftLint skips
   extensions for type_body_length, so new logic goes in same-file extensions or new types.
 - Keep build output outside the repo (`/tmp/bc-build`). If the build fails with "There is no
   XCFramework found", `rm -rf /tmp/bc-build` and rebuild (moved DerivedData breaks SPM paths).
-- **Don't use ad-hoc signing (`CODE_SIGN_IDENTITY="-"`)**: the code hash changes every build, so
-  macOS forgets the Screen Recording permission and prompts forever. If a permission gets stuck:
-  `tccutil reset ScreenCapture com.diip3sh.Reco`, then relaunch.
+- **Never launch an ad-hoc signed build.** Its designated requirement is pinned to its cdhash
+  (`designated => cdhash H"…"`), which changes on every build, while TCC stores the cert-anchored
+  requirement (`anchor apple generic and certificate leaf[subject.CN] = "Apple Development: …"`). So
+  tccd logs `Failed to match existing code requirement for subject com.diip3sh.Reco and service
+  kTCCServiceScreenCapture` and macOS asks for Screen Recording again — **while System Settings still
+  lists Reco as allowed**, because that row survives (auth_value=2) and simply stops matching. Nothing
+  is actually lost; the app just isn't recognised.
+  - This Mac has one valid Apple Development identity, and Xcode's own build signs **ad-hoc with no
+    team identifier** (`Signature=adhoc`, `TeamIdentifier=not set`). So ⌘R, or any `xcodebuild`
+    without the settings below, produces a Reco that cannot keep the permission — and it lands in
+    `~/Library/Developer/Xcode/DerivedData/Reco-*/Build/Products/Debug/Reco.app`, a second copy whose
+    path becomes the process's responsiblePath. Measured 2026-10-05: that is exactly what happened.
+  - `scripts/dev.sh` now refuses to launch a build whose `TeamIdentifier` is unset, and names a Reco
+    that is running from another build.
+  - `tccutil reset ScreenCapture com.diip3sh.Reco` looks the app up through Launch Services, which
+    doesn't index `/tmp`, so it answers `No such bundle identifier` (-10814) for a dev build. Fix a
+    stuck grant in System Settings → Privacy & Security instead: remove Reco, launch the signed build,
+    grant again. Microphone is the same and keeps its row in the per-user TCC database, not the system
+    one (`kTCCServiceMicrophone` is absent from the system db while `kTCCServiceScreenCapture` is there).
 - Live reload: `brew install --cask injectioniii`, run it, open this project in it, then run the app. Saving
   a Swift file patches the running Debug build (`DebugInjection`; Debug has `-interposable` and no hardened
   runtime). Changes it can't patch (new stored properties, type layout) need a relaunch: `scripts/dev.sh`
@@ -186,15 +203,15 @@ Audio buffers straddling a pause edge are dropped whole (gap ≤ ~21 ms per edge
 
 ### F5 — Countdown (`feat/countdown`)
 
-**Settings → General → Recording → Countdown**: Off / 3 / 5 / 10 s (default 3). Every user start (menu
-Start, pre-record overlay Start, Toggle Recording shortcut) shows a big number centred on what will be
+**Settings → General → Recording → Countdown**: Off / 3 / 5 / 10 s (default 3). Every user start (the capture
+toolbar's Record, Toggle Recording shortcut) shows a big number centred on what will be
 recorded (area, window, or display) and the seconds in the menu bar. `reco://toggle` /
 `toggle-copy` skip the countdown (and cancel one that's running) so automation stays precise.
 
 | File | Role |
 |---|---|
 | `Service/RecordingCountdown.swift` | `@Observable` tick loop (`remaining`), cancellable, injectable one-second sleep for tests |
-| `View/CountdownOverlay.swift`, `View/CountdownView.swift` | Click-through, non-activating `.screenSaver` dark panel with the number on a 150 pt glass disc (`editorGlass`) that grows in from its centre (`panelPresentation`) and counts with `numericText`; Esc as a temporary global hotkey |
+| `View/CountdownOverlay.swift`, `View/CountdownView.swift` | Click-through, non-activating `.screenSaver` dark panel with the number on a 150 pt disc of the capture toolbar's dark glass (`captureToolbarPill(in:)`) that grows in from its centre (`panelPresentation`) and counts with `numericText`; Esc as a temporary global hotkey |
 | `Model/CountdownDuration.swift` | Setting enum (`SettingsStore.countdownDuration`) |
 | `ViewModel/RecorderViewModel.swift` | `// MARK: - Countdown` extension: `startRecordingWithCountdown()`, `cancelCountdown()`; `toggleRecording(countdown:)` |
 
@@ -222,7 +239,7 @@ bottom-left without a region) and shrinks back there when closed, copied, saved 
 `restore()` stay instant. Drag the card by its 8 pt edge: it follows the pointer 1:1 from where it
 was grabbed (`PanelDragger`), and a flick that projects past the screen's edge (`GesturePhysics.flickExit`)
 throws it off at the release speed and closes it; a slow drag stays where dropped, a flick inwards too. Drag the shot into
-any app to drop the image. The card and the pre-record overlay have no window shadow: it outlines
+any app to drop the image. The card and the capture toolbar have no window shadow: it outlines
 the rectangle around their rounded glass. Nothing is written until **Save**. The card stays until
 closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate` wires
 `ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and `onDidCapture` to
@@ -238,7 +255,7 @@ closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate`
 |---|---|
 | `QuickAccess/View/QuickAccessController.swift`, `QuickAccessPanel.swift` | Non-activating borderless `.floating` dark panel (key on appearing, `hidesOnDeactivate = false`), enter/exit through `panelPresentation` (`exitDelay` before ordering out; leaving panels are tracked so `hide()` clears them too), placement (`panelFrame`), owns the card's view model and the pins |
 | `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin` |
-| `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius), hover scrim and controls (`.editorPrimary` Copy/Save, dark corner icons), a solid toast; icons are 1.5 pt line
+| `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius), hover scrim and controls (`.editorAccent` Copy/Save, dark corner icons), a solid toast; icons are 1.5 pt line
 SVGs in `Assets.xcassets/LineIcons` as template vectors, drawn by `LineIcon` in `CornerButtonStyle`'s dark circles (both shared with pins): Iconsax Linear (MIT) for close, tick and
 the text scan (its scan frame around text lines), Tabler's pin (MIT) since Iconsax has none; a `DragGesture` on the edge drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the shot. Annotate goes first in the top-right corner once it exists (one line) |
 | `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, 8 pt rounded corners with a faint edge, the card's close button on hover; appears from and closes into its bottom-left corner (`panelPresentation`, a `PanelPresence` per pin) |
@@ -467,8 +484,8 @@ slate gradient.
 | `Editor/View/EditorTheme.swift` | System colors by role, spacing on a 4-point grid, and the motion tokens: `motion` (spring, response 0.35, critically damped: every state change), `quickMotion` (0.15: hover, release), `momentumMotion` (damping 0.8: only after a flick), `fadeMotion` (Reduce Motion's cross-fade) and `release(velocity:distance:)` (a drag's release speed handed to a spring) |
 | `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `GlassEffectContainer`), a material with a hairline before; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on (`nil` skips it); `withMotion { }` is the same for code with no environment; Increase Contrast adds a `dim` edge to every glass surface |
 | `Editor/View/EditorBackdrop.swift`, `StageDotGrid.swift` | The frosted desktop behind the window; the dot grid behind the preview, fading out before the stage's edges |
-| `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white) and `.editorGhost` (hairline) text buttons; every press shows on the frame it lands, only hover and release ease |
-| `View/PanelPresentation.swift`, `PanelPresence.swift` | `panelPresentation(isPresented:anchor:)`: a floating panel fades and settles from 0.96 anchored at its source and goes back there (opacity only with Reduce Motion); `exitDelay` is how long its window stays; `PanelPresence` carries the flag for controllers whose view model can't. Used by the agent bar, Quick Access card, pins, pre-record overlay and countdown |
+| `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white), `.editorAccent` (white on the accent colour, for the floating capture panels) and `.editorGhost` (hairline) text buttons; every press shows on the frame it lands, only hover and release ease |
+| `View/PanelPresentation.swift`, `PanelPresence.swift` | `panelPresentation(isPresented:anchor:)`: a floating panel fades and settles from 0.96 anchored at its source and goes back there (opacity only with Reduce Motion); `exitDelay` is how long its window stays; `PanelPresence` carries the flag for controllers whose view model can't. Used by the agent bar, Quick Access card, pins, capture toolbar and countdown |
 | `View/MenuRowButtonStyle.swift` | `.menuRow` for the popover's rows, and `MenuRowHighlight` (also under `MenuBarToggle`): Control Center's highlight, a 10 pt continuous rounded fill the row's full height, 6 pt in from the sides, 0.1 on hover, 0.16 the moment it's pressed, dimmed when disabled |
 | `Model/GesturePhysics.swift` | Pure: `project` (momentum), `rubberband`/`rubberbanded` (resistance past a boundary), `relativeVelocity`, `velocityMatchedDuration`, `flickExit`, and `VelocityTracker` (the last 0.1 s of a drag) |
 | `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar |
@@ -487,17 +504,16 @@ Key facts:
   scaling).
 - Two visual families, one motion system: the system-native popover and Settings, and this studio
   look (editor, Recordings, Web Recording, the agent bar and the floating capture panels: Quick Access card,
-  pins, pre-record overlay, countdown).
+  pins, capture toolbar and its picker, countdown). These share the toolbar's dark glass and the system
+  accent colour for what is chosen or the action; a take in progress is red.
 - Motion follows the apple-design skill: respond on press, move 1:1 from the grab point, springs that start
   from the current value, bounce only after a flick, symmetric enter and exit from the source. Timeline
   clip and trim-handle drags resist past the ends (`rubberbanded`) and release into `release(velocity:distance:)`,
   so what the timeline refuses springs home from where it was shown; the zoom focus pad keeps the offset
   from where its outline was grabbed.
-- The pre-record overlay drops from the status item (`panelPresentation(anchor: .top)`); dismissing stops the
-  preview at once, and showing it again during the exit turns it round and restarts the preview. Its Live
-  mark (`LiveIndicator`, also on the popover's preview) is a red dot and a word, static.
 - Area selection fades its dim in over 0.12 s on the first drag (instant with Reduce Motion), and its
-  Confirm and Cancel are system buttons (glass on macOS 26) with Return and Esc as key equivalents.
+  Confirm and Cancel are system buttons (glass on macOS 26, Confirm tinted with the accent colour) with Return
+  and Esc as key equivalents.
 - Skipped on purpose: Settings, the menu bar label, the export sheet, momentum on timeline edits, rubber-banding
   area selection, pin flick, scrubbing.
 - Clips in a lane (`TimelineLane`: zooms, web cursor and scroll clips) are window-coloured chips on a hairline and
@@ -544,7 +560,6 @@ is never pruned.
 | `Screenshot/ViewModel/ScreenshotController.swift` | Owned by `AppDelegate` (which registers the shortcuts); permission check, selection, `isCapturing`, `canCapture`, `onWillCapture`/`onDidCapture`, `save(_:)` with the failure notification |
 | `Screenshot/Service/ScreenshotService.swift` | Display lookup, `SCScreenshotManager.captureImage`, save into the folder it's given, PNG via ImageIO (`@concurrent`) |
 | `Screenshot/Service/WindowPicker.swift` | System `SCContentSharingPicker` in `.window` mode, observed only while picking |
-| `Screenshot/View/ScreenshotButtons.swift` | The three popover rows |
 | `Service/SCContentFilter+CaptureScale.swift` | Window-scale fix shared with recording (moved from `RecorderViewModel`) |
 | `Screenshot/Service/ScreenshotHistory.swift` | `nonisolated` history folder, `isExpired` (pure), `prune`/`clear`/`remove` (`@concurrent`, folder as a parameter for tests) |
 | `Model/ScreenshotHistoryRetention.swift`, `Model/SettingsStore+ScreenshotHistory.swift` | The setting (an extension: `SettingsStore.swift` is over the file length limit) |
@@ -740,11 +755,35 @@ countdown chip with its value, then system audio, microphone and camera as switc
 kind remembers its own mode (`CaptureToolbarViewModel.open(records:)`); a selection made elsewhere opens the
 recording one. What is live, chosen or on is the system accent colour (`CaptureToolbarView.live`): the action's
 pill, the mode's highlight (sliding to the one chosen), switches that are on (filled, white icon); a switch that is
-off keeps a faint fill so it still reads as one. Record with nothing chosen opens the area selection, or for a window
-or display Reco's own picker (not the system's full-screen one): a dark glass panel above the bar with a
-thumbnail per window or display (up to four across, two rows, the rest scrolled), and starts the countdown once
-one is clicked. Esc, Cancel or a click elsewhere closes it. During the take the bar
-shows what it records (fixed until it ends) and the live pill: the time in the accent colour, dim while paused, pause,
+off keeps a faint fill so it still reads as one.
+
+**Choosing what to record** opens the mode's own control straight away, whether from a mode icon
+(`pick(_:)`) or from Record (`performAction()`), both through `chooseSource(for:)`: Reco's picker for a window
+or a display (not the system's full-screen one), the area overlay to drag on. A choice then starts the
+countdown. The picker is the windows or displays as thumbnails above the bar, up to four across and two rows,
+the rest scrolled to, each with its app icon, title and app name, on a light frost of its own
+(`pickerBackdrop()`; solid with Reduce Transparency) and **nothing else** — no panel with a title, no button.
+Esc and the close control cancel the innermost thing open first (`cancel()`, so its tooltip follows: Close,
+Close Picker, Cancel Selection). It waits until it has something to show (`hasSomethingToShow`, a spinner only
+after `waitingDelay`), so a warm open lays out the finished tiles in one move, and it arrives on
+`EditorTheme.quickMotion` through `panelPresentation(…, motion:)`, not the panels' 0.35 s spring.
+
+**It is drawn in the bar's own window**, above the bar (`CaptureToolbarView`), never one of its own: a second
+window that took key would have macOS draw the bar's controls as inactive for as long as it was open. So the
+panel is sized to the bar plus the picker while it is up (`onSizeChange` measures the window, `onBarSizeChange`
+the bar, which is what placement works from —
+`CaptureToolbarPlacement.barOrigin(inWindow:barSize:margin:)` and `windowOrigin(for:windowSize:barSize:margin:)`),
+the frame is set rather than animated, and a click elsewhere closes the picker through the bar's own
+`didResignKey`. It stays mounted until its exit has played, then the window shrinks back around the bar.
+
+**The area selection Record opened has no
+Confirm/Cancel buttons of its own** (`presentAreaSelection(showsActions: false)`, from the toolbar only;
+the menu and shortcut paths keep them): the bar rises one level above the overlay
+(`CaptureToolbarController.selectionLevel`, `.screenSaver + 1`) so it stays clickable, Record is disabled until
+an area is drawn and then takes it (`AreaSelectionOverlay.isPresented`/`canConfirm`/`confirm()`), and
+switching mode or closing the bar cancels the selection (`cancel()`). Return and Esc still work, on the
+overlay's own key handling. During the take the bar
+shows what it records (fixed until it ends) and the live pill: the time in red, on a red-tinted pill, dim while paused, pause,
 and a white stop square, for any start (menu, shortcut, `reco://`); it goes once the file is saved.
 
 - **Motion:** dragged from anywhere between its controls, it follows the pointer 1:1 from where it was
@@ -772,15 +811,15 @@ and a white stop square, for any start (menu, shortcut, `reco://`); it goes once
 | File | Role |
 |---|---|
 | `CaptureToolbar/Model/CaptureToolbarMode.swift` | The six modes; screenshots and recordings each remember theirs (`storageKey(records:)`) |
-| `CaptureToolbar/Model/CaptureToolbarPlacement.swift` | Pure: home (bottom centre, 48 pt above the Dock), drag resistance, where a release comes to rest, the snap-home distance, where a tooltip sits |
-| `CaptureToolbar/ViewModel/CaptureToolbarViewModel.swift` | Mode, `performAction()`, `close()`, `selectionDidChange()` (from `RecorderViewModel.onSelectionChange`), option toggles (permission asked when the mic/camera is turned on) |
+| `CaptureToolbar/Model/CaptureToolbarPlacement.swift` | Pure: home (bottom centre, 48 pt above the Dock), drag resistance, where a release comes to rest, the snap-home distance, where a tooltip sits, and where the bar sits inside its window and the window around the bar |
+| `CaptureToolbar/ViewModel/CaptureToolbarViewModel.swift` | Mode, `pick()`/`chooseSource()`/`performAction()`, `cancel()`/`close()`, `selectionDidChange()` (from `RecorderViewModel.onSelectionChange`), option toggles (permission asked when the mic/camera is turned on) |
 | `CaptureToolbar/Model/CaptureSource.swift` | Pure: which windows are offered (layer 0, on screen, ≥ 64 pt, not Reco), an untitled window's name, the grid's size |
 | `CaptureToolbar/Service/CaptureSourceLoader.swift` | `SCShareableContent` windows or displays with the filter that records each (`desktopIndependentWindow`, or the display), thumbnails at 2× a tile with `SCScreenshotManager` (displays without Reco's windows) |
-| `CaptureToolbar/ViewModel/CaptureSourcePicker.swift`, `View/CaptureSourcePickerView.swift` | Open/pick/cancel, thumbnails filled in as each is drawn; the panel and its tiles. A pick goes through `RecorderViewModel.selectContent(_:)`, the same path as the system picker's |
+| `CaptureToolbar/ViewModel/CaptureSourcePicker.swift`, `View/CaptureSourcePickerView.swift` | Open/pick/cancel, thumbnails filled in as each is drawn; `hasSomethingToShow`, the panel and its bare tiles. A pick goes through `RecorderViewModel.selectContent(_:)`, the same path as the system picker's |
 | `CaptureToolbar/ViewModel/CaptureToolbarTooltips.swift` | The hovered control and its text: rest delay and warm period, hover, retext while hovered, unhover after a switch grace, suppressed while dragging, and `pointsUp` when the bar sits at the top of the screen |
 | `CaptureToolbar/View/CaptureToolbarTooltip.swift` | The tooltip modifier every control takes (dwell delay, live text, mid-x in the bar's coordinate space), the Dock-style bubble with its tail, and its fade |
-| `CaptureToolbar/View/CaptureToolbarController.swift` | Non-activating borderless panel, no shadow (glass draws its own), shown and hidden by the recorder's state, widened at once and narrowed after the exit, drag and momentum, and the tooltip's window above the hovered control |
-| `CaptureToolbar/View/CaptureToolbarView.swift` | Idle / counting down (with Cancel) / recording / saving, all in the studio's dark scheme |
+| `CaptureToolbar/View/CaptureToolbarController.swift` | Non-activating borderless panel, no shadow (glass draws its own), shown and hidden by the recorder's state, sized to the bar plus the picker while it is up (widened at once, narrowed after the exit), drag and momentum, the tooltip's window above the hovered control, and the picker's mount and exit |
+| `CaptureToolbar/View/CaptureToolbarView.swift` | The picker above the bar, then idle / counting down (with Cancel) / recording / saving, all in the studio's dark scheme; reports the window's and the bar's own sizes |
 | `CaptureToolbar/View/CaptureToolbarIdleControls.swift`, `CaptureToolbarLiveControls.swift` | The idle groups with the sliding mode highlight; the live indicators and pill |
 | `CaptureToolbar/View/CaptureToolbarOptions.swift`, `CaptureToolbarMoreMenu.swift` | Countdown chip menu; system audio / mic / camera switches; Show Cursor and Settings… |
 | `CaptureToolbar/View/CaptureToolbarPill.swift`, `CaptureToolbarButtonStyle.swift`, `ToolbarIcon.swift`, `CaptureModeIcon.swift` | The glass pill (solid with Reduce Transparency, defined edge with Increase Contrast), the press/hover/isOn button styles, the icons |

@@ -6,7 +6,7 @@
 import SwiftUI
 
 /// During a take: what it records, shown but fixed until it ends, and the live pill with the time,
-/// pause and stop. The time is in the live colour while it runs, dim while paused.
+/// pause and stop. The time is red while it runs, dim while paused.
 struct CaptureToolbarLiveControls: View {
     let recorder: RecorderViewModel
 
@@ -23,7 +23,7 @@ struct CaptureToolbarLiveControls: View {
         HStack(spacing: EditorTheme.tightSpacing) {
             Text(recorder.formattedDuration)
                 .font(.title3.monospacedDigit())
-                .foregroundStyle(recorder.isPaused ? Color.secondary : CaptureToolbarView.live)
+                .foregroundStyle(recorder.isPaused ? Color.secondary : CaptureToolbarView.recording)
                 .contentTransition(.numericText())
                 .editorMotion(EditorTheme.quickMotion, value: recorder.formattedDuration)
                 .padding(.leading, EditorTheme.mediumSpacing)
@@ -56,7 +56,7 @@ struct CaptureToolbarLiveControls: View {
             .buttonStyle(CaptureToolbarStopButtonStyle())
             .captureToolbarTooltip("Stop Recording")
         }
-        .captureToolbarPill(tint: CaptureToolbarView.live.mix(with: CaptureToolbarView.ground, by: recorder.isPaused ? 0.9 : 0.7))
+        .captureToolbarPill(tint: CaptureToolbarView.recording.mix(with: CaptureToolbarView.ground, by: recorder.isPaused ? 0.9 : 0.7))
     }
 
     private func indicator(_ title: String, icon: ImageResource, isOn: Bool) -> some View {

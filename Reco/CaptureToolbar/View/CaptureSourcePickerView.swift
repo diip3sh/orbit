@@ -6,82 +6,106 @@
 import AppKit
 import SwiftUI
 
-/// The windows or displays to record, as thumbnails in a dark glass panel above the capture toolbar.
-/// A click records that one; Esc or Cancel closes it.
+/// The windows or displays to record, as thumbnails above the capture toolbar. Nothing is drawn but a
+/// light frost behind them, so what is offered is the window's picture and its name: no panel with a
+/// title or a button in it. A click records that one; Esc or a click elsewhere closes it.
+///
+/// It shares the toolbar's window rather than sitting in one of its own — a second window would take
+/// key from the bar and macOS would draw the bar's controls as inactive while it was open.
 struct CaptureSourcePickerView: View {
     let picker: CaptureSourcePicker
-    let presence: PanelPresence
-
-    /// Room around the panel for its glass's edge and shadow, inside the window
-    static let margin: CGFloat = 12
 
     private typealias Grid = CaptureSourceGrid
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Grid.spacing) {
-            header
-            content
-        }
-        .frame(width: size.width - Grid.padding * 2, height: size.height - Grid.padding * 2, alignment: .top)
-        // The pill adds 4 pt of its own
-        .padding(Grid.padding - 4)
-        .captureToolbarPill(isInteractive: false)
-        .environment(\.colorScheme, .dark)
-        .padding(Self.margin)
-        .panelPresentation(isPresented: presence.isShown, anchor: .bottom)
+        content
+            .frame(width: panelSize.width - Grid.padding * 2, height: panelSize.height - Grid.padding * 2)
+            .padding(Grid.padding)
+            .pickerBackdrop()
+            .environment(\.colorScheme, .dark)
+            .panelPresentation(isPresented: picker.isOpen, anchor: .bottom, motion: EditorTheme.quickMotion)
     }
 
-    private var size: CGSize {
-        Grid.size(for: picker.sources?.count)
-    }
-
-    private var header: some View {
-        HStack {
-            Text(picker.kind == .display ? "Choose a Display to Record" : "Choose a Window to Record")
-                .font(.headline)
-            Spacer()
-            Button("Cancel") { picker.cancel() }
-                .buttonStyle(.captureToolbar)
-                .keyboardShortcut(.cancelAction)
-        }
-        .frame(height: Grid.headerHeight)
+    /// What the tiles take up, padding included, so the bar's window can be measured around it
+    private var panelSize: CGSize {
+        guard let sources = picker.sources, !sources.isEmpty else { return Grid.messageSize }
+        return Grid.size(for: sources.count)
     }
 
     @ViewBuilder
     private var content: some View {
         if picker.failed {
-            message("Allow Reco to record the screen in System Settings → Privacy & Security, then try again.")
+            notice("Allow Reco to record the screen in System Settings → Privacy & Security, then try again.")
         } else if let sources = picker.sources {
             if sources.isEmpty {
-                message(picker.kind == .display ? "No displays to record." : "No windows to record.")
+                notice(picker.kind == .display ? "No displays to record." : "No windows to record.")
             } else {
-                ScrollView {
-                    LazyVGrid(
-                        columns: Array(repeating: GridItem(.fixed(Grid.tileWidth), spacing: Grid.spacing), count: Grid.columns(for: sources.count)),
-                        spacing: Grid.spacing
-                    ) {
-                        ForEach(sources) { source in
-                            CaptureSourceTile(source: source, thumbnail: picker.thumbnails[source.id]) {
-                                picker.pick(source)
-                            }
-                        }
-                    }
-                }
-                .scrollIndicators(.automatic)
-                .scrollBounceBehavior(.basedOnSize)
+                grid(sources)
             }
         } else {
+            // Only a load slow enough to be noticed: a warm one shows the tiles straight away
             ProgressView()
                 .controlSize(.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    private func message(_ text: String) -> some View {
+    private func grid(_ sources: [CaptureSource]) -> some View {
+        ScrollView {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.fixed(Grid.tileWidth), spacing: Grid.spacing), count: Grid.columns(for: sources.count)),
+                spacing: Grid.spacing
+            ) {
+                ForEach(sources) { source in
+                    CaptureSourceTile(source: source, thumbnail: picker.thumbnails[source.id]) {
+                        picker.pick(source)
+                    }
+                }
+            }
+        }
+        .scrollIndicators(.automatic)
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    private func notice(_ text: String) -> some View {
         Text(text)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+extension View {
+    /// The picker's own frost, behind the tiles
+    fileprivate func pickerBackdrop() -> some View {
+        modifier(PickerBackdrop())
+    }
+}
+
+/// The frost the tiles and their names sit on: without it they land straight on whatever is under the
+/// panel and the names can't be read. A plain dark frost — no edge, no tint of its own, and lighter than
+/// the bar's glass, so it reads as one surface with the bar rather than a second panel. Solid with Reduce
+/// Transparency, which has no blur to fall back on.
+private struct PickerBackdrop: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reducesTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        content
+            .background {
+                if reducesTransparency {
+                    shape.fill(CaptureToolbarView.ground.opacity(0.88))
+                } else {
+                    // Dark enough for white labels over any window, whatever is behind the panel
+                    shape.fill(.ultraThinMaterial)
+                    shape.fill(CaptureToolbarView.ground.opacity(0.55))
+                }
+            }
+            .overlay {
+                if contrast == .increased {
+                    shape.strokeBorder(.white.opacity(0.4))
+                }
+            }
     }
 }
 
@@ -158,7 +182,8 @@ private struct CaptureSourceTileBody: View {
         configuration.label
             .overlay(alignment: .top) {
                 shape
-                    .strokeBorder(.white.opacity(configuration.isPressed ? 0.9 : isHovered ? 0.6 : 0), lineWidth: 2)
+                    // The accent, as the toolbar marks what is chosen: full on press, softer under the pointer
+                    .strokeBorder(CaptureToolbarView.live.opacity(configuration.isPressed ? 1 : isHovered ? 0.7 : 0), lineWidth: 2)
                     .frame(height: CaptureSourceGrid.thumbnailHeight)
             }
             .contentShape(.rect)

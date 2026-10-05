@@ -7,41 +7,53 @@
 
 import SwiftUI
 
-/// A text button: the primary one off-white with dark text, the ghost one a hairline outline whose
-/// text brightens under the pointer.
+/// A text button: the primary one off-white with dark text, the accent one white on the system accent
+/// colour (the floating capture panels' action, as the capture toolbar's), the ghost one a hairline
+/// outline whose text brightens under the pointer.
 struct EditorButtonStyle: ButtonStyle {
-    var isPrimary = true
+    enum Role {
+        case primary, accent, ghost
+    }
+
+    var role = Role.primary
 
     func makeBody(configuration: Configuration) -> some View {
-        EditorButton(configuration: configuration, isPrimary: isPrimary)
+        EditorButton(configuration: configuration, role: role)
     }
 }
 
 extension ButtonStyle where Self == EditorButtonStyle {
     static var editorPrimary: Self { EditorButtonStyle() }
-    static var editorGhost: Self { EditorButtonStyle(isPrimary: false) }
+    static var editorAccent: Self { EditorButtonStyle(role: .accent) }
+    static var editorGhost: Self { EditorButtonStyle(role: .ghost) }
 }
 
 private struct EditorButton: View {
     let configuration: ButtonStyleConfiguration
-    let isPrimary: Bool
+    let role: EditorButtonStyle.Role
 
     @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
 
+    private var isLit: Bool {
+        isEnabled && (isHovered || configuration.isPressed)
+    }
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 8)
-        let isLit = isEnabled && (isHovered || configuration.isPressed)
 
         configuration.label
             .font(.body.weight(.medium))
-            .foregroundStyle(isPrimary ? EditorTheme.primaryInk : isLit ? EditorTheme.ink : EditorTheme.dim)
+            .foregroundStyle(foreground)
             .padding(.horizontal, EditorTheme.mediumSpacing)
             .frame(minHeight: 28)
             .background {
-                if isPrimary {
+                switch role {
+                case .primary:
                     shape.fill(isLit ? EditorTheme.primaryHover : EditorTheme.primary)
-                } else {
+                case .accent:
+                    shape.fill(EditorTheme.accent.opacity(configuration.isPressed ? 0.7 : isHovered ? 0.85 : 1))
+                case .ghost:
                     shape.fill(.primary.opacity(isEnabled && configuration.isPressed ? 0.06 : 0))
                     shape.strokeBorder(isLit ? EditorTheme.faint : EditorTheme.hairline)
                 }
@@ -51,5 +63,13 @@ private struct EditorButton: View {
             .onHover { isHovered = $0 }
             // The press shows on the frame it lands; only the release eases
             .editorMotion(configuration.isPressed ? nil : EditorTheme.quickMotion, value: isLit)
+    }
+
+    private var foreground: Color {
+        switch role {
+        case .primary: EditorTheme.primaryInk
+        case .accent: .white
+        case .ghost: isLit ? EditorTheme.ink : EditorTheme.dim
+        }
     }
 }

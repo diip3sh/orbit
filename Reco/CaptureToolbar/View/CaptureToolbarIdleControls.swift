@@ -15,14 +15,14 @@ struct CaptureToolbarIdleControls: View {
 
     var body: some View {
         Button {
-            Task { await viewModel.close() }
+            Task { await viewModel.cancel() }
         } label: {
             Label { Text("Close") } icon: { ToolbarIcon(.toolbarClose) }
                 .labelStyle(.iconOnly)
         }
         .buttonStyle(.captureToolbar)
         .keyboardShortcut(.cancelAction)
-        .captureToolbarTooltip("Close")
+        .captureToolbarTooltip(viewModel.cancelTitle)
         .captureToolbarPill()
 
         modeGroup(CaptureToolbarMode.allCases.filter { $0.records == viewModel.mode.records })
@@ -53,7 +53,8 @@ struct CaptureToolbarIdleControls: View {
             ForEach(modes) { mode in
                 let isSelected = viewModel.mode == mode
                 Button {
-                    viewModel.select(mode)
+                    // Choosing a mode also opens what records it, so Record isn't a step on the way
+                    Task { await viewModel.pick(mode) }
                 } label: {
                     CaptureModeIcon(mode: mode, ground: isSelected ? CaptureToolbarView.live : CaptureToolbarView.ground)
                         .accessibilityLabel(mode.title)

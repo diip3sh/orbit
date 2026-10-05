@@ -68,10 +68,59 @@ struct CaptureToolbarTests {
         #expect(viewModel.canPerformAction)
     }
 
+    // MARK: - Cancelling
+
+    /// Esc and the close control reach the innermost thing open, so a picker goes on its own and the
+    /// toolbar only with the next press
+    @Test func theCloseControlClosesWhatIsOpenFirst() async {
+        let viewModel = makeViewModel()
+        var hides: [Bool] = []
+        viewModel.onHide = { hides.append($0) }
+
+        await viewModel.pick(.recordWindow)
+        #expect(viewModel.sources.isOpen)
+        await viewModel.cancel()
+
+        #expect(!viewModel.sources.isOpen)
+        #expect(hides.isEmpty)
+
+        // Nothing left open: the toolbar goes
+        await viewModel.cancel()
+        #expect(hides == [true])
+    }
+
+    /// Choosing a mode on the bar opens what records it, so Record isn't a step on the way to the picker
+    @Test func choosingARecordingModeOpensWhatRecordsIt() async {
+        let viewModel = makeViewModel()
+
+        await viewModel.pick(.recordWindow)
+        #expect(viewModel.sources.kind == .window)
+
+        await viewModel.pick(.recordScreen)
+        #expect(viewModel.sources.kind == .display)
+
+        // A screenshot only switches: Capture commits, so nothing opens
+        await viewModel.pick(.captureWindow)
+        #expect(!viewModel.sources.isOpen)
+        #expect(viewModel.mode == .captureWindow)
+    }
+
     // MARK: - Placement
 
     private let visibleFrame = CGRect(x: 0, y: 80, width: 1440, height: 795)
     private let bar = CGSize(width: 600, height: 52)
+
+    /// The window is centred on the bar and reaches `margin` below it, however much taller it is with the
+    /// picker drawn above the bar in it
+    @Test func theBarSitsCentredAtTheBottomOfItsWindow() {
+        let window = CGSize(width: 920, height: 480)
+        let barOrigin = CGPoint(x: 400, y: 96)
+        let origin = CaptureToolbarPlacement.windowOrigin(for: barOrigin, windowSize: window, barSize: bar, margin: 12)
+
+        #expect(origin == CGPoint(x: 240, y: 84))
+        #expect(origin.x + window.width / 2 == barOrigin.x + bar.width / 2)
+        #expect(CaptureToolbarPlacement.barOrigin(inWindow: CGRect(origin: origin, size: window), barSize: bar, margin: 12) == barOrigin)
+    }
 
     @Test func homeIsBottomCentreAboveTheDock() {
         let home = CaptureToolbarPlacement.home(size: bar, in: visibleFrame)
@@ -168,7 +217,8 @@ struct CaptureToolbarTests {
         #expect(four.width == five.width)
         #expect(five.height > four.height)
         #expect(twenty == five)
-        #expect(CaptureSourceGrid.size(for: nil).height == one.height)
+        #expect(one.height == four.height)
+        #expect(CaptureSourceGrid.messageSize.width == CaptureSourceGrid.size(for: 2).width)
     }
 
     @Test func aClosedPickerHoldsNothing() {
@@ -179,6 +229,19 @@ struct CaptureToolbarTests {
         viewModel.sources.cancel()
         #expect(!viewModel.sources.isOpen)
         #expect(viewModel.sources.sources == nil)
+    }
+
+    /// The panel is held back until there is something to put in it, so a warm open presents the
+    /// finished tiles instead of a spinner that is replaced a moment later
+    @Test func aPickerWaitsForItsSourcesBeforeItShowsAnything() {
+        let viewModel = makeViewModel()
+        viewModel.select(.recordWindow)
+
+        viewModel.sources.open(.window)
+        #expect(!viewModel.sources.hasSomethingToShow)
+
+        viewModel.sources.cancel()
+        #expect(!viewModel.sources.hasSomethingToShow)
     }
 
     // MARK: - Tooltips

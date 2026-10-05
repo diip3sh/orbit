@@ -21,6 +21,13 @@ final class CaptureSourcePicker {
     private(set) var thumbnails: [CaptureSource.ID: CGImage] = [:]
     private(set) var failed = false
 
+    /// Set when loading has run long enough to need a spinner: a warm open shows the tiles instead, so
+    /// the picker arrives in one move rather than as a spinner that is replaced a moment later
+    private(set) var isWaiting = false
+
+    /// How long a load runs before the picker says it is waiting
+    nonisolated static let waitingDelay = Duration.milliseconds(250)
+
     @ObservationIgnored var onPick: ((SCContentFilter) -> Void)?
     @ObservationIgnored var onCancel: (() -> Void)?
 
@@ -29,9 +36,17 @@ final class CaptureSourcePicker {
 
     var isOpen: Bool { kind != nil }
 
+    /// Whether the panel has anything to put on screen: the tiles, a failure, or a wait worth showing
+    var hasSomethingToShow: Bool { sources != nil || failed || isWaiting }
+
     func open(_ kind: CaptureSource.Kind) {
         reset()
         self.kind = kind
+        loading.append(Task {
+            try? await Task.sleep(for: Self.waitingDelay)
+            guard !Task.isCancelled else { return }
+            isWaiting = true
+        })
         loading.append(Task { await load(kind) })
     }
 
@@ -56,6 +71,7 @@ final class CaptureSourcePicker {
         thumbnails = [:]
         filters = [:]
         failed = false
+        isWaiting = false
     }
 
     private func load(_ kind: CaptureSource.Kind) async {

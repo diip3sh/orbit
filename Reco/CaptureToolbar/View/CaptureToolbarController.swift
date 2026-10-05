@@ -83,8 +83,7 @@ final class CaptureToolbarController {
     /// Orders the tooltip's window out once its exit has played
     private var tooltipRemoval: Task<Void, Never>?
 
-    /// The windows or displays to record, in a window above the bar
-    private var pickerPanel: NSPanel?
+    /// The picker for a window or a display, drawn above the bar in this same window
     private let pickerPresence = PanelPresence()
     private var pickerRemoval: Task<Void, Never>?
 
@@ -94,6 +93,15 @@ final class CaptureToolbarController {
     private var lastState: RecorderViewModel.RecordingState = .idle
 
     private var margin: CGFloat { CaptureToolbarView.margin }
+
+    /// The bar's windows sit one step above the area selection overlay (`.screenSaver`, which covers the
+    /// whole screen) while one is being drawn, so its Record stays clickable and confirms the selection;
+    /// the rest of the time they keep the floating level and stay under anything the user puts in front.
+    private var level: NSWindow.Level {
+        viewModel.areaSelection.isPresented ? Self.selectionLevel : .floating
+    }
+
+    private static let selectionLevel = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
 
     init(viewModel: CaptureToolbarViewModel) {
         self.viewModel = viewModel
@@ -106,6 +114,7 @@ final class CaptureToolbarController {
             }
         }
         observeRecorder()
+        observeAreaSelection()
         observeTooltips()
         observePicker()
     }
@@ -149,11 +158,14 @@ final class CaptureToolbarController {
 
     private func makePanel() -> CaptureToolbarPanel {
         let panel = CaptureToolbarPanel()
+        panel.level = level
         let view = CaptureToolbarView(
             viewModel: viewModel,
             presence: presence,
+            pickerPresence: pickerPresence,
             tooltips: tooltips,
             onSizeChange: { [weak self] in self?.fit($0) },
+            onBarSizeChange: { [weak self] in self?.barSize = $0 },
             onDrag: { [weak self] in self?.drag() },
             onDragEnd: { [weak self] in self?.endDrag() }
         )
@@ -163,11 +175,18 @@ final class CaptureToolbarController {
         panel.contentView = hostingView
         self.panel = panel
 
+        // A click in another app or on the desktop closes the picker, as it would close any popover
+        NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: panel, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.viewModel.sources.cancel() }
+        }
+
         // A drop on another screen doesn't follow the bar to this one
         if let anchor, !screenUnderPointer.visibleFrame.contains(anchor) {
             self.anchor = nil
         }
-        fit(hostingView.fittingSize)
+        let fitted = hostingView.fittingSize
+        barSize = CGSize(width: fitted.width - margin * 2, height: fitted.height - margin * 2)
+        fit(fitted)
         return panel
     }
 
@@ -176,6 +195,30 @@ final class CaptureToolbarController {
         self.panel = nil
         removal = nil
         narrowing?.cancel()
+    }
+
+    // MARK: - Area selection
+
+    /// Rises above the area selection while one is up, so its Record reaches the bar and not the overlay
+    private func observeAreaSelection() {
+        withObservationTracking {
+            _ = viewModel.areaSelection.isPresented
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.areaSelectionDidChange()
+                self?.observeAreaSelection()
+            }
+        }
+    }
+
+    private func areaSelectionDidChange() {
+        let level = self.level
+        panel?.level = level
+        tooltipPanel?.level = level
+        // The overlay's own windows were ordered in after the bar, so it is brought forward again
+        if let panel, panel.isVisible, level != .floating {
+            panel.orderFrontRegardless()
+        }
     }
 
     // MARK: - Recording
@@ -212,11 +255,10 @@ final class CaptureToolbarController {
 
     // MARK: - Sizing
 
-    /// Sizes the panel to the bar (plus its margin) around the anchor. Widening is at once, narrowing after
-    /// the change of state has played: the bar is centred in the panel either way, so it doesn't shift.
+    /// Sizes the panel to its content (plus its margin) around the anchor. Widening is at once, narrowing
+    /// after the change of state has played: the bar is centred in the panel either way, so it doesn't shift.
     private func fit(_ size: CGSize) {
         guard let panel, size.width > 0, size.height > 0 else { return }
-        barSize = CGSize(width: size.width - margin * 2, height: size.height - margin * 2)
         narrowing?.cancel()
 
         guard size.width < panel.frame.width, panel.isVisible else {
@@ -232,8 +274,9 @@ final class CaptureToolbarController {
 
     private func place(_ panel: NSPanel, size: CGSize) {
         let bottomCentre = anchor ?? homeAnchor
-        let frame = CGRect(x: (bottomCentre.x - size.width / 2).rounded(), y: bottomCentre.y - margin, width: size.width, height: size.height)
-        panel.setFrame(frame, display: true)
+        let barOrigin = CGPoint(x: bottomCentre.x - barSize.width / 2, y: bottomCentre.y)
+        let origin = CaptureToolbarPlacement.windowOrigin(for: barOrigin, windowSize: size, barSize: barSize, margin: margin)
+        panel.setFrame(CGRect(x: origin.x.rounded(), y: origin.y, width: size.width, height: size.height), display: true)
     }
 
     private var screenUnderPointer: NSScreen {
@@ -254,13 +297,16 @@ final class CaptureToolbarController {
         guard let panel, let screen = panel.screen else { return }
         tooltips.setDragging(true)
         let mouse = NSEvent.mouseLocation
-        let offset = grabOffset ?? CGSize(width: mouse.x - panel.frame.minX, height: mouse.y - panel.frame.minY)
+        let bar = CaptureToolbarPlacement.barOrigin(inWindow: panel.frame, barSize: barSize, margin: margin)
+        let offset = grabOffset ?? CGSize(width: mouse.x - bar.x, height: mouse.y - bar.y)
         grabOffset = offset
         tracker.add(mouse, at: ProcessInfo.processInfo.systemUptime)
 
-        let pointerLed = CGPoint(x: mouse.x - offset.width + margin, y: mouse.y - offset.height + margin)
+        let pointerLed = CGPoint(x: mouse.x - offset.width, y: mouse.y - offset.height)
         let shown = CaptureToolbarPlacement.dragged(pointerLed, size: barSize, in: screen.visibleFrame)
-        panel.setFrameOrigin(CGPoint(x: shown.x - margin, y: shown.y - margin))
+        panel.setFrameOrigin(
+            CaptureToolbarPlacement.windowOrigin(for: shown, windowSize: panel.frame.size, barSize: barSize, margin: margin)
+        )
     }
 
     /// Lets the bar go at the release speed, to where its momentum carries it inside the screen.
@@ -273,12 +319,15 @@ final class CaptureToolbarController {
         guard grabOffset != nil, let panel, let screen = panel.screen else { return }
 
         let velocity = tracker.velocity
-        let released = CGPoint(x: panel.frame.minX + margin, y: panel.frame.minY + margin)
+        let released = CaptureToolbarPlacement.barOrigin(inWindow: panel.frame, barSize: barSize, margin: margin)
         let rest = CaptureToolbarPlacement.resting(released, velocity: velocity, size: barSize, in: screen.visibleFrame)
         let home = CaptureToolbarPlacement.home(size: barSize, in: screen.visibleFrame)
         anchor = rest == home ? nil : CGPoint(x: rest.x + barSize.width / 2, y: rest.y)
 
-        let target = CGRect(origin: CGPoint(x: rest.x - margin, y: rest.y - margin), size: panel.frame.size)
+        let target = CGRect(
+            origin: CaptureToolbarPlacement.windowOrigin(for: rest, windowSize: panel.frame.size, barSize: barSize, margin: margin),
+            size: panel.frame.size
+        )
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
             panel.setFrame(target, display: true)
             return
@@ -354,6 +403,7 @@ extension CaptureToolbarController {
 
     private func makeTooltipPanel() -> NSPanel {
         let panel = CaptureTooltipPanel()
+        panel.level = level
         let hostingView = NSHostingView(rootView: CaptureToolbarTooltipView(tooltips: tooltips))
         // The panel is sized here, from the text the tooltips state holds
         hostingView.sizingOptions = []
@@ -367,12 +417,12 @@ extension CaptureToolbarController {
 
 extension CaptureToolbarController {
 
-    /// Shows the picker's window while it is open, refitted as its sources arrive, and plays its exit once
-    /// it closes (a choice, Cancel, Esc, or a click elsewhere).
+    /// Mounts the picker while it is open, once it has something to show, and unmounts it once its exit
+    /// has played (a choice, Esc, a mode change, or a click elsewhere).
     private func observePicker() {
         withObservationTracking {
             _ = viewModel.sources.kind
-            _ = viewModel.sources.sources?.count
+            _ = viewModel.sources.hasSomethingToShow
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.pickerDidChange()
@@ -381,56 +431,29 @@ extension CaptureToolbarController {
         }
     }
 
+    /// The picker waits until it has something to show, so it arrives in one move: a warm load lays out
+    /// the finished tiles, and a slow one a spinner that stands for the wait.
     private func pickerDidChange() {
         let picker = viewModel.sources
-        guard picker.isOpen, let barPanel = panel, barPanel.isVisible else {
+        guard picker.isOpen, picker.hasSomethingToShow else {
             dismissPicker()
             return
         }
         pickerRemoval?.cancel()
+        pickerRemoval = nil
         pickerPresence.isShown = true
         tooltips.unhover(immediately: true)
-
-        let panel = pickerPanel ?? makePickerPanel()
-        let grid = CaptureSourceGrid.size(for: picker.sources?.count)
-        let pickerMargin = CaptureSourcePickerView.margin
-        let size = CGSize(width: grid.width + pickerMargin * 2, height: grid.height + pickerMargin * 2)
-        let frame = CaptureToolbarPlacement.rectAbove(
-            barFrame: barPanel.frame,
-            size: size,
-            midX: barPanel.frame.midX,
-            gap: CaptureToolbarPlacement.pickerGap,
-            in: (barPanel.screen ?? screenUnderPointer).visibleFrame
-        )
-        // Grows from its bottom edge, next to the bar, as the sources arrive
-        panel.setFrame(frame, display: true, animate: panel.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-        if !panel.isKeyWindow {
-            panel.makeKeyAndOrderFront(nil)
-        }
     }
 
+    /// Takes the picker away: the view animates its exit, and it is unmounted once that has played, so
+    /// the bar's window can shrink back around the bar alone.
     private func dismissPicker() {
-        guard let pickerPanel, pickerPresence.isShown else { return }
-        pickerPresence.isShown = false
-        pickerPanel.ignoresMouseEvents = true
+        guard pickerPresence.isShown else { return }
+        pickerRemoval?.cancel()
         pickerRemoval = Task {
             try? await Task.sleep(for: PanelPresentation.exitDelay)
             guard !Task.isCancelled else { return }
-            pickerPanel.orderOut(nil)
-            pickerPanel.ignoresMouseEvents = false
+            pickerPresence.isShown = false
         }
-    }
-
-    private func makePickerPanel() -> NSPanel {
-        let panel = CaptureToolbarPanel()
-        let hostingView = FirstMouseHostingView(rootView: CaptureSourcePickerView(picker: viewModel.sources, presence: pickerPresence))
-        hostingView.sizingOptions = []
-        panel.contentView = hostingView
-        // A click in another app or on the desktop closes it, as a popover would
-        NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: panel, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.viewModel.sources.cancel() }
-        }
-        pickerPanel = panel
-        return panel
     }
 }

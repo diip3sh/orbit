@@ -50,23 +50,29 @@ nonisolated enum CaptureSourceGrid {
     /// The icon, title and subtitle under the picture
     static let labelHeight: CGFloat = 34
     static let spacing: CGFloat = 12
-    static let padding: CGFloat = 16
-    static let headerHeight: CGFloat = 28
+    /// The tiles' room inside the frost around them
+    static let padding: CGFloat = 10
     static let maximumColumns = 4
     static let visibleRows = 2
 
     static var tileHeight: CGFloat { thumbnailHeight + 6 + labelHeight }
 
+    /// A message on its own, with no tiles: a spinner, a failure, or nothing to record. Two tiles wide,
+    /// so the longest one wraps over a few lines
+    static var messageSize: CGSize {
+        CGSize(width: tileWidth * 2 + spacing + padding * 2, height: 120)
+    }
+
     static func columns(for count: Int) -> Int {
         min(max(count, 1), maximumColumns)
     }
 
-    /// The grid's own size for `count` tiles; while loading (`count` nil), one row of three
-    static func size(for count: Int?) -> CGSize {
-        let columns = count.map(columns(for:)) ?? 3
-        let rows = count.map { min(max(1, Int((Double($0) / Double(maximumColumns)).rounded(.up))), visibleRows) } ?? 1
+    /// The grid's own size for `count` tiles
+    static func size(for count: Int) -> CGSize {
+        let columns = columns(for: count)
+        let rows = min(max(1, Int((Double(count) / Double(maximumColumns)).rounded(.up))), visibleRows)
         let width = CGFloat(columns) * tileWidth + CGFloat(columns - 1) * spacing + padding * 2
-        let height = headerHeight + spacing + CGFloat(rows) * tileHeight + CGFloat(rows - 1) * spacing + padding * 2
+        let height = CGFloat(rows) * tileHeight + CGFloat(rows - 1) * spacing + padding * 2
         return CGSize(width: width, height: height)
     }
 }

@@ -12,4 +12,6 @@ protocol AreaSelectionViewDelegate: AnyObject {
     func areaSelectionView(_ view: AreaSelectionView, didConfirmSelection rect: CGRect, on screen: NSScreen)
     func areaSelectionViewDidCancel(_ view: AreaSelectionView)
     func areaSelectionViewDidBeginDrawing(_ view: AreaSelectionView)
+    /// The selection became confirmable (drawn and being adjusted) or stopped being so
+    func areaSelectionView(_ view: AreaSelectionView, canConfirm: Bool)
 }

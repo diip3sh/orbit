@@ -40,10 +40,17 @@ final class CaptureToolbarViewModel {
         sources.onCancel = { [weak self] in self?.startsOnSelection = false }
     }
 
-    /// Whether the action can run now: screenshots wait for the recorder, recordings for idle
+    /// Whether the action can run now: screenshots wait for the recorder, recordings for idle, and while
+    /// the area is being chosen Record waits for one to be drawn
     var canPerformAction: Bool {
-        mode.records ? recorder.state == .idle : screenshots.canCapture(alongside: recorder)
+        guard mode.records else { return screenshots.canCapture(alongside: recorder) }
+        if areaSelection.isPresented { return areaSelection.canConfirm }
+        return recorder.state == .idle
     }
+
+    /// The recording area selection, which Record confirms while it is up (the controller raises the bar
+    /// above it so it stays clickable)
+    var areaSelection: AreaSelectionOverlay { recorder.areaSelectionOverlay }
 
     private static func rememberedMode(records: Bool, in defaults: UserDefaults) -> CaptureToolbarMode {
         defaults.string(forKey: CaptureToolbarMode.storageKey(records: records))
@@ -64,16 +71,30 @@ final class CaptureToolbarViewModel {
     func select(_ newMode: CaptureToolbarMode) {
         guard newMode != mode else { return }
         sources.cancel()
+        areaSelection.cancel()
         mode = newMode
         if recorder.hasContentSelected {
             Task { await recorder.resetSelection() }
         }
     }
 
+    /// A mode was chosen on the bar: switch to it and start choosing what to record, so Record isn't a
+    /// second click on the way to the picker. Screenshot modes only switch; Capture commits.
+    func pick(_ newMode: CaptureToolbarMode) async {
+        select(newMode)
+        guard newMode.records, !recorder.hasContentSelected else { return }
+        await chooseSource(for: newMode)
+    }
+
     /// Takes the screenshot, or starts the recording: at once when its content is chosen, otherwise
     /// once it is.
     func performAction() async {
         guard canPerformAction else { return }
+        // The area is being chosen: Record takes the one drawn, and the take starts from it
+        if areaSelection.isPresented {
+            areaSelection.confirm()
+            return
+        }
         switch mode {
         case .captureScreen:
             onHide?(false)
@@ -89,17 +110,24 @@ final class CaptureToolbarViewModel {
                 await recorder.startRecordingWithCountdown()
                 return
             }
-            startsOnSelection = true
-            switch mode {
-            case .recordScreen:
-                sources.open(.display)
-            case .recordWindow:
-                sources.open(.window)
-            default:
-                await recorder.presentAreaSelection()
-                // Chosen or cancelled by now
-                startsOnSelection = false
-            }
+            await chooseSource(for: mode)
+        }
+    }
+
+    /// Opens the mode's own way of choosing what to record: Reco's picker for a window or a display, the
+    /// area overlay to draw on. A choice then starts the take, through `selectionDidChange()`.
+    private func chooseSource(for mode: CaptureToolbarMode) async {
+        startsOnSelection = true
+        switch mode {
+        case .recordScreen:
+            sources.open(.display)
+        case .recordWindow:
+            sources.open(.window)
+        default:
+            // The toolbar's Record confirms it, so the selection needs no buttons of its own
+            await recorder.presentAreaSelection(showsActions: false)
+            // Chosen or cancelled by now
+            startsOnSelection = false
         }
     }
 
@@ -127,9 +155,30 @@ final class CaptureToolbarViewModel {
     /// Cancels a countdown, drops the selection and takes the toolbar away
     func close() async {
         sources.cancel()
+        areaSelection.cancel()
         recorder.cancelCountdown()
         await recorder.resetSelection()
         onHide?(true)
+    }
+
+    /// What Esc and the close control do: the innermost thing open first, so a picker or a half-drawn
+    /// area goes on its own and the toolbar only with the next press.
+    func cancel() async {
+        if areaSelection.isPresented {
+            areaSelection.cancel()
+            return
+        }
+        if sources.isOpen {
+            sources.cancel()
+            return
+        }
+        await close()
+    }
+
+    /// What the close control says it will do, which follows what it is about to close
+    var cancelTitle: String {
+        if areaSelection.isPresented { return "Cancel Selection" }
+        return sources.isOpen ? "Close Picker" : "Close"
     }
 
     /// Follows a selection made here or elsewhere: shows it as the mode, and starts the take Record asked for

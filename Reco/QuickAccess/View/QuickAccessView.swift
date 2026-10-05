@@ -134,7 +134,7 @@ private struct QuickAccessActions: View {
             }
             .keyboardShortcut("s", modifiers: .command)
         }
-        .buttonStyle(.editorPrimary)
+        .buttonStyle(.editorAccent)
         .padding(6)
     }
 }

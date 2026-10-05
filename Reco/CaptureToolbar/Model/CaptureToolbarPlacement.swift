@@ -22,9 +22,20 @@ nonisolated enum CaptureToolbarPlacement {
     /// margin inside its window, so the chip ends up about 8 pt clear of the bar.
     static let tooltipGap: CGFloat = 2
 
-    /// Between the bar's window and the picker's: both have a 12 pt transparent margin, so this overlaps
-    /// them and leaves 12 pt between the glass, without the picker's window reaching over the bar's glass.
-    static let pickerGap: CGFloat = -12
+    /// The bar's own origin inside its window: the bar sits centred at the window's bottom, `margin` in
+    /// from its edges. The window can be wider than the bar and taller, since the picker for a window or
+    /// a display is drawn above the bar in the same one.
+    static func barOrigin(inWindow frame: CGRect, barSize: CGSize, margin: CGFloat) -> CGPoint {
+        CGPoint(x: frame.midX - barSize.width / 2, y: frame.minY + margin)
+    }
+
+    /// Where the window goes for a bar at `barOrigin`, sized `windowSize`
+    static func windowOrigin(for barOrigin: CGPoint, windowSize: CGSize, barSize: CGSize, margin: CGFloat) -> CGPoint {
+        CGPoint(
+            x: barOrigin.x - (windowSize.width - barSize.width) / 2,
+            y: barOrigin.y - margin
+        )
+    }
 
     /// The bar's origin at home: centred, `bottomMargin` above the bottom of `visibleFrame`
     static func home(size: CGSize, in visibleFrame: CGRect) -> CGPoint {

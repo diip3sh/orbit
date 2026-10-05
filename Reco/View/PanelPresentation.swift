@@ -11,9 +11,9 @@ extension View {
     /// source it came from (`anchor`), and goes back there. The window orders itself out
     /// `PanelPresentation.exitDelay` after `isPresented` turns false. A spring without bounce, so
     /// a change during the move turns round from where the panel is; with Reduce Motion, a short
-    /// cross-fade only.
-    func panelPresentation(isPresented: Bool, anchor: UnitPoint) -> some View {
-        modifier(PanelPresentation(isPresented: isPresented, anchor: anchor))
+    /// cross-fade only. `motion` replaces the panel spring for a surface that should arrive faster.
+    func panelPresentation(isPresented: Bool, anchor: UnitPoint, motion: Animation? = nil) -> some View {
+        modifier(PanelPresentation(isPresented: isPresented, anchor: anchor, motion: motion))
     }
 }
 
@@ -24,6 +24,7 @@ struct PanelPresentation: ViewModifier {
 
     let isPresented: Bool
     let anchor: UnitPoint
+    let motion: Animation?
 
     // Shown only once the view is on screen, so the entrance animates from hidden
     @State private var hasAppeared = false
@@ -31,11 +32,12 @@ struct PanelPresentation: ViewModifier {
 
     func body(content: Content) -> some View {
         let isShown = hasAppeared && isPresented
+        let arrival = reducesMotion ? EditorTheme.fadeMotion : (motion ?? EditorTheme.motion)
 
         content
             .opacity(isShown ? 1 : 0)
             .scaleEffect(isShown || reducesMotion ? 1 : 0.96, anchor: anchor)
-            .animation(reducesMotion ? EditorTheme.fadeMotion : EditorTheme.motion, value: isShown)
+            .animation(arrival, value: isShown)
             .onAppear { hasAppeared = true }
     }
 }

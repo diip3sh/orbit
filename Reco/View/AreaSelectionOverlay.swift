@@ -7,6 +7,7 @@
 
 import AppKit
 import KeyboardShortcuts
+import Observation
 import OSLog
 
 /// Result of an area selection operation
@@ -19,18 +20,26 @@ struct AreaSelectionResult: Sendable {
 
 // MARK: - AreaSelectionOverlay
 
-/// Manages the area selection overlay for drawing a capture rectangle on screen
+/// Manages the area selection overlay for drawing a capture rectangle on screen. Observable, so a control
+/// outside it (the capture toolbar's Record) can confirm the selection once one is drawn.
 @MainActor
+@Observable
 final class AreaSelectionOverlay {
 
     // MARK: - Properties
 
-    private var panels: [AreaSelectionPanel] = []
-    private var overlayViews: [AreaSelectionView] = []
-    private var continuation: CheckedContinuation<AreaSelectionResult?, Never>?
-    private var escapeTask: Task<Void, Never>?
+    /// Whether the overlay is up
+    private(set) var isPresented = false
 
-    private let logger = Logger(
+    /// Whether a drawn selection can be confirmed now (`confirm()`)
+    private(set) var canConfirm = false
+
+    @ObservationIgnored private var panels: [AreaSelectionPanel] = []
+    @ObservationIgnored private var overlayViews: [AreaSelectionView] = []
+    @ObservationIgnored private var continuation: CheckedContinuation<AreaSelectionResult?, Never>?
+    @ObservationIgnored private var escapeTask: Task<Void, Never>?
+
+    @ObservationIgnored private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "Reco",
         category: "AreaSelectionOverlay"
     )
@@ -41,8 +50,13 @@ final class AreaSelectionOverlay {
     /// - Parameters:
     ///   - confirmsOnRelease: Confirms as soon as a large enough drag ends, skipping adjusting and Confirm
     ///   - frozen: Each display as it was when the selection started, by display ID, shown instead of the live screen
+    ///   - showsActions: Confirm and Cancel beside the selection; off when another control confirms it
     /// - Returns: The selected area result, or nil if cancelled
-    func present(confirmsOnRelease: Bool = false, frozen: [CGDirectDisplayID: CGImage] = [:]) async -> AreaSelectionResult? {
+    func present(
+        confirmsOnRelease: Bool = false,
+        frozen: [CGDirectDisplayID: CGImage] = [:],
+        showsActions: Bool = true
+    ) async -> AreaSelectionResult? {
         let screens = NSScreen.screens
         guard !screens.isEmpty else {
             logger.error("No screens available")
@@ -57,6 +71,7 @@ final class AreaSelectionOverlay {
 
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
+            isPresented = true
 
             for screen in screens {
                 let panel = AreaSelectionPanel(screen: screen, takesFocus: takesFocus)
@@ -64,7 +79,8 @@ final class AreaSelectionOverlay {
                 let overlayView = AreaSelectionView(
                     frame: NSRect(origin: .zero, size: screen.frame.size),
                     screen: screen,
-                    confirmsOnRelease: confirmsOnRelease
+                    confirmsOnRelease: confirmsOnRelease,
+                    showsActions: showsActions
                 )
                 overlayView.delegate = self
 
@@ -99,6 +115,19 @@ final class AreaSelectionOverlay {
         }
     }
 
+    /// Confirms the drawn selection, as Return does; nothing while none can be confirmed
+    func confirm() {
+        guard canConfirm else { return }
+        for view in overlayViews {
+            view.confirmSelectionIfValid()
+        }
+    }
+
+    func cancel() {
+        guard isPresented else { return }
+        finish(with: nil)
+    }
+
     // MARK: - Private Methods
 
     /// Removes the overlay, releases Esc and hands the result to `present`
@@ -117,6 +146,8 @@ final class AreaSelectionOverlay {
         }
         panels.removeAll()
         overlayViews.removeAll()
+        isPresented = false
+        canConfirm = false
         NSCursor.arrow.set()
         BackgroundCursor.setEnabled(false)
     }
@@ -147,6 +178,10 @@ extension AreaSelectionOverlay: AreaSelectionViewDelegate {
     func areaSelectionViewDidBeginDrawing(_ view: AreaSelectionView) {
         clearOtherViews(except: view)
     }
+
+    func areaSelectionView(_ view: AreaSelectionView, canConfirm: Bool) {
+        self.canConfirm = canConfirm
+    }
 }
 
 // MARK: - Interaction State
@@ -171,6 +206,7 @@ final class AreaSelectionView: NSView {
 
     private let screen: NSScreen
     private let confirmsOnRelease: Bool
+    private let showsActions: Bool
     private var selectionRect: CGRect = .zero
     private var interactionState: InteractionState = .idle
     private var trackingArea: NSTrackingArea?
@@ -198,9 +234,10 @@ final class AreaSelectionView: NSView {
 
     // MARK: - Initialization
 
-    init(frame: NSRect, screen: NSScreen, confirmsOnRelease: Bool) {
+    init(frame: NSRect, screen: NSScreen, confirmsOnRelease: Bool, showsActions: Bool = true) {
         self.screen = screen
         self.confirmsOnRelease = confirmsOnRelease
+        self.showsActions = showsActions
         super.init(frame: frame)
         setupTrackingArea()
     }
@@ -467,7 +504,10 @@ final class AreaSelectionView: NSView {
 
     // MARK: - Action Buttons
 
+    /// Also where the selection becomes confirmable, so the overlay hears of it with or without the buttons
     private func showActionButtons() {
+        delegate?.areaSelectionView(self, canConfirm: true)
+        guard showsActions else { return }
         guard buttonContainer == nil else {
             updateButtonPositions()
             return
@@ -475,7 +515,7 @@ final class AreaSelectionView: NSView {
 
         let container = NSView()
 
-        let confirm = makeActionButton(title: "Confirm", keyEquivalent: "\r", action: #selector(confirmButtonClicked))
+        let confirm = makeActionButton(title: "Confirm", keyEquivalent: "\r", isProminent: true, action: #selector(confirmButtonClicked))
         let cancel = makeActionButton(title: "Cancel", keyEquivalent: "\u{1b}", action: #selector(cancelButtonClicked))
 
         container.addSubview(confirm)
@@ -518,6 +558,7 @@ final class AreaSelectionView: NSView {
     }
 
     private func hideActionButtons() {
+        delegate?.areaSelectionView(self, canConfirm: false)
         buttonContainer?.removeFromSuperview()
         buttonContainer = nil
         buttonContainerCenterX = nil
@@ -533,7 +574,8 @@ final class AreaSelectionView: NSView {
     }
 
     /// A system button: glass on macOS 26. Return confirms and Esc cancels, as the keys always did.
-    private func makeActionButton(title: String, keyEquivalent: String, action: Selector) -> NSButton {
+    /// Confirm is tinted with the accent colour, as the capture toolbar's action is.
+    private func makeActionButton(title: String, keyEquivalent: String, isProminent: Bool = false, action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
         button.controlSize = .large
         button.keyEquivalent = keyEquivalent
@@ -541,6 +583,9 @@ final class AreaSelectionView: NSView {
             button.bezelStyle = .glass
         } else {
             button.bezelStyle = .push
+        }
+        if isProminent {
+            button.bezelColor = .controlAccentColor
         }
         button.widthAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
         return button
@@ -712,7 +757,7 @@ final class AreaSelectionView: NSView {
         }
     }
 
-    private func confirmSelectionIfValid() {
+    func confirmSelectionIfValid() {
         guard Self.isValidSelection(selectionRect) else { return }
 
         // Convert from view coordinates to screen coordinates

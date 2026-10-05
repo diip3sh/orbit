@@ -97,7 +97,8 @@ final class RecorderViewModel {
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
     private var videoSize: CGSize = .zero
-    private let areaSelectionOverlay = AreaSelectionOverlay()
+    /// Observed by the capture toolbar, whose Record confirms a selection it opened
+    let areaSelectionOverlay = AreaSelectionOverlay()
     private let selectionBorderFrame = SelectionBorderFrame()
 
     /// Called when content is chosen to record, or the picker is cancelled, so the capture toolbar can follow
@@ -179,12 +180,13 @@ final class RecorderViewModel {
         captureEngine(captureEngine, didUpdateFilter: filter)
     }
 
-    /// Presents the area selection overlay on the display under the cursor
-    func presentAreaSelection() async {
+    /// Presents the area selection overlay on the display under the cursor; `showsActions` false when
+    /// another control confirms it
+    func presentAreaSelection(showsActions: Bool = true) async {
         // Dismiss any existing border frame so it doesn't overlap the selection overlay
         selectionBorderFrame.dismiss()
 
-        guard let result = await areaSelectionOverlay.present() else {
+        guard let result = await areaSelectionOverlay.present(showsActions: showsActions) else {
             logger.info("Area selection cancelled")
             return
         }
