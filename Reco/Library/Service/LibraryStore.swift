@@ -12,9 +12,10 @@ import UniformTypeIdentifiers
 /// and moving them to the Trash.
 nonisolated enum LibraryStore {
 
-    /// Everything Reco made in the two folders, newest first. A folder that doesn't exist yet has none.
+    /// Everything Reco made in the folders, newest first. A folder that doesn't exist yet has none.
+    /// - Parameter history: Screenshots nobody saved (spec 0012); one that's also in `screenshots` is listed from there.
     @concurrent
-    static func items(recordings: URL, screenshots: URL) async throws -> [LibraryItem] {
+    static func items(recordings: URL, screenshots: URL, history: URL) async throws -> [LibraryItem] {
         let recordingFiles = try contents(of: recordings)
         // Both may be one folder: it's read once, so nothing is listed twice
         let screenshotFiles = screenshots.standardizedFileURL == recordings.standardizedFileURL ? recordingFiles : try contents(of: screenshots)
@@ -24,7 +25,11 @@ nonisolated enum LibraryStore {
         let shots = screenshotFiles
             .filter { LibraryItem.isScreenshot($0.url, contentType: $0.type) }
             .map { LibraryItem(url: $0.url, kind: .screenshot, date: $0.date) }
-        return (movies + shots).sorted { $0.date > $1.date }
+        let saved = Set(shots.map(\.url.lastPathComponent))
+        let kept = try contents(of: history)
+            .filter { LibraryItem.isScreenshot($0.url, contentType: $0.type) && !saved.contains($0.url.lastPathComponent) }
+            .map { LibraryItem(url: $0.url, kind: .screenshot, date: $0.date) }
+        return (movies + shots + kept).sorted { $0.date > $1.date }
     }
 
     /// Moves `item` and its companions to the Trash, where the user can put them back. `remove` is

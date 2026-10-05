@@ -525,10 +525,18 @@ global hotkey, as in the countdown. macOS ignores cursor changes from an app tha
 (looked up at run time; without it the pointer just stays an arrow). Not yet seen working in the app. Recording keeps drag, adjust and Confirm, and takes the keyboard for Return.
 Captures at native pixels exactly what is on screen (Reco's windows and menus, wallpaper, Dock and menu bar included; the popover, `MenuBarExtraWindow`, too when the shortcut is used; left out only when the capture starts from it, so no wait for its fade) into memory (`Screenshot`: image, scale,
 capture time) and hands it to `ScreenshotController.onDidCapture` (the Quick Access card, C2). Nothing is
-written until the card's **Save**: `ScreenshotController.save(_:)` writes
+written to the screenshot folder until the card's **Save**: `ScreenshotController.save(_:)` writes
 `Reco_Screenshot_<capture time>.png` into `SettingsStore.screenshotDirectory`: the Desktop unless the user picks
 another folder in **Settings → General → Output Location → Screenshots** (a plain path; unsandboxed, no bookmark).
 macOS asks once for Desktop access the first time a screenshot is saved there.
+
+**History** (spec 0012): every capture is also written, in the background (the card doesn't wait), to
+`URL.recoSupport/Screenshots/` under the same name. Save deletes that copy (after awaiting its write, if still
+running), so nothing is stored or listed twice; Copy, Pin, Recognize Text and Close leave it. **Settings → General →
+Screenshot History**: Keep Screenshots Off / 1 Week / 1 Month (default) / 3 Months, and Clear History…. Expired
+files (creation date older than the retention; Off expires all) are deleted with `removeItem`, not trashed, to free
+space: at launch and after each history write, by `ScreenshotHistory.isExpired`, the one rule. The screenshot folder
+is never pruned.
 
 | File | Role |
 |---|---|
@@ -538,6 +546,8 @@ macOS asks once for Desktop access the first time a screenshot is saved there.
 | `Screenshot/Service/WindowPicker.swift` | System `SCContentSharingPicker` in `.window` mode, observed only while picking |
 | `Screenshot/View/ScreenshotButtons.swift` | The three popover rows |
 | `Service/SCContentFilter+CaptureScale.swift` | Window-scale fix shared with recording (moved from `RecorderViewModel`) |
+| `Screenshot/Service/ScreenshotHistory.swift` | `nonisolated` history folder, `isExpired` (pure), `prune`/`clear`/`remove` (`@concurrent`, folder as a parameter for tests) |
+| `Model/ScreenshotHistoryRetention.swift`, `Model/SettingsStore+ScreenshotHistory.swift` | The setting (an extension: `SettingsStore.swift` is over the file length limit) |
 
 Key facts:
 - Shared with recording: `CaptureSizeCalculator.sourceRect` (area → display rect), `filter.captureScale`,
@@ -786,13 +796,16 @@ main window, which stays open unlike the popover: a sidebar (All, Recordings, We
 Screenshots, with counts), a grid of pictures, search, and **New** (Capture Area/Window/Screen, Record
 Area…, Record Window or Display…, New Web Recording…, Record with AI Agent…). A click opens a movie in the
 editor and a screenshot in Preview; the context menu shows in Finder, copies (a screenshot as PNG, a movie
-as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`.
+as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`. The grid is under date
+headers, newest first: Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
+list the screenshot history folder (spec 0012).
 
 | File | Role |
 |---|---|
 | `Library/Model/LibraryItem.swift` | Pure: kinds by name and type (`Reco_Web_` web, `-edited` export, `Reco_Screenshot_` PNG), companions, `LibrarySection` |
-| `Library/Service/LibraryStore.swift` | Lists the recordings and screenshot folders (once when they're the same), thumbnails (movie frame or `CGImageSource`), trash |
-| `Library/Service/FolderWatcher.swift` | `DispatchSource` vnode writes on both folders, 0.3 s settle, so new saves show at once |
+| `Library/Model/LibraryDateGroup.swift` | Pure: `groups(of:now:calendar:)`, the date headers |
+| `Library/Service/LibraryStore.swift` | Lists the recordings, screenshot and history folders (a folder read once when two are the same; a history name also saved is listed from the screenshot folder), thumbnails (movie frame or `CGImageSource`), trash |
+| `Library/Service/FolderWatcher.swift` | `DispatchSource` vnode writes on all three folders, 0.3 s settle, so new saves show at once (a folder that doesn't exist yet isn't watched until the window is reopened; the history folder is made at launch) |
 | `Library/ViewModel/LibraryViewModel.swift`, `Library/View/` | Sections, search, intents; `Actions` wired in `AppDelegate`; window in `EditorWindowManager.showLibrary()` |
 
 - The screenshot folder is the Desktop by default, so only `Reco_Screenshot_*.png` there are listed; reading
@@ -815,6 +828,38 @@ text sent to the agent never includes a password's value.
 | `WebRecording/Service/WebPreviewController.swift`, `WebBrowseScript.swift` | `waitUntilLoaded`, `screenshot`, `hover`/`click` via `sendPointer`; locate, read, position scripts in the `RecoPick` world |
 | `WebRecording/ViewModel/WebRecordingViewModel.swift` | `agentOpen`, `showAgentTarget` (refused while rendering) |
 | `Editor/View/EditorWindowManager.swift` | `webRecordingForAgent()`: the window, ordered front without focus |
+
+### S9 — Notch shelf (`feat/screenshot-history`, spec 0013)
+
+A black shape over the notch of every screen (a 120×8 pt pill at the top centre where there is none). The pointer
+on it makes it peek (+7.5 pt each side, +5 down, shadow); staying 300 ms opens it into a 560 pt panel with the
+newest 20 screenshots (saved and history): click copies the PNG (tile says Copied for 1.2 s), drag drops the file.
+Collapses 500 ms after the pointer leaves. **Settings → General → Screenshot History → Show Screenshots in the Notch** (default on).
+
+| File | Role |
+|---|---|
+| `NotchShelf/Model/NotchGeometry.swift` | Pure: notch (gap between `auxiliaryTopLeftArea`/`RightArea`, widths and height only) or pill; peek, open rects, the one fixed `window` (open panel + 24 pt to the sides and below); open height = notch height + 132 (164 pt on a 14" MBP) |
+| `NotchShelf/Model/NotchMotion.swift` | Every spring, delay, radius, shadow and transition, in one place |
+| `NotchShelf/ViewModel/NotchShelfViewModel.swift` | `isPeeking`/`isExpanded`; `pointerEntered()`/`pointerExited()` return their delay task (injectable sleep); `activeRect` (notch / peek / panel by state); reads on the pointer resting, not a timer, and draws the pictures before publishing (`reload()`); `copy(_:)` |
+| `NotchShelf/View/NotchShelfController.swift` | `NSPanel` per screen (`.statusBar`, never key), one fixed-frame panel, `hitTest` and an `.activeAlways` tracking rect that follow `activeRect` (rebuilt on state change, then pointer vs view model re-synced), rebuilt on screen changes, `hide()`/`restore()` |
+| `NotchShelf/View/NotchShelfView.swift`, `NotchShape.swift` | Strip and tiles; one `Shape` (quadratic curves) with animatable top and bottom radii |
+
+Key facts:
+- **The window never resizes** (a window chasing the shape clipped it, and its shadow, on every grow: it was resized a
+  run-loop turn late). Click-through is transparency plus `hitTest` (nil outside `activeRect`); hover is a tracking
+  area on `activeRect` (no global `NSEvent` monitor: Accessibility), rebuilt on each state change, then
+  `NSEvent.mouseLocation` is compared with the view model since AppKit sends no enter/exit for a pointer an area
+  already contains or misses.
+- `reload()` draws the missing pictures side by side before publishing, during the 300 ms delay, so tiles aren't grey
+  as the strip enters; the previous items and pictures stay until a read ends.
+- Hidden in `ScreenshotController.onWillCapture`, restored in `onDidCapture` (`AppDelegate`), so it's never in a shot.
+- **Motion matches notchi's measured feel** (numbers only; it is GPL-3.0, no code taken), user's request 2026-10-04, and
+  **overshoots on purpose: the one exception to bounce-free motion.** Springs (response/damping): peek in 0.36/0.74,
+  out 0.28/0.96; open 0.5/0.78; collapse 0.36/0.88. Shadows black, blur 6: 0.3 peeking, 0.7 open. Radii: top (inward
+  ears) 6→19 pt, bottom 14→24 pt, clamped to the pill. Strip enters y −12 `easeOut(0.22)` +0.08 s, leaves y −6
+  `easeIn(0.12)`; header enters y −8 `easeOut(0.2)` +0.12 s, leaves y −4 `easeIn(0.1)`. Reduce Motion: no spring, a fade.
+- Tiles use `onTapGesture` + `onDrag`, not a `Button`, whose press tracking would swallow the drag.
+- Not yet seen running on a notched Mac: hover while Reco is inactive, full-screen Spaces, several displays.
 
 ### Telemetry JSON (version 3)
 

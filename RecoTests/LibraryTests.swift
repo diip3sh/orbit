@@ -53,7 +53,7 @@ struct LibraryTests {
         try write([("Reco_old.mov", 60), ("Reco_Web_new.mov", 0), ("Reco_Web_new.telemetry.json", 0), ("Reco_old-edited.mp4", 30)], in: movies)
         try write([("Reco_Screenshot_a.png", 10), ("Screenshot 2026.png", 5), ("notes.txt", 1)], in: desktop)
 
-        let items = try await LibraryStore.items(recordings: movies, screenshots: desktop)
+        let items = try await LibraryStore.items(recordings: movies, screenshots: desktop, history: root.appending(path: "none"))
 
         #expect(items.map(\.name) == ["Reco_Web_new", "Reco_Screenshot_a", "Reco_old-edited", "Reco_old"])
         #expect(items.map(\.kind) == [.webRecording, .screenshot, .export, .recording])
@@ -64,14 +64,32 @@ struct LibraryTests {
         let shared = try folder("Shared")
         try write([("Reco_1.mov", 1), ("Reco_Screenshot_1.png", 0)], in: shared)
 
-        #expect(try await LibraryStore.items(recordings: shared, screenshots: shared).count == 2)
-        #expect(try await LibraryStore.items(recordings: root.appending(path: "none"), screenshots: root.appending(path: "none2")).isEmpty)
+        #expect(try await LibraryStore.items(recordings: shared, screenshots: shared, history: shared).count == 2)
+        #expect(try await LibraryStore.items(recordings: root.appending(path: "none"), screenshots: root.appending(path: "none2"), history: root.appending(path: "none3")).isEmpty)
+    }
+
+    @Test func historyScreenshotsAreListedAndASavedOneIsListedOnce() async throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let movies = try folder("Movies")
+        let desktop = try folder("Desktop")
+        let history = try folder("History")
+        try write([("Reco_Screenshot_saved.png", 20), ("Reco_Screenshot_both.png", 10)], in: desktop)
+        try write([("Reco_Screenshot_kept.png", 5), ("Reco_Screenshot_both.png", 10), ("notes.txt", 1)], in: history)
+
+        let items = try await LibraryStore.items(recordings: movies, screenshots: desktop, history: history)
+
+        #expect(Set(items.map(\.name)) == ["Reco_Screenshot_saved", "Reco_Screenshot_both", "Reco_Screenshot_kept"])
+        #expect(items.count == 3)
+        let both = try #require(items.first { $0.name == "Reco_Screenshot_both" })
+        #expect(both.url.deletingLastPathComponent().lastPathComponent == "Desktop")
+        #expect(items.first { $0.name == "Reco_Screenshot_kept" }?.url.deletingLastPathComponent().lastPathComponent == "History")
     }
 
     @Test func theViewModelFiltersOpensCopiesAndTrashes() async throws {
         defer { try? FileManager.default.removeItem(at: root) }
         let movies = try folder("Movies")
         let desktop = try folder("Desktop")
+        let history = try folder("History")
         let tag = UUID().uuidString
         try write([("Reco_\(tag).mov", 2), ("Reco_\(tag).telemetry.json", 2), ("Reco_Web_\(tag).mov", 1)], in: movies)
         let png = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 4, pixelsHigh: 4, bitsPerSample: 8, samplesPerPixel: 4,
@@ -83,7 +101,8 @@ struct LibraryTests {
         var openedMovie: URL?
         var openedFile: URL?
         let viewModel = LibraryViewModel(
-            folders: { (movies, desktop) }, openMovie: { openedMovie = $0 }, openFile: { openedFile = $0 }, pasteboard: pasteboard,
+            folders: { LibraryFolders(recordings: movies, screenshots: desktop, history: history) },
+            openMovie: { openedMovie = $0 }, openFile: { openedFile = $0 }, pasteboard: pasteboard,
             trashItem: { try await LibraryStore.trash($0) { try FileManager.default.removeItem(at: $0) } }
         )
 

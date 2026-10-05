@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
     private lazy var quickAccess = QuickAccessController { [screenshots] screenshot in await screenshots.save(screenshot) }
+    private lazy var notchShelf = NotchShelfController(settings: viewModel.settings)
 
     /// Serves the tools coding agents record web pages with; a movie it renders opens in the editor.
     lazy var agentBridge = AgentBridgeServer(tools: AgentTools(settings: viewModel.settings) { [editorWindows] url in editorWindows.open(url) })
@@ -48,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Made now so it follows selections and takes started before it is first shown
         _ = captureToolbar
         ColorPanelPlacement.start()
+        notchShelf.start()
         agentBridge.start()
         viewModel.notificationService.editRecording = editorWindows.open
         editorWindows.agentRecording = agentRecording
@@ -70,13 +72,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.notificationService.retryAgentRecording = { [agentRecording] in agentRecording.retry() }
         viewModel.notificationService.showAgentRecording = { [weak self] in self?.showAgentRecording() }
 
-        // Hidden first so the last card and the capture toolbar never land in the next shot, even with
-        // Show Reco on; a cancelled or failed capture brings them back
-        screenshots.onWillCapture = { [quickAccess, captureToolbar] in
+        // Hidden first so the last card, the capture toolbar and the notch shelf never land in the next
+        // shot, even with Show Reco on; a cancelled or failed capture brings them back
+        screenshots.onWillCapture = { [quickAccess, captureToolbar, notchShelf] in
             quickAccess.hide()
             captureToolbar.hide(animated: false)
+            notchShelf.hide()
         }
-        screenshots.onDidCapture = { [quickAccess, captureToolbar] screenshot in
+        screenshots.onDidCapture = { [quickAccess, captureToolbar, notchShelf] screenshot in
+            notchShelf.restore()
             if let screenshot {
                 quickAccess.show(screenshot)
             } else {

@@ -31,9 +31,14 @@ final class ScreenshotController {
     private let windowPicker = WindowPicker()
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "ScreenshotController")
 
+    /// History copies still being written, by file name, so Save can wait for one before deleting it
+    private var historyWrites: [String: Task<Void, Never>] = [:]
+
     init(settings: SettingsStore, notificationService: NotificationService) {
         self.settings = settings
         self.notificationService = notificationService
+        let retention = settings.screenshotHistoryRetention
+        Task { await ScreenshotHistory.prune(retention: retention) }
     }
 
     /// Screenshots wait for the recorder: none while it records, stops or counts down, and only one at a time
@@ -85,12 +90,16 @@ final class ScreenshotController {
         }
     }
 
-    /// Writes the screenshot into `SettingsStore.screenshotDirectory`; logs and notifies when that fails
+    /// Writes the screenshot into `SettingsStore.screenshotDirectory`, which replaces its history copy;
+    /// logs and notifies when that fails
     /// - Returns: Whether it was saved
     func save(_ screenshot: Screenshot) async -> Bool {
         do {
             let url = try await service.save(screenshot, in: settings.screenshotDirectory)
             logger.info("Screenshot saved: \(url.lastPathComponent)")
+            // The history write may still be running: wait, or the copy would outlive the delete
+            await historyWrites[screenshot.filename]?.value
+            await ScreenshotHistory.remove(named: screenshot.filename)
             return true
         } catch {
             logger.error("Screenshot save failed: \(error.localizedDescription)")
@@ -118,9 +127,27 @@ final class ScreenshotController {
             }
             logger.info("Screenshot captured: \(captured.image.width)×\(captured.image.height) px")
             screenshot = captured
+            keepInHistory(captured)
         } catch {
             logger.error("Screenshot failed: \(error.localizedDescription)")
             notificationService.sendScreenshotFailedNotification(error: error)
+        }
+    }
+
+    /// Writes a copy into the history in the background, so the card doesn't wait for it, then prunes
+    private func keepInHistory(_ screenshot: Screenshot) {
+        let retention = settings.screenshotHistoryRetention
+        guard retention != .off else { return }
+        let name = screenshot.filename
+        let image = screenshot.image
+        historyWrites[name] = Task {
+            do {
+                try await ScreenshotService.writePNG(image, to: ScreenshotHistory.directory.appending(path: name))
+                await ScreenshotHistory.prune(retention: retention)
+            } catch {
+                logger.error("Screenshot history write failed: \(error.localizedDescription)")
+            }
+            historyWrites[name] = nil
         }
     }
 }
