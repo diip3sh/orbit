@@ -11,6 +11,12 @@ This file covers what AGENTS.md doesn't: how to build this fork, what it adds on
 
 Reco is a macOS menu bar screen recorder (ScreenCaptureKit + AVAssetWriter, not sandboxed since 2026-10-01, spec 0007), forked from BetterCapture
 and renamed: its own bundle ID (`com.diip3sh.Reco`), `reco://` links, and Reco in every name.
+**Users see it as Orbit** (2026-10-05): `CFBundleDisplayName`, user-facing strings, the release title,
+the DMG and the app's file name in it (`RELEASE_NAME` in `fork-release.yml`). The target, scheme, module,
+executable, bundle ID, `reco://`, the agents' `reco` MCP server key, `Reco_*` file names and `Movies/Reco`
+stay Reco, so installed copies keep updating (Sparkle matches the DMG's `Orbit.app` by bundle ID and
+installs at the old path), their permissions and settings, and connected agents. `CFBundleName` stays
+Reco: the generated plist's value wins over `Info.plist`. Release install steps: `dist/install-notes.md`.
 This fork is working towards a free Screen Studio / CleanShot X alternative: record input telemetry
 now, build an editor (auto-zoom, smooth cursor, backgrounds) on top of it later.
 

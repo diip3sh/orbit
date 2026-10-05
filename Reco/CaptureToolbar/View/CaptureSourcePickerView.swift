@@ -62,7 +62,7 @@ struct CaptureSourcePickerView: View {
     @ViewBuilder
     private var content: some View {
         if picker.failed {
-            notice("Allow Reco to record the screen in System Settings → Privacy & Security, then try again.")
+            notice("Allow Orbit to record the screen in System Settings → Privacy & Security, then try again.")
         } else if let sources = picker.sources {
             if sources.isEmpty {
                 notice(picker.kind == .display ? "No displays to record." : "No windows to record.")

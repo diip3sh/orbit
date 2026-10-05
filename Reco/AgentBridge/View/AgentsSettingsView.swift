@@ -46,7 +46,7 @@ struct AgentsSettingsView: View {
             } header: {
                 Text("Agents")
             } footer: {
-                Text("Restart an agent after connecting it. Reco adds itself as an MCP server named reco to the agent's own settings.")
+                Text("Restart an agent after connecting it. Orbit adds itself as an MCP server named reco to the agent's own settings.")
             }
         }
         .formStyle(.grouped)

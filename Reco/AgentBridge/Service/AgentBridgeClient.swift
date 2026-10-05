@@ -22,7 +22,7 @@ nonisolated enum AgentBridgeClient {
     /// Runs until stdin or the socket closes.
     static func run() -> Never {
         guard let token = ProcessInfo.processInfo.environment[AgentServerCommand.tokenVariable], !token.isEmpty else {
-            quit("Connect this agent in Reco → Settings → Agents.", status: 1)
+            quit("Connect this agent in Orbit → Settings → Agents.", status: 1)
         }
         connect(token: token, deadline: .now + startTimeout, hasLaunched: false)
         dispatchMain()
@@ -43,7 +43,7 @@ nonisolated enum AgentBridgeClient {
                 if !hasLaunched {
                     launchApp()
                 }
-                guard ContinuousClock.now < deadline else { quit("Reco didn't start.", status: 1) }
+                guard ContinuousClock.now < deadline else { quit("Orbit didn't start.", status: 1) }
                 Task {
                     try? await Task.sleep(for: retryInterval)
                     connect(token: token, deadline: deadline, hasLaunched: true)
@@ -61,7 +61,7 @@ nonisolated enum AgentBridgeClient {
         configuration.activates = false
         NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
             if let error {
-                note("Couldn't start Reco: \(error.localizedDescription)")
+                note("Couldn't start Orbit: \(error.localizedDescription)")
             }
         }
     }
@@ -88,7 +88,7 @@ nonisolated enum AgentBridgeClient {
                 FileHandle.standardOutput.write(data)
             }
             if error != nil || isComplete {
-                quit("Reco closed the connection.", status: 0)
+                quit("Orbit closed the connection.", status: 0)
             }
             forward(from: connection)
         }

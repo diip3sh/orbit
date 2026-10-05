@@ -19,9 +19,9 @@ struct AgentConfigStore {
 
         var errorDescription: String? {
             switch self {
-            case .translocated: "Move Reco to Applications first, then connect the agent."
+            case .translocated: "Move Orbit to Applications first, then connect the agent."
             case .notInstalled(let agent): "\(agent) isn't installed."
-            case .symbolicLink(let path): "\(path) is a symbolic link, which Reco doesn't rewrite. Add the server to it yourself."
+            case .symbolicLink(let path): "\(path) is a symbolic link, which Orbit doesn't rewrite. Add the server to it yourself."
             }
         }
     }

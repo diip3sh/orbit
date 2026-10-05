@@ -123,7 +123,7 @@ struct MenuBarView: View {
                 openSettings()
             }
 
-            MenuBarActionButton(title: "Quit Reco", systemImage: "power") {
+            MenuBarActionButton(title: "Quit Orbit", systemImage: "power") {
                 NSApplication.shared.terminate(nil)
             }
             .padding(.bottom, 8)

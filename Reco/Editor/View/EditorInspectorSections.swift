@@ -170,7 +170,7 @@ struct KeystrokesInspectorSection: View {
             Toggle("Show All Keys", isOn: $viewModel.keystrokes.showsAllKeys)
         } footer: {
             if telemetry?.keystrokesAvailable == false {
-                Text("Keystrokes weren't recorded: Reco didn't have Input Monitoring access.")
+                Text("Keystrokes weren't recorded: Orbit didn't have Input Monitoring access.")
             } else if viewModel.keystrokes.showsAllKeys {
                 Text("Everything typed is shown, passwords included.")
             } else {

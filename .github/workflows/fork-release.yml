@@ -24,6 +24,9 @@ concurrency:
 
 env:
   APP_NAME: Reco
+  # What users see: release titles, the DMG, its volume and the app's file name. The target,
+  # executable and bundle ID stay APP_NAME, so installed copies keep updating
+  RELEASE_NAME: Orbit
   SCHEME: Reco
 
 jobs:
@@ -143,17 +146,17 @@ jobs:
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          DMG_PATH="$RUNNER_TEMP/$APP_NAME-$TAG.dmg"
+          DMG_PATH="$RUNNER_TEMP/$RELEASE_NAME-$TAG.dmg"
           STAGE="$RUNNER_TEMP/dmg-contents"
           mkdir -p "$STAGE"
-          ditto "$DERIVED_DATA/Build/Products/Release/$APP_NAME.app" "$STAGE/$APP_NAME.app"
+          ditto "$DERIVED_DATA/Build/Products/Release/$APP_NAME.app" "$STAGE/$RELEASE_NAME.app"
           ln -s /Applications "$STAGE/Applications"
           # The mounted disk shows the app's icon: a volume icon needs the root's custom-icon flag,
           # which can only be set on a mounted, writable image
-          cp "$STAGE/$APP_NAME.app/Contents/Resources/$APP_NAME.icns" "$STAGE/.VolumeIcon.icns"
+          cp "$STAGE/$RELEASE_NAME.app/Contents/Resources/$APP_NAME.icns" "$STAGE/.VolumeIcon.icns"
 
           RW_DMG="$RUNNER_TEMP/$APP_NAME-rw.dmg"
-          hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDRW "$RW_DMG"
+          hdiutil create -volname "$RELEASE_NAME" -srcfolder "$STAGE" -ov -format UDRW "$RW_DMG"
           MOUNT=$(hdiutil attach "$RW_DMG" -nobrowse -noautoopen | tail -1 | cut -f3)
           SetFile -a C "$MOUNT"
           hdiutil detach "$MOUNT"
@@ -186,9 +189,7 @@ jobs:
           {
             cat "$RUNNER_TEMP/changes.md"
             echo
-            echo "### Installing"
-            echo
-            echo "- This build isn't notarized. On first launch macOS blocks it: open **System Settings → Privacy & Security** and choose **Open Anyway**. Later versions arrive through the app's own updater."
+            cat "$GITHUB_WORKSPACE/dist/install-notes.md"
           } > "$RUNNER_TEMP/notes.md"
 
       - name: Generate Sparkle appcast
@@ -207,7 +208,7 @@ jobs:
             || echo "No previous appcast found, will create a fresh one"
 
           cd "$APPCAST_DIR"
-          DMG_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$APP_NAME-$TAG.dmg" \
+          DMG_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$RELEASE_NAME-$TAG.dmg" \
           RELEASE_NOTES="$(cat "$RUNNER_TEMP/changes.md")" \
           RELEASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" \
             python3 "$GITHUB_WORKSPACE/dist/update_appcast.py"
@@ -222,7 +223,7 @@ jobs:
         run: |
           gh release create "$TAG" "$DMG_PATH" "$RUNNER_TEMP/appcast.xml" \
             --target "$GITHUB_SHA" \
-            --title "$APP_NAME $VERSION" \
+            --title "$RELEASE_NAME $VERSION" \
             --notes-file "$RUNNER_TEMP/notes.md" \
             --latest
 

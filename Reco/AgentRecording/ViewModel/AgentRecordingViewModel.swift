@@ -288,7 +288,7 @@ final class AgentRecordingViewModel {
         }
         guard let invocation = AgentInvocation.make(for: request, in: directory, server: store.command),
               let executable = executable(for: request.agent, in: environment) else {
-            return .failed(reason: "Reco couldn't find \(request.agent.displayName)'s command in your login shell.")
+            return .failed(reason: "Orbit couldn't find \(request.agent.displayName)'s command in your login shell.")
         }
         // The command runs in it, so it must exist even when the agent needs no files there
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

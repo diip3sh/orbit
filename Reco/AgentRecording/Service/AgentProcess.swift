@@ -26,7 +26,7 @@ nonisolated enum AgentProcess {
         var errorDescription: String? {
             switch self {
             case .timedOut: "Your shell took more than 10 seconds to start."
-            case .unreadable: "Reco couldn't read your shell's environment."
+            case .unreadable: "Orbit couldn't read your shell's environment."
             }
         }
     }
@@ -121,7 +121,7 @@ nonisolated enum AgentProcess {
                     try process.run()
                 } catch {
                     process.terminationHandler = nil
-                    continuation.resume(returning: .launchFailed("Reco couldn't start \(executable.lastPathComponent): \(error.localizedDescription)"))
+                    continuation.resume(returning: .launchFailed("Orbit couldn't start \(executable.lastPathComponent): \(error.localizedDescription)"))
                     return
                 }
                 // Cancelled or timed out before it started

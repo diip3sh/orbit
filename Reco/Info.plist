@@ -5,13 +5,13 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Reco needs access to your microphone to record audio alongside screen captures.</string>
+	<string>Orbit needs access to your microphone to record audio alongside screen captures.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Reco needs access to your camera to enable Presenter Overlay during screen recordings.</string>
+	<string>Orbit needs access to your camera to enable Presenter Overlay during screen recordings.</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Reco needs access to screen recording to capture your screen content.</string>
+	<string>Orbit needs access to screen recording to capture your screen content.</string>
 	<key>SUFeedURL</key>
-	<string>https://github.com/diip3sh/reco/releases/latest/download/appcast.xml</string>
+	<string>https://github.com/diip3sh/orbit/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>SPARKLE_PUBLIC_KEY</string>
 	<key>CFBundleURLTypes</key>

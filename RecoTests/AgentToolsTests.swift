@@ -90,7 +90,7 @@ struct AgentToolsTests {
         let open = await tools.call("open_page", arguments: Data(#"{"url":"example.com"}"#.utf8))
 
         #expect(open.isError)
-        #expect(open.text.contains("started from Reco"))
+        #expect(open.text.contains("started from Orbit"))
     }
 
     @Test func browsingWithoutAWindowSaysSoAndOthersAreChecked() async {

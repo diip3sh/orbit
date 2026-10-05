@@ -12,13 +12,27 @@ ScreenCaptureKit, AVFoundation and SwiftUI.
 
 Requires **macOS 15.2 or later**, on Apple silicon or Intel.
 
-1. Download the DMG from the [latest release](https://github.com/diip3sh/orbit/releases/latest).
-2. Open it and drag the app to **Applications**.
-3. The build is signed but **not notarized**. If macOS blocks the first launch, open
-   **System Settings → Privacy & Security** and click **Open Anyway**.
-4. Grant **Screen Recording** when asked. Microphone and camera ask when you first turn them on.
+Orbit isn't notarized by Apple yet, so macOS blocks the first launch. You only do this once.
 
-Updates arrive automatically through the app's built-in updater.
+1. Download the DMG from the [latest release](https://github.com/diip3sh/orbit/releases/latest)
+   and open it.
+2. Drag **Orbit** onto **Applications**.
+3. Open Orbit from Applications. macOS says it can't verify the app: click **Done**, not
+   *Move to Trash*.
+4. Open **System Settings → Privacy & Security**, scroll down to **Security**, and click
+   **Open Anyway** next to *"Orbit" was blocked*. Enter your password, then click
+   **Open Anyway** again.
+5. Orbit appears in the menu bar. Allow **Screen Recording** when asked, then quit and reopen it.
+   Microphone and camera ask when you first turn them on.
+
+Prefer Terminal? After step 2, run this instead of steps 3–4:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Orbit.app && open /Applications/Orbit.app
+```
+
+Updates arrive automatically through the app's built-in updater
+(**Settings → General → Check for Updates…**).
 
 ## Features
 

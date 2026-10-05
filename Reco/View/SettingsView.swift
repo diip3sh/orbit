@@ -75,7 +75,7 @@ struct ShortcutsSettingsView: View {
             }
 
             Section {
-                Text("Shortcuts work globally, even when Reco is not focused.")
+                Text("Shortcuts work globally, even when Orbit is not focused.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -196,7 +196,7 @@ struct VideoSettingsView: View {
                 Toggle("Show Wallpaper", isOn: $settings.showWallpaper)
                 Toggle("Show Menu Bar", isOn: $settings.showMenuBar)
                 Toggle("Show Dock", isOn: $settings.showDock)
-                Toggle("Show Reco", isOn: $settings.showReco)
+                Toggle("Show Orbit", isOn: $settings.showReco)
             }
 
             Section("Window Capture") {

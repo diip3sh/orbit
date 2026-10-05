@@ -86,7 +86,7 @@ final class AgentTools {
             case AgentToolCatalog.openPage, AgentToolCatalog.look, AgentToolCatalog.readPage, AgentToolCatalog.click,
                  AgentToolCatalog.hover, AgentToolCatalog.type:
                 guard hostsRun else {
-                    throw AgentToolError.invalidArgument("Browsing works only in runs started from Reco. Use inspect_page, then record_page.")
+                    throw AgentToolError.invalidArgument("Browsing works only in runs started from Orbit. Use inspect_page, then record_page.")
                 }
                 return try await browse(name, arguments: arguments)
             default:

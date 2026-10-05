@@ -122,7 +122,7 @@ final class AgentBridgeServer {
         let server = Server(
             name: AgentServerCommand.serverName,
             version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0",
-            title: "Reco",
+            title: "Orbit",
             instructions: AgentToolCatalog.instructions,
             capabilities: .init(tools: .init(listChanged: false))
         )
