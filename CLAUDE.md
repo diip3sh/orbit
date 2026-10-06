@@ -870,8 +870,10 @@ should hold but need re-measuring.
 | S5 agent chat and reliable web takes (spec 0008) | Done and tested: real Claude Code runs from the prompt and from the chat in the app (sent through accessibility), 60 s apple.com takes checked frame by frame. Not yet tried: Retry and Cancel by hand, VoiceOver, Reduce Motion, other agents |
 
 | Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps, shown elements, playbook | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop); linear.app walkthroughs run from the app through `reco://record-agent`. Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
+| S6 motion editor (spec 0011): launch videos as motion design from the real UI | Planned; phase 0 (benchmark and spikes) is next. Spec 0010's step 1 lands in its phase 2; steps 2–5 are replaced by it |
 
-What to build next and in what order: `docs/specs/0009-stand-out-roadmap.md` (October 2026). The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
+What to build next: `docs/specs/0011-motion-editor.md` (October 2026), phase by phase. The earlier
+order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
 `docs/specs/0004-next-features.md`.
 
 Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorder` are Apache-2.0
