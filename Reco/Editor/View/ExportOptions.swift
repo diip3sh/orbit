@@ -28,7 +28,8 @@ struct ExportOptions: View {
         VStack(spacing: 0) {
             navigation
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding([.horizontal, .top])
+                // The column's content already starts under the toolbar's strip
+                .padding(.horizontal)
 
             ScrollView {
                 VStack(spacing: 0) {
@@ -117,18 +118,24 @@ struct ExportOptions: View {
     }
 
     /// Back to the editor; forward has nowhere to go from export, so it is there only to read as the pair.
+    /// A glass capsule like the toolbar's: `ControlGroup`'s navigation style is a capsule only in a toolbar, and a
+    /// bordered box anywhere else.
     private var navigation: some View {
-        ControlGroup {
+        HStack(spacing: 0) {
             Button("Editor", systemImage: "chevron.left", action: back)
                 // Esc ends a rename first
                 .keyboardShortcut(isRenaming ? nil : .cancelAction)
                 .disabled(session.isExporting)
                 .help("Back to the editor (Esc)")
+            Divider()
+                .frame(height: 16)
             Button("Export", systemImage: "chevron.right") {}
                 .disabled(true)
         }
-        .controlGroupStyle(.navigation)
-        .fixedSize()
+        .buttonStyle(.editorIcon)
+        .fontWeight(.semibold)
+        .padding(3)
+        .editorGlass(in: .capsule)
     }
 
     private var actions: some View {
