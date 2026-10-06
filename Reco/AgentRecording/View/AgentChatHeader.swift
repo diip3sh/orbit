@@ -41,8 +41,10 @@ struct AgentChatHeader: View {
                     .foregroundStyle(EditorTheme.dim)
                     .fixedSize(horizontal: false, vertical: true)
                 if model.unavailableReason != nil {
-                    Button("Set Up Agents…", action: Self.openAgentSettings)
-                        .buttonStyle(.editorGhost)
+                    Button(action: Self.openAgentSettings) {
+                        Label("Set Up Agents…", image: "button-settings")
+                    }
+                    .buttonStyle(.editorSecondary)
                 }
             }
         }

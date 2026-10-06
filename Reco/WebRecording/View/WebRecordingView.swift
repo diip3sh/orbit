@@ -53,24 +53,27 @@ struct WebRecordingView: View {
         .toolbar {
             if agent != nil {
                 ToolbarItem(placement: .navigation) {
-                    Button("AI Agent", systemImage: "sparkles") {
+                    Button {
                         withAnimation(reducesMotion ? EditorTheme.fadeMotion : EditorTheme.motion) {
                             viewModel.showsAgent.toggle()
                         }
+                    } label: {
+                        Label("AI Agent", image: "button-agent")
                     }
-                    .labelStyle(.titleAndIcon)
-                    .buttonStyle(.editorGhost)
-                    .background(viewModel.showsAgent ? EditorTheme.softHairline : .clear, in: .capsule)
+                    .buttonStyle(.editorSecondary)
+                    // The open panel beside it shows the state; a fill behind glass only muddied it
+                    .accessibilityAddTraits(viewModel.showsAgent ? .isSelected : [])
                     .help(viewModel.showsAgent ? "Hide the agent" : "Have a coding agent script and record this page")
                 }
                 .hidingSharedBackground()
             }
             ToolbarItem(placement: .primaryAction) {
-                Button("Render", systemImage: "film") {
+                Button {
                     viewModel.render()
+                } label: {
+                    Label("Render", image: "button-render")
                 }
-                .labelStyle(.titleAndIcon)
-                .buttonStyle(.editorAccent)
+                .buttonStyle(.editorPrimary)
                 .help("Render the script into a recording and open it in the editor")
                 // One render at a time: the agent's uses the same renderer
                 .disabled(!viewModel.canRender || agent?.isRunning == true)

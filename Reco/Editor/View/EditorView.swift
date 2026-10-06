@@ -38,10 +38,12 @@ struct EditorView: View {
                 } description: {
                     Text(error.localizedDescription)
                 } actions: {
-                    Button("Show in Finder") {
+                    Button {
                         NSWorkspace.shared.activateFileViewerSelecting([viewModel.videoURL])
+                    } label: {
+                        Label("Show in Finder", image: "button-folder")
                     }
-                    .buttonStyle(.editorGhost)
+                    .buttonStyle(.editorSecondary)
                 }
             } else {
                 ProgressView("Opening…")
@@ -82,12 +84,13 @@ struct EditorView: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Export…", systemImage: "square.and.arrow.up") {
+                Button {
                     viewModel.playback.pause()
                     showsExport = true
+                } label: {
+                    Label("Export…", image: "button-export")
                 }
-                .labelStyle(.titleAndIcon)
-                .buttonStyle(.editorAccent)
+                .buttonStyle(.editorPrimary)
                 .keyboardShortcut("e")
                 .help("Export the edited video")
             }

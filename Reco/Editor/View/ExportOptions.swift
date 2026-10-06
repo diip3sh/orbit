@@ -122,30 +122,31 @@ struct ExportOptions: View {
 
             if isExporting {
                 Button(action: cancel) {
-                    Text("Cancel").frame(maxWidth: .infinity)
+                    Label("Cancel", image: "button-close").frame(maxWidth: .infinity)
                 }
                 .keyboardShortcut(.cancelAction)
-                .buttonStyle(.editorGhost)
+                .buttonStyle(.editorSecondary)
             } else if let exported {
+                // Once the file exists, sharing it is what comes next
                 HStack(spacing: EditorTheme.smallSpacing) {
                     Button {
                         NSWorkspace.shared.activateFileViewerSelecting([exported])
                     } label: {
-                        Text("Show in Finder").frame(maxWidth: .infinity)
+                        Label("Finder", image: "button-folder").frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.editorGhost)
+                    .buttonStyle(.editorSecondary)
+                    .help("Show in Finder")
                     ShareLink(item: exported) {
-                        Label("Share…", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity)
+                        Label("Share…", image: "button-share").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.editorPrimary)
                 }
             } else {
                 Button(action: export) {
-                    Text("Export").frame(maxWidth: .infinity)
+                    Label("Export", image: "button-export").frame(maxWidth: .infinity)
                 }
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.editorAccent)
+                .buttonStyle(.editorPrimary)
             }
         }
     }

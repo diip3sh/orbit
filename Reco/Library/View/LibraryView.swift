@@ -64,9 +64,9 @@ private struct LibraryGrid: View {
                 } actions: {
                     // Where the folders are chosen
                     SettingsLink {
-                        Text("Choose Folders in Settings…")
+                        Label("Choose Folders in Settings…", image: "button-settings")
                     }
-                    .buttonStyle(.editorGhost)
+                    .buttonStyle(.editorSecondary)
                 }
             } else if viewModel.items == nil {
                 ProgressView()

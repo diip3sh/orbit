@@ -78,10 +78,12 @@ struct WebStage: View {
                 if viewModel.isPicking {
                     HStack(spacing: EditorTheme.mediumSpacing) {
                         Label("Click the element to aim the clip at", systemImage: "scope")
-                        Button("Stop") {
+                        Button {
                             viewModel.togglePicking()
+                        } label: {
+                            Label("Stop", image: "button-close")
                         }
-                        .buttonStyle(.editorGhost)
+                        .buttonStyle(.editorSecondary)
                         .keyboardShortcut(.cancelAction)
                     }
                     .padding(.leading, EditorTheme.mediumSpacing)

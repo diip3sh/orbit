@@ -132,12 +132,14 @@ private struct QuickAccessActions: View {
                 ShortcutLabel(title: "Copy", keys: "⌘C", confirmation: "Copied", isConfirmed: model.feedback == .copied)
             }
             .keyboardShortcut("c", modifiers: .command)
+            .buttonStyle(.editorSecondary)
+            // Save is the card's lead: it is what keeps the shot
             Button { Task { await model.save() } } label: {
                 ShortcutLabel(title: "Save", keys: "⌘S", confirmation: "Saved", isConfirmed: model.feedback == .saved)
             }
             .keyboardShortcut("s", modifiers: .command)
+            .buttonStyle(.editorPrimary)
         }
-        .buttonStyle(.editorAccent)
         .padding(6)
     }
 }

@@ -23,8 +23,10 @@ struct AgentRecordingFailure: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Button("Retry", systemImage: "arrow.clockwise", action: retry)
-                .buttonStyle(.editorPrimary)
+            Button(action: retry) {
+                Label("Retry", image: "button-retry")
+            }
+            .buttonStyle(.editorSecondary)
         }
         .padding(EditorTheme.mediumSpacing)
         .background(Color.primary.opacity(0.06), in: .rect(cornerRadius: 14, style: .continuous))
