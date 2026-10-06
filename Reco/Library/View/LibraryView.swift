@@ -35,8 +35,16 @@ struct LibraryView: View {
 private struct LibraryGrid: View {
     let viewModel: LibraryViewModel
 
+    /// The coordinate space the date headers measure themselves in, for the rail's active date.
+    static let gridSpace = "libraryGrid"
+
+    /// Each date header's distance below the top of the grid, by ``LibraryDateGroup/id``. Only the
+    /// headers a lazy grid has built have one, and one below the fold is treated as not reached yet.
+    @State private var headerTops: [String: CGFloat] = [:]
+
     var body: some View {
         let shown = viewModel.shown
+        let groups = viewModel.shownGroups
 
         Group {
             if viewModel.items == nil, let error = viewModel.error {
@@ -61,25 +69,42 @@ private struct LibraryGrid: View {
                     ContentUnavailableView.search(text: viewModel.search)
                 }
             } else {
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: EditorTheme.largeSpacing)], spacing: EditorTheme.largeSpacing) {
-                        ForEach(viewModel.shownGroups) { group in
-                            Section {
-                                ForEach(group.items) { item in
-                                    LibraryTile(item: item, thumbnail: viewModel.thumbnails[item.url], viewModel: viewModel)
-                                        .task {
-                                            await viewModel.loadThumbnail(for: item)
-                                        }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: EditorTheme.largeSpacing)], spacing: EditorTheme.largeSpacing) {
+                            ForEach(groups) { group in
+                                Section {
+                                    ForEach(group.items) { item in
+                                        LibraryTile(item: item, thumbnail: viewModel.thumbnails[item.url], viewModel: viewModel)
+                                            .task {
+                                                await viewModel.loadThumbnail(for: item)
+                                            }
+                                    }
+                                } header: {
+                                    Text(group.title)
+                                        .font(.subheadline)
+                                        .foregroundStyle(EditorTheme.dim)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        // Where the rail scrolls to, and what it measures
+                                        .id(group.id)
+                                        .background { headerTop(of: group) }
                                 }
-                            } header: {
-                                Text(group.title)
-                                    .font(.subheadline)
-                                    .foregroundStyle(EditorTheme.dim)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .padding(EditorTheme.largeSpacing)
+                        // The rail floats over the grid, so the last column keeps clear of it
+                        .padding(.trailing, groups.count > 1 ? LibraryDateRail.width : 0)
+                    }
+                    .coordinateSpace(name: Self.gridSpace)
+                    .overlay(alignment: .trailing) {
+                        if groups.count > 1 {
+                            LibraryDateRail(groups: groups, active: activeDate) { date in
+                                withMotion {
+                                    proxy.scrollTo(date, anchor: .top)
+                                }
                             }
                         }
                     }
-                    .padding(EditorTheme.largeSpacing)
                 }
             }
         }
@@ -91,6 +116,28 @@ private struct LibraryGrid: View {
             }
         }
         .navigationTitle(viewModel.section.title)
+    }
+
+    /// The date the grid is looking at: the last one whose header has passed the top, or the first one
+    /// still below it, which is the first date before anything has scrolled.
+    private var activeDate: String? {
+        LibraryDateGroup.active(in: viewModel.shownGroups, headerTops: headerTops, topLine: Self.topLine)
+    }
+
+    /// Where a header counts as the one being read: the grid's own top padding, so the first date is
+    /// marked as soon as the grid is at its top.
+    private static let topLine = EditorTheme.largeSpacing
+
+    /// Reports where a date's header sits, which moves as the grid scrolls. Only a few headers exist at
+    /// a time, so this is a handful of updates per frame at most.
+    private func headerTop(of group: LibraryDateGroup) -> some View {
+        GeometryReader { proxy in
+            let top = proxy.frame(in: .named(Self.gridSpace)).minY
+            Color.clear
+                .onChange(of: top, initial: true) { _, newTop in
+                    headerTops[group.id] = newTop
+                }
+        }
     }
 }
 

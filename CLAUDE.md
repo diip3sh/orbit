@@ -919,15 +919,21 @@ Area…, Record Window or Display…, New Web Recording…, Record with AI Agent
 editor and a screenshot in Preview; the context menu shows in Finder, copies (a screenshot as PNG, a movie
 as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`. The grid is under date
 headers, newest first: Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
-list the screenshot history folder (spec 0012).
+list the screenshot history folder (spec 0012). Down the right edge the dates repeat as a rail
+(`LibraryDateRail`), adapted from Chánh Đại's Line Nav: a line per date that lengthens and brightens for the
+date at the top of the grid and for the one under the pointer, and a click that scrolls the grid to it. The
+grid reserves the rail's width and hides the rail for a single date. Which date is current is
+`LibraryDateGroup.active(in:headerTops:topLine:)`, fed by each header's own offset — a lazy grid measures
+only the headers it has built, so an unmeasured date is one below the fold and is skipped.
 
 | File | Role |
 |---|---|
 | `Library/Model/LibraryItem.swift` | Pure: kinds by name and type (`Reco_Web_` web, `-edited` export, `Reco_Screenshot_` PNG), companions, `LibrarySection` |
-| `Library/Model/LibraryDateGroup.swift` | Pure: `groups(of:now:calendar:)`, the date headers |
+| `Library/Model/LibraryDateGroup.swift` | Pure: `groups(of:now:calendar:)`, the date headers, and `active(in:headerTops:topLine:)`, which date the rail marks |
 | `Library/Service/LibraryStore.swift` | Lists the recordings, screenshot and history folders (a folder read once when two are the same; a history name also saved is listed from the screenshot folder), thumbnails (movie frame or `CGImageSource`), trash |
 | `Library/Service/FolderWatcher.swift` | `DispatchSource` vnode writes on all three folders, 0.3 s settle, so new saves show at once (a folder that doesn't exist yet isn't watched until the window is reopened; the history folder is made at launch) |
 | `Library/ViewModel/LibraryViewModel.swift`, `Library/View/` | Sections, search, intents; `Actions` wired in `AppDelegate`; window in `EditorWindowManager.showLibrary()` |
+| `Library/View/LibraryDateRail.swift` | The dates down the right edge: a line per date, the current one marked, a click that scrolls to it |
 
 - The screenshot folder is the Desktop by default, so only `Reco_Screenshot_*.png` there are listed; reading
   it is what asks for Desktop access the first time.

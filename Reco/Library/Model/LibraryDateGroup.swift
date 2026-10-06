@@ -46,4 +46,15 @@ nonisolated struct LibraryDateGroup: Identifiable, Equatable, Sendable {
         }
         return groups.map { LibraryDateGroup(title: $0.title, items: $0.items) }
     }
+
+    /// The group being read, by ``id``, from where each header sits below the top of the grid: the last
+    /// one that has passed `topLine`, or the first measured one, or the first group.
+    ///
+    /// A lazy grid measures only the headers it has built, so a group with no entry is one that has
+    /// never been on screen and is skipped. A header scrolled off the top keeps the last place it was
+    /// measured, which stays in order, so the group at the top is still the last one past the line.
+    static func active(in groups: [LibraryDateGroup], headerTops: [String: CGFloat], topLine: CGFloat) -> String? {
+        let measured = groups.compactMap { group in headerTops[group.id].map { (id: group.id, top: $0) } }
+        return measured.last { $0.top <= topLine }?.id ?? measured.first?.id ?? groups.first?.id
+    }
 }
