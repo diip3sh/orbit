@@ -16,5 +16,10 @@ enum Fixture {
         return try Data(contentsOf: url)
     }
 
+    /// A fixture file other than JSON, e.g. a golden frame.
+    static func url(_ name: String, withExtension fileExtension: String) -> URL? {
+        Bundle(for: BundleToken.self).url(forResource: name, withExtension: fileExtension)
+    }
+
     private final class BundleToken {}
 }

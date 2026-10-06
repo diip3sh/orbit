@@ -35,7 +35,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 651 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 680 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
   reads alpha 254 instead of 255 with Xcode 26.0.1 on macOS 26.5.2, also without this fork's later changes.
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
@@ -799,6 +799,33 @@ Key facts:
   once built.
 - Tilt is `-0.2 rad × tanh(speed / 1500 pt/s)` about the hot spot; the loop's glide is at most half the output.
 
+### S6 — Motion editor, phase 1: document, core, compositor (`remotion`, spec 0011)
+
+A `<name>.motion` bundle (`document.json`, `assets/`) holds scenes of layers (text, image, shape, group)
+on planes in 3D, keyframed, seen by one camera. `open -a Reco <name>.motion` opens a window with the
+preview, play and step, and Export (HEVC, ProRes 4444, GIF) as `<name>-edited` next to the bundle.
+
+| File | Role |
+|---|---|
+| `Motion/Model/MotionDocument.swift` and the types it holds | v1 format, defaults for every optional field, `validate()` (`MotionDocumentError`) |
+| `Motion/Model/MotionEasing.swift`, `PropertyTrack.swift`, `Keyframe.swift` | Linear, hold, CSS cubic Bézier (`Model/CubicBezier.swift`, shared with web takes' `Easing`), critically damped spring; scale in log space |
+| `Motion/Model/Transform3D.swift`, `Motion/Render/CameraProjection.swift` | Layer matrix (CSS rotation order and directions), the camera's projection |
+| `Motion/Render/TextImage.swift` | Core Text image of a text layer, with word and line boxes |
+| `Motion/Render/MotionPlan.swift` | Built off the main actor: flattened layers, tracks, images and shadows drawn once at the largest scale shown; `placements(of:at:)` |
+| `Motion/Render/MotionFrameRenderer.swift`, `MotionCompositor.swift`, `MotionInstruction.swift` | The only place motion pixels are decided: `CIPerspectiveTransform` per layer, blur, opacity, shadow |
+| `Motion/Render/MotionCompositionBuilder.swift` | The placeholder movie stretched to the video's length drives the compositor |
+| `Motion/Service/MotionStore.swift`, `MotionExporter.swift` | Bundle I/O; export through `ExportService` |
+| `Motion/ViewModel/MotionEditorViewModel.swift`, `Motion/View/*` | The window; `PlaybackControls`, `PlaybackTime` are shared with the editor's transport |
+
+Key facts:
+- A composition whose video track holds only `insertEmptyTimeRange` has a duration of 0 and no track
+  (`AVAssetReaderVideoCompositionOutput` asserts): a 1-frame 16×16 movie scaled with `scaleTimeRange`
+  drives preview, export and GIF (spike A).
+- Shadows are blurred once per plan and projected with their layer: per frame, a 40 px shadow cost most
+  of a 1080p frame (3.6 / 8.6 ms p50 / p95 against 1.7 / 2.5, M5, Debug).
+- Golden frames: `RecoTests/Fixtures/motion-demo-*.png`, drawn from `motion-demo.json` at 480 px. A
+  missing golden fails its test and writes the frame to the temporary folder to review and copy in.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -870,7 +897,7 @@ should hold but need re-measuring.
 | S5 agent chat and reliable web takes (spec 0008) | Done and tested: real Claude Code runs from the prompt and from the chat in the app (sent through accessibility), 60 s apple.com takes checked frame by frame. Not yet tried: Retry and Cancel by hand, VoiceOver, Reduce Motion, other agents |
 
 | Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps, shown elements, playbook | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop); linear.app walkthroughs run from the app through `reco://record-agent`. Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
-| S6 motion editor (spec 0011): launch videos as motion design from the real UI | Planned; phase 0 (benchmark and spikes) is next. Spec 0010's step 1 lands in its phase 2; steps 2–5 are replaced by it |
+| S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Waiting on the user's side-by-side of spike C; the window not yet seen in the app. Phase 2 (real UI layers) is next |
 
 What to build next: `docs/specs/0011-motion-editor.md` (October 2026), phase by phase. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

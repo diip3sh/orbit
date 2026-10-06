@@ -54,46 +54,17 @@ struct TransportBar: View {
 
                 Spacer()
 
-                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !playback.isPlaying)) { _ in
-                    HStack(spacing: EditorTheme.tightSpacing) {
-                        Text(Self.format(playback.currentTime))
-                        Text("/ \(Self.format(duration))")
-                            .foregroundStyle(EditorTheme.dim)
-                    }
-                    .font(.callout)
-                    .monospaced()
-                }
-                .padding(.horizontal, EditorTheme.spacing)
-                .frame(height: 38)
-                .editorGlass(in: .capsule)
+                PlaybackTime(playback: playback, duration: duration)
+                    .padding(.horizontal, EditorTheme.spacing)
+                    .frame(height: 38)
+                    .editorGlass(in: .capsule)
             }
             .overlay {
-                HStack(spacing: EditorTheme.tightSpacing) {
-                    Button("Previous Frame", systemImage: "backward.frame.fill") {
-                        playback.step(by: -1)
-                    }
-                    .keyboardShortcut(.leftArrow, modifiers: [])
-
-                    Button(playback.isPlaying ? "Pause" : "Play", systemImage: playback.isPlaying ? "pause.fill" : "play.fill") {
-                        playback.togglePlay()
-                    }
-                    .keyboardShortcut(.space, modifiers: [])
-                    .buttonStyle(.editorProminentIcon)
-                    .contentTransition(.symbolEffect(.replace))
-
-                    Button("Next Frame", systemImage: "forward.frame.fill") {
-                        playback.step(by: 1)
-                    }
-                    .keyboardShortcut(.rightArrow, modifiers: [])
-                }
-                .padding(EditorTheme.tightSpacing)
-                .editorGlass(in: .capsule)
+                PlaybackControls(playback: playback)
+                    .padding(EditorTheme.tightSpacing)
+                    .editorGlass(in: .capsule)
             }
         }
         .buttonStyle(.editorIcon)
-    }
-
-    private static func format(_ seconds: Double) -> String {
-        Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond(padMinuteToLength: 2, fractionalSecondsLength: 2)))
     }
 }

@@ -414,7 +414,7 @@ end of every phase and its scores recorded here.
 | Phase | Size | Status |
 |---|---|---|
 | 0 - Benchmark and spikes | M | Done but the side-by-side |
-| 1 - Document, core, compositor | L | Todo |
+| 1 - Document, core, compositor | L | Done; the window not yet seen in the app |
 | 2 - Real UI layers | L | Todo |
 | 3 - Grammar v1 | L | Todo |
 | 4 - Agent | L | Todo |
@@ -496,6 +496,37 @@ p50, 10.9 ms p95 a frame; 600 frames written in 6.2 s. Awaiting the user's side-
   GIF) through spike A's composition.
 - **Done when:** a hand-written document (a title, an image on a tilted plane, a push) previews and
   exports identically; golden frames pass; plan build, preview and export are measured.
+
+#### Phase 1 results (2026-10-06)
+
+What was built, and where it differs from the model above:
+
+- **Keyframes only.** A layer's and a camera's animated properties are `keyframes`, keyed by
+  property (`x`, `y`, `z`, `scale`, `rotationX/Y/Z`, `opacity`, `blur`; a camera only `x`, `y`,
+  `z`). Moves, shots, `style`, `assets`, `audio` and `pacing` come with the phases that use them and
+  are added to v1 as optional fields. An easing is coded as written: `"linear"`, `"hold"`,
+  `[x1, y1, x2, y2]` or `{"spring": response}`; it shapes the way to the next keyframe, as in CSS.
+- **Space:** canvas pixels, top-left origin, y down, z away from the camera; rotations as CSS's
+  `rotateX() rotateY() rotateZ()`. The camera looks at `x, y` from 1.6 canvas heights in front of z 0
+  (spike C's lens) and moves in by `z`; a layer at z 0 shows 1:1 from rest. Groups nest transforms
+  and multiply opacity. Layers draw farthest first by their centre's depth, document order breaking ties.
+- **Images** (text, pictures) are drawn once per plan at the largest scale they're shown, sampled at
+  30 Hz over the scene, at most 4× the output; shapes are generated (`CIRoundedRectangleGenerator`).
+  Shadows are blurred once in the layer's space and projected with it: blurring them per frame took
+  most of a frame.
+- **Composition:** spike A's placeholder movie (`MotionCompositionBuilder`), written once per launch
+  into the temporary folder. Exports go through `ExportService` (HEVC, H.264, ProRes, GIF), as
+  `<name>-edited` next to the bundle.
+- **Window:** `open -a Reco <name>.motion` opens the preview with play, step and Export (HEVC,
+  ProRes 4444, GIF). Editing comes in phase 6.
+
+Measured on an M5, Debug, load average 1.8, with the demo document (`RecoTests/Fixtures/motion-demo.json`:
+a title fading up, a tilted group of an image with a shadow and a shape, a camera push): plan build
+10.7 ms; a frame at 1080p 0.6 / 0.9 ms p50 / p95 for the title and 1.7 / 2.5 ms for the plane (3.6 / 8.6
+before shadows were drawn once); at 4K 4.6 / 7.1 ms. Export of the 5 s video at 1080p60 in HEVC took
+1.26 s (4× real time), as a 540 px GIF 0.7 s. Golden frames at 480 px (four, `motion-demo-*.png`) and
+the preview's composition match the renderer (mean difference under 0.5 of 255); the HEVC export's
+frame is within a mean of 3.
 
 ### Phase 2 - Real UI layers (L)
 

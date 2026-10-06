@@ -35,6 +35,12 @@ final class EditorWindowManager: NSObject {
         let viewModel: WebRecordingViewModel
     }
 
+    private struct MotionEditor {
+        let window: NSWindow
+        let viewModel: MotionEditorViewModel
+        let accessesOutputDirectory: Bool
+    }
+
     private let settings: SettingsStore
 
     /// Runs what a web take's agent chat asks.
@@ -42,6 +48,7 @@ final class EditorWindowManager: NSObject {
     private var editors: [URL: Editor] = [:]
     private var recordings: Recordings?
     private var webRecording: WebRecording?
+    private var motionEditors: [URL: MotionEditor] = [:]
 
     init(settings: SettingsStore, agentRecording: AgentRecordingViewModel) {
         self.settings = settings
@@ -143,6 +150,27 @@ final class EditorWindowManager: NSObject {
         activate(window)
     }
 
+    /// Opens a motion bundle (spec 0011) in its own window, or brings its window forward.
+    func openMotion(_ bundleURL: URL) {
+        let bundleURL = bundleURL.standardizedFileURL
+        if let window = motionEditors[bundleURL]?.window {
+            activate(window)
+            return
+        }
+
+        let accessesOutputDirectory = settings.startAccessingOutputDirectory()
+        let viewModel = MotionEditorViewModel(bundleURL: bundleURL)
+        let hostingController = NSHostingController(rootView: MotionEditorView(viewModel: viewModel))
+        hostingController.sizingOptions = []
+        hostingController.sceneBridgingOptions = [.toolbars]
+        let window = makeWindow(contained(hostingController), title: bundleURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1280, height: 800))
+        window.representedURL = bundleURL
+        motionEditors[bundleURL] = MotionEditor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
+
+        NSApp.setActivationPolicy(.regular)
+        activate(window)
+    }
+
     private func editorController(_ viewModel: EditorViewModel, _ chat: AgentChatViewModel) -> NSHostingController<EditorView> {
         let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel, chat: chat))
         // No sizes from the content: the window holds the minimum itself (`open`)
@@ -226,6 +254,12 @@ extension EditorWindowManager: NSWindowDelegate {
         } else if let webRecording, window === webRecording.window {
             self.webRecording = nil
             webRecording.viewModel.close()
+        } else if let (bundleURL, motion) = motionEditors.first(where: { $0.value.window === window }).map({ ($0.key, $0.value) }) {
+            motionEditors[bundleURL] = nil
+            motion.viewModel.close()
+            if motion.accessesOutputDirectory {
+                settings.stopAccessingOutputDirectory()
+            }
         } else if let (videoURL, editor) = editor(for: window) {
             editors[videoURL] = nil
             let settings = settings
@@ -237,7 +271,7 @@ extension EditorWindowManager: NSWindowDelegate {
                 }
             }
         }
-        if editors.isEmpty, recordings == nil, webRecording == nil {
+        if editors.isEmpty, motionEditors.isEmpty, recordings == nil, webRecording == nil {
             NSApp.setActivationPolicy(.accessory)
         }
     }

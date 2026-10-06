@@ -24,33 +24,8 @@ nonisolated enum Easing: String, Codable, CaseIterable, Sendable {
 
     /// How far along the eased motion is when `progress` of its time has passed, both from 0 to 1.
     func callAsFunction(_ progress: Double) -> Double {
-        let progress = min(max(progress, 0), 1)
-        guard self != .linear else { return progress }
+        guard self != .linear else { return min(max(progress, 0), 1) }
         let (first, second) = controlPoints
-        let parameter = Self.parameter(forX: progress, first: first.x, second: second.x)
-        return Self.bezier(parameter, first: first.y, second: second.y)
-    }
-
-    /// One coordinate of the curve from (0, 0) to (1, 1) at `parameter`, given that coordinate of
-    /// the two control points.
-    private static func bezier(_ parameter: Double, first: Double, second: Double) -> Double {
-        let inverse = 1 - parameter
-        return 3 * inverse * inverse * parameter * first + 3 * inverse * parameter * parameter * second + parameter * parameter * parameter
-    }
-
-    /// The curve's parameter where its x is `target`, by bisection: x grows with the parameter for CSS's
-    /// curves, and 40 halvings land within 10⁻¹².
-    private static func parameter(forX target: Double, first: Double, second: Double) -> Double {
-        var low = 0.0
-        var high = 1.0
-        for _ in 0..<40 {
-            let middle = (low + high) / 2
-            if bezier(middle, first: first, second: second) < target {
-                low = middle
-            } else {
-                high = middle
-            }
-        }
-        return (low + high) / 2
+        return CubicBezier(first: first, second: second)(progress)
     }
 }

@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "canvas": { "size": [1920, 1080], "frameRate": 60 },
+  "scenes": [
+    {
+      "id": "title",
+      "duration": 2,
+      "layers": [
+        {
+          "id": "headline",
+          "content": { "text": { "text": "Ship faster.", "size": 140, "weight": "bold", "alignment": "center" } },
+          "transform": { "position": [960, 540, 0] },
+          "keyframes": {
+            "opacity": [{ "time": 0.2, "value": 0, "easing": [0.33, 1, 0.68, 1] }, { "time": 0.8, "value": 1 }],
+            "y": [{ "time": 0.2, "value": 576, "easing": [0.33, 1, 0.68, 1] }, { "time": 0.8, "value": 540 }]
+          }
+        }
+      ]
+    },
+    {
+      "id": "plane",
+      "duration": 3,
+      "camera": {
+        "keyframes": { "z": [{ "time": 0, "value": 0, "easing": [0.5, 0, 0.2, 1] }, { "time": 3, "value": 480 }] }
+      },
+      "layers": [
+        {
+          "id": "ui",
+          "content": {
+            "group": [
+              {
+                "id": "card",
+                "content": { "image": { "path": "assets/card.png", "size": [1200, 700] } },
+                "shadow": { "opacity": 0.6, "radius": 40, "offset": 30 }
+              },
+              {
+                "id": "badge",
+                "content": { "shape": { "size": [360, 96], "cornerRadius": 48, "color": { "red": 0.36, "green": 0.42, "blue": 0.95, "alpha": 1 } } },
+                "transform": { "position": [380, 260, -60] }
+              }
+            ]
+          },
+          "transform": { "position": [960, 560, 200], "rotation": [24, -14, 4] }
+        }
+      ]
+    }
+  ]
+}
