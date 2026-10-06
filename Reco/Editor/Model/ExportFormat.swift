@@ -46,9 +46,13 @@ nonisolated enum ExportFormat: String, CaseIterable, Identifiable, Sendable {
         self == .proRes4444
     }
 
+    var fileExtension: String {
+        fileType == .mov ? "mov" : "mp4"
+    }
+
     /// `<name>-edited.<mp4|mov>` next to the recording.
     func outputURL(for videoURL: URL) -> URL {
         let name = videoURL.deletingPathExtension().lastPathComponent + Self.nameSuffix
-        return videoURL.deletingLastPathComponent().appending(path: name).appendingPathExtension(fileType == .mov ? "mov" : "mp4")
+        return videoURL.deletingLastPathComponent().appending(path: name).appendingPathExtension(fileExtension)
     }
 }

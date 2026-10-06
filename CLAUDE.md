@@ -323,8 +323,14 @@ Key facts:
 
 Click highlights (a ring that grows and fades) and a keystroke chip, drawn live in the preview and
 into exports by one custom compositor. An inspector (toolbar toggle) holds their styles; **Export…**
-writes `<name>-edited.mp4` (HEVC, H.264) or `.mov` (ProRes 422) next to the recording, then offers **Share…** (`ShareLink`: AirDrop, Mail, Messages…) and
-**Show in Finder**.
+opens the **export page** in the same window (2026-10-06; it was a sheet): it slides in from the trailing edge, the editor
+stepping 80 pt left under it (opacity only with Reduce Motion), and **Back**/Esc returns the same way. Esc is Cancel while an
+export runs, and Back is disabled then. The page opens and leaves on a paused frame, and the editor's keys (S, Z, ⌫, arrows) are
+gone with it: the editor view is removed, not hidden, so its local state (the timeline's) starts over on return. It writes
+`<name>-edited.mp4` (HEVC, H.264) or `.mov` (ProRes 422) next to the recording, then offers **Share…** (`ShareLink`: AirDrop, Mail,
+Messages…) and **Show in Finder**. The facts under the preview show duration, output size and rate, and the format; the file's real
+size joins them once it exists. There is no estimate before: it depends on the content, and a wrong number is worse than none.
+Web Recording has no export of its own: Render opens the editor, and this page is its export.
 
 | File | Role |
 |---|---|
@@ -333,7 +339,7 @@ writes `<name>-edited.mp4` (HEVC, H.264) or `.mov` (ProRes 422) next to the reco
 | `Editor/Render/EditorCompositor.swift`, `EditorInstruction.swift`, `CompositionBuilder.swift` | `AVVideoCompositing` with one shared `CIContext`; the instruction carries the plan; the same video composition feeds `AVPlayerItem` and `AVAssetExportSession` |
 | `Editor/Service/KeyLabelFormatter.swift` | Key code + modifiers → "⇧⌘K" with the current layout (`UCKeyTranslate`); TIS is read on the main actor only |
 | `Editor/Service/ExportService.swift` | `AVAssetExportSession.export(to:as:)` + `states(updateInterval:)`; cancelling the task cancels it |
-| `Editor/View/EditorInspectorSections.swift`, `ExportSheet.swift` | Style controls (bound through `EditorViewModel.clickHighlights`/`keystrokes`), format + progress |
+| `Editor/View/EditorInspectorSections.swift`, `ExportPage.swift`, `ExportOptions.swift` | Style controls (bound through `EditorViewModel.clickHighlights`/`keystrokes`); the export page (format, size, frame rate, progress) |
 
 Key facts:
 - **Privacy:** keystrokes show only shortcuts (⌘/⌃/⌥) and special keys unless "Show All Keys" is on.
@@ -469,7 +475,7 @@ the recordings with pictures; a click opens one in the editor.
 | `Editor/Render/RenderResources.swift`, `RenderTarget.swift` | What plans draw with from the system (key labels, arrow, background picture); what a plan is for (the preview, or an export's size and dynamic range) |
 | `Editor/Render/HDREditorCompositor.swift`, `Editor/Model/DynamicRange.swift` | 10-bit or half-float frames in, half-float out; SDR, PQ or HLG from the track's transfer function |
 | `Editor/Service/BackgroundImageLoader.swift` | Security-scoped bookmark to the chosen picture, read upright, in sRGB, at most 4096 px |
-| `Editor/Model/ExportSettings.swift`, `Editor/View/ExportSheet.swift` | Format, size (a shorter side) and frame rate; only smaller ones are offered |
+| `Editor/Model/ExportSettings.swift`, `Editor/View/ExportPage.swift` | Format, size (a shorter side) and frame rate; only smaller ones are offered |
 
 Key facts:
 - The canvas keeps the video's shorter side (9:16 from 4K is 2160×3840), and padding (8%), corner
@@ -523,7 +529,7 @@ slate gradient.
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the transport in the timeline's header |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart; a line at each label, dots between; labels carry their units, "0.5s", "1m 30s", "1h", since a clock's "0:00.5" didn't say what it counted), the playhead's knob, the zoom blocks |
 | `Editor/View/Inspector*.swift`, `EditorInspectorSections.swift`, `TickSlider.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | `EditorInspector` and its sections, which fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides. Every slider is a `TickSlider`: a track with ticks, accent fill up to a bar at the value, dragged 1:1 from the grab (a press away from the bar takes it there first), VoiceOver adjustable in 20 steps, without a focus ring |
-| `Editor/View/ExportSheet.swift`, `ExportProgressBar.swift` | Native pickers in a grid with a line on what the format is for; progress |
+| `Editor/View/ExportPage.swift`, `ExportOptions.swift`, `ExportProgressBar.swift` | The export page: the preview (`EditorStage`) with Play and the file's facts under it, the options column (formats as rows with what each is for, segmented size and frame rate, the action); progress |
 
 Key facts:
 - Glass only on controls over the stage, never on the timeline (content) or over the live video:
