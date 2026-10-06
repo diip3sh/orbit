@@ -42,37 +42,63 @@ struct MenuBarView: View {
                 MenuBarDivider()
             }
 
-            // Saving; the take's controls, and choosing what to capture, are on the capture toolbar
-            if viewModel.state == .stopping {
-                // Finishing the file takes a moment; nothing can start meanwhile
-                HStack(spacing: EditorTheme.mediumSpacing) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .frame(width: 20)
-                    Text("Saving Recording…")
-                        .foregroundStyle(.secondary)
-                    Spacer()
+            // The ways in first; saving, the take's controls and choosing what to capture are on the capture toolbar
+            VStack(spacing: 0) {
+                if viewModel.state == .stopping {
+                    // Finishing the file takes a moment; nothing can start meanwhile
+                    HStack(spacing: EditorTheme.mediumSpacing) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 20)
+                        Text("Saving Recording…")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, EditorTheme.mediumSpacing)
+                    .padding(.vertical, EditorTheme.smallSpacing)
+                } else if viewModel.state == .idle {
+                    MenuBarActionButton(
+                        title: "Screenshot", systemImage: "camera.viewfinder", isDisabled: viewModel.countdown.isRunning,
+                        shortcut: .showScreenshotToolbar
+                    ) {
+                        dismiss()
+                        showScreenshotToolbar()
+                    }
+                    MenuBarActionButton(
+                        title: "Record", systemImage: "record.circle", isDisabled: viewModel.countdown.isRunning,
+                        shortcut: .showRecordingToolbar
+                    ) {
+                        dismiss()
+                        showRecordingToolbar()
+                    }
                 }
-                .padding(.horizontal, EditorTheme.mediumSpacing)
-                .padding(.vertical, EditorTheme.smallSpacing)
-                .padding(.top, EditorTheme.smallSpacing)
-            } else if viewModel.state == .idle {
-                MenuBarActionButton(
-                    title: "Take Screenshot…", systemImage: "camera.viewfinder", isDisabled: viewModel.countdown.isRunning,
-                    shortcut: .showScreenshotToolbar
-                ) {
+
+                MenuBarActionButton(title: "Product Record", systemImage: "globe") {
+                    showWebRecording()
                     dismiss()
-                    showScreenshotToolbar()
                 }
-                .padding(.top, 8)
-                MenuBarActionButton(
-                    title: "Record Screen…", systemImage: "record.circle", isDisabled: viewModel.countdown.isRunning,
-                    shortcut: .showRecordingToolbar
-                ) {
+
+                MenuBarActionButton(title: "Library", systemImage: "square.grid.2x2") {
+                    showLibrary()
                     dismiss()
-                    showRecordingToolbar()
+                }
+
+                if viewModel.lastRecordingURL != nil {
+                    MenuBarActionButton(title: "Edit Last Recording", systemImage: "film") {
+                        editLastRecording()
+                        dismiss()
+                    }
+                }
+
+                if agentRecording.isRunning {
+                    MenuBarActionButton(title: "Cancel Agent Recording", systemImage: "xmark.circle") {
+                        agentRecording.cancel()
+                    }
                 }
             }
+            .padding(.top, 8)
+
+            MenuBarDivider()
 
             // What each take captures; video formats and the content filter are in Settings → Video
             CaptureSettingsSection(
@@ -86,32 +112,6 @@ struct MenuBarView: View {
 
             MenuBarDivider()
 
-            // Bottom Actions
-            if viewModel.lastRecordingURL != nil {
-                MenuBarActionButton(title: "Edit Last Recording", systemImage: "film") {
-                    editLastRecording()
-                    dismiss()
-                }
-            }
-
-            MenuBarActionButton(title: "Library…", systemImage: "square.grid.2x2") {
-                showLibrary()
-                dismiss()
-            }
-
-            MenuBarActionButton(title: "New Web Recording…", systemImage: "globe") {
-                showWebRecording()
-                dismiss()
-            }
-
-            if agentRecording.isRunning {
-                MenuBarActionButton(title: "Cancel Agent Recording", systemImage: "xmark.circle") {
-                    agentRecording.cancel()
-                }
-            }
-
-            MenuBarDivider()
-
             MenuBarActionButton(title: "Settings…", systemImage: "gear") {
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 openSettings()
@@ -122,7 +122,7 @@ struct MenuBarView: View {
             }
             .padding(.bottom, 8)
         }
-        .frame(width: 320)
+        .frame(width: 288)
         .background(.ultraThinMaterial)
     }
 }

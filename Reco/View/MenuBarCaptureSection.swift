@@ -47,7 +47,6 @@ struct CaptureSettingsSection: View {
                     }
                 }
                 .padding(.leading, 12)
-                .background(.quaternary.opacity(0.3))
             }
 
             CaptureGroupRow(
@@ -69,7 +68,6 @@ struct CaptureSettingsSection: View {
                     }
                 }
                 .padding(.leading, 12)
-                .background(.quaternary.opacity(0.3))
             }
         }
         .onChange(of: settings.presenterOverlayEnabled) { _, isEnabled in

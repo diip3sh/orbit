@@ -826,11 +826,12 @@ Effects are properties of a web script's steps, previewed with Play and rendered
 
 ### Menu bar popover
 
-**Take Screenshot…** and **Record Screen…** open the capture toolbar (below) for that kind; while a take is saved,
-Saving Recording… instead. Then
-Capture (system audio, microphone and its device; camera), Library…, New Web Recording…, Record with AI
-Agent…, Settings… and Quit. The take's own controls are only on the toolbar. Frame rate, codecs, container, alpha, HDR and the content filter are in
-Settings → Video, the audio codec in Settings → Audio; Edit Last Recording shows only when there is one.
+288 pt wide. First the ways in: **Screenshot** and **Record** (with their shortcuts, ⇧⌘1 / ⇧⌘2) open the capture
+toolbar (below) for that kind (while a take is saved, Saving Recording… instead), then **Product Record** (the Web
+Recording window) and **Library**, and Edit Last Recording when there is one. Then Capture (system audio, microphone
+and its device; camera), whose expanded rows sit on the popover itself, with no second background; then Settings… and
+Quit. The take's own controls are only on the toolbar. Frame rate, codecs, container, alpha, HDR and the content filter
+are in Settings → Video, the audio codec in Settings → Audio.
 
 ### Capture toolbar (`feat/ui-polish`)
 
