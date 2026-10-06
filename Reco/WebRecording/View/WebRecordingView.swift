@@ -87,7 +87,7 @@ struct WebRecordingView: View {
             }
         }
         // Filling the window, like the editor's root, so SwiftUI never fits the window down to it
-        .frame(minWidth: 900, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)
+        .frame(minWidth: viewModel.showsAgent ? 900 + Self.panelWidth : 900, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)
         .editorWindowBackground()
     }
 

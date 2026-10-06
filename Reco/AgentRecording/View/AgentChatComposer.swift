@@ -53,24 +53,21 @@ struct AgentChatComposer: View {
                     .editorMotion(EditorTheme.quickMotion, value: isFocused)
             }
 
-            ScrollView(.horizontal) {
-                HStack(spacing: EditorTheme.smallSpacing) {
-                    Button("New Chat", systemImage: "arrow.counterclockwise", action: model.startNewChat)
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.agentCircle)
-                        .help("Start a new conversation")
-                        .disabled(model.isRunning || model.transcript.entries.isEmpty)
-                    ForEach(Self.suggestions, id: \.self) { suggestion in
-                        Button(suggestion) {
-                            message = suggestion
-                            isFocused = true
-                        }
-                        .buttonStyle(.agentChip)
-                        .disabled(!canType)
+            ChipFlow(spacing: EditorTheme.smallSpacing) {
+                Button("New Chat", systemImage: "arrow.counterclockwise", action: model.startNewChat)
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.agentCircle)
+                    .help("Start a new conversation")
+                    .disabled(model.isRunning || model.transcript.entries.isEmpty)
+                ForEach(Self.suggestions, id: \.self) { suggestion in
+                    Button(suggestion) {
+                        message = suggestion
+                        isFocused = true
                     }
+                    .buttonStyle(.agentChip)
+                    .disabled(!canType)
                 }
             }
-            .scrollIndicators(.hidden)
 
             if page == nil {
                 Text("Load a page first: type its address above the preview.")

@@ -24,7 +24,7 @@ struct AgentBubble: ViewModifier {
             .background(fill, in: shape)
             .overlay {
                 if role == .assistant {
-                    shape.strokeBorder(contrast == .increased ? EditorTheme.dim : EditorTheme.softHairline)
+                    shape.strokeBorder(contrast == .increased ? EditorTheme.dim : EditorTheme.hairline)
                 }
             }
     }
