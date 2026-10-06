@@ -924,9 +924,13 @@ editor and a screenshot in Preview; the context menu shows in Finder, copies (a 
 as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`. The grid is under date
 headers, newest first: Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
 list the screenshot history folder (spec 0012). Down the right edge the dates repeat as a rail
-(`LibraryDateRail`), adapted from Chánh Đại's Line Nav: a line per date that lengthens and brightens for the
-date at the top of the grid and for the one under the pointer, and a click that scrolls the grid to it. The
-grid reserves the rail's width and hides the rail for a single date. Which date is current is
+(`LibraryDateRail`), adapted from Chánh Đại's Line Nav: only a short line per date, 10 pt apart, that lengthens
+and brightens for the date at the top of the grid and for the one under the pointer, whose title shows in an
+opaque chip to the line's left, over the grid; a click scrolls the grid to it. The grid reserves only the lines'
+44 pt and hides the rail for a single date. The grid sits on the content colour (`controlBackgroundColor`): on the
+window's own colour it matched the sidebar within a few levels (55 against 57 in dark mode). Tiles are 16:10
+pictures that fill their frame (screenshots too, cropped), 10 pt continuous corners and a faint edge, with the
+name and, dimmed, the kind's symbol and the date under them. Which date is current is
 `LibraryDateGroup.active(in:headerTops:topLine:)`, fed by each header's own offset — a lazy grid measures
 only the headers it has built, so an unmeasured date is one below the fold and is skipped.
 
@@ -937,7 +941,7 @@ only the headers it has built, so an unmeasured date is one below the fold and i
 | `Library/Service/LibraryStore.swift` | Lists the recordings, screenshot and history folders (a folder read once when two are the same; a history name also saved is listed from the screenshot folder), thumbnails (movie frame or `CGImageSource`), trash |
 | `Library/Service/FolderWatcher.swift` | `DispatchSource` vnode writes on all three folders, 0.3 s settle, so new saves show at once (a folder that doesn't exist yet isn't watched until the window is reopened; the history folder is made at launch) |
 | `Library/ViewModel/LibraryViewModel.swift`, `Library/View/` | Sections, search, intents; `Actions` wired in `AppDelegate`; window in `EditorWindowManager.showLibrary()` |
-| `Library/View/LibraryDateRail.swift` | The dates down the right edge: a line per date, the current one marked, a click that scrolls to it |
+| `Library/View/LibraryDateRail.swift` | The dates down the right edge: a line per date, the current one marked, its title on hover, a click that scrolls to it |
 
 - The screenshot folder is the Desktop by default, so only `Reco_Screenshot_*.png` there are listed; reading
   it is what asks for Desktop access the first time.

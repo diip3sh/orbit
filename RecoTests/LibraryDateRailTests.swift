@@ -8,17 +8,15 @@ import SwiftUI
 import Testing
 @testable import Reco
 
-/// The rail's one subtle rule, which nothing else catches: the marked date's line grows into its own
-/// column, so the titles stay in a line instead of shifting as the marker grows.
+/// The rail's one subtle rule, which nothing else catches: the marked date's line grows leftward from a
+/// shared right edge, so the lines read as one column; and at rest only the lines are drawn, the titles
+/// waiting for the pointer.
 ///
 /// `ImageRenderer` draws the rail because it holds no glass, no AppKit control and no `ScrollView`.
 /// Colours aren't asserted: the rail uses the system's, so which of two is brighter depends on the
-/// appearance the test host happens to be in.
+/// appearance the test host happens to be in. Hover can't be rendered, so the title chip isn't covered.
 @MainActor
 struct LibraryDateRailTests {
-
-    /// Where a title starts: the line column plus the gap after it.
-    private static let titleStart = 36
 
     private func group(_ title: String) -> LibraryDateGroup {
         LibraryDateGroup(title: title, items: [LibraryItem(url: URL(filePath: "/r/\(title).png"), kind: .screenshot, date: .now)])
@@ -32,25 +30,22 @@ struct LibraryDateRailTests {
         return ImagePixels(try #require(renderer.cgImage))
     }
 
-    @Test func theMarkedDatesLineIsLongerAndTheTitlesStillLine() throws {
+    @Test func onlyLinesAreDrawnAndTheMarkedOneIsLonger() throws {
         let image = try rendered()
+        #expect(image.width == Int(LibraryDateRail.width), "the rail takes only its lines' room: \(image.width)")
 
-        // The lines are the only pixels before the titles start
-        let bands = image.bands(inColumns: 0..<Self.titleStart)
-        #expect(bands.count == 2, "one line per date")
+        // Across the whole rail, so a title drawn at rest would show as more or wider bands
+        let bands = image.bands(inColumns: 0..<image.width)
+        #expect(bands.count == 2, "one line per date and nothing else")
 
         let today = try #require(bands.first)
         let september = try #require(bands.last)
+        #expect(today.rows.count <= 3 && september.rows.count <= 3, "lines, not text: \(today.rows) and \(september.rows)")
         // The markers share a right edge and grow leftward, so they read as one column rather than
         // each starting where its line happens to
         #expect(today.right == september.right, "the markers end together: \(today.right) against \(september.right)")
-        #expect(today.left > september.left, "the marked one starts further left: \(september.left) against \(today.left)")
         #expect(september.width - today.width >= 8, "the marked line is longer: \(september.width) against \(today.width)")
-
-        // The line grew into its own column, so the titles didn't move
-        let titles = [today, september].compactMap { image.titleLeft(below: $0, from: Self.titleStart) }
-        #expect(titles.count == 2, "both titles are drawn")
-        #expect(abs((titles.first ?? 0) - (titles.last ?? 0)) <= 2, "the titles start together: \(titles)")
+        #expect(september.rows.lowerBound - today.rows.upperBound <= 12, "the lines sit close: \(today.rows) then \(september.rows)")
     }
 }
 
@@ -67,7 +62,7 @@ private struct ImagePixels {
     }
 
     private let data: [UInt8]
-    private let width: Int
+    let width: Int
     private let height: Int
 
     init(_ image: CGImage) {
@@ -109,10 +104,5 @@ private struct ImagePixels {
             }
         }
         return bands
-    }
-
-    /// Where a title starts under a line: the first drawn pixel at or after `column`.
-    func titleLeft(below band: Band, from column: Int) -> Int? {
-        band.rows.lazy.compactMap { row in (column..<width).first { isDrawn(column: $0, row: row) } }.first
     }
 }

@@ -20,6 +20,9 @@ struct LibraryView: View {
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
         } detail: {
             LibraryGrid(viewModel: viewModel)
+                // Solid, where the window's own colour matched the sidebar's within a few levels (55 against
+                // 57 in dark mode), so the two read as one surface
+                .background(LibraryGrid.background)
         }
         .searchable(text: $viewModel.search, placement: .toolbar, prompt: "Search by name")
         .toolbar {
@@ -37,6 +40,12 @@ private struct LibraryGrid: View {
 
     /// The coordinate space the date headers measure themselves in, for the rail's active date.
     static let gridSpace = "libraryGrid"
+
+    /// The content area's colour: white in light mode, the darkest grey in dark mode.
+    static let background = Color(nsColor: .controlBackgroundColor)
+
+    /// Columns at least this wide, filling the row; tiles sit closer side by side than date to date.
+    private static let columns = [GridItem(.adaptive(minimum: 200), spacing: EditorTheme.spacing, alignment: .top)]
 
     /// Each date header's distance below the top of the grid, by ``LibraryDateGroup/id``. Only the
     /// headers a lazy grid has built have one, and one below the fold is treated as not reached yet.
@@ -71,7 +80,7 @@ private struct LibraryGrid: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: EditorTheme.largeSpacing)], spacing: EditorTheme.largeSpacing) {
+                        LazyVGrid(columns: Self.columns, spacing: EditorTheme.largeSpacing) {
                             ForEach(groups) { group in
                                 Section {
                                     ForEach(group.items) { item in
@@ -82,8 +91,8 @@ private struct LibraryGrid: View {
                                     }
                                 } header: {
                                     Text(group.title)
-                                        .font(.subheadline)
-                                        .foregroundStyle(EditorTheme.dim)
+                                        .font(.headline)
+                                        .foregroundStyle(EditorTheme.ink)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         // Where the rail scrolls to, and what it measures
                                         .id(group.id)

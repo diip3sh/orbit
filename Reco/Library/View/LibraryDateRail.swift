@@ -5,14 +5,13 @@
 
 import SwiftUI
 
-/// The Library's dates down the right edge, as a minimap of the grid's date headers: every date with its
-/// line, the one at the top of the grid marked with a longer, brighter line and a brighter title, and a
-/// click that scrolls the grid to it.
+/// The Library's dates down the right edge, as a minimap of the grid's date headers: one short line per
+/// date, the one at the top of the grid longer and brighter, its title shown beside the line under the
+/// pointer, and a click that scrolls the grid to it.
 ///
-/// Adapted from Chánh Đại's Line Nav (chanhdai.com/components/line-nav): a vertical list whose line
-/// marker expands on hover and for the active item, and whose active item brightens. The lines sit in a
-/// fixed column so the titles stay aligned as the markers grow; here the titles are the grid's date
-/// headers rather than page names, and a click scrolls rather than navigates.
+/// Adapted from Chánh Đại's Line Nav (chanhdai.com/components/line-nav): a vertical stack of lines whose
+/// marker expands on hover and for the active item. Only the lines take room, so the grid keeps nearly its
+/// full width; the title floats to their left, over the grid, while pointed at.
 struct LibraryDateRail: View {
 
     let groups: [LibraryDateGroup]
@@ -22,19 +21,11 @@ struct LibraryDateRail: View {
 
     let onSelect: (String) -> Void
 
-    /// The line column, and the line at rest and marked. Room for the marked line, so a title doesn't
-    /// move as its line grows.
-    private static let lineColumn: CGFloat = 28
-    private static let lineWidth: CGFloat = 18
-    private static let markedLineWidth: CGFloat = 28
-    private static let lineHeight: CGFloat = 2
-
-    /// What the grid keeps clear on its trailing side, so the titles never sit on the last column: the
-    /// line column, the longest header (a month and a year) and the margin past them.
-    static let width: CGFloat = 152
+    /// What the grid keeps clear on its trailing side: the line column and the margin past it.
+    static let width: CGFloat = LibraryDateRailDate.lineColumn + EditorTheme.spacing
 
     var body: some View {
-        VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
+        VStack(alignment: .trailing, spacing: 0) {
             ForEach(groups) { group in
                 LibraryDateRailDate(title: group.title, isActive: group.id == active) {
                     onSelect(group.id)
@@ -42,12 +33,12 @@ struct LibraryDateRail: View {
             }
         }
         .padding(.trailing, EditorTheme.spacing)
-        .frame(width: Self.width, alignment: .leading)
+        .frame(width: Self.width, alignment: .trailing)
     }
 }
 
-/// One date in the rail: its line, which lengthens and darkens when the date is at the top of the grid or
-/// under the pointer, and its title, which brightens with it.
+/// One date in the rail: its line, which lengthens when the date is at the top of the grid or under the
+/// pointer, and its title in a solid chip to the left while pointed at.
 private struct LibraryDateRailDate: View {
 
     let title: String
@@ -56,41 +47,55 @@ private struct LibraryDateRailDate: View {
 
     @State private var isHovered = false
 
-    /// The line column, and the line at rest and marked. Room for the marked line, so a title doesn't
-    /// move as its line grows.
-    private static let lineColumn: CGFloat = 28
-    private static let lineWidth: CGFloat = 18
+    /// The line column, so a marked line grows leftward inside it, and the line at rest and marked.
+    static let lineColumn: CGFloat = 28
+    private static let lineWidth: CGFloat = 16
     private static let markedLineWidth: CGFloat = 28
     private static let lineHeight: CGFloat = 2
 
-    /// Whether the date is being pointed at or read.
+    /// Each date's row, which is also the gap between lines: tall enough to point at.
+    private static let rowHeight: CGFloat = 10
+
     private var isMarked: Bool { isActive || isHovered }
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: EditorTheme.smallSpacing) {
-                // Trailing inside its column, so the line grows leftward and the titles stay put
-                Capsule()
-                    .fill(isActive ? EditorTheme.ink : EditorTheme.faint)
-                    .frame(
-                        width: isMarked ? Self.markedLineWidth : Self.lineWidth,
-                        height: Self.lineHeight
-                    )
-                    .frame(width: Self.lineColumn, alignment: .trailing)
-                Text(title)
-                    .font(.callout)
-                    .foregroundStyle(isActive ? EditorTheme.ink : EditorTheme.dim)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .padding(.vertical, EditorTheme.tightSpacing)
-            .contentShape(.rect)
+            Capsule()
+                .fill(isActive ? EditorTheme.ink : isHovered ? EditorTheme.dim : EditorTheme.faint)
+                .frame(width: isMarked ? Self.markedLineWidth : Self.lineWidth, height: Self.lineHeight)
+                .frame(width: Self.lineColumn, height: Self.rowHeight, alignment: .trailing)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .help(title)
+        .overlay(alignment: .leading) {
+            if isHovered {
+                label
+                    // The chip's trailing edge a gap left of the row, so it never covers the lines
+                    .alignmentGuide(.leading) { [gap = EditorTheme.smallSpacing] in $0[.trailing] + gap }
+                    .transition(.opacity)
+            }
+        }
+        // Above the rows after it, whose lines would otherwise draw over a tall chip
+        .zIndex(isHovered ? 1 : 0)
         .accessibilityLabel(title)
         .editorMotion(EditorTheme.quickMotion, value: isMarked)
         .editorMotion(EditorTheme.quickMotion, value: isActive)
+    }
+
+    /// The title on the window's own colour, opaque so the tiles under it don't show through.
+    private var label: some View {
+        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        return Text(title)
+            .font(.callout)
+            .foregroundStyle(EditorTheme.ink)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, EditorTheme.smallSpacing)
+            .padding(.vertical, EditorTheme.tightSpacing)
+            .background(EditorTheme.stage, in: shape)
+            .overlay { shape.strokeBorder(EditorTheme.hairline) }
+            .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+            .allowsHitTesting(false)
     }
 }
