@@ -413,7 +413,7 @@ end of every phase and its scores recorded here.
 
 | Phase | Size | Status |
 |---|---|---|
-| 0 - Benchmark and spikes | M | Todo |
+| 0 - Benchmark and spikes | M | Done but the side-by-side |
 | 1 - Document, core, compositor | L | Todo |
 | 2 - Real UI layers | L | Todo |
 | 3 - Grammar v1 | L | Todo |
@@ -441,6 +441,52 @@ end of every phase and its scores recorded here.
 
 **Done when:** the user has looked at the side-by-side and judged it close enough to build on, or
 named what's missing; spike A and B results are written here.
+
+#### Phase 0 results (2026-10-06, M5, macOS 26.5.2)
+
+**Rubric** (scored per run; a run passes with every check clean and the side-by-side accepted):
+
+| Check | Pass |
+|---|---|
+| Lint and design check | No findings |
+| Text on a phone (frame scaled to 390 pt wide) | Every line readable; headline cap height ≥ 2.8% of H |
+| Pacing | Shots 1.3–5.3 s, title holds 0.9–2.5 s, typing ≤ 25 cps, end card 1.9–4.5 s |
+| Tells | None of the list under *What the best tools encode* |
+| Color | Dark videos: mean luma 12–24, colored pixels ≤ 21% |
+| Run | Minutes and cost recorded |
+| Look | The user's side-by-side verdict |
+
+Targets: Linear Agent 0–10 s (two drifting shots and a cut), Linear for Agents 0–8 s. Sites:
+cardboard.ai (dark serif), linear.app (dark sans, slow to paint), supabase.com (dark sans; a light
+sans site is still to pick: all three are dark).
+
+**Spike A, composition without a recording: a placeholder movie.** An `AVMutableComposition` whose
+video track holds only `insertEmptyTimeRange` reports a duration of 0 and no video track:
+`AVAssetReaderVideoCompositionOutput` asserts (`[videoTracks count] >= 1`) and nothing plays. A
+1-frame 16×16 movie (written in 0.12 s) inserted once and stretched with `scaleTimeRange` to the
+document's length works everywhere: frames through `AVAssetImageGenerator`, HEVC export (2 s at
+320×180 in 85 ms, the compositor called for all 61 frames), GIF through the reader (50 frames at
+25 fps) and `AVPlayerItem` (ready). The compositor ignores the placeholder's pixels.
+In the test target, `AVAssetExportSession.export(to:as:)` crashed in its back-deployed thunk (as in
+CLAUDE.md); through the app's `ExportService` it doesn't.
+
+**Spike B, lifting an element.** `WKSnapshotConfiguration.rect` at 2× and 4× of the box from
+`getBoundingClientRect`, after scrolling it into view:
+
+| | Result |
+|---|---|
+| Cost | 2–35 ms at 2× (supabase.com's 1088×644 hero 35 ms), 10–93 ms at 4× (the hero at 4352×2574: 93 ms). The first snapshot after a load pays 55–164 ms |
+| Sharpness | Text crisp at 2× (Linear's comment card) |
+| Transparency | `drawsBackground = false` (KVC) plus a style that hides everything but the element (`body * { visibility: hidden }`, the element's subtree visible, `html, body` transparent) gives real alpha: Linear's card corners read alpha 0. No `border-radius` mask and no black-and-white matting (twice the snapshots) needed |
+| Fails | cardboard.ai scrolls inside its own container, so `window.scrollTo` left its tiles outside the viewport and WebKit returned the whole view: lifting must scroll with `scrollIntoView` and check the rect. A card whose own background is transparent (supabase.com's second card) loses the page behind it: fill it with the nearest painted ancestor's background |
+
+**Spike C, the shot by hand.** A standalone Swift harness (not kept) rendered the 10 s recreation from
+three lifted linear.app pieces (the agent thread, the issue list with a diff, the composer): two
+shots drifting at constant speed (pan 2 %W/s, push 1–1.5 %/s), each plane projected through a
+camera (focal length 1.6 × H, `CIPerspectiveTransform`), a band of focus drawn in the plane's
+space and projected with it into `CIMaskedVariableBlur`, a soft shadow under the near plane, a
+hard cut at 4.8 s, and "create issues and assign to me" typed at 15 cps. 1080p60, `-O`: 7.5 ms
+p50, 10.9 ms p95 a frame; 600 frames written in 6.2 s. Awaiting the user's side-by-side.
 
 ### Phase 1 - Document, core, compositor (L)
 
