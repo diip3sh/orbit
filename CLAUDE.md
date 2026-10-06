@@ -305,7 +305,8 @@ video), **Edit Last Recording** in the menu bar, and `reco://edit-last`. Keys: s
 | File | Role |
 |---|---|
 | `Editor/View/EditorWindowManager.swift` | One `NSWindow` + `NSHostingController` per recording, owned by `AppDelegate`; `.regular` activation policy while any is open; holds the output folder's security scope until the window's project is saved |
-| `Editor/ViewModel/EditorViewModel.swift` | Loads source + project, `edit(_:_:)` (one undo step, registers redo), 1 s debounced autosave, `close()` |
+| `Editor/ViewModel/EditorViewModel.swift` | Loads source + project, `edit(_:_:)` (one undo step, registers redo), 1 s debounced autosave, `rename(to:)` (saves, moves the files, reopens at the playhead, `onRename` re-keys the window), `close()` |
+| `Editor/Model/RecordingRename.swift`, `Editor/Service/RecordingRenamer.swift`, `Editor/View/RecordingNameField.swift` | Pure rules (valid names, the field's name without the web prefix, which files move); the all-or-nothing move; the title bar's click-to-rename field |
 | `Editor/ViewModel/PlaybackController.swift` | `AVPlayer`, coalesced zero-tolerance seeks (QA1820), frame stepping, end of item |
 | `Editor/Service/EditorSourceLoader.swift` | Asset properties + telemetry off the main actor; telemetry problems never block opening |
 | `Editor/Service/ProjectStore.swift`, `Editor/Model/EditorProject.swift` | `<name>.edit.json` v1 (`cuts`), atomic writes; only written after an edit |
@@ -328,8 +329,12 @@ preview stays, the transport and timeline slide down out of the window and the p
 inspector's content changes, to the export's options (`ExportOptions`, in the inspector's own sections and `SegmentedChoice`).
 One `.inspector` serves both modes so the column never moves; it opens at `EditorInspector.idealWidth` (380 pt, picked by hand
 in a 1533 pt window) and always shows during export. Both ways run on a 0.25 s critically damped spring, a cross-fade with
-Reduce Motion. The window's title becomes **Export**, the recording's name under it as its subtitle, beside **‹ Editor**
-(the editor window bridges `.title`; a `.principal` title read as a stray glass button). **Back**/Esc returns; Esc is Cancel while an export runs, and Back is disabled then. Export opens and leaves on a
+Reduce Motion. The title bar shows the recording's name in both modes (`RecordingNameField`, in the leading toolbar item; the system title is
+hidden, and `.navigationTitle` is bridged only for the Window menu): a click turns it into a field that renames the movie and its
+telemetry and project (`RecordingRename`, `RecordingRenamer`; Return or leaving the field commits, Esc cancels, and Esc doesn't
+also trigger Back meanwhile). A web recording's `Reco_Web_` prefix is kept but hidden in the field, and names ending in `-edited`
+are refused, since the Library tells kinds apart by file name alone. **‹ Editor** sits in the trailing `.primaryAction` slot
+where Export… was, so the two swap in place. **Back**/Esc returns; Esc is Cancel while an export runs, and Back is disabled then. Export opens and leaves on a
 paused frame, and the editor's keys (S, Z, ⌫, arrows, Space) go with the transport. `ExportSession` holds one visit's settings,
 running export and result, so the toolbar and the inspector share it. It writes
 `<name>-edited.mp4` (HEVC, H.264) or `.mov` (ProRes 422) next to the recording, then offers **Share…** (`ShareLink`: AirDrop, Mail,

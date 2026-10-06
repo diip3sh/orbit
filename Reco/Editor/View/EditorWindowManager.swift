@@ -82,12 +82,19 @@ final class EditorWindowManager: NSObject {
         let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel))
         // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
         hostingController.sizingOptions = .minSize
-        // The export and inspector buttons are SwiftUI toolbar items
-        // The title too: export renames the window "Export", with the recording's name under it
+        // The name field, export and inspector buttons are SwiftUI toolbar items
+        // The title too, for the Window menu; the title bar shows the name field instead
         hostingController.sceneBridgingOptions = [.toolbars, .title]
         let window = makeWindow(hostingController, title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1533, height: 943))
         window.representedURL = videoURL
+        window.titleVisibility = .hidden
         editors[videoURL] = Editor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
+        // A renamed recording is found, and reopened, under its new name
+        viewModel.onRename = { [weak self] old, new in
+            guard let self, let editor = editors.removeValue(forKey: old.standardizedFileURL) else { return }
+            editors[new.standardizedFileURL] = editor
+            editor.window.representedURL = new
+        }
 
         // A regular app gets a Dock icon, ⌘-Tab and the main menu with Undo and Redo
         NSApp.setActivationPolicy(.regular)

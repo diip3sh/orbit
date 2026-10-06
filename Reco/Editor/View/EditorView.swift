@@ -15,6 +15,9 @@ struct EditorView: View {
 
     @State private var showsInspector = true
 
+    /// Whether the title bar's name is being edited, which Esc must end before it leaves export.
+    @State private var isRenaming = false
+
     /// The export's visit, while it shows.
     @State private var export: ExportSession?
     @Environment(\.accessibilityReduceMotion) private var reducesMotion
@@ -73,10 +76,8 @@ struct EditorView: View {
         // SwiftUI shrank the window to it (900×592) as it opened, whatever size it was given
         .frame(minWidth: 900, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)
         .editorWindowBackground()
-        // Export names the page in the title bar, beside its back button, with the recording under it, as
-        // macOS titles a step: a title in the toolbar's middle read as a stray glass button
-        .navigationTitle(export == nil ? recordingName : "Export")
-        .navigationSubtitle(export == nil ? "" : recordingName)
+        // The window's name, for the Window menu; the title bar shows the name field in its place
+        .navigationTitle(viewModel.videoURL.deletingPathExtension().lastPathComponent)
         .editorMotion(.smooth, value: viewModel.source == nil)
         .task {
             await viewModel.load()
@@ -100,14 +101,26 @@ struct EditorView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        if let export {
-            ToolbarItem(placement: .navigation) {
-                Button("Editor", systemImage: "chevron.left", action: closeExport)
-                    .labelStyle(.titleAndIcon)
-                    .keyboardShortcut(.cancelAction)
-                    .disabled(export.isExporting)
-                    .help("Back to the editor (Esc)")
+        ToolbarItem(placement: .navigation) {
+            RecordingNameField(name: RecordingRename.displayName(of: viewModel.videoURL), isRenaming: $isRenaming) { name in
+                Task { await viewModel.rename(to: name) }
             }
+            .disabled(export?.isExporting == true)
+        }
+        .hidingSharedBackground()
+        if let export {
+            // Where Export… was, so the two swap in place
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: closeExport) {
+                    Label("Editor", systemImage: "chevron.left")
+                }
+                .buttonStyle(.editorSecondary)
+                // Esc ends a rename first
+                .keyboardShortcut(isRenaming ? nil : .cancelAction)
+                .disabled(export.isExporting)
+                .help("Back to the editor (Esc)")
+            }
+            .hidingSharedBackground()
         } else {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: openExport) {
@@ -128,10 +141,6 @@ struct EditorView: View {
                 .help(showsInspector ? "Hide the inspector" : "Show the inspector")
             }
         }
-    }
-
-    private var recordingName: String {
-        viewModel.videoURL.deletingPathExtension().lastPathComponent
     }
 
     /// Export opens and closes on a paused frame: it is for looking, not editing.

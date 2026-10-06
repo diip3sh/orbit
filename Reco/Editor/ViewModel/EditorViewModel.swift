@@ -14,7 +14,8 @@ import OSLog
 @Observable
 final class EditorViewModel {
 
-    let videoURL: URL
+    /// Changes only when ``rename(to:)`` moves the recording.
+    var videoURL: URL
     let playback = PlaybackController()
 
     /// The window's undo manager. ``EditorWindowManager`` hands it to AppKit, so ⌘Z and ⇧⌘Z reach it.
@@ -41,7 +42,7 @@ final class EditorViewModel {
 
     /// The project as last read from or written to disk.
     @ObservationIgnored private var savedProject = EditorProject()
-    @ObservationIgnored private var autosave: Task<Void, Never>?
+    @ObservationIgnored private(set) var autosave: Task<Void, Never>?
 
     /// What the player shows and export writes. Behind the project while a rebuild runs.
     @ObservationIgnored private var plan: RenderPlan?
@@ -58,6 +59,9 @@ final class EditorViewModel {
     /// Which edits share an undo step.
     @ObservationIgnored private var coalescedEdits = EditCoalescing()
 
+    /// Told after a rename moved the recording, so the window follows it.
+    @ObservationIgnored var onRename: ((_ old: URL, _ new: URL) -> Void)?
+
     /// How long edits must settle before they are saved.
     private static let autosaveDelay = Duration.seconds(1)
 
@@ -67,9 +71,10 @@ final class EditorViewModel {
         self.videoURL = videoURL
     }
 
-    /// Loads the recording and its project; the window shows a placeholder meanwhile.
-    func load() async {
-        guard source == nil else { return }
+    /// Loads the recording and its project; the window shows a placeholder meanwhile. With `time`, loads
+    /// again (its files moved) and shows source time `time`.
+    func load(reloadingAt time: Double? = nil) async {
+        guard source == nil || time != nil else { return }
         let source: EditorSource
         let project: EditorProject
         do {
@@ -110,7 +115,7 @@ final class EditorViewModel {
         savedProject = project
         markers = source.telemetry.map(TimelineMarkers.init)
         updateTimeline()
-        show(composition, plan: plan, atSource: 0)
+        show(composition, plan: plan, atSource: time ?? 0)
         if project.canvas.imageBookmark != nil, resources.background == nil {
             fail(.unreadableBackground)
         }
@@ -237,9 +242,7 @@ final class EditorViewModel {
         rebuild?.cancel()
         playback.release()
         thumbnails = []
-        autosave?.cancel()
-        await autosave?.value
-        await save()
+        await flushSave()
     }
 
     // MARK: - Private
@@ -341,7 +344,7 @@ final class EditorViewModel {
         }
     }
 
-    private func save() async {
+    func save() async {
         guard project != savedProject else { return }
         let project = project
         do {
@@ -352,7 +355,7 @@ final class EditorViewModel {
         }
     }
 
-    private func fail(_ error: EditorError) {
+    func fail(_ error: EditorError) {
         logger.error("\(self.videoURL.lastPathComponent): \(error.localizedDescription)")
         self.error = error
     }
