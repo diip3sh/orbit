@@ -14,9 +14,12 @@ struct EditorStage: View {
     private static let cornerRadius: CGFloat = 10
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius)
+        // Continuous, like the player layer's corners: a circular one left the black backing showing at each corner
+        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
 
         PlayerLayerView(player: viewModel.playback.player, cornerRadius: Self.cornerRadius)
+            // The player layer's own corner radius doesn't clip its video: the frame showed square corners past the ring
+            .clipShape(shape)
             .background {
                 if viewModel.canvas.background == .transparent {
                     Checkerboard(square: 10)
