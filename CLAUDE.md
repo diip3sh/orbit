@@ -749,7 +749,11 @@ What recorders are checked for, and what an agent needs to go from a page to a f
 - **Walkthrough playbook** (`AgentRecordingRequest.playbook`, in every new-take prompt; a short form in the MCP
   server's `instructions`): research (inspect_page on the page and the pages its navigation links to, each with its
   meta description; web search or fetch if the agent has them), a shot list of four to six beats, then record with
-  a show on every step, scale 1, 45–60 s. A re-record with warnings is tried once, then the agent must stop and report.
+  a show on every step at scale 2 (sharp when zoomed; the first takes at scale 1 came out blurred), 45–60 s. A
+  re-record with warnings is tried once, then the agent must stop and report.
+- **`render_cost`** in `inspect_page`: seconds of rendering per second of video at scale 1 and 2, from one snapshot of
+  the page at each (`WebPageRenderer.renderCost`). The playbook drops to scale 1 only above 8 at 2×. Measured on this
+  M5: supabase.com 1.6 / 2.6 (26 / 43 ms a frame), linear.app ~4 / ~18.
 
 | File | Role |
 |---|---|
@@ -785,6 +789,9 @@ Key facts:
 - `RecoTests/LocalPages.swift` serves a few pages on `127.0.0.1` for renderer tests that need a real navigation:
   `data:` pages can't link to each other. The editor applies a replaced take's look to the new
   take's stored project too (`EditorViewModel.load`), so shown zooms survive a chat re-record.
+- `unmatched_selectors` names only selectors missing before any click: after a click the steps may be on the page it
+  opened, and the take checks them where their clips start. Reported before, a supabase.com run spent its one retry on
+  three selectors that were fine and reported the video as broken when it wasn't.
 - Without a method the agent hovered headings and parked the cursor on the navigation, and auto-zoom followed it;
   three linear.app takes made that way had no flow. `show` moves the choice of what the viewer sees from the
   cursor's rests to the plan.

@@ -68,8 +68,9 @@ nonisolated struct RecordPlan: Equatable, Sendable {
         return steps.compactMap(\.selector).filter { seen.insert($0).inserted }
     }
 
-    /// The take for `page`, and the selectors that matched nothing: their cursor clips aim at the
-    /// middle of the viewport.
+    /// The take for `page`, and the selectors that matched nothing before any click: their cursor
+    /// clips aim at the middle of the viewport. After a click, which may have opened another page, a
+    /// selector is expected to miss here; the take checks it where its clip starts.
     ///
     /// Scrolls to an element aim at it again when they start in the take, and each cursor clip gets
     /// a scroll that brings its element into view first, if the Scroll lane has room before it: a
@@ -114,11 +115,14 @@ nonisolated struct RecordPlan: Equatable, Sendable {
                 // The viewport's point, not the page's: where the element is once the scrolls before it are done
                 let scrolled = script.scrollOffset(at: step.range.lowerBound)
                 point = CGPoint(x: box.midX - scrolled.x, y: box.midY - scrolled.y)
-            } else if action == .click, !hasClick(step) {
+            } else if !hasClick(step) {
                 // A click aimed at nothing would land on whatever is there, and may open another page
-                throw .invalidArgument("steps[\(step.index)]: no element matches \"\(selector)\" on the page, so there's nothing to click. Use a selector from inspect_page.")
-            } else if !unmatched.contains(selector) {
-                unmatched.append(selector)
+                guard action != .click else {
+                    throw .invalidArgument("steps[\(step.index)]: no element matches \"\(selector)\" on the page, so there's nothing to click. Use a selector from inspect_page.")
+                }
+                if !unmatched.contains(selector) {
+                    unmatched.append(selector)
+                }
             }
             let target = WebTarget(selector: selector, point: point)
             script.pointer = script.pointer.inserting(PointerClip(range: step.range, action: action, target: target, text: step.text, show: step.show))

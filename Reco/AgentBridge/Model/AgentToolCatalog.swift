@@ -37,7 +37,9 @@ nonisolated enum AgentToolCatalog {
                 Loads a web page in Reco and lists what it shows: size, title, description and its visible links, buttons, inputs and \
                 headings, each with a CSS selector, role, text, box in page pixels at scroll 0, and a link's href. Reco scrolls \
                 through the page first, so content that loads on the way is listed too. Call it before record_page to get \
-                selectors to hover, click or scroll to, and on the page a click opens (its href) for the steps after that click.
+                selectors to hover, click or scroll to, and on the page a click opens (its href) for the steps after that click. \
+                render_cost says how many seconds a second of video takes to render at scale 1 and 2 on this page: record at 2 \
+                (sharp when the video zooms in) unless that would take longer than the run allows.
                 """,
             schema: #"""
             {"type":"object","properties":{"url":{"type":"string","description":"Page address; https:// added if missing"},
@@ -62,7 +64,7 @@ nonisolated enum AgentToolCatalog {
             schema: #"""
             {"type":"object","properties":{"url":{"type":"string","description":"Page address; https:// added if missing"},
             "viewport":{"type":"string","enum":["desktop","laptop","tablet","phone"],"default":"desktop"},
-            "scale":{"type":"integer","enum":[1,2],"default":2},
+            "scale":{"type":"integer","enum":[1,2],"default":2,"description":"2 is sharp when zoomed; 1 renders faster (see inspect_page's render_cost)"},
             "duration":{"type":"number","description":"Seconds, max 120; default: last step end + 1.5"},
             "steps":{"type":"array","items":{"type":"object","properties":{
             "action":{"type":"string","enum":["hover","click","type","scroll"]},

@@ -345,9 +345,9 @@ final class WebPageRenderer: NSObject {
 
     /// The page drawn at the take's scale. WebKit paints it for the requested width, so a 2× take
     /// is sharp on any display.
-    private func snapshot() async throws -> CGImage {
+    private func snapshot(scale: Int? = nil) async throws -> CGImage {
         let configuration = WKSnapshotConfiguration()
-        configuration.snapshotWidth = NSNumber(value: script.viewport.width * CGFloat(script.scale) / window.backingScaleFactor)
+        configuration.snapshotWidth = NSNumber(value: script.viewport.width * CGFloat(scale ?? script.scale) / window.backingScaleFactor)
         let image = try await webView.takeSnapshot(configuration: configuration)
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             throw WebRenderError.snapshotFailed
@@ -374,7 +374,23 @@ extension WebPageRenderer {
             WebInspectScript.source, arguments: ["selectors": selectors], contentWorld: .defaultClient
         )
         guard let json = result as? String else { throw WebRenderError.loadFailed("The page couldn't be read.") }
-        return try JSONDecoder().decode(PageInspection.self, from: Data(json.utf8))
+        var inspection = try JSONDecoder().decode(PageInspection.self, from: Data(json.utf8))
+        inspection.renderCost = try await renderCost()
+        return inspection
+    }
+
+    /// Seconds of rendering per second of video at scale 1 and 2, from one snapshot of the page at
+    /// each: the snapshot is the cost of a frame, 14 ms on a simple page and 310 ms on linear.app at
+    /// 2× (M5), the rest of a frame a few ms. Lets an agent choose a scale the run's time allows.
+    private func renderCost() async throws -> [String: Double] {
+        var cost: [String: Double] = [:]
+        for scale in [1, 2] {
+            let start = ContinuousClock.now
+            _ = try await snapshot(scale: scale)
+            let seconds = (ContinuousClock.now - start) / .seconds(1)
+            cost[String(scale)] = (seconds * Double(WebScript.frameRate) * 100).rounded() / 100
+        }
+        return cost
     }
 }
 

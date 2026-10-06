@@ -17,7 +17,8 @@ nonisolated struct RenderStatus: Codable, Equatable, Sendable {
     var movie: String?
     var telemetry: String?
 
-    /// Selectors the page had no match for, so their cursor clips aim at the middle of the viewport.
+    /// Selectors the page had no match for before any click, so their cursor clips aim at the
+    /// middle of the viewport. Misses on pages clicks open come back as `warnings` instead.
     var unmatchedSelectors: [String]?
 
     /// What went wrong on the page during the take (``WebTakeIssues``), for the agent to fix.

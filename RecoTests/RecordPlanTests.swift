@@ -108,7 +108,8 @@ struct RecordPlanTests {
 
         let result = try plan(steps).script(page: page(boxes: boxes))
 
-        #expect(result.unmatched == ["#checkout"])
+        // Not reported as unmatched: it's on the page the click opens, and the take checks it there
+        #expect(result.unmatched.isEmpty)
         // Found when the scroll starts in the take; planned not to move
         let scroll = try #require(result.script.scrolls.first { $0.target?.placement == .top })
         #expect(scroll.target?.selector == "#specs")

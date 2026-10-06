@@ -297,6 +297,9 @@ struct WebPageRendererTests {
         #expect(inspection.pageHeight == 3000)
         #expect(inspection.description == nil)
         #expect(!inspection.truncated)
+        // A frame's cost at each scale, as seconds per second of video
+        #expect(inspection.renderCost?.keys.sorted() == ["1", "2"])
+        #expect(inspection.renderCost?.values.allSatisfy { $0 >= 0 && $0 < 60 } == true)
         let buy = try #require(inspection.elements.first)
         #expect(inspection.elements.count == 1)
         #expect(buy.selector == "#buy")

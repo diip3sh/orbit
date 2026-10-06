@@ -24,9 +24,14 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
     /// The box of the first element each requested selector matches; `nil` when none were requested.
     var boxes: [String: Box]?
 
+    /// Seconds of rendering per second of video, by scale ("1", "2"), measured on this page; `nil`
+    /// until measured.
+    var renderCost: [String: Double]?
+
     private enum CodingKeys: String, CodingKey {
         case title, url, description, viewport, elements, truncated, boxes
         case pageHeight = "page_height"
+        case renderCost = "render_cost"
     }
 
     nonisolated struct Element: Codable, Equatable, Sendable {

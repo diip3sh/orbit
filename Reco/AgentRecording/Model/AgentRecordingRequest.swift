@@ -45,9 +45,9 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         3. Record with record_page, one or two steps per beat, every step with a show: the element the video zooms on; it zooms \
         on nothing else. Show the thing itself, not the heading above it; show the hero or a whole section to stay zoomed out. \
         Hover something in or beside what you show for 2 to 3 s, so it is in view. To open a page, click its link, then hover that \
-        page's hero showing it. Never park the cursor on the navigation while a page loads. Use scale 1 unless asked for 2: a \
-        minute at 2 takes over 15 minutes to render on a heavy page. Keep 1 s still at the start, 0.8 to 1 s between steps, and \
-        45 to 60 s in all unless asked otherwise.
+        page's hero showing it. Never park the cursor on the navigation while a page loads. Use scale 2, which stays sharp when \
+        the video zooms in, unless inspect_page's render_cost at 2 is over 8: then the render would take over 8 minutes a \
+        minute, so use 1. Keep 1 s still at the start, 0.8 to 1 s between steps, and 45 to 60 s in all unless asked otherwise.
         """
 
     /// How a video is recorded again with a change (spec 0008).
