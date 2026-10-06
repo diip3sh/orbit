@@ -99,6 +99,12 @@ struct EditorView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        if let export {
+            // In front of the name, as a browser's back and forward
+            ToolbarItem(placement: .navigation) {
+                exportNavigation(export)
+            }
+        }
         ToolbarItem(placement: .navigation) {
             RecordingNameField(name: RecordingRename.displayName(of: viewModel.videoURL), isRenaming: $isRenaming) { name in
                 Task { await viewModel.rename(to: name) }
@@ -132,6 +138,20 @@ struct EditorView: View {
                 .help(showsInspector ? "Hide the inspector" : "Show the inspector")
             }
         }
+    }
+
+    /// Back to the editor; forward has nowhere to go from export, so it is there only to read as the pair.
+    private func exportNavigation(_ export: ExportSession) -> some View {
+        ControlGroup {
+            Button("Editor", systemImage: "chevron.left", action: closeExport)
+                // Esc ends a rename first
+                .keyboardShortcut(isRenaming ? nil : .cancelAction)
+                .disabled(export.isExporting)
+                .help("Back to the editor (Esc)")
+            Button("Export", systemImage: "chevron.right") {}
+                .disabled(true)
+        }
+        .controlGroupStyle(.navigation)
     }
 
     /// Export opens and closes on a paused frame: it is for looking, not editing.
