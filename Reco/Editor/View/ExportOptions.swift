@@ -12,9 +12,6 @@ import SwiftUI
 struct ExportOptions: View {
     let viewModel: EditorViewModel
     @Bindable var session: ExportSession
-    /// Whether the title bar's name is being edited, which Esc must end before it leaves export.
-    let isRenaming: Bool
-    let back: () -> Void
 
     @Namespace private var highlight
 
@@ -26,11 +23,6 @@ struct ExportOptions: View {
         let frameRates = ExportSettings.frameRates(below: frameRate)
 
         VStack(spacing: 0) {
-            navigation
-                .frame(maxWidth: .infinity, alignment: .leading)
-                // The column's content already starts under the toolbar's strip
-                .padding(.horizontal)
-
             ScrollView {
                 VStack(spacing: 0) {
                     InspectorSection("Format") {
@@ -115,27 +107,6 @@ struct ExportOptions: View {
             facts.append(ExportFact(title: "File Size", value: Int64(exportedBytes).formatted(.byteCount(style: .file))))
         }
         return facts
-    }
-
-    /// Back to the editor; forward has nowhere to go from export, so it is there only to read as the pair.
-    /// A glass capsule like the toolbar's: `ControlGroup`'s navigation style is a capsule only in a toolbar, and a
-    /// bordered box anywhere else.
-    private var navigation: some View {
-        HStack(spacing: 0) {
-            Button("Editor", systemImage: "chevron.left", action: back)
-                // Esc ends a rename first
-                .keyboardShortcut(isRenaming ? nil : .cancelAction)
-                .disabled(session.isExporting)
-                .help("Back to the editor (Esc)")
-            Divider()
-                .frame(height: 16)
-            Button("Export", systemImage: "chevron.right") {}
-                .disabled(true)
-        }
-        .buttonStyle(.editorIcon)
-        .fontWeight(.semibold)
-        .padding(3)
-        .editorGlass(in: .capsule)
     }
 
     private var actions: some View {

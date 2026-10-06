@@ -43,7 +43,7 @@ struct EditorView: View {
                 .inspector(isPresented: export == nil ? $showsInspector : .constant(true)) {
                     Group {
                         if let export {
-                            ExportOptions(viewModel: viewModel, session: export, isRenaming: isRenaming, back: closeExport)
+                            ExportOptions(viewModel: viewModel, session: export)
                         } else {
                             EditorInspector(viewModel: viewModel)
                         }
