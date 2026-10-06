@@ -158,8 +158,11 @@ struct RenderPlanTests {
     }
 
     @Test func buildsTheCanvasAtTheTargetsSize() async {
-        let preview = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), resources: .none)
-        let export = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), resources: .none, target: RenderTarget(shorterSide: 600))
+        // The video's own 4:3, so the frame keeps its size; Original would grow by the padding
+        var project = EditorProject()
+        project.canvas.aspect = .standard
+        let preview = await RenderPlan.build(project: project, source: source(telemetry: nil), resources: .none)
+        let export = await RenderPlan.build(project: project, source: source(telemetry: nil), resources: .none, target: RenderTarget(shorterSide: 600))
 
         #expect(preview.canvas.size == CGSize(width: 1600, height: 1200))
         #expect(export.canvas.size == CGSize(width: 800, height: 600))

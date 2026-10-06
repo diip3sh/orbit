@@ -24,7 +24,7 @@ extension SettingsStore {
     var showsScreenshotsInNotch: Bool {
         get {
             access(keyPath: \.showsScreenshotsInNotch)
-            return defaults.object(forKey: "showsScreenshotsInNotch") as? Bool ?? true
+            return defaults.object(forKey: "showsScreenshotsInNotch") as? Bool ?? false
         }
         set {
             withMutation(keyPath: \.showsScreenshotsInNotch) {

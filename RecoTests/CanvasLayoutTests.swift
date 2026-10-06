@@ -25,6 +25,15 @@ struct CanvasLayoutTests {
         #expect(CanvasLayout.size(for: CGSize(width: 3456, height: 2234), aspect: .square, shorterSide: nil) == CGSize(width: 2234, height: 2234))
     }
 
+    @Test func theVideosOwnShapeGrowsByThePaddingSoItsEqualOnEverySide() {
+        for video in [CGSize(width: 3420, height: 2224), CGSize(width: 1080, height: 1920)] {
+            let size = CanvasLayout.size(for: video, aspect: .source, padding: 0.08, shorterSide: nil)
+            let frame = CanvasLayout.videoFrame(for: video, in: size, padding: 0.08)
+            let sides = [frame.minX, frame.minY, size.width - frame.maxX, size.height - frame.maxY]
+            #expect(sides.max()! - sides.min()! <= 2, "\(video): \(sides)")
+        }
+    }
+
     @Test func fitsTheVideoInsideThePaddingOnWholePixels() {
         // 10% of 1,200 px on every side leaves 1,894×960 px, which the height limits to 1,280×960
         let frame = CanvasLayout.videoFrame(for: CGSize(width: 1600, height: 1200), in: CGSize(width: 2134, height: 1200), padding: 0.1)
@@ -53,7 +62,7 @@ struct CanvasLayoutTests {
     }
 
     @Test func fillsTheBackgroundWithItsPictureOrElseItsColor() throws {
-        var style = CanvasStyle(padding: 0.1, shadow: 0, background: .image)
+        var style = CanvasStyle(aspect: .standard, padding: 0.1, shadow: 0, background: .image)
         style.color = RGBAColor(red: 0, green: 0, blue: 1, alpha: 1)
         let picture = try #require(CIContext().createCGImage(
             CIImage(color: CIColor(red: 1, green: 0, blue: 0)), from: CGRect(x: 0, y: 0, width: 30, height: 10)

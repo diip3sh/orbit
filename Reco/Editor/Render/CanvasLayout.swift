@@ -75,7 +75,7 @@ extension CanvasLayout {
     ///   - shorterSide: The output's shorter side in pixels, or `nil` for the video's.
     ///   - background: The picture of an image background.
     nonisolated init(style: CanvasStyle, videoSize: CGSize, shorterSide: CGFloat?, background: CGImage?) {
-        size = Self.size(for: videoSize, aspect: style.aspect, shorterSide: shorterSide)
+        size = Self.size(for: videoSize, aspect: style.aspect, padding: style.padding, shorterSide: shorterSide)
         videoFrame = Self.videoFrame(for: videoSize, in: size, padding: style.padding)
         videoTransform = CGAffineTransform(scaleX: videoFrame.width / videoSize.width, y: videoFrame.height / videoSize.height)
             .concatenating(CGAffineTransform(translationX: videoFrame.minX, y: videoFrame.minY))
@@ -135,10 +135,13 @@ extension CanvasLayout {
     }
 
     /// The frame's size: `aspect`, with a shorter side of `shorterSide` or the video's. Sides are
-    /// even, as 4:2:0 video needs; the video's own shape keeps its size.
-    nonisolated static func size(for videoSize: CGSize, aspect: CanvasStyle.Aspect, shorterSide: CGFloat?) -> CGSize {
+    /// even, as 4:2:0 video needs; the video's own shape keeps its size. With `padding`, the video's own
+    /// shape grows by it, so it's the same on every side; a fixed shape puts what's left on one axis.
+    nonisolated static func size(
+        for videoSize: CGSize, aspect: CanvasStyle.Aspect, padding: Double = 0, shorterSide: CGFloat?
+    ) -> CGSize {
         let videoShorterSide = min(videoSize.width, videoSize.height)
-        guard let ratio = aspect.ratio else {
+        guard let ratio = aspect.ratio ?? paddedRatio(of: videoSize, padding: padding) else {
             guard let shorterSide else { return videoSize }
             let scale = shorterSide / videoShorterSide
             return CGSize(width: even(videoSize.width * scale), height: even(videoSize.height * scale))
@@ -147,6 +150,14 @@ extension CanvasLayout {
         return ratio >= 1
             ? CGSize(width: even(shorter * ratio), height: even(shorter))
             : CGSize(width: even(shorter), height: even(shorter / ratio))
+    }
+
+    /// The video's shape with `padding` (a share of the shorter side) on every side, or `nil` without any.
+    nonisolated private static func paddedRatio(of videoSize: CGSize, padding: Double) -> Double? {
+        guard padding > 0 else { return nil }
+        let long = max(videoSize.width, videoSize.height) / min(videoSize.width, videoSize.height)
+        let padded = (1 - 2 * padding) * long + 2 * padding
+        return videoSize.width >= videoSize.height ? padded : 1 / padded
     }
 
     /// The video fitted inside the frame less `padding` on every side, centred, on whole pixels.

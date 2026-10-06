@@ -467,6 +467,8 @@ Key facts:
   radius (1.5%) and the shadow's blur (3%) are shares of it. An export at another size is drawn at
   that size, not scaled afterwards. Zoom and canvas placement are one transform, so the video is
   resampled once; the cursor is drawn at its final scale.
+- With padding, Original grows by it (`CanvasLayout.paddedRatio`), so the padding is equal on every side; a
+  fixed shape whose ratio differs from the video's puts the rest on one axis.
 - Frames are drawn region by region (`CanvasLayout.regions`): the padding from the backdrop alone,
   the video in 8 bands, its rounded corners with the mask. Core Image evaluates every overlay
   across the whole region it renders; in bands it skips them where they aren't. Measured on an M1,
@@ -936,7 +938,8 @@ text sent to the agent never includes a password's value.
 A black shape over the notch of every screen (a 120×8 pt pill at the top centre where there is none). The pointer
 on it makes it peek (+7.5 pt each side, +5 down, shadow); staying 300 ms opens it into a 560 pt panel with the
 newest 20 screenshots (saved and history): click copies the PNG (tile says Copied for 1.2 s), drag drops the file.
-Collapses 500 ms after the pointer leaves. **Settings → General → Screenshot History → Show Screenshots in the Notch** (default on).
+Collapses 500 ms after the pointer leaves. **Settings → General → Screenshot History → Show Screenshots in the Notch** (default off).
+Hidden while a take records or saves (`AppDelegate.hideNotchShelfWhileRecording`), so a display recording never shows it as a bar over the notch, Show Reco or not. Hover rings a tile in the accent; a press dims and shrinks it on the frame it lands and lets go after 4 pt, so the file drag still starts.
 
 | File | Role |
 |---|---|

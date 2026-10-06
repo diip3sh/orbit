@@ -89,6 +89,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 captureToolbar.show()
             }
         }
+        hideNotchShelfWhileRecording()
+    }
+
+    /// The shelf's black shape sits over the notch, where a display recording would show it as a bar, even
+    /// with Show Reco on. `state` turns `.recording` before the stream starts, so no frame catches it.
+    private func hideNotchShelfWhileRecording() {
+        withObservationTracking {
+            _ = viewModel.state
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                if self.viewModel.state == .idle {
+                    self.notchShelf.restore()
+                } else {
+                    self.notchShelf.hide()
+                }
+                self.hideNotchShelfWhileRecording()
+            }
+        }
     }
 
     /// Shows the capture toolbar for a screenshot, or for a recording (`records`).
