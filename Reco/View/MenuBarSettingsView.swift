@@ -47,12 +47,12 @@ struct MenuBarDivider: View {
 
 // MARK: - Toggle Row
 
-/// A menu bar style toggle with a switch on the right side and hover effect
+/// A menu bar style toggle with a switch on the right side. No hover highlight: only the switch is clickable,
+/// so a lit row would promise a click that does nothing.
 struct MenuBarToggle: View {
     let name: String
     @Binding var isOn: Bool
     var isDisabled: Bool = false
-    @State private var isHovered = false
     /// Off while the popover's settings are locked, from the countdown until the file is saved
     @Environment(\.isEnabled) private var isEnabled
 
@@ -69,12 +69,6 @@ struct MenuBarToggle: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .contentShape(.rect)
-        .background(MenuRowHighlight(opacity: isHovered && !isDisabled && isEnabled ? 0.1 : 0))
-        .onHover { hovering in
-            isHovered = hovering
-        }
-        .editorMotion(EditorTheme.quickMotion, value: isHovered)
     }
 }
 
