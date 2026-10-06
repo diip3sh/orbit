@@ -74,7 +74,8 @@ nonisolated enum FrameRenderer {
     private static func placed(_ image: CIImage, by placement: CGAffineTransform, plan: RenderPlan) -> CIImage {
         guard !placement.isIdentity else { return image }
         // Clamped to the frame, so its edge pixels aren't blended with what's around it
-        return image.cropped(to: CGRect(origin: .zero, size: plan.videoSize)).clampedToExtent().transformed(by: placement)
+        return image.cropped(to: CGRect(origin: .zero, size: plan.videoSize)).clampedToExtent()
+            .transformed(by: placement, highQualityDownsample: plan.downsamplesSmoothly)
     }
 
     /// Maps the frame's Core Image pixels to the zoomed frame's: the part in `viewport` fills it.

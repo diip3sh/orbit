@@ -30,6 +30,26 @@ struct AgentTranscriptTests {
         #expect(transcript.sessionID(for: .cursor) == nil)
     }
 
+    @Test func consecutiveToolStepsShareOneGroup() {
+        var transcript = AgentTranscript()
+        transcript.addRequest("Hover Pricing")
+        transcript.apply(.toolStarted(id: "1", tool: "inspect_page", input: input("{}")), from: .claudeCode)
+        transcript.apply(.toolStarted(id: "2", tool: "record_page", input: input("{}")), from: .claudeCode)
+        transcript.apply(.text("Done."), from: .claudeCode)
+        transcript.apply(.toolStarted(id: "3", tool: "render_status", input: input("{}")), from: .claudeCode)
+
+        let groups = transcript.groups
+        #expect(groups.count == 4)
+        guard case .request = groups[0], case .tools(let first) = groups[1], case .reply = groups[2], case .tools(let last) = groups[3] else {
+            Issue.record("unexpected grouping \(groups)")
+            return
+        }
+        #expect(first.map(\.id) == ["1", "2"])
+        #expect(last.map(\.id) == ["3"])
+        #expect(groups[1].id == "1")
+        #expect(AgentTranscript().groups.isEmpty)
+    }
+
     @Test func checkingTheRenderAgainUpdatesOneRow() {
         var transcript = AgentTranscript()
         for id in ["a", "b", "c"] {

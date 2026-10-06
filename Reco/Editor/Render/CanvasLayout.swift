@@ -75,7 +75,7 @@ extension CanvasLayout {
     ///   - shorterSide: The output's shorter side in pixels, or `nil` for the video's.
     ///   - background: The picture of an image background.
     nonisolated init(style: CanvasStyle, videoSize: CGSize, shorterSide: CGFloat?, background: CGImage?) {
-        size = Self.size(for: videoSize, aspect: style.aspect, shorterSide: shorterSide)
+        size = Self.size(for: videoSize, aspect: style.aspect, padding: style.padding, shorterSide: shorterSide)
         videoFrame = Self.videoFrame(for: videoSize, in: size, padding: style.padding)
         videoTransform = CGAffineTransform(scaleX: videoFrame.width / videoSize.width, y: videoFrame.height / videoSize.height)
             .concatenating(CGAffineTransform(translationX: videoFrame.minX, y: videoFrame.minY))
@@ -135,10 +135,13 @@ extension CanvasLayout {
     }
 
     /// The frame's size: `aspect`, with a shorter side of `shorterSide` or the video's. Sides are
-    /// even, as 4:2:0 video needs; the video's own shape keeps its size.
-    nonisolated static func size(for videoSize: CGSize, aspect: CanvasStyle.Aspect, shorterSide: CGFloat?) -> CGSize {
+    /// even, as 4:2:0 video needs; the video's own shape keeps its size. With `padding`, the video's own
+    /// shape grows by it, so it's the same on every side; a fixed shape puts what's left on one axis.
+    nonisolated static func size(
+        for videoSize: CGSize, aspect: CanvasStyle.Aspect, padding: Double = 0, shorterSide: CGFloat?
+    ) -> CGSize {
         let videoShorterSide = min(videoSize.width, videoSize.height)
-        guard let ratio = aspect.ratio else {
+        guard let ratio = aspect.ratio ?? paddedRatio(of: videoSize, padding: padding) else {
             guard let shorterSide else { return videoSize }
             let scale = shorterSide / videoShorterSide
             return CGSize(width: even(videoSize.width * scale), height: even(videoSize.height * scale))
@@ -149,11 +152,34 @@ extension CanvasLayout {
             : CGSize(width: even(shorter), height: even(shorter / ratio))
     }
 
+    /// The shorter side at which the unzoomed video keeps its own pixels inside the padding, so an export
+    /// at the original size never shrinks it. The preview keeps the video's shorter side instead, to stay
+    /// inside its frame budget.
+    nonisolated static func nativeShorterSide(for videoSize: CGSize, aspect: CanvasStyle.Aspect, padding: Double) -> CGFloat {
+        let (width, height) = (Double(videoSize.width), Double(videoSize.height))
+        let ratio = aspect.ratio ?? paddedRatio(of: videoSize, padding: padding) ?? width / height
+        // The side S whose space, less padding × S on each edge, holds the video at scale 1
+        let side = ratio >= 1
+            ? max(width / (ratio - 2 * padding), height / (1 - 2 * padding))
+            : max(width / (1 - 2 * padding), height / (1 / ratio - 2 * padding))
+        // Up to an even side, 2 px to spare: the long side is rounded to even too, and mustn't crop the video
+        return ((CGFloat(side) + 2) / 2).rounded(.up) * 2
+    }
+
+    /// The video's shape with `padding` (a share of the shorter side) on every side, or `nil` without any.
+    nonisolated private static func paddedRatio(of videoSize: CGSize, padding: Double) -> Double? {
+        guard padding > 0 else { return nil }
+        let long = max(videoSize.width, videoSize.height) / min(videoSize.width, videoSize.height)
+        let padded = (1 - 2 * padding) * long + 2 * padding
+        return videoSize.width >= videoSize.height ? padded : 1 / padded
+    }
+
     /// The video fitted inside the frame less `padding` on every side, centred, on whole pixels.
     nonisolated static func videoFrame(for videoSize: CGSize, in size: CGSize, padding: Double) -> CGRect {
         let inset = padding * min(size.width, size.height)
         let space = CGRect(origin: .zero, size: size).insetBy(dx: inset, dy: inset)
-        let scale = min(space.width / videoSize.width, space.height / videoSize.height)
+        // Never enlarged: a canvas rounded up a pixel or two leaves the video its own pixels, unresampled
+        let scale = min(1, space.width / videoSize.width, space.height / videoSize.height)
         let width = (videoSize.width * scale).rounded()
         let height = (videoSize.height * scale).rounded()
         return CGRect(x: ((size.width - width) / 2).rounded(), y: ((size.height - height) / 2).rounded(), width: width, height: height)

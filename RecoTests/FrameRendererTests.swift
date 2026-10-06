@@ -172,7 +172,7 @@ struct FrameRendererTests {
 
     /// A white background, the video in the middle with 10% padding and corners 15 px round: 320×240 px
     /// at (40, 30), four fifths of its size.
-    private let whiteFrame = CanvasStyle(padding: 0.1, cornerRadius: 0.05, shadow: 0, background: .color, color: RGBAColor(red: 1, green: 1, blue: 1, alpha: 1))
+    private let whiteFrame = CanvasStyle(aspect: .standard, padding: 0.1, cornerRadius: 0.05, shadow: 0, background: .color, color: RGBAColor(red: 1, green: 1, blue: 1, alpha: 1))
 
     @Test func drawsTheVideoWithRoundedCornersOnTheBackground() {
         let plan = plan(at: 0, canvas: whiteFrame)

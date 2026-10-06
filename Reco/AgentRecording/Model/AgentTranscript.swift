@@ -108,6 +108,39 @@ nonisolated struct AgentTranscript: Equatable, Sendable {
         return String(last)
     }
 
+    /// A message the chat draws as one bubble, or the run of tool steps between messages as one card.
+    nonisolated enum Group: Identifiable, Equatable, Sendable {
+        case request(Entry)
+        case reply(Entry)
+        case tools([Entry])
+
+        /// The first entry's, so a card keeps its identity while steps join it.
+        var id: String {
+            switch self {
+            case .request(let entry), .reply(let entry): entry.id
+            case .tools(let entries): entries[0].id
+            }
+        }
+    }
+
+    /// The entries as the chat shows them: consecutive tool steps together.
+    var groups: [Group] {
+        var groups: [Group] = []
+        for entry in entries {
+            switch entry.kind {
+            case .request: groups.append(.request(entry))
+            case .reply: groups.append(.reply(entry))
+            case .tool:
+                if case .tools(let steps)? = groups.last {
+                    groups[groups.count - 1] = .tools(steps + [entry])
+                } else {
+                    groups.append(.tools([entry]))
+                }
+            }
+        }
+        return groups
+    }
+
     static func == (lhs: AgentTranscript, rhs: AgentTranscript) -> Bool {
         lhs.entries == rhs.entries && lhs.session?.id == rhs.session?.id && lhs.session?.agent == rhs.session?.agent
     }

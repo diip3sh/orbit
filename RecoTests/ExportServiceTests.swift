@@ -62,7 +62,8 @@ struct ExportServiceTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         try await TestRecording.write(to: video, size: videoSize, frameCount: 15, frameRate: 30)
         let source = try await EditorSourceLoader.load(videoURL: video)
-        let project = EditorProject()
+        var project = EditorProject()
+        project.canvas.aspect = .standard
         let plan = await RenderPlan.build(project: project, source: source, resources: .none, target: RenderTarget(shorterSide: 120))
         var composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
         composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan, frameRate: 15)

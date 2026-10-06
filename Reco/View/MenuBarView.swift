@@ -16,7 +16,6 @@ struct MenuBarView: View {
     let editLastRecording: () -> Void
     let showLibrary: () -> Void
     let showWebRecording: () -> Void
-    let showAgentRecording: () -> Void
     let agentRecording: AgentRecordingViewModel
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
@@ -108,11 +107,6 @@ struct MenuBarView: View {
             if agentRecording.isRunning {
                 MenuBarActionButton(title: "Cancel Agent Recording", systemImage: "xmark.circle") {
                     agentRecording.cancel()
-                }
-            } else {
-                MenuBarActionButton(title: "Record with AI Agent…", systemImage: "sparkles", shortcut: .recordWithAgent) {
-                    showAgentRecording()
-                    dismiss()
                 }
             }
 
@@ -253,7 +247,6 @@ struct PermissionRow: View {
         editLastRecording: {},
         showLibrary: {},
         showWebRecording: {},
-        showAgentRecording: {},
         agentRecording: AgentRecordingViewModel(
             tools: AgentTools(settings: SettingsStore()) { _ in },
             reportFailure: { _ in },

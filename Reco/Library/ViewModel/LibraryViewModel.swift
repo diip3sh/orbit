@@ -20,7 +20,6 @@ final class LibraryViewModel {
         var recordArea: () -> Void = {}
         var recordWindowOrDisplay: () -> Void = {}
         var newWebRecording: () -> Void = {}
-        var recordWithAgent: () -> Void = {}
     }
 
     var section = LibrarySection.all
@@ -37,8 +36,8 @@ final class LibraryViewModel {
 
     let actions: Actions
 
-    /// A tile's picture at most, in pixels: 16:9 at twice its width on screen.
-    static let thumbnailSize = CGSize(width: 480, height: 270)
+    /// A tile's picture at most, in pixels: 16:10 at twice a wide tile's width on screen (320 pt).
+    static let thumbnailSize = CGSize(width: 640, height: 400)
 
     @ObservationIgnored private let folders: () -> LibraryFolders
     @ObservationIgnored private let openMovie: (URL) -> Void

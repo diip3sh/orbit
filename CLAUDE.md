@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 581 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 721 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -54,6 +54,12 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   `InspectorSection.swift`), and opening Web Recording crashed with `EXC_BAD_ACCESS` in an "outlined copy" of it.
   A crash in compiler-generated copy code right after such an edit: `rm -rf
   /tmp/bc-build/dd/Build/Intermediates.noindex/Reco.build` and rebuild.
+- Never subclass `NSHostingView<Content>` with a generic `Content`: Swift 6.3.3's Release optimizer
+  (Xcode 26.6, `EarlyPerfInliner`, x86_64 whole-module) crashes in the deinit of such a subclass. Measured
+  2026-10-05: Debug was fine and so was a local arm64 Release build, so it showed up only in CI's Release
+  job. `FirstMouseHostingView` (capture toolbar) and `NotchHostingView` (notch shelf) are
+  `NSHostingView<AnyView>`, their call sites wrapping the root in `AnyView(...)`. `xcodebuild`'s summary
+  hides a compiler crash like this; read the raw log or the `.xcresult` for it.
 - **Never launch an ad-hoc signed build.** Its designated requirement is pinned to its cdhash
   (`designated => cdhash H"…"`), which changes on every build, while TCC stores the cert-anchored
   requirement (`anchor apple generic and certificate leaf[subject.CN] = "Apple Development: …"`). So
@@ -252,9 +258,12 @@ was grabbed (`PanelDragger`), and a flick that projects past the screen's edge (
 throws it off at the release speed and closes it; a slow drag stays where dropped, a flick inwards too. Drag the shot into
 any app to drop the image. The card and the capture toolbar have no window shadow: it outlines
 the rectangle around their rounded glass. Nothing is written until **Save**. The card stays until
-closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate` wires
-`ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and `onDidCapture` to
-`show(_:)` for a new screenshot or `restore()` (same card, same place) when the capture is cancelled or fails.
+closed, copied, saved, pinned, or replaced by the next screenshot. **Esc** closes it, like the Close button and
+a flick: the panel is key while it shows, so `QuickAccessView` handles it (`.onExitCommand`), not the window.
+`AppDelegate` wires `ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and
+`onDidCapture` to `show(_:)` for a new screenshot or `restore()` (same card, same place) when the capture is
+cancelled or fails. The capture toolbar is hidden the same way but **isn't** brought back by a cancelled capture:
+it was only the way in, so Esc on an area selection closes that state and leaves the screen as it was.
 
 - **Copy** (C14): PNG data only; the button turns to ✓ Copied as the card starts closing, so it confirms during the
   fade. **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed
@@ -467,6 +476,12 @@ Key facts:
   radius (1.5%) and the shadow's blur (3%) are shares of it. An export at another size is drawn at
   that size, not scaled afterwards. Zoom and canvas placement are one transform, so the video is
   resampled once; the cursor is drawn at its final scale.
+- Exporting at the original size uses `CanvasLayout.nativeShorterSide`: a canvas just big enough that the
+  unzoomed video keeps its own pixels inside the padding (the preview keeps the video's shorter side, for
+  its frame budget). Exports shrink frames with `highQualityDownsample` (`RenderPlan.downsamplesSmoothly`);
+  linear sampling blurred a Retina recording's text at 1080p. Its export cost isn't measured yet.
+- With padding, Original grows by it (`CanvasLayout.paddedRatio`), so the padding is equal on every side; a
+  fixed shape whose ratio differs from the video's puts the rest on one axis.
 - Frames are drawn region by region (`CanvasLayout.regions`): the padding from the backdrop alone,
   the video in 8 bands, its rounded corners with the mask. Core Image evaluates every overlay
   across the whole region it renders; in bands it skips them where they aren't. Measured on an M1,
@@ -646,11 +661,19 @@ Key facts (measured on an M5, macOS 26.5, spec 0005):
   loads, and a frame call still in flight when the new page commits is ended (WebKit fails it only
   once garbage collected, 106 s measured). A 6 s 2× take of apple.com/macbook-pro that clicks Buy
   and scrolls the store rendered in 17.8 s.
+- **Requests:** a frame waits off the clock for the page's `fetch`/`XMLHttpRequest` calls and the bodies it reads
+  (`answerRequests` in `WebClockScript`), so a slow API's answer shows at once instead of the take running a step
+  ahead; 5 s at most, then those are forgotten (long polls, streams). Websockets and server-sent events aren't
+  counted. A 3 s apple.com take took 10.6–10.8 s with it, 10.3–10.9 s without.
 - **Loading:** a frame waits up to 5 s for images in view and fonts; what misses that isn't waited
   for again (a hung image cost one frame 5 s, not every frame). The first load waits for the page's
   `didFinish`, so a subresource that hangs from the start fails the take after a minute.
 - **Speed:** snapshots are painted on the CPU: 2880×1800 took 14 ms (simple page), 35 ms
   (apple.com) and 310 ms (linear.app; 64 ms at 1×). A 3 s apple.com take rendered in 8.5 s.
+  Measured again 2026-10-06 (apple.com 2×, per frame): snapshot 11–14 ms, append 2 ms; the frame step
+  waited 7 ms for a real animation frame (`settle`), now dropped since the snapshot forces a rendering
+  update anyway, and frames came out pixel-identical. A first render also waits for the page's images
+  (`loadInView`): 37 ms a frame cold against 1 ms warm.
 - The take and the preview share the default website data store, so a cookie banner dismissed in
   the preview stays dismissed in the take.
 - App Transport Security blocks plain `http://` pages (measured on neverssl.com); `http://localhost` loads.
@@ -695,9 +718,10 @@ Key facts:
 
 ### S4 — Agent recording (`feat/agent-bridge`, spec 0007)
 
-**Record with AI Agent…** in the menu bar and the Library, and the shortcut of the same name (Settings → Shortcuts →
-Web Recording, no default), open the Web Recording window on its Agent chat (`EditorWindowManager.showAgentChat()`,
-S5); the Spotlight-style bar it used to open was removed on 2026-10-02. Reco runs the agent's command line headlessly with only its own
+The agent is part of the one Web Recording window (**New Web Recording…**, and the Library's New): its **AI Agent** button
+at the toolbar's leading edge opens the chat panel on the left. The shortcut **Record with AI Agent** (Settings → Shortcuts →
+Web Recording, no default) and the failure notification's action open the same window with the panel open
+(`EditorWindowManager.showAgentChat()`, S5); the menu bar and the Library have no row of their own. The Spotlight-style bar it used to open was removed on 2026-10-02. Reco runs the agent's command line headlessly with only its own
 three MCP tools allowed; the agent records through the bridge (S3) and the editor opens. While it
 runs the bar and the menu bar (a sparkle, "AI", then the render's percent) show it; **Cancel** stops
 the command line. A failure shows its reason with **Retry** in the bar and in a notification.
@@ -739,8 +763,9 @@ Key facts:
 
 ### S5 — Agent chat (`feat/ui-polish`, spec 0008)
 
-The Web Recording window's right column, one fixed width (340 pt), holds the **Inspector** or the **Agent**
-chat: the toolbar's sidebar button and **AI Agent** each show theirs, or hide the column if it's showing: a chat with Claude Code or Cursor about the window's page. Their `stream-json`
+The Web Recording window is laid out like the editor: the **inspector** on the right (system `.inspector`, 340 pt,
+`showsInspector`), and the **Agent** chat on the left (340 pt and a hairline, `showsAgent`, hidden by default), which the toolbar's
+**AI Agent** button at the leading edge slides in and out from the leading edge: a chat with Claude Code or Cursor about the window's page. Their `stream-json`
 output (`AgentStreamEvent`, measured formats) fills `AgentRecordingViewModel.transcript` with requests,
 replies and tool steps; a follow-up resumes the conversation (`--resume`). Reco's tools report what the
 agent inspects and plans (`AgentTools.onInspected`/`onPlanned`), so the preview highlights its elements,
@@ -752,6 +777,13 @@ sits in the timeline header, not over the page. The header is laid out like the 
 that add a hover, click, typing or scroll (and delete the selected clip) on the left, Play in the middle, progress and
 the time on the right; Render is the accent button, like Export. The stage has no dot grid, only an edge and a soft shadow. Details and file map: `docs/specs/0008-agent-chat.md`.
 
+- **The chat's look** (iMessage-like): a header with the agent and model menus; the agent's words in light rounded
+  bubbles on the left, the user's in accent bubbles on the right, consecutive tool steps as one activity card
+  (`AgentTranscript.groups`), a typing indicator until the render starts and then a progress card, and a result card
+  once a run has a movie (`AgentRecordingViewModel.lastMovie`: the agent's own render, or the window's from its
+  staged plan) that opens it in the editor. The composer is a pill field with a round Send (Stop while running), under it
+  a round New Chat button and suggestion chips that fill the field without sending. Bubbles enter with a spring from
+  their own bottom corner (opacity only with Reduce Motion).
 - **Tests and a running Reco:** the test host is Reco, so a test run takes the bridge's socket from the
   running app. An agent run going at the time loses Reco, and its `--mcp` client starts a second copy.
   Don't run tests during an agent run; relaunch Reco after testing. `AgentToolsTests` render into a
@@ -911,19 +943,29 @@ and a white stop square, for any start (menu, shortcut, `reco://`); it goes once
 **Library…** in the menu bar, and clicking Reco in the Dock (`applicationShouldHandleReopen`), open Reco's
 main window, which stays open unlike the popover: a sidebar (All, Recordings, Web Recordings, Exports,
 Screenshots, with counts), a grid of pictures, search, and **New** (Capture Area/Window/Screen, Record
-Area…, Record Window or Display…, New Web Recording…, Record with AI Agent…). A click opens a movie in the
+Area…, Record Window or Display…, New Web Recording…). A click opens a movie in the
 editor and a screenshot in Preview; the context menu shows in Finder, copies (a screenshot as PNG, a movie
 as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`. The grid is under date
 headers, newest first: Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
-list the screenshot history folder (spec 0012).
+list the screenshot history folder (spec 0012). Down the right edge the dates repeat as a rail
+(`LibraryDateRail`), adapted from Chánh Đại's Line Nav: only a short line per date, 10 pt apart, that lengthens
+and brightens for the date at the top of the grid and for the one under the pointer, whose title shows to the
+line's left, over the grid, in large text with no background; a click scrolls the grid to it. The grid reserves only the lines'
+44 pt and hides the rail for a single date. The grid sits on the content colour (`controlBackgroundColor`): on the
+window's own colour it matched the sidebar within a few levels (55 against 57 in dark mode). Tiles are 16:10
+pictures that fill their frame (screenshots too, cropped), 10 pt continuous corners and a faint edge, with the
+name and, dimmed, the kind's symbol and the date under them. Which date is current is
+`LibraryDateGroup.active(in:headerTops:topLine:)`, fed by each header's own offset — a lazy grid measures
+only the headers it has built, so an unmeasured date is one below the fold and is skipped.
 
 | File | Role |
 |---|---|
 | `Library/Model/LibraryItem.swift` | Pure: kinds by name and type (`Reco_Web_` web, `-edited` export, `Reco_Screenshot_` PNG), companions, `LibrarySection` |
-| `Library/Model/LibraryDateGroup.swift` | Pure: `groups(of:now:calendar:)`, the date headers |
+| `Library/Model/LibraryDateGroup.swift` | Pure: `groups(of:now:calendar:)`, the date headers, and `active(in:headerTops:topLine:)`, which date the rail marks |
 | `Library/Service/LibraryStore.swift` | Lists the recordings, screenshot and history folders (a folder read once when two are the same; a history name also saved is listed from the screenshot folder), thumbnails (movie frame or `CGImageSource`), trash |
 | `Library/Service/FolderWatcher.swift` | `DispatchSource` vnode writes on all three folders, 0.3 s settle, so new saves show at once (a folder that doesn't exist yet isn't watched until the window is reopened; the history folder is made at launch) |
 | `Library/ViewModel/LibraryViewModel.swift`, `Library/View/` | Sections, search, intents; `Actions` wired in `AppDelegate`; window in `EditorWindowManager.showLibrary()` |
+| `Library/View/LibraryDateRail.swift` | The dates down the right edge: a line per date, the current one marked, its title on hover, a click that scrolls to it |
 
 - The screenshot folder is the Desktop by default, so only `Reco_Screenshot_*.png` there are listed; reading
   it is what asks for Desktop access the first time.
@@ -951,7 +993,8 @@ text sent to the agent never includes a password's value.
 A black shape over the notch of every screen (a 120×8 pt pill at the top centre where there is none). The pointer
 on it makes it peek (+7.5 pt each side, +5 down, shadow); staying 300 ms opens it into a 560 pt panel with the
 newest 20 screenshots (saved and history): click copies the PNG (tile says Copied for 1.2 s), drag drops the file.
-Collapses 500 ms after the pointer leaves. **Settings → General → Screenshot History → Show Screenshots in the Notch** (default on).
+Collapses 500 ms after the pointer leaves. **Settings → General → Screenshot History → Show Screenshots in the Notch** (default off).
+Hidden while a take records or saves (`AppDelegate.hideNotchShelfWhileRecording`), so a display recording never shows it as a bar over the notch, Show Reco or not. Hover rings a tile in the accent; a press dims and shrinks it on the frame it lands and lets go after 4 pt, so the file drag still starts.
 
 | File | Role |
 |---|---|

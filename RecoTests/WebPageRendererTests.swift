@@ -6,6 +6,7 @@
 import AVFoundation
 import CoreImage
 import Foundation
+import Network
 import Testing
 @testable import Reco
 
@@ -90,6 +91,24 @@ struct WebPageRendererTests {
         #expect(telemetry.cursor.map(\.location) == [CGPoint(x: 200, y: 130)])
         #expect(telemetry.cursorSprites.map(\.kind) == [.pointingHand, .arrow])
         #expect(telemetry.cursorShapes.map(\.sprite) == [0, 1])
+    }
+
+    @Test func waitsOffTheClockForThePagesRequests() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let server = try await SlowServer.start(answeringAfter: .seconds(3))
+        defer { server.stop() }
+        // Green once its request is answered: 3 s in real time, past the 1 s the take waits after loading,
+        // and at once on the take's clock
+        let script = Self.script(for: """
+            <!doctype html><html><body style="margin: 0; background: rgb(255, 255, 255)"><script>
+            fetch('http://127.0.0.1:\(server.port)/').then((response) => response.text())
+              .then(() => { document.body.style.background = 'rgb(0, 255, 0)'; });
+            </script></body></html>
+            """)
+
+        let movie = try await render(script).movie
+
+        #expect(try await pixel(at: CGPoint(x: 20, y: 20), frame: 0, of: movie).isClose(to: [0, 255, 0]))
     }
 
     @Test func holdsTheAnimationsThePagePauses() async throws {
@@ -344,6 +363,50 @@ struct WebPageRendererTests {
         generator.requestedTimeToleranceAfter = .zero
         let image = CIImage(cgImage: try await generator.image(at: CMTime(value: CMTimeValue(frame), timescale: 60)).image)
         return image.pixel(at: CGPoint(x: point.x, y: image.extent.height - 1 - point.y))
+    }
+}
+
+/// Answers every request after a delay with an empty 200 that any page may read, as a slow API would.
+private final class SlowServer: Sendable {
+    let port: UInt16
+    private let listener: NWListener
+
+    private init(listener: NWListener, port: UInt16) {
+        self.listener = listener
+        self.port = port
+    }
+
+    static func start(answeringAfter delay: Duration) async throws -> SlowServer {
+        let listener = try NWListener(using: .tcp, on: .any)
+        listener.newConnectionHandler = { connection in
+            connection.start(queue: .global())
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { _, _, _, _ in
+                Task {
+                    try? await Task.sleep(for: delay)
+                    let answer = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
+                    connection.send(content: Data(answer.utf8), completion: .contentProcessed { _ in connection.cancel() })
+                }
+            }
+        }
+        let port: UInt16 = try await withCheckedThrowingContinuation { continuation in
+            listener.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    listener.stateUpdateHandler = nil
+                    continuation.resume(returning: listener.port?.rawValue ?? 0)
+                case .failed(let error):
+                    listener.stateUpdateHandler = nil
+                    continuation.resume(throwing: error)
+                default: break
+                }
+            }
+            listener.start(queue: .global())
+        }
+        return SlowServer(listener: listener, port: port)
+    }
+
+    func stop() {
+        listener.cancel()
     }
 }
 
