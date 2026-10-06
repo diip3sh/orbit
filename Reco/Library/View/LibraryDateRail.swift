@@ -68,11 +68,13 @@ private struct LibraryDateRailDate: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .overlay(alignment: .leading) {
+        .overlay(alignment: .trailing) {
             if isHovered {
                 label
-                    // The chip's trailing edge a gap left of the row, so it never covers the lines
-                    .alignmentGuide(.leading) { [gap = EditorTheme.smallSpacing] in $0[.trailing] + gap }
+                    // Moved past the row by the line column and a gap, so it never covers the lines. An
+                    // alignment guide inside the overlay was ignored: the chip sat on its line and ran off
+                    // the window's edge.
+                    .offset(x: -(Self.lineColumn + EditorTheme.smallSpacing))
                     .transition(.opacity)
             }
         }
