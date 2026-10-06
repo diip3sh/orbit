@@ -47,8 +47,8 @@ struct MenuBarDivider: View {
 
 // MARK: - Toggle Row
 
-/// A menu bar style toggle with a switch on the right side. No hover highlight: only the switch is clickable,
-/// so a lit row would promise a click that does nothing.
+/// A menu bar style toggle with a switch on the right side. The whole row flips it, like Control Center's; it has
+/// no hover highlight, and the switch's own motion answers the click.
 struct MenuBarToggle: View {
     let name: String
     @Binding var isOn: Bool
@@ -57,18 +57,28 @@ struct MenuBarToggle: View {
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
-        HStack {
-            Text(name)
-                .font(.body.weight(.medium))
-                .foregroundStyle(isDisabled || !isEnabled ? .secondary : .primary)
-            Spacer()
-            Toggle("", isOn: $isOn)
-                .toggleStyle(.switch)
-                .scaleEffect(0.8)
-                .disabled(isDisabled)
+        Button {
+            isOn.toggle()
+        } label: {
+            HStack {
+                Text(name)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(isDisabled || !isEnabled ? .secondary : .primary)
+                Spacer()
+                Toggle("", isOn: $isOn)
+                    .toggleStyle(.switch)
+                    .scaleEffect(0.8)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .contentShape(.rect)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        // One switch to VoiceOver, not a button around a switch
+        .accessibilityRepresentation {
+            Toggle(name, isOn: $isOn)
+        }
     }
 }
 
