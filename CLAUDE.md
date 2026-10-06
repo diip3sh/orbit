@@ -476,6 +476,10 @@ Key facts:
   radius (1.5%) and the shadow's blur (3%) are shares of it. An export at another size is drawn at
   that size, not scaled afterwards. Zoom and canvas placement are one transform, so the video is
   resampled once; the cursor is drawn at its final scale.
+- Exporting at the original size uses `CanvasLayout.nativeShorterSide`: a canvas just big enough that the
+  unzoomed video keeps its own pixels inside the padding (the preview keeps the video's shorter side, for
+  its frame budget). Exports shrink frames with `highQualityDownsample` (`RenderPlan.downsamplesSmoothly`);
+  linear sampling blurred a Retina recording's text at 1080p. Its export cost isn't measured yet.
 - With padding, Original grows by it (`CanvasLayout.paddedRatio`), so the padding is equal on every side; a
   fixed shape whose ratio differs from the video's puts the rest on one axis.
 - Frames are drawn region by region (`CanvasLayout.regions`): the padding from the backdrop alone,
@@ -662,6 +666,10 @@ Key facts (measured on an M5, macOS 26.5, spec 0005):
   `didFinish`, so a subresource that hangs from the start fails the take after a minute.
 - **Speed:** snapshots are painted on the CPU: 2880×1800 took 14 ms (simple page), 35 ms
   (apple.com) and 310 ms (linear.app; 64 ms at 1×). A 3 s apple.com take rendered in 8.5 s.
+  Measured again 2026-10-06 (apple.com 2×, per frame): snapshot 11–14 ms, append 2 ms; the frame step
+  waited 7 ms for a real animation frame (`settle`), now dropped since the snapshot forces a rendering
+  update anyway, and frames came out pixel-identical. A first render also waits for the page's images
+  (`loadInView`): 37 ms a frame cold against 1 ms warm.
 - The take and the preview share the default website data store, so a cookie banner dismissed in
   the preview stays dismissed in the take.
 - App Transport Security blocks plain `http://` pages (measured on neverssl.com); `http://localhost` loads.

@@ -48,6 +48,10 @@ nonisolated struct RenderPlan: Sendable {
     /// What frames are drawn in: the recording's dynamic range, or SDR for a target that doesn't keep
     /// HDR. The overlays' images are already in its encoding.
     let dynamicRange: DynamicRange
+
+    /// Shrinks frames with Core Image's high-quality downsampling, as exports do: a 1080p export of a
+    /// Retina recording halves it, and plain linear sampling blurs its text. The preview skips it.
+    var downsamplesSmoothly = false
 }
 
 // MARK: - Building
@@ -107,7 +111,8 @@ extension RenderPlan {
             keystrokes: keystrokes,
             chipImages: labels.map { OverlayImages.encoded(OverlayImages.chip(label: $0, height: chipHeight), in: dynamicRange) },
             canvas: canvas,
-            dynamicRange: dynamicRange
+            dynamicRange: dynamicRange,
+            downsamplesSmoothly: target.shorterSide != nil
         )
     }
 

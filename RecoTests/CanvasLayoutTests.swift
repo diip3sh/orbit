@@ -34,6 +34,16 @@ struct CanvasLayoutTests {
         }
     }
 
+    @Test func anExportAtTheNativeSizeKeepsTheVideosOwnPixels() {
+        for video in [CGSize(width: 3420, height: 2224), CGSize(width: 1080, height: 1920)] {
+            for aspect in CanvasStyle.Aspect.allCases {
+                let side = CanvasLayout.nativeShorterSide(for: video, aspect: aspect, padding: 0.08)
+                let size = CanvasLayout.size(for: video, aspect: aspect, padding: 0.08, shorterSide: side)
+                #expect(CanvasLayout.videoFrame(for: video, in: size, padding: 0.08).size == video, "\(video) \(aspect)")
+            }
+        }
+    }
+
     @Test func fitsTheVideoInsideThePaddingOnWholePixels() {
         // 10% of 1,200 px on every side leaves 1,894×960 px, which the height limits to 1,280×960
         let frame = CanvasLayout.videoFrame(for: CGSize(width: 1600, height: 1200), in: CGSize(width: 2134, height: 1200), padding: 0.1)

@@ -135,7 +135,6 @@ enum WebClockScript {
         }
       }
 
-      const settle = () => new Promise((resolve) => realFrame(() => realTimeout(resolve, 0)));
       const inView = (element) => {
         const box = element.getBoundingClientRect();
         return box.width > 0 && box.bottom > 0 && box.right > 0 && box.top < innerHeight && box.left < innerWidth;
@@ -182,8 +181,9 @@ enum WebClockScript {
           if (base === null && document.readyState !== 'complete') return null;
           this.freeze(time);
           advance(base + time * 1000);
+          // No wait for a real frame: the snapshot that follows forces a rendering update, which runs
+          // the page's scroll handlers before it paints. Measured on apple.com at 2×, warm: 7 ms a frame
           window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
-          await settle();
           await loadInView();
           const boxes = {};
           for (const selector of selectors) {

@@ -190,13 +190,20 @@ final class EditorViewModel {
         set { edit("Audio", coalescing: true) { $0.audio = newValue } }
     }
 
-    /// The exported frame's size for a shorter side of `resolution` pixels, or the canvas's own.
+    /// The exported frame's size for a shorter side of `resolution` pixels, or the one that keeps the video's
+    /// own pixels.
     func exportSize(resolution: Int?) -> CGSize {
         guard let source else { return .zero }
         return CanvasLayout.size(
             for: source.naturalSize, aspect: project.canvas.aspect, padding: project.canvas.padding,
-            shorterSide: resolution.map { CGFloat($0) }
+            shorterSide: exportShorterSide(resolution)
         )
+    }
+
+    private func exportShorterSide(_ resolution: Int?) -> CGFloat? {
+        guard let source else { return nil }
+        return resolution.map { CGFloat($0) }
+            ?? CanvasLayout.nativeShorterSide(for: source.naturalSize, aspect: project.canvas.aspect, padding: project.canvas.padding)
     }
 
     /// Exports the edited video as `<name>-edited` next to the recording and returns where, or `nil`
@@ -205,7 +212,7 @@ final class EditorViewModel {
         await rebuild?.value
         guard let source, var composition else { return nil }
         // Drawn at the export's size, frame rate and dynamic range; otherwise the same as the preview
-        let target = RenderTarget(shorterSide: settings.resolution.map { CGFloat($0) }, keepsHDR: settings.format.keepsHDR)
+        let target = RenderTarget(shorterSide: exportShorterSide(settings.resolution), keepsHDR: settings.format.keepsHDR)
         let plan = await RenderPlan.build(project: project, source: source, resources: resources, target: target)
         composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan, frameRate: settings.frameRate.map { Double($0) })
         let url = settings.format.outputURL(for: videoURL)
