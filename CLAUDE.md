@@ -661,6 +661,10 @@ Key facts (measured on an M5, macOS 26.5, spec 0005):
   loads, and a frame call still in flight when the new page commits is ended (WebKit fails it only
   once garbage collected, 106 s measured). A 6 s 2× take of apple.com/macbook-pro that clicks Buy
   and scrolls the store rendered in 17.8 s.
+- **Requests:** a frame waits off the clock for the page's `fetch`/`XMLHttpRequest` calls and the bodies it reads
+  (`answerRequests` in `WebClockScript`), so a slow API's answer shows at once instead of the take running a step
+  ahead; 5 s at most, then those are forgotten (long polls, streams). Websockets and server-sent events aren't
+  counted. A 3 s apple.com take took 10.6–10.8 s with it, 10.3–10.9 s without.
 - **Loading:** a frame waits up to 5 s for images in view and fonts; what misses that isn't waited
   for again (a hung image cost one frame 5 s, not every frame). The first load waits for the page's
   `didFinish`, so a subresource that hangs from the start fails the take after a minute.

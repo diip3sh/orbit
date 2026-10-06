@@ -20,6 +20,9 @@ import Foundation
 ///   `animation-play-state`, holds its time.
 /// - A frame waits up to 5 s for the images in view and the fonts to load; what misses that isn't
 ///   waited for again.
+/// - A frame first waits, off the clock, for the page's `fetch` and `XMLHttpRequest` calls (and the
+///   bodies it reads) to be answered, so a slow API shows its answer at once instead of putting the take a
+///   step ahead of the page. Up to 5 s: a long poll or a stream isn't waited for again.
 /// - `window.__reco` holds what the renderer calls: `frame(time, x, y, selectors)` freezes
 ///   the clock at the take's `time` on its first call, then steps it; it returns `null` while a new
 ///   page is still loading. `hold(x, y)` seeks animations the pointer just started and names the
@@ -135,6 +138,33 @@ enum WebClockScript {
         }
       }
 
+      // Requests the page is waiting on. A frame waits off the clock until they're answered (or 5 s, after
+      // which those are forgotten), then the images their answers put in view load as above
+      const requests = new Set();
+      function track(promise) {
+        const token = {};
+        requests.add(token);
+        const done = () => requests.delete(token);
+        promise.then(done, done);
+        return promise;
+      }
+      const realFetch = window.fetch.bind(window);
+      window.fetch = (...args) => track(realFetch(...args));
+      for (const read of ['arrayBuffer', 'blob', 'formData', 'json', 'text']) {
+        const realRead = Response.prototype[read];
+        Response.prototype[read] = function () { return track(realRead.call(this)); };
+      }
+      const realSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function (...args) {
+        track(new Promise((resolve) => this.addEventListener('loadend', resolve, { once: true })));
+        return realSend.apply(this, args);
+      };
+      async function answerRequests() {
+        const deadline = realNow() + 5000;
+        while (requests.size && realNow() < deadline) await new Promise((resolve) => realTimeout(resolve, 10));
+        requests.clear();
+      }
+
       const inView = (element) => {
         const box = element.getBoundingClientRect();
         return box.width > 0 && box.bottom > 0 && box.right > 0 && box.top < innerHeight && box.left < innerWidth;
@@ -184,6 +214,7 @@ enum WebClockScript {
           // No wait for a real frame: the snapshot that follows forces a rendering update, which runs
           // the page's scroll handlers before it paints. Measured on apple.com at 2×, warm: 7 ms a frame
           window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
+          await answerRequests();
           await loadInView();
           const boxes = {};
           for (const selector of selectors) {
