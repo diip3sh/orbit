@@ -339,20 +339,29 @@ are refused, since the Library tells kinds apart by file name alone. Back is a b
 forward always disabled) in the title bar, in front of the recording's name (`ControlGroup`'s navigation style is a capsule only in a
 toolbar; in the inspector it drew a bordered box). **Back**/Esc returns; Esc is Cancel while an export runs, and Back is disabled then. Export opens and leaves on a
 paused frame, and the editor's keys (S, Z, ⌫, arrows, Space) go with the transport. `ExportSession` holds one visit's settings,
-running export and result, so the toolbar and the inspector share it. It writes
-`<name>-edited.mp4` (HEVC, H.264) or `.mov` (ProRes 422) next to the recording, then offers **Share…** (`ShareLink`: AirDrop, Mail,
-Messages…) and **Show in Finder**. The inspector's File section shows duration, size, frame rate and container; the file's real
-size joins them once it exists. There is no estimate before: it depends on the content, and a wrong number is worse than none.
+running export and result, so the toolbar and the inspector share it. The inspector is laid out in this order: **Export As**
+(MP4 (HEVC), ProRes, GIF), **Output Size** (Original, 720p, 1080p, 4K, with the pixel size under it; only sizes under the canvas's are
+enabled), **Frame Rate** (15, 30, 60 fps; not above the recording's, and a GIF's at most 30) and **Quality** (Studio, Social Media, Web,
+Web (Low), as rows each with its estimated size; none for a GIF, whose size depends on what's on screen). Under a line, **Export ↩**
+writes `<name>-edited.mp4`, `.mov` (ProRes 422, or 4444 when the canvas is transparent) or `.gif` next to the recording, then offers
+**Share…** (`ShareLink`: AirDrop, Mail, Messages…) and **Show in Finder** with the file's real size; **Copy to Clipboard ⌘↩** exports the
+same file to a temporary folder and puts its URL (and a GIF's data) on the pasteboard (`FilePasteboard`). Under the buttons, "Estimated max
+size" for the chosen quality. The estimate is honest because the export encodes to a bitrate it sets itself: MP4 at 0.20, 0.10, 0.05 and
+0.025 bits per pixel per frame for the four qualities (plus AAC at 128 kbit/s), ProRes 422 as HQ, 422, LT and Proxy at Apple's target
+rates for 1080p29.97 scaled to the size and frame rate (220, 147, 102, 45 Mbit/s; 4444: 330) with 16-bit PCM audio, all times the output
+duration (`ExportSettings.estimatedBytes`). Measured on 640×360 frames of grain, 2 s: the MP4's average bitrate came out at 1.06, 1.07 and
+1.05 times the target for Studio, Social Media and Web; Web (Low), whose 0.025 is under what that content costs at the encoder's coarsest,
+came out at 1.55. Flat frames come out far under, so the number is a maximum.
 Web Recording has no export of its own: Render opens the editor, and this is its export.
 
 | File | Role |
 |---|---|
 | `Editor/Render/RenderPlan.swift` | `Sendable` snapshot built off the main actor on every edit: click markers already in Core Image pixels, keystroke chips, and images drawn once (`OverlayImages`) |
 | `Editor/Render/FrameRenderer.swift` | `(source frame, source time, plan) -> CIImage`; the only place pixels are decided |
-| `Editor/Render/EditorCompositor.swift`, `EditorInstruction.swift`, `CompositionBuilder.swift` | `AVVideoCompositing` with one shared `CIContext`; the instruction carries the plan; the same video composition feeds `AVPlayerItem` and `AVAssetExportSession` |
+| `Editor/Render/EditorCompositor.swift`, `EditorInstruction.swift`, `CompositionBuilder.swift` | `AVVideoCompositing` with one shared `CIContext`; the instruction carries the plan; the same video composition feeds `AVPlayerItem` and the export's reader |
 | `Editor/Service/KeyLabelFormatter.swift` | Key code + modifiers → "⇧⌘K" with the current layout (`UCKeyTranslate`); TIS is read on the main actor only |
-| `Editor/Service/ExportService.swift` | `AVAssetExportSession.export(to:as:)` + `states(updateInterval:)`; cancelling the task cancels it |
-| `Editor/View/EditorInspectorSections.swift`, `ExportOptions.swift`, `Editor/ViewModel/ExportSession.swift` | Style controls (bound through `EditorViewModel.clickHighlights`/`keystrokes`); export's options (format, size, frame rate, file facts, progress) and its state |
+| `Editor/Service/ExportService.swift`, `MovieEncoder.swift`, `GIFEncoder.swift`, `GIFMuxer.swift` | The export: an `AVAssetReader` (the composition's frames and the mixed audio) feeding an `AVAssetWriter` (HEVC at the quality's average bitrate in MP4, a ProRes flavour in MOV, AAC or PCM), fed per input on a queue with `requestMediaDataWhenReady`; cancelling the task stops the reader and removes the partial file. A GIF is written a frame at a time: ImageIO encodes each frame on its own and `GIFMuxer` joins them (ImageIO's own animated GIF holds every frame until the end: 19 GB for 30 s of 1786×1080 at 30 fps, against 54 MB above idle this way, measured), each delay in whole centiseconds from the cumulative rounding |
+| `Editor/View/EditorInspectorSections.swift`, `ExportOptions.swift`, `Editor/ViewModel/ExportSession.swift` | Style controls (bound through `EditorViewModel.clickHighlights`/`keystrokes`); export's options (format, size, frame rate, quality, actions, progress) and its state; `Model/ExportSettings.swift` (pure: availability rules and size estimates), `ExportQuality.swift`, `ExportFormat.swift`, `ExportDestination.swift` |
 
 Key facts:
 - **Privacy:** keystrokes show only shortcuts (⌘/⌃/⌥) and special keys unless "Show All Keys" is on.
@@ -476,8 +485,8 @@ Key facts:
 
 The recording sits on a canvas: a shape (original, 16:9, 9:16, 1:1, 4:3), a gradient, color,
 picture or transparent background, padding, rounded corners and a shadow. New projects get the
-styled default. Export picks a size and frame rate, and adds ProRes 4444, which keeps a
-transparent background; HDR recordings stay HDR in HEVC and ProRes. The Library (S7) lists
+styled default. Export picks a format (MP4, ProRes, GIF), size, frame rate and quality, and ProRes becomes 4444, which keeps a
+transparent background; HDR recordings stay HDR in MP4 and ProRes. The Library (S7) lists
 the recordings with pictures; a click opens one in the editor.
 
 | File | Role |
@@ -488,7 +497,7 @@ the recordings with pictures; a click opens one in the editor.
 | `Editor/Render/RenderResources.swift`, `RenderTarget.swift` | What plans draw with from the system (key labels, arrow, background picture); what a plan is for (the preview, or an export's size and dynamic range) |
 | `Editor/Render/HDREditorCompositor.swift`, `Editor/Model/DynamicRange.swift` | 10-bit or half-float frames in, half-float out; SDR, PQ or HLG from the track's transfer function |
 | `Editor/Service/BackgroundImageLoader.swift` | Security-scoped bookmark to the chosen picture, read upright, in sRGB, at most 4096 px |
-| `Editor/Model/ExportSettings.swift`, `Editor/View/ExportOptions.swift` | Format, size (a shorter side) and frame rate; only smaller ones are offered |
+| `Editor/Model/ExportSettings.swift`, `Editor/View/ExportOptions.swift` | Format, quality, size (a shorter side: 720, 1080, 2160, only those under the canvas's) and frame rate (15, 30, 60, not above the recording's; a GIF's at most 30: 60 fps delays are 1 or 2 cs, which browsers slow to 10 cs); the quality's estimated sizes |
 
 Key facts:
 - The canvas keeps the video's shorter side (9:16 from 4K is 2160×3840), and padding (8%), corner
@@ -506,7 +515,7 @@ Key facts:
   across the whole region it renders; in bands it skips them where they aren't. Measured on an M1,
   Debug, 4K with a ring and a chip, load average 4–6: 3 ms p50 plain (7 drawn whole), 3.7–5 ms on
   the default canvas (9 whole), p95 under 7.5 ms. The backdrop takes 4 ms to draw (17 the first time).
-- A transparent background keeps its alpha only in ProRes 4444; other formats export it black.
+- A transparent background keeps its alpha only in ProRes 4444 (the ProRes tab's 4444 when the canvas is transparent); other formats export it black.
 - HDR frames are drawn without color management too: the plan draws its overlays once in the
   recording's encoding (`OverlayImages.encoded`), SDR white at 203 nits (BT.2408). Their
   semi-transparent parts (the chip's backing, the cursor's shadow, a fading ring) blend in PQ's
@@ -514,7 +523,7 @@ Key facts:
   ring and a chip, load average 2–3: 4–4.6 ms p50 and 5–8 ms p95, against 6.7–8.1 and 10–13 with
   a color-managed context; SDR took 3–3.5 in the same runs. Converting the backdrop costs 9–11 ms
   more per HDR plan (20 the first time), alongside the camera and cursor. The composition is
-  tagged BT.2020 and the recording's PQ or HLG; H.264 exports are SDR.
+  tagged BT.2020 and the recording's PQ or HLG; GIF exports are SDR.
 
 ### S1 — Editor design (`feat/editor-shell`)
 
@@ -542,7 +551,7 @@ slate gradient.
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the transport in the timeline's header |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart; a line at each label, dots between; labels carry their units, "0.5s", "1m 30s", "1h", since a clock's "0:00.5" didn't say what it counted), the playhead's knob, the zoom blocks |
 | `Editor/View/Inspector*.swift`, `EditorInspectorSections.swift`, `TickSlider.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | `EditorInspector` and its sections, which fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides. Every slider is a `TickSlider`: a track with ticks, accent fill up to a bar at the value, dragged 1:1 from the grab (a press away from the bar takes it there first), VoiceOver adjustable in 20 steps, without a focus ring |
-| `Editor/View/ExportOptions.swift`, `ExportProgressBar.swift` | Export's inspector: formats as rows with what each is for, size and frame rate as `SegmentedChoice`, the file's facts, the action pinned under a line; progress |
+| `Editor/View/ExportOptions.swift`, `ExportProgressBar.swift` | Export's inspector: format, size and frame rate as `SegmentedChoice` tabs (an option can be disabled), the quality as rows with their estimated sizes, Export and Copy to Clipboard (side by side, or stacked when the column is narrow) pinned under a line; progress |
 
 Key facts:
 - Glass only on controls over the stage, never on the timeline (content) or over the live video:

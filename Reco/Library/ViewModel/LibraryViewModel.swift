@@ -119,9 +119,9 @@ final class LibraryViewModel {
         NSWorkspace.shared.activateFileViewerSelecting([item.url])
     }
 
-    /// A screenshot as its PNG, to paste anywhere; a movie as its file, to drop into an app.
+    /// A screenshot as its PNG, to paste anywhere; a movie or GIF as its file, to drop into an app.
     func copy(_ item: LibraryItem) {
-        if !item.isMovie, let png = try? Data(contentsOf: item.url) {
+        if item.kind == .screenshot, let png = try? Data(contentsOf: item.url) {
             ImagePasteboard.copy(png: png, to: pasteboard)
         } else {
             pasteboard.clearContents()

@@ -5,52 +5,28 @@
 //  Created by Diip3sh on 26.09.26.
 //
 
-import AVFoundation
+import Foundation
 
-/// The codecs an edited video can be exported with, each an `AVAssetExportSession` preset.
-nonisolated enum ExportFormat: String, CaseIterable, Identifiable, Sendable {
-    case hevc = "HEVC"
-    case h264 = "H.264"
-    case proRes422 = "ProRes 422"
-    case proRes4444 = "ProRes 4444"
+/// The files an edited video can be exported as: MP4 (HEVC), a ProRes movie, or an animated GIF.
+nonisolated enum ExportFormat: CaseIterable, Identifiable, Sendable {
+    case mp4
+    case proRes
+    case gif
 
     /// Added to the recording's name for its export.
     static let nameSuffix = "-edited"
 
     var id: Self { self }
 
-    var preset: String {
-        switch self {
-        case .hevc: AVAssetExportPresetHEVCHighestQuality
-        case .h264: AVAssetExportPresetHighestQuality
-        case .proRes422: AVAssetExportPresetAppleProRes422LPCM
-        case .proRes4444: AVAssetExportPresetAppleProRes4444LPCM
-        }
-    }
-
-    /// MP4, which plays everywhere, except for ProRes, which needs QuickTime's container.
-    var fileType: AVFileType {
-        switch self {
-        case .hevc, .h264: .mp4
-        case .proRes422, .proRes4444: .mov
-        }
-    }
-
-    /// Whether an HDR recording stays HDR; H.264 exports it in SDR.
-    var keepsHDR: Bool {
-        self != .h264
-    }
-
-    /// Whether a transparent background stays transparent; other formats export it black.
-    var keepsTransparency: Bool {
-        self == .proRes4444
-    }
-
     var fileExtension: String {
-        fileType == .mov ? "mov" : "mp4"
+        switch self {
+        case .mp4: "mp4"
+        case .proRes: "mov"
+        case .gif: "gif"
+        }
     }
 
-    /// `<name>-edited.<mp4|mov>` next to the recording.
+    /// `<name>-edited.<mp4|mov|gif>` next to the recording.
     func outputURL(for videoURL: URL) -> URL {
         let name = videoURL.deletingPathExtension().lastPathComponent + Self.nameSuffix
         return videoURL.deletingLastPathComponent().appending(path: name).appendingPathExtension(fileExtension)

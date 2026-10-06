@@ -12,19 +12,24 @@ import Testing
 @MainActor
 struct ExportSessionTests {
 
-    @Test func aTransparentCanvasStartsInTheOnlyFormatThatKeepsIt() {
-        #expect(ExportSettings.initial(transparentCanvas: true).format == .proRes4444)
-        #expect(ExportSettings.initial(transparentCanvas: false).format == .hevc)
-        #expect(ExportSettings.initial(transparentCanvas: false).resolution == nil)
-        #expect(ExportSettings.initial(transparentCanvas: false).frameRate == nil)
-    }
-
     @Test func aSessionStartsWithTheCanvasDefaultAndNothingExported() {
         let session = ExportSession(viewModel: EditorViewModel(videoURL: URL(filePath: "/tmp/none.mov")))
         #expect(session.settings == ExportSettings.initial(transparentCanvas: false))
         #expect(!session.isExporting)
         #expect(session.exported == nil)
         #expect(session.exportedBytes == nil)
+        #expect(!session.copied)
+        // Nothing is loaded to estimate from
+        #expect(session.estimatedBytes() == nil)
+    }
+
+    @Test func copyingExportsToo() {
+        let session = ExportSession(viewModel: EditorViewModel(videoURL: URL(filePath: "/tmp/none.mov")))
+        session.copy()
+        #expect(session.isExporting)
+        session.cancel()
+        #expect(!session.isExporting)
+        #expect(!session.copied)
     }
 
     @Test func cancellingStopsTheExport() async {

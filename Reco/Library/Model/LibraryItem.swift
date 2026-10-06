@@ -29,9 +29,9 @@ nonisolated struct LibraryItem: Identifiable, Hashable, Sendable {
         url.deletingPathExtension().lastPathComponent
     }
 
-    /// Whether it opens in the editor, rather than in the system's viewer.
+    /// Whether it opens in the editor, rather than in the system's viewer: a GIF export is an image.
     var isMovie: Bool {
-        kind != .screenshot
+        kind != .screenshot && url.pathExtension != "gif"
     }
 
     /// The files that go with it: a recording's telemetry and editor project beside the movie. Moving
@@ -41,12 +41,13 @@ nonisolated struct LibraryItem: Identifiable, Hashable, Sendable {
         return [InputTelemetry.sidecarURL(for: url), EditorProject.fileURL(for: url)]
     }
 
-    /// What a file in the recordings folder is: movies only, an export when the editor named it so, a
-    /// web recording by the name renders get.
+    /// What a file in the recordings folder is: movies only, and an export when the editor named it so, which
+    /// may be a GIF too; a web recording by the name renders get.
     static func recordingKind(of url: URL, contentType: UTType?) -> Kind? {
-        guard contentType?.conforms(to: .movie) == true else { return nil }
         let name = url.deletingPathExtension().lastPathComponent
-        if name.hasSuffix(ExportFormat.nameSuffix) {
+        let isExport = name.hasSuffix(ExportFormat.nameSuffix)
+        guard contentType?.conforms(to: .movie) == true || (isExport && contentType?.conforms(to: .gif) == true) else { return nil }
+        if isExport {
             return .export
         }
         return name.hasPrefix(webRecordingPrefix) ? .webRecording : .recording

@@ -116,10 +116,10 @@ struct PauseCutExportTests {
         #expect(source.telemetry != nil, "\(String(describing: source.telemetryError))")
         let plan = await RenderPlan.build(project: project, source: source, resources: resources)
         let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
-        let output = ExportFormat.h264.outputURL(for: result.url)
+        let output = ExportFormat.mp4.outputURL(for: result.url)
         defer { try? FileManager.default.removeItem(at: output) }
 
-        try await ExportService.export(composition, to: output, as: .h264) { _ in }
+        try await ExportService.export(composition, to: output, as: ExportSettings(quality: .studio)) { _ in }
 
         let exportedDuration = try await AVURLAsset(url: output).load(.duration).seconds
         #expect(abs(exportedDuration - 2.5) < 1.0 / Double(frameRate), "the cut and the pause are gone")

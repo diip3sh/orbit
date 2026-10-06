@@ -211,21 +211,23 @@ final class EditorViewModel {
             ?? CanvasLayout.nativeShorterSide(for: source.naturalSize, aspect: project.canvas.aspect, padding: project.canvas.padding)
     }
 
-    /// Exports the edited video as `<name>-edited` next to the recording and returns where, or `nil`
-    /// while the recording isn't loaded. Cancelling the calling task cancels the export.
-    func export(_ settings: ExportSettings) async throws -> URL? {
+    /// Exports the edited video as `<name>-edited` to `destination` and returns where, or `nil` while the
+    /// recording isn't loaded. Cancelling the calling task cancels the export.
+    func export(_ settings: ExportSettings, to destination: ExportDestination = .recordingFolder) async throws -> URL? {
         await rebuild?.value
         guard let source, var composition else { return nil }
         // Drawn at the export's size, frame rate and dynamic range; otherwise the same as the preview
-        let target = RenderTarget(shorterSide: exportShorterSide(settings.resolution), keepsHDR: settings.format.keepsHDR)
+        let target = RenderTarget(shorterSide: exportShorterSide(settings.resolution), keepsHDR: settings.keepsHDR)
         let plan = await RenderPlan.build(project: project, source: source, resources: resources, target: target)
-        composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan, frameRate: settings.frameRate.map { Double($0) })
-        let url = settings.format.outputURL(for: videoURL)
+        composition.videoComposition = CompositionBuilder.videoComposition(
+            for: source, plan: plan, frameRate: settings.outputFrameRate(recordingRate: source.frameRate)
+        )
+        let url = destination.outputURL(for: videoURL, format: settings.format)
         exportProgress = 0
         defer { exportProgress = nil }
 
         do {
-            try await ExportService.export(composition, to: url, as: settings.format) { [weak self] in
+            try await ExportService.export(composition, to: url, as: settings) { [weak self] in
                 self?.exportProgress = $0
             }
         } catch {

@@ -49,9 +49,9 @@ struct CompositionBuilderTests {
         let project = EditorProject(cuts: [0.2..<0.5])
         let plan = await RenderPlan.build(project: project, source: source, resources: .none)
         let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
-        let output = ExportFormat.h264.outputURL(for: video)
+        let output = ExportFormat.mp4.outputURL(for: video)
 
-        try await ExportService.export(composition, to: output, as: .h264) { _ in }
+        try await ExportService.export(composition, to: output, as: ExportSettings(quality: .studio)) { _ in }
 
         let exported = AVURLAsset(url: output)
         #expect(abs(try await exported.load(.duration).seconds - 0.7) < 1.0 / 30)

@@ -19,9 +19,10 @@ enum TestRecording {
 
     /// Writes an H.264 recording of flat grey frames, frame `n` at level `level(n)` in every channel,
     /// with a 440 Hz tone on one 16-bit PCM audio track when `withTone` is set. With `hdr`, it's
-    /// HDR10 instead: HEVC Main 10, BT.2020 and PQ, `level` setting every byte of 10-bit samples.
+    /// HDR10 instead: HEVC Main 10, BT.2020 and PQ, `level` setting every byte of 10-bit samples. With `noisy`,
+    /// every SDR frame has random blocks of color and grain instead, for a bitrate test.
     static func write(
-        to url: URL, size: CGSize, frameCount: Int, frameRate: Int32, withTone: Bool = false, hdr: Bool = false,
+        to url: URL, size: CGSize, frameCount: Int, frameRate: Int32, withTone: Bool = false, hdr: Bool = false, noisy: Bool = false,
         level: (Int) -> UInt8 = { _ in 0 }
     ) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
@@ -34,7 +35,9 @@ enum TestRecording {
                 AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
             ]
         ] : [
-            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: size.width, AVVideoHeightKey: size.height
+            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: size.width, AVVideoHeightKey: size.height,
+            // Grain at the default bitrate decodes to mush, which re-encodes far below any target
+            AVVideoCompressionPropertiesKey: noisy ? [AVVideoQualityKey: 1.0] as [String: Any] : [:]
         ])
         writer.add(input)
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: nil)
@@ -55,7 +58,7 @@ enum TestRecording {
             while !input.isReadyForMoreMediaData {
                 try await Task.sleep(for: .milliseconds(5))
             }
-            let frame = try frame(size: size, format: hdr ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange : kCVPixelFormatType_32BGRA, level: level(index))
+            let frame = try frame(size: size, format: hdr ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange : kCVPixelFormatType_32BGRA, level: level(index), noisy: noisy)
             adaptor.append(frame, withPresentationTime: CMTime(value: CMTimeValue(index), timescale: frameRate))
         }
         input.markAsFinished()
@@ -64,8 +67,8 @@ enum TestRecording {
         #expect(writer.status == .completed, "\(String(describing: writer.error))")
     }
 
-    /// A frame with every byte of every plane set to `level`.
-    private static func frame(size: CGSize, format: OSType, level: UInt8) throws -> CVPixelBuffer {
+    /// A frame with every byte of every plane set to `level`, with random blocks of color and grain over it when `noisy`.
+    private static func frame(size: CGSize, format: OSType, level: UInt8, noisy: Bool) throws -> CVPixelBuffer {
         var pixelBuffer: CVPixelBuffer?
         CVPixelBufferCreate(nil, Int(size.width), Int(size.height), format, nil, &pixelBuffer)
         let frame = try #require(pixelBuffer)
@@ -77,9 +80,36 @@ enum TestRecording {
             }
         } else {
             memset(CVPixelBufferGetBaseAddress(frame), Int32(level), CVPixelBufferGetDataSize(frame))
+            if noisy {
+                scatterBlocks(in: frame)
+            }
         }
         CVPixelBufferUnlockBaseAddress(frame, [])
         return frame
+    }
+
+    /// 32×32 blocks of random colors, new in every frame, under a grain of ±20 levels per sample: an encoder
+    /// needs a high bitrate for the grain and, with so little else changing, can get far lower if it's told to.
+    /// Unlike plain noise, whose bitrate stays near 0.5 bits per pixel whatever it's asked for.
+    private static func scatterBlocks(in frame: CVPixelBuffer) {
+        let size = 32
+        let (width, height, rowBytes) = (CVPixelBufferGetWidth(frame), CVPixelBufferGetHeight(frame), CVPixelBufferGetBytesPerRow(frame))
+        let base = CVPixelBufferGetBaseAddress(frame)!.assumingMemoryBound(to: UInt8.self)
+        var grain = [UInt8](repeating: 0, count: rowBytes * height)
+        arc4random_buf(&grain, grain.count)
+        var colors: [UInt8] = []
+        for _ in 0..<(3 * (width / size + 1) * (height / size + 1)) {
+            colors.append(.random(in: 20...235))
+        }
+        for row in 0..<height {
+            for column in 0..<width {
+                let block = (row / size) * (width / size + 1) + column / size
+                for channel in 0..<3 {
+                    let offset = row * rowBytes + column * 4 + channel
+                    base[offset] = UInt8(Int(colors[3 * block + channel]) + Int(grain[offset] % 41) - 20)
+                }
+            }
+        }
     }
 
     /// `duration` seconds of the tone, 48 kHz mono, in one sample buffer.
