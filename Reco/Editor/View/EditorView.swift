@@ -76,8 +76,6 @@ struct EditorView: View {
         // SwiftUI shrank the window to it (900×592) as it opened, whatever size it was given
         .frame(minWidth: 900, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)
         .editorWindowBackground()
-        // The window's name, for the Window menu; the title bar shows the name field in its place
-        .navigationTitle(viewModel.videoURL.deletingPathExtension().lastPathComponent)
         .editorMotion(.smooth, value: viewModel.source == nil)
         .task {
             await viewModel.load()
@@ -108,6 +106,12 @@ struct EditorView: View {
             .disabled(export?.isExporting == true)
         }
         .hidingSharedBackground()
+        // With the window's title hidden nothing pushes the buttons to the trailing edge: this does
+        if #available(macOS 26, *) {
+            ToolbarSpacer(.flexible, placement: .primaryAction)
+        } else {
+            ToolbarItem(placement: .primaryAction) { Spacer() }
+        }
         if let export {
             // Where Export… was, so the two swap in place
             ToolbarItem(placement: .primaryAction) {

@@ -17,30 +17,22 @@ struct RecordingNameField: View {
     let rename: (String) -> Void
 
     @State private var draft = ""
-    @FocusState private var isFocused: Bool
 
     var body: some View {
         if isRenaming {
-            TextField("Name", text: $draft)
-                .textFieldStyle(.plain)
+            // Sized by the text, between the limits, with the field laid over it
+            Text(draft.isEmpty ? " " : draft)
                 .font(.headline)
-                .frame(minWidth: Self.minimumWidth, maxWidth: Self.maximumWidth)
+                .lineLimit(1)
+                .padding(.trailing, Self.padding)
+                .hidden()
+                .frame(minWidth: Self.minimumWidth, maxWidth: Self.maximumWidth, alignment: .leading)
                 .fixedSize(horizontal: true, vertical: false)
+                .overlay {
+                    NameEditor(text: $draft, onEnd: finish) { isRenaming = false }
+                }
                 .padding(.horizontal, Self.padding)
-                .focused($isFocused)
-                .onSubmit(finish)
-                .onExitCommand { isRenaming = false }
-                .onChange(of: isFocused) { _, isFocused in
-                    if !isFocused {
-                        finish()
-                    }
-                }
-                .task {
-                    isFocused = true
-                    // Once the field has taken focus and has its text editor
-                    await Task.yield()
-                    NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
-                }
+                .accessibilityElement(children: .contain)
                 .accessibilityLabel("Recording name")
         } else {
             Button {
@@ -74,6 +66,67 @@ struct RecordingNameField: View {
         if !draft.isEmpty, draft != name {
             rename(draft)
         }
+    }
+}
+
+/// The field itself, in AppKit: `@FocusState` didn't reach a text field in the window's toolbar (focus set as
+/// it appeared was lost, and typing went nowhere), and its field editor took Esc before `onExitCommand` saw it.
+private struct NameEditor: NSViewRepresentable {
+    @Binding var text: String
+
+    /// Return, or focus leaving the field
+    let onEnd: () -> Void
+
+    /// Esc
+    let onCancel: () -> Void
+
+    func makeNSView(context: Context) -> FocusedTextField {
+        let field = FocusedTextField(string: text)
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .preferredFont(forTextStyle: .headline)
+        field.cell?.isScrollable = true
+        field.delegate = context.coordinator
+        return field
+    }
+
+    func updateNSView(_ field: FocusedTextField, context: Context) {
+        context.coordinator.parent = self
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: NameEditor
+
+        init(parent: NameEditor) {
+            self.parent = parent
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            parent.text = (notification.object as? NSTextField)?.stringValue ?? parent.text
+        }
+
+        func controlTextDidEndEditing(_ notification: Notification) {
+            parent.onEnd()
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            guard selector == #selector(NSResponder.cancelOperation(_:)) else { return false }
+            parent.onCancel()
+            return true
+        }
+    }
+}
+
+/// Takes focus, its text selected, as soon as it is in the window.
+private final class FocusedTextField: NSTextField {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
     }
 }
 

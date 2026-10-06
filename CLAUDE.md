@@ -329,8 +329,10 @@ preview stays, the transport and timeline slide down out of the window and the p
 inspector's content changes, to the export's options (`ExportOptions`, in the inspector's own sections and `SegmentedChoice`).
 One `.inspector` serves both modes so the column never moves; it opens at `EditorInspector.idealWidth` (380 pt, picked by hand
 in a 1533 pt window) and always shows during export. Both ways run on a 0.25 s critically damped spring, a cross-fade with
-Reduce Motion. The title bar shows the recording's name in both modes (`RecordingNameField`, in the leading toolbar item; the system title is
-hidden, and `.navigationTitle` is bridged only for the Window menu): a click turns it into a field that renames the movie and its
+Reduce Motion. The title bar shows the recording's name in both modes (`RecordingNameField`, in the leading toolbar item; the window's title is
+hidden and not bridged, since SwiftUI draws a bridged title whatever `titleVisibility` says, and set by hand for the Window
+menu; a flexible `ToolbarSpacer` holds the buttons at the trailing edge): a click turns it into an AppKit field (`@FocusState`
+didn't reach a field in the toolbar, and its field editor took Esc) that renames the movie and its
 telemetry and project (`RecordingRename`, `RecordingRenamer`; Return or leaving the field commits, Esc cancels, and Esc doesn't
 also trigger Back meanwhile). A web recording's `Reco_Web_` prefix is kept but hidden in the field, and names ending in `-edited`
 are refused, since the Library tells kinds apart by file name alone. **‹ Editor** sits in the trailing `.primaryAction` slot

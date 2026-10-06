@@ -82,9 +82,10 @@ final class EditorWindowManager: NSObject {
         let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel))
         // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
         hostingController.sizingOptions = .minSize
-        // The name field, export and inspector buttons are SwiftUI toolbar items
-        // The title too, for the Window menu; the title bar shows the name field instead
-        hostingController.sceneBridgingOptions = [.toolbars, .title]
+        // The name field, export and inspector buttons are SwiftUI toolbar items. The title isn't bridged: the
+        // window keeps it for the Window menu, hidden, since SwiftUI draws a bridged title whatever titleVisibility
+        // says, and removing it from its toolbar also took the space that holds the buttons at the trailing edge
+        hostingController.sceneBridgingOptions = [.toolbars]
         let window = makeWindow(hostingController, title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1533, height: 943))
         window.representedURL = videoURL
         window.titleVisibility = .hidden
@@ -94,6 +95,7 @@ final class EditorWindowManager: NSObject {
             guard let self, let editor = editors.removeValue(forKey: old.standardizedFileURL) else { return }
             editors[new.standardizedFileURL] = editor
             editor.window.representedURL = new
+            editor.window.title = new.deletingPathExtension().lastPathComponent
         }
 
         // A regular app gets a Dock icon, ⌘-Tab and the main menu with Undo and Redo
