@@ -150,7 +150,7 @@ private struct LibraryGrid: View {
     }
 }
 
-/// New: a screenshot, a screen recording, a web recording or an agent's recording.
+/// New: a screenshot, a screen recording or a web recording.
 private struct LibraryNewMenu: View {
     let actions: LibraryViewModel.Actions
 
@@ -167,7 +167,6 @@ private struct LibraryNewMenu: View {
             }
             Section("Web") {
                 Button("New Web Recording…", systemImage: "globe", action: actions.newWebRecording)
-                Button("Record with AI Agent…", systemImage: "sparkles", action: actions.recordWithAgent)
             }
         } label: {
             Label("New", systemImage: "plus")

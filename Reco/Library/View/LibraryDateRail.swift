@@ -38,7 +38,7 @@ struct LibraryDateRail: View {
 }
 
 /// One date in the rail: its line, which lengthens when the date is at the top of the grid or under the
-/// pointer, and its title in a solid chip to the left while pointed at.
+/// pointer, and its title to the left while pointed at.
 private struct LibraryDateRailDate: View {
 
     let title: String
@@ -72,32 +72,26 @@ private struct LibraryDateRailDate: View {
             if isHovered {
                 label
                     // Moved past the row by the line column and a gap, so it never covers the lines. An
-                    // alignment guide inside the overlay was ignored: the chip sat on its line and ran off
+                    // alignment guide inside the overlay was ignored: the title sat on its line and ran off
                     // the window's edge.
                     .offset(x: -(Self.lineColumn + EditorTheme.smallSpacing))
                     .transition(.opacity)
             }
         }
-        // Above the rows after it, whose lines would otherwise draw over a tall chip
+        // Above the rows after it, whose lines would otherwise draw over a tall title
         .zIndex(isHovered ? 1 : 0)
         .accessibilityLabel(title)
         .editorMotion(EditorTheme.quickMotion, value: isMarked)
         .editorMotion(EditorTheme.quickMotion, value: isActive)
     }
 
-    /// The title on the window's own colour, opaque so the tiles under it don't show through.
+    /// The title alone, with no chip behind it.
     private var label: some View {
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-        return Text(title)
-            .font(.callout)
+        Text(title)
+            .font(.title3.weight(.medium))
             .foregroundStyle(EditorTheme.ink)
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, EditorTheme.smallSpacing)
-            .padding(.vertical, EditorTheme.tightSpacing)
-            .background(EditorTheme.stage, in: shape)
-            .overlay { shape.strokeBorder(EditorTheme.hairline) }
-            .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
             .allowsHitTesting(false)
     }
 }

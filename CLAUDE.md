@@ -919,14 +919,14 @@ and a white stop square, for any start (menu, shortcut, `reco://`); it goes once
 **Library…** in the menu bar, and clicking Reco in the Dock (`applicationShouldHandleReopen`), open Reco's
 main window, which stays open unlike the popover: a sidebar (All, Recordings, Web Recordings, Exports,
 Screenshots, with counts), a grid of pictures, search, and **New** (Capture Area/Window/Screen, Record
-Area…, Record Window or Display…, New Web Recording…, Record with AI Agent…). A click opens a movie in the
+Area…, Record Window or Display…, New Web Recording…). A click opens a movie in the
 editor and a screenshot in Preview; the context menu shows in Finder, copies (a screenshot as PNG, a movie
 as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`. The grid is under date
 headers, newest first: Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
 list the screenshot history folder (spec 0012). Down the right edge the dates repeat as a rail
 (`LibraryDateRail`), adapted from Chánh Đại's Line Nav: only a short line per date, 10 pt apart, that lengthens
-and brightens for the date at the top of the grid and for the one under the pointer, whose title shows in an
-opaque chip to the line's left, over the grid; a click scrolls the grid to it. The grid reserves only the lines'
+and brightens for the date at the top of the grid and for the one under the pointer, whose title shows to the
+line's left, over the grid, in large text with no background; a click scrolls the grid to it. The grid reserves only the lines'
 44 pt and hides the rail for a single date. The grid sits on the content colour (`controlBackgroundColor`): on the
 window's own colour it matched the sidebar within a few levels (55 against 57 in dark mode). Tiles are 16:10
 pictures that fill their frame (screenshots too, cropped), 10 pt continuous corners and a faint edge, with the
