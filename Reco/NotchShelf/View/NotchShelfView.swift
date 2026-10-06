@@ -101,7 +101,10 @@ private struct NotchShelfStrip: View {
             ScrollView(.horizontal) {
                 LazyHStack(spacing: EditorTheme.smallSpacing) {
                     ForEach(viewModel.items ?? []) { item in
-                        NotchShelfTile(item: item, thumbnail: viewModel.thumbnails[item.url], isCopied: viewModel.copiedURL == item.url) {
+                        NotchShelfTile(
+                            item: item, thumbnail: viewModel.thumbnails[item.url], isCopied: viewModel.copiedURL == item.url,
+                            pointer: viewModel.pointer
+                        ) {
                             Task { await viewModel.copy(item) }
                         }
                         .task {
@@ -123,10 +126,13 @@ private struct NotchShelfTile: View {
     let item: LibraryItem
     let thumbnail: CGImage?
     let isCopied: Bool
+    let pointer: CGPoint?
     let copy: () -> Void
 
-    @State private var isHovered = false
+    @State private var frame = CGRect.zero
     @GestureState private var isPressed = false
+
+    private var isHovered: Bool { pointer.map(frame.contains) ?? false }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 10)
@@ -152,7 +158,8 @@ private struct NotchShelfTile: View {
         .overlay(shape.strokeBorder(isHovered ? Color.accentColor : .white.opacity(0.12), lineWidth: isHovered ? 2 : 1))
         .scaleEffect(isPressed ? 0.96 : 1)
         .contentShape(shape)
-        .onHover { isHovered = $0 }
+        // The hosting view's coordinates, which the pointer is in
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
         .editorMotion(EditorTheme.quickMotion, value: isHovered)
         .editorMotion(isPressed ? nil : EditorTheme.quickMotion, value: isPressed)
         // A press shows on the frame it lands; moving 4 pt ends it, so the file drag takes over
