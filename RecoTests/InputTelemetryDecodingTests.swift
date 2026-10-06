@@ -35,6 +35,16 @@ struct InputTelemetryDecodingTests {
         #expect(telemetry.geometry.first?.boundingRect == CGRect(x: 0, y: 0, width: 800, height: 600))
         #expect(telemetry.cursorSprites.map(\.kind) == [.arrow, .iBeam])
         #expect(telemetry.cursorShapes.map(\.sprite) == [0, 1])
+        #expect(telemetry.navigations.isEmpty)
+    }
+
+    @Test func aWebTakesPagesRoundTrip() throws {
+        var telemetry = InputTelemetry(capture: .init(kind: .web, videoSize: CGSize(width: 1440, height: 900)), keystrokesAvailable: true)
+        telemetry.navigations = [.init(time: 2.5, url: "https://example.com/plan")]
+
+        let decoded = try JSONDecoder().decode(InputTelemetry.self, from: JSONEncoder().encode(telemetry))
+
+        #expect(decoded.navigations == telemetry.navigations)
     }
 
     @Test(arguments: [1, 4])

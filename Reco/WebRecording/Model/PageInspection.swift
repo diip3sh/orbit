@@ -5,10 +5,14 @@
 
 import CoreGraphics
 
-/// What ``WebInspectScript`` found in a page, at scroll 0: the page's size, its visible interactive
-/// elements and the boxes of the selectors asked for. Boxes are in page CSS pixels.
+/// What ``WebInspectScript`` found in a page, at scroll 0: the page's size, what it says it's about,
+/// its visible interactive elements and headings, and the boxes of the selectors asked for. Boxes are
+/// in page CSS pixels.
 nonisolated struct PageInspection: Codable, Equatable, Sendable {
     var title: String
+
+    /// The page's meta or Open Graph description, if it has one.
+    var description: String?
     var url: String
     var viewport: Size
     var pageHeight: Double
@@ -21,7 +25,7 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
     var boxes: [String: Box]?
 
     private enum CodingKeys: String, CodingKey {
-        case title, url, viewport, elements, truncated, boxes
+        case title, description, url, viewport, elements, truncated, boxes
         case pageHeight = "page_height"
     }
 
@@ -30,6 +34,9 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
         var role: String
         var text: String
         var box: Box
+
+        /// Where a link goes.
+        var href: String?
     }
 
     nonisolated struct Box: Codable, Equatable, Sendable {

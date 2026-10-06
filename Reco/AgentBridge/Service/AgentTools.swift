@@ -28,7 +28,16 @@ final class AgentTools {
     /// the live page shares the default website data store, so it has the user's logins.
     /// ponytail: any connection may browse during such a run, not just its agent; tell them apart by a
     /// per-run token if that matters.
-    @ObservationIgnored var hostsRun = false
+    @ObservationIgnored var hostsRun = false {
+        didSet { recordings = 0 }
+    }
+
+    /// How many times `record_page` was called in the run going on.
+    @ObservationIgnored private var recordings = 0
+
+    /// How many times an agent Reco runs may call `record_page` in one run: a take and one more with its
+    /// warnings fixed. An agent on a page whose warning re-recording can't fix would otherwise record forever.
+    static let maximumRecordings = 2
 
     /// Whether `record_page` only puts the plan on the window's timeline, for the user to render: for
     /// the chat, where the user reviews and edits before rendering. Set for a run, cleared when it ends.
@@ -113,15 +122,20 @@ final class AgentTools {
         if let job, job.status == .rendering {
             throw AgentToolError.busy(renderID: job.renderID)
         }
+        if hostsRun, recordings >= Self.maximumRecordings {
+            throw AgentToolError.invalidArgument("This run has recorded \(recordings) times, the most it may. Report what the last result said.")
+        }
         let id = UUID().uuidString
         if stagesPlans {
-            let (script, unmatched) = try await script(for: plan)
+            let (script, warnings) = try await script(for: plan)
+            recordings += 1
             var planned = RenderStatus(renderID: id, status: .planned, progress: 0)
-            planned.unmatchedSelectors = unmatched.isEmpty ? nil : unmatched
+            planned.warnings = warnings.isEmpty ? nil : warnings
             job = planned
             onPlanned?(script)
             return planned
         }
+        recordings += 1
         job = RenderStatus(renderID: id, status: .rendering, progress: 0)
         renderTask = Task { await render(plan, id: id) }
         return try await wait(for: id)
@@ -136,12 +150,12 @@ final class AgentTools {
     /// Looks at the page to aim the plan, renders it and records the outcome in ``job``.
     private func render(_ plan: RecordPlan, id: String) async {
         do {
-            let (script, unmatched) = try await script(for: plan)
-            job?.unmatchedSelectors = unmatched.isEmpty ? nil : unmatched
+            let (script, _) = try await script(for: plan)
             onPlanned?(script)
-            let movie = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
+            let (movie, warnings) = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
                 self?.job?.progress = progress
             }
+            job?.warnings = warnings.isEmpty ? nil : warnings
             job?.status = .done
             job?.progress = 1
             job?.movie = movie.path(percentEncoded: false)
@@ -153,7 +167,7 @@ final class AgentTools {
         }
     }
 
-    /// The plan as a script, aimed by looking at the page, and the selectors it found no match for.
+    /// The plan as a script, aimed by looking at the page, and what the page lacks that its steps need.
     private func script(for plan: RecordPlan) async throws -> (WebScript, [String]) {
         let page = try await WebPageRenderer(script: plan.inspectionScript).inspect(selectors: plan.selectors)
         return try plan.script(page: page)

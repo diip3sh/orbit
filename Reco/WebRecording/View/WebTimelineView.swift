@@ -50,17 +50,18 @@ struct WebTimelineView: View {
                         selection: viewModel.selection
                     ) { clip, isDragged in
                         let symbol = clip.action.symbol
+                        let zooms = WebCamera.zooms(on: clip, in: viewModel.script)
                         TimelineBlock(isSelected: clip.id == viewModel.selection, isDragged: isDragged) {
                             // The icon alone on a clip too short for its name, rather than a cut-off name
                             ViewThatFits(in: .horizontal) {
                                 HStack(spacing: EditorTheme.tightSpacing) {
                                     Label(Self.name(of: clip), systemImage: symbol)
-                                    if clip.zoom != nil {
+                                    if zooms {
                                         Image(systemName: "plus.magnifyingglass")
                                             .accessibilityLabel("Zoomed")
                                     }
                                 }
-                                Image(systemName: clip.zoom == nil ? symbol : "plus.magnifyingglass")
+                                Image(systemName: zooms ? "plus.magnifyingglass" : symbol)
                             }
                         }
                         .help(Self.name(of: clip))

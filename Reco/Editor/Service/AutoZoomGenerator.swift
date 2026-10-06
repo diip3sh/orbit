@@ -94,7 +94,7 @@ nonisolated enum AutoZoomGenerator {
             }
         }
 
-        return zooms.map { zoom in
+        let segments = zooms.map { zoom in
             ZoomSegment(
                 range: zoom.range,
                 scale: configuration.scale,
@@ -102,6 +102,9 @@ nonisolated enum AutoZoomGenerator {
                 isAutomatic: true
             )
         }
+        // A web take's page scrolls and is replaced under the cursor: a zoom on what was there ends with it,
+        // so one on a link doesn't hang over the page it opened
+        return telemetry.capture.kind == .web ? PageChanges.ending(segments, at: PageChanges.times(in: telemetry)) : segments
     }
 
     /// Presses inside the video, in time order: clicks where they were, keys at the last click.

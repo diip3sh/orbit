@@ -42,6 +42,9 @@ final class WebRecordingViewModel {
     /// Where the cursor is at the playhead, in viewport CSS pixels.
     private(set) var cursorPreview: CGPoint?
 
+    /// The box of the element the clip at the playhead shows, in viewport CSS pixels, for the camera.
+    private(set) var shownPreview: CGRect?
+
     /// The elements an agent just found in the page, in viewport CSS pixels at the top of the page;
     /// shown for ``agentHighlightTime`` (spec 0008).
     private(set) var agentHighlights: [CGRect] = []
@@ -405,9 +408,9 @@ final class WebRecordingViewModel {
         let script = script
         let time = playhead
         showTask = Task {
-            let location = await preview.show(script, at: time, scrolling: scrolling)
+            let shown = await preview.show(script, at: time, scrolling: scrolling)
             guard !Task.isCancelled else { return }
-            cursorPreview = location
+            (cursorPreview, shownPreview) = shown
         }
     }
 
@@ -453,7 +456,7 @@ extension WebRecordingViewModel {
             do {
                 let movie = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
                     self?.renderProgress = progress
-                }
+                }.movie
                 onRendered(movie)
             } catch {
                 if !(error is CancellationError) {
@@ -585,7 +588,7 @@ extension WebRecordingViewModel {
         let presses = script.presses(after: pressedThrough, through: time)
         pressedThrough = time
         Task {
-            let location = await preview.show(script, at: time, scrolling: true)
+            let (location, shown) = await preview.show(script, at: time, scrolling: true)
             // The page hears the pointer as in the take, so hovers and clicks happen while it plays
             if let location {
                 if location != hovered {
@@ -598,7 +601,7 @@ extension WebRecordingViewModel {
             }
             isMovingPage = false
             if isPlaying {
-                cursorPreview = location
+                (cursorPreview, shownPreview) = (location, shown)
             }
         }
     }

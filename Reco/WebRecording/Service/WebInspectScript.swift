@@ -5,8 +5,9 @@
 
 import Foundation
 
-/// The page's visible, interactive elements for an agent to aim at (spec 0006), run in its own
-/// content world as the body of a function that returns a JSON string, decoded as ``PageInspection``.
+/// What the page is about and its visible, interactive elements for an agent to aim at (spec 0006),
+/// run in its own content world as the body of an async function that returns a JSON string, decoded
+/// as ``PageInspection``. It scrolls through the page first, so what loads on the way is listed too.
 ///
 /// Selectors come from ``WebPickScript/selectorFunctions``, so they are the ones the pick mode makes.
 /// Boxes are in page CSS pixels (the viewport's box plus the scroll). `selectors` (an argument) are
@@ -16,8 +17,23 @@ enum WebInspectScript {
     /// The most elements listed; `truncated` says when there were more.
     static let maximumElements = 200
 
+    /// How far the page is scrolled at a time while it loads what's further down, as a share of the
+    /// viewport's height, and how many milliseconds each step waits.
+    static let preloadStep = 0.8
+    static let preloadDelay = 100
+
     static let source = #"""
     \#(WebPickScript.selectorFunctions)
+    // Content that loads as it scrolls into view (lazy images, sections that reveal themselves) is
+    // there before the page is read, and cached for the take: down the page and back, as screenshot
+    // services do. At most 40 steps.
+    const pause = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+    for (let y = 0, step = 0; y < document.documentElement.scrollHeight && step < 40; y += innerHeight * \#(preloadStep), step++) {
+      scrollTo({ left: 0, top: y, behavior: 'instant' });
+      await pause(\#(preloadDelay));
+    }
+    scrollTo({ left: 0, top: 0, behavior: 'instant' });
+    await pause(\#(preloadDelay));
     const interactive = 'a[href], button, input:not([type=hidden]), select, textarea, summary, [role=button], [role=link], ' +
       '[role=tab], [role=menuitem], [role=checkbox], [role=switch], [onclick], [tabindex]:not([tabindex="-1"]), h1, h2, h3';
     const implicitRoles = { a: 'link', button: 'button', select: 'combobox', textarea: 'textbox', summary: 'button', h1: 'heading', h2: 'heading', h3: 'heading' };
@@ -39,13 +55,17 @@ enum WebInspectScript {
     };
     const roleOf = (element) => element.getAttribute('role') || implicitRoles[element.localName] || (element.localName === 'input' ? element.type : 'generic');
     const visible = [...document.querySelectorAll(interactive)].filter(isVisible);
+    const meta = (name) => document.querySelector(`meta[name="${name}"], meta[property="${name}"]`)?.content?.trim();
     const result = {
       title: document.title,
+      description: (meta('description') || meta('og:description') || '').slice(0, 300) || undefined,
       url: location.href,
       viewport: { width: innerWidth, height: innerHeight },
       page_height: document.documentElement.scrollHeight,
       elements: visible.slice(0, \#(maximumElements)).map((element) => ({
-        selector: selectorFor(element), role: roleOf(element), text: textOf(element), box: pageBox(element)
+        selector: selectorFor(element), role: roleOf(element), text: textOf(element), box: pageBox(element),
+        // Where a link goes, to inspect the page a click opens
+        href: element.localName === 'a' && element.href ? element.href.slice(0, 200) : undefined
       })),
       truncated: visible.length > \#(maximumElements)
     };

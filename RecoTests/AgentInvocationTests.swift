@@ -27,7 +27,8 @@ struct AgentInvocationTests {
         let plain = try invocation(.claudeCode)
         let chosen = try invocation(.claudeCode, model: "opus")
 
-        let head: [String] = ["-p", prompt, "--tools", "", "--allowedTools", "mcp__reco__*", "--permission-mode", "dontAsk",
+        let head: [String] = ["-p", prompt, "--tools", "WebSearch,WebFetch", "--allowedTools", "mcp__reco__*", "WebSearch", "WebFetch",
+                              "--permission-mode", "dontAsk",
                               "--mcp-config", directory.appending(path: "reco-mcp.json").path(percentEncoded: false),
                               "--strict-mcp-config"]
         let streaming = ["--output-format", "stream-json", "--verbose"]

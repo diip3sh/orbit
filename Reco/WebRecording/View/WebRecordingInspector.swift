@@ -31,6 +31,10 @@ struct WebRecordingInspector: View {
                                     .lineLimit(1...4)
                             }
                         }
+                        InspectorField("Show") {
+                            TextField("Show", text: clip.show.orEmpty, prompt: Text("CSS selector to zoom on"))
+                                .monospaced()
+                        }
                         InspectorField("Zoom") {
                             SegmentedChoice(selection: clip.zoom, options: [(nil, "Off")] + WebCamera.scales.map { (Double?.some($0), "\($0.formatted())×") })
                         }
@@ -39,8 +43,9 @@ struct WebRecordingInspector: View {
                         Text("""
                             The cursor is on the target from the clip's start to its end, and travels there \
                             before. A click presses at the start; typing clicks the field, then types the text \
-                            through the clip. Zoom moves the camera in on the target just before the clip and \
-                            out just after; Play shows it.
+                            through the clip. Show frames that element during the clip; once any clip shows one, \
+                            only those zoom. Otherwise Zoom moves the camera in on the target just before the clip \
+                            and out just after. Play shows both.
                             """)
                     }
                 } else if let clip = Binding(unwrapping: $viewModel.selectedScrollClip) {

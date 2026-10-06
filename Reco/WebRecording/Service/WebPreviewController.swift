@@ -79,13 +79,15 @@ final class WebPreviewController: NSObject {
     }
 
     /// Returns where `script`'s cursor is at `time`, in viewport CSS pixels, after scrolling the page
-    /// to where the script has it then when `scrolling`. Resting and travelling cursors are placed
-    /// from their targets as they are now; the take can only tell by playing up to `time`.
-    func show(_ script: WebScript, at time: Double, scrolling: Bool) async -> CGPoint? {
+    /// to where the script has it then when `scrolling`, and the box of the element the clip playing
+    /// then shows, if it shows one the page has. Resting and travelling cursors are placed from their
+    /// targets as they are now; the take can only tell by playing up to `time`.
+    func show(_ script: WebScript, at time: Double, scrolling: Bool) async -> (cursor: CGPoint?, shown: CGRect?) {
         var track = PointerTrack(script: script)
         let offset = script.scrollOffset(at: time)
         let scroll: Any = scrolling ? [offset.x, offset.y] : NSNull()
-        let arguments: [String: Any] = ["scroll": scroll, "selectors": track.selectors(at: time)]
+        let show = WebCamera.shownClip(at: time, in: script)?.show
+        let arguments: [String: Any] = ["scroll": scroll, "selectors": track.selectors(at: time) + [show].compactMap(\.self)]
         let result = try? await webView.callAsyncJavaScript(Self.showScript, arguments: arguments, contentWorld: pickWorld)
         // The fields hold what's typed by then; only those with a selector, as the preview's focus is the user's
         let fields = script.typing(at: time).filter { $0.selector != nil }
@@ -96,7 +98,7 @@ final class WebPreviewController: NSObject {
         for (selector, box) in result as? [String: [Double]] ?? [:] where box.count == 4 {
             frames[selector] = CGRect(x: box[0], y: box[1], width: box[2], height: box[3])
         }
-        return track.location(at: time, elementFrames: frames)
+        return (track.location(at: time, elementFrames: frames), show.flatMap { frames[$0] })
     }
 
     /// Scrolls to `scroll` unless it's null, and returns the boxes of the elements `selectors` match
