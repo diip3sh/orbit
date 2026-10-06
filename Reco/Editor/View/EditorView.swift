@@ -44,6 +44,8 @@ struct EditorView: View {
                     Group {
                         if let export {
                             ExportOptions(viewModel: viewModel, session: export)
+                                // Over the inspector, at its leading edge, as a browser's back and forward
+                                .toolbar { exportNavigation(export) }
                         } else {
                             EditorInspector(viewModel: viewModel)
                         }
@@ -112,20 +114,7 @@ struct EditorView: View {
         } else {
             ToolbarItem(placement: .primaryAction) { Spacer() }
         }
-        if let export {
-            // Where Export… was, so the two swap in place
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: closeExport) {
-                    Label("Editor", systemImage: "chevron.left")
-                }
-                .buttonStyle(.editorSecondary)
-                // Esc ends a rename first
-                .keyboardShortcut(isRenaming ? nil : .cancelAction)
-                .disabled(export.isExporting)
-                .help("Back to the editor (Esc)")
-            }
-            .hidingSharedBackground()
-        } else {
+        if export == nil {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: openExport) {
                     Label("Export…", image: "button-export")
@@ -144,6 +133,23 @@ struct EditorView: View {
                 }
                 .help(showsInspector ? "Hide the inspector" : "Show the inspector")
             }
+        }
+    }
+
+    /// Back to the editor; forward has nowhere to go from export, so it is there only to read as the pair.
+    @ToolbarContentBuilder
+    private func exportNavigation(_ export: ExportSession) -> some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            ControlGroup {
+                Button("Editor", systemImage: "chevron.left", action: closeExport)
+                    // Esc ends a rename first
+                    .keyboardShortcut(isRenaming ? nil : .cancelAction)
+                    .disabled(export.isExporting)
+                    .help("Back to the editor (Esc)")
+                Button("Export", systemImage: "chevron.right") {}
+                    .disabled(true)
+            }
+            .controlGroupStyle(.navigation)
         }
     }
 
