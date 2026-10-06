@@ -75,4 +75,19 @@ struct WebTakeTelemetryTests {
         #expect(CursorKind(css: "auto") == nil)
         #expect(CursorKind(css: "ew-resize") == nil)
     }
+
+    @Test func recordsScrollingAsAWheelWouldAndThePagesAClickOpened() throws {
+        var take = WebTakeTelemetry(script: WebScript())
+
+        take.record(time: 0, cursor: nil, presses: [], shape: nil)
+        take.record(time: 1, cursor: CGPoint(x: 5, y: 6), presses: [], shape: nil, scrolled: CGVector(dx: 0, dy: -40))
+        take.record(time: 2, cursor: nil, presses: [], shape: nil, scrolled: CGVector(dx: 0, dy: -20))
+        take.navigated(to: try #require(URL(string: "https://example.com/plan")), at: 3)
+
+        let telemetry = take.telemetry
+        #expect(telemetry.scrolls.map(\.delta.dy) == [-40, -20])
+        // Where the cursor is, or the middle of the 1440 × 900 view without one
+        #expect(telemetry.scrolls.map(\.location) == [CGPoint(x: 5, y: 6), CGPoint(x: 720, y: 450)])
+        #expect(telemetry.navigations == [.init(time: 3, url: "https://example.com/plan")])
+    }
 }

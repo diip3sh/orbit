@@ -63,7 +63,7 @@ struct WebPageRendererTests {
         let movie = folder.appending(path: "take.mov")
         var progress: [Double] = []
 
-        let telemetry = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { progress.append($0) }
+        let telemetry = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { progress.append($0) }.telemetry
 
         #expect(progress.count == 60)
         #expect(progress.last == 1)
@@ -114,7 +114,7 @@ struct WebPageRendererTests {
         var script = Self.script(for: #"<!doctype html><html><body><button id="menu" style="display: none">Menu</button></body></html>"#)
         script.pointer = [PointerClip(range: 0..<1, action: .hover, target: WebTarget(selector: "#menu", point: CGPoint(x: 40, y: 60)))]
 
-        let telemetry = try await render(script).telemetry
+        let telemetry = try await render(script).output.telemetry
 
         #expect(telemetry.cursor.map(\.location) == [CGPoint(x: 40, y: 60)])
     }
@@ -137,6 +137,99 @@ struct WebPageRendererTests {
         // The page turns green 100 ms after it loads; frame 0 only catches that when the load
         // settles late, so look a sixth of a second in, past the timeout on the take's own clock
         #expect(try await pixel(at: CGPoint(x: 20, y: 20), frame: 10, of: movie).isClose(to: [0, 255, 0]))
+    }
+
+    @Test func aShownElementIsMeasuredWhereItsStepStarts() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var script = Self.script(for: Self.page)
+        let buy = WebTarget(selector: "#buy", point: .zero)
+        script.pointer = [
+            PointerClip(range: 0.2..<0.5, action: .hover, target: buy, show: "#buy"),
+            PointerClip(range: 0.6..<0.9, action: .hover, target: buy, show: "#band")
+        ]
+
+        let take = try await render(script).output
+
+        // The button, in view; the band, 500 px down a 400 px view, isn't
+        #expect(take.shots == [WebCamera.Shot(range: 0.2..<0.5, visible: CGRect(x: 100, y: 100, width: 200, height: 60))])
+        #expect(take.warnings.count == 1)
+        #expect(take.warnings.first?.hasPrefix(##"At 0.6 s the shown element "#band" wasn't on the page or mostly in view"##) == true)
+    }
+
+    @Test func aClickOnAnElementThePageDoesntHaveIsLeftOutAndReported() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var script = Self.script(for: Self.page)
+        script.pointer = [PointerClip(range: 0.2..<0.5, action: .click, target: WebTarget(selector: "#gone", point: CGPoint(x: 150, y: 120)))]
+
+        let (take, movie) = try await render(script)
+
+        #expect(take.telemetry.clicks.isEmpty)
+        // Not pressed on the button that happens to be at the target's point
+        #expect(try await pixel(at: CGPoint(x: 20, y: 20), frame: 59, of: movie).isClose(to: [255, 255, 255]))
+        #expect(take.warnings.count == 2)
+        #expect(take.warnings.contains { $0.contains("so its click was left out") })
+    }
+
+    @Test func aCoveredTargetIsReported() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let menu = #"<div id="menu" style="position: fixed; left: 0; top: 0; width: 640px; height: 200px; z-index: 9">Menu</div>"#
+        let covered = Self.page.replacing("</body>", with: menu + "</body>")
+        var script = Self.script(for: covered)
+        script.pointer = [PointerClip(range: 0.2..<0.5, action: .hover, target: WebTarget(selector: "#buy", point: .zero))]
+
+        let take = try await render(script).output
+
+        #expect(take.warnings.count == 1)
+        #expect(take.warnings.first?.hasPrefix(##"At 0.2 s div#menu ("Menu") covered "#buy" where the cursor pointed."##) == true)
+    }
+
+    @Test func aScrollToAnElementAimsAtItWhenItStarts() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var script = Self.script(for: Self.page)
+        // Planned for nowhere: the take finds the band when the scroll starts
+        script.scrolls = [ScrollClip(range: 0.2..<0.6, offset: .zero, target: ScrollClip.Target(selector: "#band", placement: .top))]
+
+        let (take, movie) = try await render(script)
+
+        // The band's top, 500 px down, ends 15% of the 400 px view from its top: at 60
+        #expect(try await pixel(at: CGPoint(x: 20, y: 50), frame: 59, of: movie).isClose(to: [255, 255, 255]))
+        #expect(try await pixel(at: CGPoint(x: 20, y: 70), frame: 59, of: movie).isClose(to: [255, 255, 0]))
+        #expect(abs(take.telemetry.scrolls.map(\.delta.dy).reduce(0, +) + 440) < 0.5)
+        #expect(take.warnings.isEmpty)
+    }
+
+    @Test func aPageAClickOpensShowsFromItsTop() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // A 3000 px page that's lime at its top and red below
+        let next = folder.appending(path: "next.html")
+        try #"<!doctype html><body style="margin: 0; height: 3000px; background: rgb(255, 0, 0)"><div style="height: 100px; background: rgb(0, 255, 0)"></div></body>"#
+            .write(to: next, atomically: true, encoding: .utf8)
+        let first = folder.appending(path: "first.html")
+        try """
+            <!doctype html><body style="margin: 0; height: 3000px">
+            <a id="anchor" href="#down" style="position: fixed; left: 0; top: 0; width: 100px; height: 40px; background: blue"></a>
+            <a id="next" href="next.html" style="position: fixed; left: 200px; top: 0; width: 100px; height: 40px; background: blue"></a>
+            <div id="down" style="margin-top: 2000px">Down</div></body>
+            """.write(to: first, atomically: true, encoding: .utf8)
+        var script = WebScript()
+        script.url = first
+        script.viewport = CGSize(width: 640, height: 400)
+        script.scale = 1
+        script.duration = 1.5
+        script.scrolls = [ScrollClip(range: 0..<0.2, offset: CGPoint(x: 0, y: 1000))]
+        script.pointer = [
+            PointerClip(range: 0.3..<0.5, action: .click, target: WebTarget(selector: "#anchor", point: .zero)),
+            PointerClip(range: 0.6..<0.8, action: .click, target: WebTarget(selector: "#next", point: .zero))
+        ]
+
+        let (take, movie) = try await render(script)
+
+        // The link to an anchor isn't another page; the one after it is, and shows from its top
+        #expect(take.telemetry.navigations.map { URL(string: $0.url)?.lastPathComponent } == ["next.html"])
+        #expect(try await pixel(at: CGPoint(x: 400, y: 50), frame: 89, of: movie).isClose(to: [0, 255, 0]))
+        // Not a scroll back up the new page
+        #expect(take.telemetry.scrolls.allSatisfy { $0.delta.dy < 0 })
     }
 
     @Test func rendersIntoAFolderThatDoesNotExistYet() async throws {
@@ -224,11 +317,11 @@ struct WebPageRendererTests {
     }
 
     /// Renders `script` into the test's folder.
-    private func render(_ script: WebScript) async throws -> (telemetry: InputTelemetry, movie: AVURLAsset) {
+    private func render(_ script: WebScript) async throws -> (output: WebPageRenderer.Output, movie: AVURLAsset) {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let movie = folder.appending(path: "take.mov")
-        let telemetry = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { _ in }
-        return (telemetry, AVURLAsset(url: movie))
+        let output = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { _ in }
+        return (output, AVURLAsset(url: movie))
     }
 
     @concurrent nonisolated private func frameCount(of asset: AVAsset) async throws -> Int {

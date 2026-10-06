@@ -65,6 +65,23 @@ struct AgentToolsTests {
         #expect(second.status == .failed)
     }
 
+    @Test func aRunRecordsATakeAndOneMoreAtMost() async throws {
+        let tools = tools()
+        let arguments = Data(#"{"url":"http://localhost:2","steps":[]}"#.utf8)
+        tools.hostsRun = true
+
+        _ = await tools.call("record_page", arguments: arguments)
+        _ = await tools.call("record_page", arguments: arguments)
+        let third = await tools.call("record_page", arguments: arguments)
+
+        #expect(third.isError)
+        #expect(third.text.contains("the most it may"))
+        // The next run starts again
+        tools.hostsRun = false
+        tools.hostsRun = true
+        #expect(await !tools.call("record_page", arguments: arguments).text.contains("the most it may"))
+    }
+
     @Test func badArgumentsAreErrorsTheAgentCanActOn() async {
         let tools = tools()
 

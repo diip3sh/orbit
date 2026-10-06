@@ -21,15 +21,25 @@ struct AgentRecordingRequestTests {
         What the video should show:
         \(wanted)
 
-        Get to know the site before filming it, as a person would: open_page, then look further down (look with y) \
-        until you've seen every section, read_page for what it says, and hover or click its menus, tabs and important \
-        links to see what they show. Then plan the walkthrough: each important part in order, hovering and clicking what \
-        a viewer should notice, typing into a search box or input when that shows the product, scrolling between \
-        sections, and zoom (zoom: 2) on the steps that matter. Aim for 20 to 60 seconds. Only plan steps you tried and saw \
-        work, on selectors that matched, and keep the cursor's path off menus it shouldn't open. Record it with \
-        record_page, then call render_status with its render_id until the status is done or failed. Use only the reco \
-        tools and don't ask questions. When it's done, reply in one short sentence with what the video shows. If it fails, \
-        reply with the error.
+        1. Research. Don't record anything until you can say in one sentence what the product is for. open_page and \
+        read_page the page, then the two to four product or feature pages its navigation links to (their href); look down \
+        each one. If you can search the web, read the product's features page and what a review names as its best \
+        features. Know what the product is and the three features that matter most, each with the page or section that \
+        shows it best.
+        2. Plan four to six beats that tell one story: what the product is (its hero, 3 to 5 s), its two or three strongest \
+        features, each on its own page or section (6 to 10 s each), and the call to action (3 s). For each beat name the \
+        one element the viewer should see (a product screenshot, a feature card, a short heading that is the message; not \
+        a nav item, a decorative image or empty space) and how to get there: a click on the link that opens its page, or a \
+        scroll to its section. Show the thing itself, not the heading above it; a hero or whole section is a beat without \
+        zoom. Visit at least two feature pages or sections. Never park the cursor on the navigation while a page loads.
+        3. Record one or two steps per beat, every hover, click and type with show set to its beat's element. Hover \
+        something in or beside what you show for 2 to 3 s, so it's in view when the step starts. To open a page, click its \
+        link, then hover that page's hero with show on it. Leave 0.8 to 1 s between steps, 1.5 to 3 s per hover, click or \
+        scroll, 45 to 60 s in all. Use scale 1 unless asked for 2. Only use selectors you saw on the page they're on.
+        Record it with record_page, then call render_status with its render_id until the status is done or failed. If the \
+        result has warnings, fix those steps and record once more, only once; then report what that result says. Use only \
+        the reco tools, and web search or fetch if you have them, and don't ask questions. When it's done, reply in one or \
+        two sentences saying what the video shows, without paths or selectors. If it fails, reply with the error.
         """
     }
 

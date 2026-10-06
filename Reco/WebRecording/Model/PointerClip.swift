@@ -21,6 +21,11 @@ nonisolated struct PointerClip: Codable, Equatable, Sendable, TimelineClip {
     /// What a type clip types into its target; `nil` for the other actions.
     var text: String?
 
+    /// A CSS selector for the element the video zooms on during this clip, or `nil`. Once any clip of
+    /// a script has one, zooms come only from these, fitted to the element where its clip starts
+    /// (``WebCamera``). Scripts saved before it decode without it.
+    var show: String?
+
     nonisolated enum Action: String, Codable, CaseIterable, Sendable {
         case hover
         case click
@@ -40,25 +45,32 @@ nonisolated struct PointerClip: Codable, Equatable, Sendable, TimelineClip {
     /// How long a click holds the button down, or the whole clip when it's shorter.
     static let pressDuration = 0.1
 
-    /// The time between typed letters when a clip's length comes from its text: 12.5 a second, a
-    /// quick typist's pace that still reads on screen. A choice, not measured.
+    /// The time between typed letters: 12.5 a second, a quick typist's pace that still reads on
+    /// screen. A choice, not measured.
     static let typingInterval = 0.08
 
-    /// Typing starts this long after the press that focuses the field, and ends this long before the
-    /// clip does, so the whole text shows before the cursor moves on.
+    /// The first letter comes this long after the press that focuses the field, or half-way through
+    /// a shorter clip.
+    static let typingDelay = 0.3
+
+    /// How long a clip whose length comes from its text shows it typed, so it's read before the
+    /// cursor moves on.
+    static let readingTime = 0.8
+
+    /// Typing ends at least this long before its clip does, so a short clip shows the whole text.
     static let typingMargin = 0.1
 
-    /// How long a type clip runs to type `text` at ``typingInterval``, at least ``defaultDuration``.
+    /// How long a type clip runs to type `text` and leave it to be read, at least ``defaultDuration``.
     static func typingDuration(for text: String) -> Double {
-        max(defaultDuration, pressDuration + 2 * typingMargin + Double(text.count) * typingInterval)
+        max(defaultDuration, typingDelay + Double(text.count) * typingInterval + readingTime)
     }
 
-    /// How much of ``text`` is typed at `time`: none before typing starts, all of it from when it ends,
-    /// and evenly between.
+    /// How much of ``text`` is typed at `time`: none before typing starts, then a letter every
+    /// ``typingInterval``, faster when the clip is too short for that, and all of it from when it ends.
     func typedText(at time: Double) -> String {
         guard action == .type, let text, !text.isEmpty else { return "" }
-        let start = range.lowerBound + Self.pressDuration + Self.typingMargin
-        let end = max(start, range.upperBound - Self.typingMargin)
+        let start = range.lowerBound + min(Self.typingDelay, (range.upperBound - range.lowerBound) / 2)
+        let end = max(start, min(start + Double(text.count) * Self.typingInterval, range.upperBound - Self.typingMargin))
         guard time >= start else { return "" }
         guard time < end else { return text }
         let count = Int((time - start) / (end - start) * Double(text.count)) + 1

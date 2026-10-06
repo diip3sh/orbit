@@ -16,14 +16,22 @@ struct WebTypingTests {
     }
 
     @Test func letterByLetterThroughTheClip() {
-        // Typing runs from 1.2 s (after the press and a margin) to 1.9 s
+        // Typing starts 0.3 s after the press and types a letter every 0.08 s: until 1.86 s
         let clip = typeClip(1..<2, text: "abcdefg")
 
-        #expect(clip.typedText(at: 1.1) == "")
-        #expect(clip.typedText(at: 1.21) == "a")
+        #expect(clip.typedText(at: 1.29).isEmpty)
+        #expect(clip.typedText(at: 1.31) == "a")
         #expect(clip.typedText(at: 1.55) == "abcd")
-        #expect(clip.typedText(at: 1.9) == "abcdefg")
+        #expect(clip.typedText(at: 1.86) == "abcdefg")
         #expect(clip.typedText(at: 5) == "abcdefg")
+    }
+
+    @Test func aShortClipTypesFasterToShowTheWholeText() {
+        // From half-way, 1.1 s, to 0.1 s before its end: all at once
+        let clip = typeClip(1..<1.2, text: "abc")
+
+        #expect(clip.typedText(at: 1.09).isEmpty)
+        #expect(clip.typedText(at: 1.1) == "abc")
     }
 
     @Test func onlyTypeClipsWithTextType() {
@@ -34,8 +42,9 @@ struct WebTypingTests {
     }
 
     @Test func aTypeClipLastsAsLongAsItsText() {
-        #expect(PointerClip.typingDuration(for: "hi") == PointerClip.defaultDuration)
-        #expect(abs(PointerClip.typingDuration(for: String(repeating: "x", count: 20)) - 1.9) < 1e-9)
+        // 0.3 s to the first letter, 0.08 s a letter, 0.8 s to read it
+        #expect(abs(PointerClip.typingDuration(for: "hi") - 1.26) < 1e-9)
+        #expect(abs(PointerClip.typingDuration(for: String(repeating: "x", count: 20)) - 2.7) < 1e-9)
     }
 
     @Test func typingClicksItsFieldFirstAndClearsWhenScrubbedBack() throws {

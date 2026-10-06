@@ -57,12 +57,12 @@ struct AgentToolCatalogTests {
     }
 
     @Test func aRenderStatusIsWrittenInTheSchemasNames() throws {
-        let status = RenderStatus(renderID: "abc", status: .done, progress: 1, movie: "/m.mov", telemetry: "/m.telemetry.json", unmatchedSelectors: ["#x"])
+        let status = RenderStatus(renderID: "abc", status: .done, progress: 1, movie: "/m.mov", telemetry: "/m.telemetry.json", warnings: ["At 1.0 s …"])
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
 
         let json = try #require(String(data: encoder.encode(status), encoding: .utf8))
 
-        #expect(json == ##"{"movie":"\/m.mov","progress":1,"render_id":"abc","status":"done","telemetry":"\/m.telemetry.json","unmatched_selectors":["#x"]}"##)
+        #expect(json == ##"{"movie":"\/m.mov","progress":1,"render_id":"abc","status":"done","telemetry":"\/m.telemetry.json","warnings":["At 1.0 s …"]}"##)
     }
 }

@@ -104,9 +104,17 @@ extension WebStage {
     /// The camera at the playhead: the zoom in effect and its focus, as fractions of the page, kept
     /// where the magnified view stays inside it. Unzoomed, the whole page, and always while picking: the
     /// web view's clicks don't follow a SwiftUI transform, so a pick would land beside its element.
+    /// A script that shows elements frames the one shown at the playhead, as the take will.
     static func camera(for viewModel: WebRecordingViewModel) -> (scale: Double, focus: CGPoint) {
         let script = viewModel.script
-        guard !viewModel.isPicking, let zoom = WebCamera.zoom(at: viewModel.playhead, in: script) else { return (1, CGPoint(x: 0.5, y: 0.5)) }
+        let whole = (1.0, CGPoint(x: 0.5, y: 0.5))
+        guard !viewModel.isPicking else { return whole }
+        if WebCamera.showsElements(script) {
+            guard let shown = viewModel.shownPreview, let visible = WebCamera.visiblePart(of: shown, in: script.viewport),
+                  let fit = WebCamera.fit(visible, in: script.viewport) else { return whole }
+            return (fit.scale, fit.center)
+        }
+        guard let zoom = WebCamera.zoom(at: viewModel.playhead, in: script) else { return whole }
         let point = viewModel.cursorPreview ?? zoom.clip.target.point
         let focus = CGPoint(x: point.x / script.viewport.width, y: point.y / script.viewport.height)
         return (zoom.scale, ZoomSegment.clamped(focus, scale: zoom.scale))

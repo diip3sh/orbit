@@ -99,8 +99,10 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
             files[claudeServersFile] = mcpServers(server, entry: AgentKind.claudeCode)
             // --tools, --allowedTools and --mcp-config take any number of values, so the prompt goes right
             // after -p and each list ends at the next flag
-            // stream-json (which needs --verbose) feeds the chat; the session is kept for a follow-up
-            arguments = ["-p", prompt, "--tools", "", "--allowedTools", "mcp__reco__*", "--permission-mode", "dontAsk",
+            // stream-json (which needs --verbose) feeds the chat; the session is kept for a follow-up. Web search
+            // and fetch, read-only, are the one other thing allowed: for learning what the product is
+            arguments = ["-p", prompt, "--tools", "WebSearch,WebFetch", "--allowedTools", "mcp__reco__*", "WebSearch", "WebFetch",
+                         "--permission-mode", "dontAsk",
                          "--mcp-config", directory.appending(path: claudeServersFile).path(percentEncoded: false),
                          "--strict-mcp-config"] + resume + option("--model") + ["--output-format", "stream-json", "--verbose"]
         case .codex:

@@ -723,7 +723,8 @@ Key facts:
 - The bar lists every agent whose command line is on the login shell's `PATH` (`refreshAgents`), ready when
   `AgentInvocation.bringsServer(for:)` or connected; otherwise it says which to connect. Antigravity (`agy`) is left
   out: its headless mode has no per-run tool allowlist, only `--dangerously-skip-permissions` (checked 2026-10-02).
-- Only Reco's tools run: Claude `--tools "" --allowedTools mcp__reco__*`, Codex `approve` mode and a
+- Only Reco's tools run: Claude `--tools WebSearch,WebFetch --allowedTools mcp__reco__* WebSearch WebFetch` (read-only web
+  research, spec 0009), Codex `approve` mode and a
   read-only sandbox, OpenCode inline permission config, Gemini policy file, Grok `dontAsk` (its read-only
   built-ins remain), Cursor workspace `cli.json`. Codex wasn't run (not installed).
 - The run's limit is **15 minutes** (a 30 s apple.com take at 2x is 1–2 minutes; linear.app needs 18 for 60 s).
@@ -759,14 +760,28 @@ the time on the right; Render is the accent button, like Export. The stage has n
   Mac (macOS 26.6) with or without the chat changes: rendering `http://localhost:1` succeeds instead of
   failing. Not yet looked into.
 
-### S6 — Walkthrough editor (`feat/ui-polish`, spec 0009)
+### S6 — Walkthrough editor (`feat/ui-polish`, `feat/walkthrough-show`, spec 0009)
 
 Effects are properties of a web script's steps, previewed with Play and rendered by the editor.
-- **Zoom per step:** `PointerClip.zoom`; `WebCamera` times it (in 0.4 s before, out 0.6 s after), `WebStage`
-  previews it, and `renderTake` writes the exact zooms into `<movie>.edit.json` (none → the editor auto-zooms).
+- **Show:** `PointerClip.show` (`record_page` `steps[].show`) names what the video zooms on during a step,
+  measured where the step starts and fitted by `WebCamera.fit` (≤ 3×, 80% of the view, none under 1.1×). Once
+  any clip shows one, only show clips zoom, and the take always writes `<movie>.edit.json`. A zoom ends 0.3 s
+  after the page scrolls or is replaced and isn't made when that comes within 0.5 s (`PageChanges`, also used
+  by web takes' auto-zooms); zooms under 1 s apart pan across.
+- **Takes:** before each cursor step Reco scrolls its element into view (≤ 1 s, 15% from the edge); scrolls to
+  an element aim as they start; a page a click opens shows from its top (URLs compared without fragment) and
+  is recorded in telemetry `navigations`. Each step is checked where it starts (`WebTakeIssues`): missing,
+  outside the view, covered, a click left out, a shown element out of view; `record_page` returns them as
+  `warnings`, and a run Reco started may call it twice (`AgentTools.maximumRecordings`).
+- **Method:** the prompt makes the agent research the product (Claude Code runs get read-only `WebSearch` and
+  `WebFetch`), plan four to six beats and give every cursor step a show. Defaults: first step at 1 s, 0.8 s
+  apart, 1.5 s per hover or click, 2 s per scroll, scale 1.
+- **Zoom per step:** `PointerClip.zoom`, the window's own (agents use show); `WebCamera` times it (in 0.4 s
+  before, out 0.6 s after), `WebStage` previews it, and `renderTake` writes the exact zooms into
+  `<movie>.edit.json` (none → the editor auto-zooms).
 - **Type:** `PointerClip.Action.type` + `text` clicks a field and types into it (`typedText(at:)`,
   `WebTypingScript` in an isolated world: native setter + `input`), in the take and the preview.
-- Agents get both through `record_page` (`zoom`, `type` + `text`). From the chat (`AgentRecordingRequest.rendersVideo`
+- Agents get both through `record_page` (`show`, `type` + `text`). From the chat (`AgentRecordingRequest.rendersVideo`
   false, `AgentTools.stagesPlans`) `record_page` only puts the plan on the timeline (status `planned`); the window renders
   it when the run ends, and the user can change and render it again. Stages 3–6 (spotlight, captions,
   narration, browser frame, speed, 9:16) are planned in the spec.
@@ -975,6 +990,7 @@ scrolls:       [{ time, location, delta: [dx,dy] }]
 keys:          [{ time, keyCode, modifiers: [..], isRepeat }]
 cursorSprites: [{ id, kind?, size, hotspot, png: base64 }]
 cursorShapes:  [{ time, sprite }]
+navigations:   [{ time, url }]                         // web takes: a page a click opened; missing → none
 ```
 CG geometry types encode as arrays (`CGRect` → `[[x,y],[w,h]]`). Bump `version` on incompatible changes
 and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVideo` and the cursor fields.

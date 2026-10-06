@@ -53,7 +53,7 @@ struct WebPreviewControllerTests {
         var script = WebScript()
         script.pointer = [PointerClip(range: 0..<1, action: .hover, target: WebTarget(selector: "#menu", point: CGPoint(x: 70, y: 90)))]
 
-        #expect(await preview.show(script, at: 0.5, scrolling: false) == CGPoint(x: 70, y: 90))
+        #expect(await preview.show(script, at: 0.5, scrolling: false).cursor == CGPoint(x: 70, y: 90))
     }
 
     /// Loads ``page`` and waits until it has finished loading.
