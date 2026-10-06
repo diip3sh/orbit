@@ -258,9 +258,12 @@ was grabbed (`PanelDragger`), and a flick that projects past the screen's edge (
 throws it off at the release speed and closes it; a slow drag stays where dropped, a flick inwards too. Drag the shot into
 any app to drop the image. The card and the capture toolbar have no window shadow: it outlines
 the rectangle around their rounded glass. Nothing is written until **Save**. The card stays until
-closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate` wires
-`ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and `onDidCapture` to
-`show(_:)` for a new screenshot or `restore()` (same card, same place) when the capture is cancelled or fails.
+closed, copied, saved, pinned, or replaced by the next screenshot. **Esc** closes it, like the Close button and
+a flick: the panel is key while it shows, so `QuickAccessView` handles it (`.onExitCommand`), not the window.
+`AppDelegate` wires `ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and
+`onDidCapture` to `show(_:)` for a new screenshot or `restore()` (same card, same place) when the capture is
+cancelled or fails. The capture toolbar is hidden the same way but **isn't** brought back by a cancelled capture:
+it was only the way in, so Esc on an area selection closes that state and leaves the screen as it was.
 
 - **Copy** (C14): PNG data only; the button turns to ✓ Copied as the card starts closing, so it confirms during the
   fade. **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed

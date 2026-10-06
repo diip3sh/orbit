@@ -9,7 +9,7 @@ import SwiftUI
 
 /// The Quick Access card: the screenshot in its own shape on a thin glass edge, with Copy and Save along
 /// its bottom, which confirm on the button. Under the pointer it dims and shows Close, Recognize Text and Pin in its corners. Drag the screenshot into
-/// another app; drag the edge to move the card, or flick it away. It grows from `anchor`, the corner
+/// another app; drag the edge to move the card, or flick it away; Esc closes it. It grows from `anchor`, the corner
 /// nearest where it opened.
 struct QuickAccessView: View {
 
@@ -38,6 +38,9 @@ struct QuickAccessView: View {
             .editorMotion(EditorTheme.quickMotion, value: isHovering)
             .panelPresentation(isPresented: model.isPresented, anchor: anchor)
             .allowsWindowActivationEvents(true)
+            // Esc closes the card, like the Close button and a flick. The panel is key while it shows, so
+            // this is the only way Esc reaches it: without it the key went nowhere.
+            .onExitCommand { model.close() }
     }
 }
 
