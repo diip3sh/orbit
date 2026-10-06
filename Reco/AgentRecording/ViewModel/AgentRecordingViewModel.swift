@@ -66,6 +66,9 @@ final class AgentRecordingViewModel {
     /// Called with the take a run recorded, to open it in the editor.
     @ObservationIgnored var onRecorded: ((AgentRecordedTake) -> Void)?
 
+    /// Called with the typed page, to open it where the user can sign in (spec 0010, step 1).
+    @ObservationIgnored var onSignIn: ((URL) -> Void)?
+
     /// How a command line is run: executable, arguments, environment, working folder, time limit.
     typealias RunProcess = @Sendable (URL, [String], [String: String], URL, Duration) async -> AgentProcess.Result
 
@@ -204,6 +207,14 @@ final class AgentRecordingViewModel {
         guard let url = WebScript.url(from: address) else { return .address }
         guard let agent else { return nil }
         run(AgentRecordingRequest(url: url, instructions: instructions, agent: agent, model: model))
+        return nil
+    }
+
+    /// Opens the typed page to sign in to: takes share the Web Recording window's cookies. Returns
+    /// the address field when it names no page.
+    func signIn() -> Field? {
+        guard let url = WebScript.url(from: address) else { return .address }
+        onSignIn?(url)
         return nil
     }
 

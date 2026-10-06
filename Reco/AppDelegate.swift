@@ -53,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.notificationService.editRecording = { [editorWindows] (url: URL) in editorWindows.open(url) }
         viewModel.notificationService.retryAgentRecording = { [agentRecording] in agentRecording.retry() }
         agentRecording.onRecorded = { [editorWindows] in editorWindows.open($0) }
+        agentRecording.onSignIn = { [editorWindows] in editorWindows.showWebRecording(at: $0) }
         viewModel.notificationService.showAgentRecording = { [weak self] in self?.showAgentRecording() }
 
         // Hidden first so the last card never lands in the next shot, even with Show Reco on;

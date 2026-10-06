@@ -37,7 +37,9 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         1. Research. Learn what the product does and which three features matter most. Call inspect_page on the page, then on \
         the two to four pages its product or features navigation links to (use their href): their descriptions and headings \
         say what each page shows. If you have web search or fetch, read the product's features or docs page too, and what a \
-        review names as its best features. Don't record anything until you can say in one sentence what the product is for.
+        review names as its best features. The user may be signed in to the product in Reco: inspect its app too (/app, \
+        /dashboard, or where Log in and Get started lead) and record that when it shows the product, before falling back to \
+        the marketing pages. Don't record anything until you can say in one sentence what the product is for.
         2. Plan. Write a shot list of four to six beats that tell one story: what the product is (the hero), its two or three \
         strongest features, each on its own page or section, and the call to action. For each beat name the one element the \
         viewer should see (a product screenshot, a feature card, a short heading with its text), the page it is on and how to \
@@ -47,7 +49,9 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         Hover something in or beside what you show for 2 to 3 s, so it is in view. To open a page, click its link, then hover that \
         page's hero showing it. Never park the cursor on the navigation while a page loads. Use scale 2, which stays sharp when \
         the video zooms in, unless inspect_page's render_cost at 2 is over 8: then the render would take over 8 minutes a \
-        minute, so use 1. Keep 1 s still at the start, 0.8 to 1 s between steps, and 45 to 60 s in all unless asked otherwise.
+        minute, so use 1. Keep 1 s still at the start, 0.8 to 1 s between steps, and 45 to 60 s in all unless asked otherwise. \
+        Hide the overlays inspect_page lists that aren't the product (a cookie banner, a chat button, an announcement bar), never \
+        the navigation.
         """
 
     /// How a video is recorded again with a change (spec 0008).

@@ -35,7 +35,9 @@ nonisolated enum AgentToolCatalog {
             name: inspectPage,
             description: """
                 Loads a web page in Reco and lists what it shows: size, title, description and its visible links, buttons, inputs and \
-                headings, each with a CSS selector, role, text, box in page pixels at scroll 0, and a link's href. Reco scrolls \
+                headings, each with a CSS selector, role, text, box in page pixels at scroll 0, and a link's href; and its overlays, \
+                what stays on screen as it scrolls (a navigation bar, a cookie banner, a chat button), for record_page's hide; and its \
+                brand: background, text and accent colors, serif or sans, and the logo. Reco scrolls \
                 through the page first, so content that loads on the way is listed too. Call it before record_page to get \
                 selectors to hover, click or scroll to, and on the page a click opens (its href) for the steps after that click. \
                 render_cost says how many seconds a second of video takes to render at scale 1 and 2 on this page: record at 2 \
@@ -66,6 +68,8 @@ nonisolated enum AgentToolCatalog {
             "viewport":{"type":"string","enum":["desktop","laptop","tablet","phone"],"default":"desktop"},
             "scale":{"type":"integer","enum":[1,2],"default":2,"description":"2 is sharp when zoomed; 1 renders faster (see inspect_page's render_cost)"},
             "duration":{"type":"number","description":"Seconds, max 120; default: last step end + 1.5"},
+            "hide":{"type":"array","items":{"type":"string"},"description":"CSS selectors hidden for the whole take: overlays from \#
+            inspect_page's overlays that aren't part of the product, like a cookie banner, chat button or announcement bar"},
             "steps":{"type":"array","items":{"type":"object","properties":{
             "action":{"type":"string","enum":["hover","click","type","scroll"]},
             "selector":{"type":"string","description":"CSS selector from inspect_page; for scroll, the element to bring near the top"},

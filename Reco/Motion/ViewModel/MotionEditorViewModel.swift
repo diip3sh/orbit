@@ -41,8 +41,8 @@ final class MotionEditorViewModel {
         do {
             let document = try await MotionStore.read(bundleURL)
             let canvas = document.canvas
-            let plan = await MotionPlan.build(
-                document, bundle: bundleURL, shorterSide: min(min(canvas.size.width, canvas.size.height), Self.previewShorterSide)
+            let plan = try await UICapture.plan(
+                for: document, bundle: bundleURL, shorterSide: min(min(canvas.size.width, canvas.size.height), Self.previewShorterSide)
             )
             let composition = try await MotionCompositionBuilder.composition(for: plan)
             self.document = document

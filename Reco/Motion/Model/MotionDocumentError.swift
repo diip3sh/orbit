@@ -14,6 +14,11 @@ nonisolated enum MotionDocumentError: LocalizedError, Equatable {
     case invalidScale(String)
     case invalidSize(String)
     case invalidCameraProperty(String)
+    case invalidAsset(String)
+    case unknownAsset(String)
+
+    /// Asset id and what's wrong with its steps.
+    case invalidSteps(String, String)
 
     var errorDescription: String? {
         switch self {
@@ -24,6 +29,9 @@ nonisolated enum MotionDocumentError: LocalizedError, Equatable {
         case .invalidScale(let id): "Layer \"\(id)\" has a scale that isn't positive."
         case .invalidSize(let id): "Layer \"\(id)\" has a size that isn't positive."
         case .invalidCameraProperty(let id): "Scene \"\(id)\"'s camera animates something other than x, y or z."
+        case .invalidAsset(let id): "Asset \"\(id)\" needs a web address (http or https) and a viewport of at least 16 pixels each way."
+        case .unknownAsset(let id): "Layer \"\(id)\" shows an asset the document doesn't list."
+        case .invalidSteps(let id, let reason): "Asset \"\(id)\": \(reason)"
         }
     }
 }

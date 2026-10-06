@@ -52,6 +52,17 @@ struct RecordPageRequestTests {
         #expect(plan.duration == third.upperBound + RecordPlan.tail)
     }
 
+    @Test func hiddenOverlaysGoIntoTheTakeAndBackIntoTheArguments() throws {
+        var hiding = request(steps: [hover("#a")])
+        hiding.hide = ["#cookies", "  ", " .chat "]
+        let plan = try hiding.plan()
+
+        #expect(plan.hide == ["#cookies", ".chat"])
+        #expect(plan.inspectionScript.hide == ["#cookies", ".chat"])
+        #expect(RecordPageRequest(script: plan.inspectionScript).hide == ["#cookies", ".chat"])
+        #expect(try request(steps: [hover("#a")]).plan().hide == nil)
+    }
+
     @Test func defaultsAreTheDesktopAtTwiceTheSize() throws {
         let plan = try request(url: "example.com/pricing").plan()
 

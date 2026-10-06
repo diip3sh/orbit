@@ -130,8 +130,15 @@ final class EditorWindowManager: NSObject {
         activate(window)
     }
 
-    /// Shows the Web Recording window, or brings it forward. Each render opens in the editor.
-    func showWebRecording() {
+    /// Shows the Web Recording window, or brings it forward, on `url` when given. Each render opens
+    /// in the editor.
+    func showWebRecording(at url: URL? = nil) {
+        defer {
+            if let url, let viewModel = webRecording?.viewModel {
+                viewModel.address = url.absoluteString
+                viewModel.commitAddress()
+            }
+        }
         if let webRecording {
             activate(webRecording.window)
             return

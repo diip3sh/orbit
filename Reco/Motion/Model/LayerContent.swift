@@ -6,10 +6,12 @@
 import CoreGraphics
 
 /// What a layer shows. Coded as an object with one key naming the kind:
-/// `{"text": {...}}`, `{"image": {...}}`, `{"shape": {...}}` or `{"group": [layers]}`.
+/// `{"text": {...}}`, `{"image": {...}}`, `{"ui": {...}}`, `{"shape": {...}}` or `{"group": [layers]}`.
 nonisolated enum LayerContent: Equatable, Sendable {
     case text(TextContent)
     case image(ImageContent)
+    /// UI lifted off a web page; coded `ui`.
+    case lifted(UIContent)
     case shape(ShapeContent)
 
     /// Layers moved together: their transforms are inside the group's, their opacity multiplied by it.
@@ -22,18 +24,20 @@ nonisolated extension LayerContent: Codable {
 
     private enum CodingKeys: String, CodingKey {
         case text, image, shape, group
+        case lifted = "ui"
     }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         guard container.allKeys.count == 1, let key = container.allKeys.first else {
             throw DecodingError.dataCorrupted(DecodingError.Context(
-                codingPath: decoder.codingPath, debugDescription: "Content names one kind: text, image, shape or group"
+                codingPath: decoder.codingPath, debugDescription: "Content names one kind: text, image, ui, shape or group"
             ))
         }
         switch key {
         case .text: self = .text(try container.decode(TextContent.self, forKey: key))
         case .image: self = .image(try container.decode(ImageContent.self, forKey: key))
+        case .lifted: self = .lifted(try container.decode(UIContent.self, forKey: key))
         case .shape: self = .shape(try container.decode(ShapeContent.self, forKey: key))
         case .group: self = .group(try container.decode([MotionLayer].self, forKey: key))
         }
@@ -44,6 +48,7 @@ nonisolated extension LayerContent: Codable {
         switch self {
         case .text(let text): try container.encode(text, forKey: .text)
         case .image(let image): try container.encode(image, forKey: .image)
+        case .lifted(let lifted): try container.encode(lifted, forKey: .lifted)
         case .shape(let shape): try container.encode(shape, forKey: .shape)
         case .group(let layers): try container.encode(layers, forKey: .group)
         }

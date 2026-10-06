@@ -6,7 +6,7 @@
 import AVFoundation
 
 /// Builds what the player plays and export writes for a motion video: frames drawn by
-/// ``MotionCompositor``, driven by a placeholder movie.
+/// ``MotionCompositor``, driven by a placeholder movie, with a track for each live layer's take.
 ///
 /// A composition needs a video track with media: one that holds only an empty range reports a
 /// duration of 0, and `AVAssetReaderVideoCompositionOutput` refuses it. A 1-frame 16×16 movie
@@ -24,11 +24,44 @@ enum MotionCompositionBuilder {
         }
         try track.insertTimeRange(range, of: source, at: .zero)
         track.scaleTimeRange(CMTimeRange(start: .zero, duration: range.duration), toDuration: duration(of: plan))
-        return EditorComposition(asset: composition, videoComposition: videoComposition(for: plan, placeholderTrackID: track.trackID), audioMix: AVMutableAudioMix())
+        var liveTracks: [MotionPlan.LayerKey: CMPersistentTrackID] = [:]
+        for layer in plan.liveLayers {
+            liveTracks[layer.key] = try await add(layer, to: composition)
+        }
+        return EditorComposition(
+            asset: composition, videoComposition: videoComposition(for: plan, placeholderTrackID: track.trackID, liveTracks: liveTracks),
+            audioMix: AVMutableAudioMix()
+        )
+    }
+
+    /// Plays the layer's take from its scene's start to its end, holding the last frame when the
+    /// scene is longer, and returns its track.
+    private static func add(_ layer: MotionPlan.LiveLayer, to composition: AVMutableComposition) async throws -> CMPersistentTrackID {
+        // Kept: a track holds its asset weakly, and inserting a track whose asset is gone fails (-12780)
+        let movie = AVURLAsset(url: layer.live.movie)
+        guard let source = try await movie.loadTracks(withMediaType: .video).first,
+              let track = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+            throw AVError(.unknown)
+        }
+        let take = try await source.load(.timeRange)
+        let start = CMTime(seconds: layer.sceneStart, preferredTimescale: 60_000)
+        let scene = CMTime(seconds: layer.sceneDuration, preferredTimescale: 60_000)
+        let shown = CMTimeMinimum(take.duration, scene)
+        try track.insertTimeRange(CMTimeRange(start: take.start, duration: shown), of: source, at: start)
+        if take.duration < scene {
+            // Takes are rendered at a constant frame rate
+            let frame = CMTime(value: 1, timescale: CMTimeScale(WebScript.frameRate))
+            let last = CMTimeRange(start: take.end - frame, duration: frame)
+            try track.insertTimeRange(last, of: source, at: start + shown)
+            track.scaleTimeRange(CMTimeRange(start: start + shown, duration: frame), toDuration: scene - shown)
+        }
+        return track.trackID
     }
 
     /// Frames drawn with `plan` at its frame rate, tagged BT.709.
-    static func videoComposition(for plan: MotionPlan, placeholderTrackID: CMPersistentTrackID) -> AVVideoComposition {
+    static func videoComposition(
+        for plan: MotionPlan, placeholderTrackID: CMPersistentTrackID, liveTracks: [MotionPlan.LayerKey: CMPersistentTrackID] = [:]
+    ) -> AVVideoComposition {
         let composition = AVMutableVideoComposition()
         composition.customVideoCompositorClass = MotionCompositor.self
         composition.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
@@ -37,7 +70,9 @@ enum MotionCompositionBuilder {
         composition.renderSize = plan.outputSize
         composition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(plan.frameRate))
         composition.instructions = [
-            MotionInstruction(timeRange: CMTimeRange(start: .zero, duration: duration(of: plan)), placeholderTrackID: placeholderTrackID, plan: plan)
+            MotionInstruction(
+                timeRange: CMTimeRange(start: .zero, duration: duration(of: plan)), placeholderTrackID: placeholderTrackID, liveTracks: liveTracks, plan: plan
+            )
         ]
         return composition
     }

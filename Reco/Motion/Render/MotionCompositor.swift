@@ -39,8 +39,15 @@ nonisolated final class MotionCompositor: NSObject, AVVideoCompositing, Sendable
             request.finish(with: AVError(.unknown))
             return
         }
+        // Each live layer's take, at the time its track plays
+        var frames: [MotionPlan.LayerKey: CIImage] = [:]
+        for (key, track) in instruction.liveTracks {
+            if let buffer = request.sourceFrame(byTrackID: track) {
+                frames[key] = CIImage(cvPixelBuffer: buffer)
+            }
+        }
         do {
-            try MotionFrameRenderer.draw(at: request.compositionTime.seconds, plan: instruction.plan, into: output, context: Self.context)
+            try MotionFrameRenderer.draw(at: request.compositionTime.seconds, plan: instruction.plan, frames: frames, into: output, context: Self.context)
             request.finish(withComposedVideoFrame: output)
         } catch {
             request.finish(with: error)

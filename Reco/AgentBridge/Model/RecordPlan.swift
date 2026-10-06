@@ -15,6 +15,9 @@ nonisolated struct RecordPlan: Equatable, Sendable {
     var duration: Double
     var steps: [TimedStep]
 
+    /// Selectors hidden for the whole take.
+    var hide: [String]?
+
     /// One step on its lane, from `steps[index]` of the request.
     nonisolated struct TimedStep: Equatable, Sendable {
         var index: Int
@@ -59,6 +62,7 @@ nonisolated struct RecordPlan: Equatable, Sendable {
         var script = WebScript()
         script.url = url
         script.viewport = viewport
+        script.hide = hide
         return script
     }
 

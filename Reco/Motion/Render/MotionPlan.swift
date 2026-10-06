@@ -30,8 +30,11 @@ nonisolated struct MotionPlan: Sendable {
         let shadow: LayerShadow?
 
         /// The content at ``rasterScale`` pixels per canvas pixel, from Core Image's bottom-left
-        /// origin; `nil` for a group or empty text, or until the plan has drawn it.
+        /// origin; `nil` for a group, empty text or a live take, or until the plan has drawn it.
         var image: CIImage?
+
+        /// The live take it shows instead of an image.
+        var live: Live?
         var rasterScale = 1.0
 
         /// The shadow, blurred once at ``rasterScale`` in the layer's own space and projected with
@@ -91,6 +94,14 @@ nonisolated struct MotionPlan: Sendable {
     let background: CIColor
     private(set) var scenes: [Scene]
 
+    /// Assets to lift before this plan can draw them sharp, by id, with the scale (image pixels per
+    /// CSS pixel) to lift at: never lifted, or shown larger than their sharpest lift.
+    private(set) var liftsNeeded: [String: Int] = [:]
+
+    /// Live assets to bake before this plan can draw them sharp, by id, with the scale (video
+    /// pixels per CSS pixel) to bake at: 0 to measure an element first, then whatever it's shown at.
+    private(set) var bakesNeeded: [String: Int] = [:]
+
     var duration: Double {
         scenes.last.map { $0.start + $0.duration } ?? 0
     }
@@ -106,8 +117,12 @@ nonisolated struct MotionPlan: Sendable {
 
     /// The scene on screen at `time` and the time within it.
     func scene(at time: Double) -> (scene: Scene, time: Double) {
-        let index = max(scenes.partitioningIndex { $0.start > time } - 1, 0)
+        let index = sceneIndex(at: time)
         return (scenes[index], time - scenes[index].start)
+    }
+
+    func sceneIndex(at time: Double) -> Int {
+        max(scenes.partitioningIndex { $0.start > time } - 1, 0)
     }
 
     /// Where every drawn layer of `scene` lands at `time` in it, farthest first; layers out of
@@ -196,6 +211,19 @@ extension MotionPlan {
         defer { signposter.endInterval("Build", signpost) }
 
         let canvas = document.canvas.size
+        var lifts: [String: UILiftCache.Lift] = [:]
+        var takes: [String: UILiftCache.Take] = [:]
+        var measured: [String: UILiftCache.TakeInfo] = [:]
+        for asset in document.assets {
+            if asset.steps == nil {
+                lifts[asset.id] = UILiftCache.best(asset, in: bundle)
+            } else {
+                takes[asset.id] = UILiftCache.take(asset, in: bundle)
+                measured[asset.id] = UILiftCache.info(asset, in: bundle)
+            }
+        }
+        // Each asset's element in CSS pixels, once captured or measured
+        let sizes = lifts.mapValues(\.size).merging(measured.mapValues(\.crop.size)) { $1 }
         let outputScale = shorterSide.map { $0 / min(canvas.width, canvas.height) } ?? 1
         var start = 0.0
         let scenes = document.scenes.map { scene in
@@ -203,7 +231,7 @@ extension MotionPlan {
             return Scene(
                 start: start,
                 duration: scene.duration,
-                layers: flattened(scene.layers, parent: nil),
+                layers: flattened(scene.layers, parent: nil, sizes: sizes),
                 camera: tracks(scene.camera.keyframes),
                 cameraBase: Dictionary(uniqueKeysWithValues: MotionProperty.camera.map { ($0, scene.camera.base($0, canvas: canvas)) })
             )
@@ -213,24 +241,27 @@ extension MotionPlan {
             canvas: canvas, outputScale: outputScale, frameRate: frameRate ?? document.canvas.frameRate,
             background: CIColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha), scenes: scenes
         )
-        plan.drawImages(for: document, bundle: bundle)
+        plan.drawImages(for: document, bundle: bundle, lifts: lifts, takes: takes, measured: measured)
         return plan
     }
 
-    /// Each scene's layers, parents first, with their sizes; images come later.
-    nonisolated private static func flattened(_ layers: [MotionLayer], parent: Int?, into list: [Layer] = []) -> [Layer] {
+    /// Each scene's layers, parents first, with their sizes; images come later. A `ui` layer whose
+    /// asset was never lifted has no size yet and isn't drawn.
+    nonisolated private static func flattened(_ layers: [MotionLayer], parent: Int?, sizes: [String: CGSize], into list: [Layer] = []) -> [Layer] {
         var list = list
         for layer in layers {
             var isGroup = false
             if case .group = layer.content {
                 isGroup = true
             }
+            let size = size(of: layer.content, sizes: sizes)
             list.append(Layer(
                 parent: parent, base: Dictionary(uniqueKeysWithValues: MotionProperty.allCases.map { ($0, layer.base($0)) }),
-                anchor: layer.transform.anchor, tracks: tracks(layer.keyframes), isDrawn: !isGroup, size: size(of: layer.content), shadow: layer.shadow
+                anchor: layer.transform.anchor, tracks: tracks(layer.keyframes), isDrawn: !isGroup && size.width > 0 && size.height > 0,
+                size: size, shadow: layer.shadow
             ))
             if case .group(let children) = layer.content {
-                list = flattened(children, parent: list.count - 1, into: list)
+                list = flattened(children, parent: list.count - 1, sizes: sizes, into: list)
             }
         }
         return list
@@ -242,17 +273,27 @@ extension MotionPlan {
         }
     }
 
-    nonisolated private static func size(of content: LayerContent) -> CGSize {
+    nonisolated private static func size(of content: LayerContent, sizes: [String: CGSize]) -> CGSize {
         switch content {
         case .text(let text): TextImage(text, scale: 0).size
         case .image(let image): image.size
+        case .lifted(let lifted):
+            sizes[lifted.asset].map { size in
+                let width = lifted.width ?? size.width
+                return CGSize(width: width, height: width * size.height / size.width)
+            } ?? .zero
         case .shape(let shape): shape.size
         case .group: .zero
         }
     }
 
-    /// Draws every layer's image at the largest scale it's shown in its scene.
-    nonisolated private mutating func drawImages(for document: MotionDocument, bundle: URL) {
+    /// Draws every layer's image at the largest scale it's shown in its scene, and lists the lifts
+    /// that are missing or too small for it.
+    nonisolated private mutating func drawImages(
+        for document: MotionDocument, bundle: URL, lifts: [String: UILiftCache.Lift], takes: [String: UILiftCache.Take],
+        measured: [String: UILiftCache.TakeInfo]
+    ) {
+        let live = Set(document.assets.filter { $0.steps != nil }.map(\.id))
         for (sceneIndex, scene) in document.scenes.enumerated() {
             let contents = Self.contents(of: scene.layers)
             var largest = [Double](repeating: 0, count: contents.count)
@@ -267,7 +308,18 @@ extension MotionPlan {
                 let shown = largest[index] > 0 ? min(largest[index], Self.maximumRasterScale) : 1
                 let rasterScale = shown * outputScale
                 scenes[sceneIndex].layers[index].rasterScale = rasterScale
-                let image = Self.image(of: contents[index], scale: rasterScale, bundle: bundle)
+                if case .lifted(let lifted) = contents[index], live.contains(lifted.asset) {
+                    showLive(lifted.asset, on: MotionPlan.LayerKey(scene: sceneIndex, layer: index), rasterScale: rasterScale,
+                             take: takes[lifted.asset], measured: measured[lifted.asset])
+                    continue
+                }
+                if case .lifted(let lifted) = contents[index] {
+                    let needed = Self.liftScale(for: lifts[lifted.asset], width: scenes[sceneIndex].layers[index].size.width, rasterScale: rasterScale)
+                    if needed > lifts[lifted.asset]?.scale ?? 0 {
+                        liftsNeeded[lifted.asset] = max(liftsNeeded[lifted.asset] ?? 0, needed)
+                    }
+                }
+                let image = Self.image(of: contents[index], scale: rasterScale, size: scenes[sceneIndex].layers[index].size, bundle: bundle, lifts: lifts)
                 scenes[sceneIndex].layers[index].image = image
                 if let image, let shadow = scenes[sceneIndex].layers[index].shadow {
                     scenes[sceneIndex].layers[index].shadowImage = Self.shadow(
@@ -309,32 +361,93 @@ extension MotionPlan {
         }
     }
 
-    nonisolated private static func image(of content: LayerContent, scale: Double, bundle: URL) -> CIImage? {
+    /// Puts `asset`'s take on the layer, and asks for a bake when it hasn't been measured or is
+    /// softer than the layer is shown.
+    nonisolated private mutating func showLive(
+        _ asset: String, on key: MotionPlan.LayerKey, rasterScale: Double, take: UILiftCache.Take?, measured: UILiftCache.TakeInfo?
+    ) {
+        let layer = scenes[key.scene].layers[key.layer]
+        guard let measured else {
+            bakesNeeded[asset] = bakesNeeded[asset] ?? 0
+            return
+        }
+        let needed = Self.takeScale(for: measured, width: layer.size.width, rasterScale: rasterScale)
+        if needed > (take?.info.scale ?? 0) {
+            bakesNeeded[asset] = max(bakesNeeded[asset] ?? 0, needed)
+        }
+        guard let take else { return }
+        let live = Live(take, asset: asset)
+        scenes[key.scene].layers[key.layer].live = live
+        guard let shadow = layer.shadow else { return }
+        // Cast by the element's painted shape, or its box rounded as the element is
+        let radius = take.info.radius * layer.size.width / take.info.crop.width
+        let box = live.matte.map { matte in
+            matte.transformed(by: CGAffineTransform(
+                scaleX: layer.size.width * rasterScale / matte.extent.width, y: layer.size.height * rasterScale / matte.extent.height
+            ))
+        } ?? Self.roundedRectangle(size: layer.size, radius: radius, scale: rasterScale)
+        scenes[key.scene].layers[key.layer].shadowImage = Self.shadow(of: box, shadow: shadow, padding: layer.shadowPadding, scale: rasterScale)
+    }
+
+    /// Video pixels per CSS pixel for a live layer `width` canvas pixels wide drawn at
+    /// `rasterScale`: whole, at most 8×, and the movie within HEVC's 8,192 px. A take recorded at
+    /// 2× and shown at four times its CSS size on a 4K canvas read soft.
+    nonisolated static func takeScale(for info: UILiftCache.TakeInfo, width: Double, rasterScale: Double) -> Int {
+        let scale = Int((rasterScale * width / info.crop.width - 0.01).rounded(.up))
+        let fits = Int(UILiftCache.maximumMovieSide / max(info.crop.width, info.crop.height))
+        return max(min(scale, UILiftCache.scales.upperBound, fits), 1)
+    }
+
+    /// Image pixels per CSS pixel for a `ui` layer `width` canvas pixels wide drawn at
+    /// `rasterScale`; 2× before the first lift, when the element's size isn't known yet.
+    nonisolated private static func liftScale(for lift: UILiftCache.Lift?, width: Double, rasterScale: Double) -> Int {
+        guard let lift else { return 2 }
+        // Not a scale up for a rounding error
+        let scale = Int((rasterScale * width / lift.size.width - 0.01).rounded(.up))
+        return min(max(scale, UILiftCache.scales.lowerBound), UILiftCache.scales.upperBound)
+    }
+
+    nonisolated private static func image(
+        of content: LayerContent, scale: Double, size: CGSize, bundle: URL, lifts: [String: UILiftCache.Lift]
+    ) -> CIImage? {
         switch content {
         case .text(let text):
             return TextImage(text, scale: scale).image.map { CIImage(cgImage: $0) }
         case .shape(let shape):
             let color = shape.color
-            return CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-                "inputExtent": CIVector(cgRect: CGRect(x: 0, y: 0, width: shape.size.width * scale, height: shape.size.height * scale)),
-                "inputRadius": shape.cornerRadius * scale,
-                "inputColor": CIColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha)
-            ])?.outputImage
+            return roundedRectangle(
+                size: shape.size, radius: shape.cornerRadius, scale: scale, color: CIColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha)
+            )
         case .image(let image):
-            let pixels = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-            guard let source = CGImageSourceCreateWithURL(bundle.appending(path: image.path) as CFURL, nil),
-                  let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                    kCGImageSourceCreateThumbnailFromImageAlways: true,
-                    kCGImageSourceCreateThumbnailWithTransform: true,
-                    kCGImageSourceThumbnailMaxPixelSize: max(pixels.width, pixels.height).rounded(.up)
-                  ] as CFDictionary) else { return nil }
-            // Stretched to the layer's size, as an <img> with both dimensions set
-            return CIImage(cgImage: cgImage).transformed(by: CGAffineTransform(
-                scaleX: pixels.width / CGFloat(cgImage.width), y: pixels.height / CGFloat(cgImage.height)
-            ))
+            return picture(at: bundle.appending(path: image.path), pixels: CGSize(width: size.width * scale, height: size.height * scale))
+        case .lifted(let lifted):
+            return lifts[lifted.asset].flatMap { picture(at: $0.url, pixels: CGSize(width: size.width * scale, height: size.height * scale)) }
         case .group:
             return nil
         }
+    }
+
+    /// A rounded rectangle `size` canvas pixels large at `scale` pixels per canvas pixel.
+    nonisolated static func roundedRectangle(size: CGSize, radius: Double, scale: Double, color: CIColor = .white) -> CIImage {
+        CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+            "inputExtent": CIVector(cgRect: CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale)),
+            "inputRadius": radius * scale,
+            "inputColor": color
+        ])?.outputImage ?? CIImage.empty()
+    }
+
+    /// The image file at `url` read at most `pixels` large, stretched to exactly that, as an
+    /// `<img>` with both dimensions set.
+    nonisolated private static func picture(at url: URL, pixels: CGSize) -> CIImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: max(pixels.width, pixels.height).rounded(.up)
+              ] as CFDictionary) else { return nil }
+        return CIImage(cgImage: cgImage).transformed(by: CGAffineTransform(
+            scaleX: pixels.width / CGFloat(cgImage.width), y: pixels.height / CGFloat(cgImage.height)
+        ))
     }
 }
 

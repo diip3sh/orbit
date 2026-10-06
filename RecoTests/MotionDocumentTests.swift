@@ -64,6 +64,42 @@ struct MotionDocumentTests {
         #expect(throws: MotionDocumentError.noScenes) { try MotionDocument().validate() }
     }
 
+    @Test func decodesUILayersAndTheirAssets() throws {
+        let json = #"""
+        {
+          "version": 1,
+          "assets": [{ "id": "card", "url": "https://linear.app", "selector": ".card" }],
+          "scenes": [{ "id": "one", "duration": 1, "layers": [{ "id": "ui", "content": { "ui": { "asset": "card", "width": 900 } } }] }]
+        }
+        """#
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(json.utf8))
+
+        #expect(document.assets == [MotionAsset(id: "card", url: try #require(URL(string: "https://linear.app")), selector: ".card")])
+        #expect(document.assets[0].viewport == CGSize(width: 1440, height: 900))
+        #expect(document.scenes[0].layers[0].content == .lifted(UIContent(asset: "card", width: 900)))
+        try document.validate()
+    }
+
+    @Test func validatesAssets() throws {
+        let url = try #require(URL(string: "https://linear.app"))
+        let layer = MotionLayer(id: "ui", content: .lifted(UIContent(asset: "card")))
+        var document = MotionDocument(scenes: [MotionScene(id: "one", duration: 1, layers: [layer])])
+        #expect(throws: MotionDocumentError.unknownAsset("ui")) { try document.validate() }
+
+        document.assets = [MotionAsset(id: "card", url: url, selector: ".card"), MotionAsset(id: "card", url: url, selector: ".other")]
+        #expect(throws: MotionDocumentError.duplicateID("card")) { try document.validate() }
+
+        document.assets = [MotionAsset(id: "card", url: URL(filePath: "/tmp/page.html"), selector: ".card")]
+        #expect(throws: MotionDocumentError.invalidAsset("card")) { try document.validate() }
+
+        document.assets = [MotionAsset(id: "card", url: url, selector: ".card", steps: [RecordPageRequest.Step(action: "type", selector: "#field")])]
+        #expect(throws: MotionDocumentError.self) { try document.validate() }
+
+        document.assets = [MotionAsset(id: "card", url: url, selector: ".card")]
+        document.scenes[0].layers[0].content = .lifted(UIContent(asset: "card", width: 0))
+        #expect(throws: MotionDocumentError.invalidSize("ui")) { try document.validate() }
+    }
+
     @Test func storeWritesAndReadsABundle() async throws {
         let (url, document) = try MotionTestBundle.make()
         defer { try? FileManager.default.removeItem(at: url) }

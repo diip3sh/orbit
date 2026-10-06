@@ -186,6 +186,19 @@ struct AgentRecordingViewModelTests {
         #expect(model.phase == .idle)
     }
 
+    @Test func signingInOpensTheTypedPage() throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let model = try makeModel()
+        var opened: [URL] = []
+        model.onSignIn = { opened.append($0) }
+
+        model.address = "not a page"
+        #expect(model.signIn() == .address)
+        model.address = "linear.app"
+        #expect(model.signIn() == nil)
+        #expect(opened == [try #require(URL(string: "https://linear.app"))])
+    }
+
     @Test func aRunPassesThePromptAndTheLoginEnvironmentAndEndsIdleOnSuccess() async throws {
         defer { try? FileManager.default.removeItem(at: home) }
         let calls = Calls()

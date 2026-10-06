@@ -35,7 +35,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 680 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 696 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
   reads alpha 254 instead of 255 with Xcode 26.0.1 on macOS 26.5.2, also without this fork's later changes.
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
@@ -826,6 +826,41 @@ Key facts:
 - Golden frames: `RecoTests/Fixtures/motion-demo-*.png`, drawn from `motion-demo.json` at 480 px. A
   missing golden fails its test and writes the frame to the temporary folder to review and copy in.
 
+### S6 — Motion editor, phase 2: real UI layers (`remotion`, spec 0011)
+
+`document.assets` lists UI on web pages (address, selector, viewport); a `ui` layer shows one. A still
+is lifted alone with real alpha at the scale the plan shows it; an asset with `record_page` steps is a
+live take of the element's box, played from its scene's start with its cursor. Both are captured into
+the bundle when a plan first needs them.
+
+| File | Role |
+|---|---|
+| `Motion/Model/MotionAsset.swift`, `UIContent.swift` | The asset (`takePlan()` times its steps as `record_page` does) and the `ui` layer (`LayerContent.lifted`, coded `ui`) |
+| `Motion/Service/UICapture.swift`, `UILiftScript.swift` | `plan(for:bundle:…)` builds, captures what the plan asks for (`liftsNeeded`, `bakesNeeded`), builds again; `lift` (one page load per address) and `bake` |
+| `Motion/Service/UILiftCache.swift` | `assets/lifts/<key>@<n>x.png`, `assets/live/<key>.mov` with telemetry, `-matte.png` and `TakeInfo` (crop, radius, scale; 0 while only measured); the key hashes address, selector, viewport, hide and steps |
+| `Motion/Render/MotionPlan+Live.swift` | `Live` (movie, cursor in the take's space, crop origin), `LayerKey`, `liveLayers` |
+| `Motion/Render/MotionCompositionBuilder.swift`, `MotionCompositor.swift`, `MotionFrameRenderer.swift` | A track per live layer; its frame cropped, masked by the element's radius, with the cursor |
+| `WebRecording/Service/WebPageRenderer.swift` | `withLoadedPage` (shared with `inspect`), `render(to:crop:…)` |
+| `WebRecording/Service/WebClockScript.swift`, `WebHideScript.swift`, `WebInspectScript.swift` | Media on the take's clock; `WebScript.hide`; `PageInspection.overlays` and `brand` |
+| `AgentRecording/ViewModel/AgentRecordingViewModel.swift` | `signIn()` → `EditorWindowManager.showWebRecording(at:)` |
+
+Key facts:
+- Lifts: whole scales 1–8× image pixels per CSS pixel; sharper ones are kept. Scroll as little as it
+  takes, wait for the element's finite animations (≤ 5 s), hide what's beside the path from the root
+  (never an ancestor: WebKit then dropped supabase.com's card background), `backdrop-filter` off.
+- Live takes are measured first (`bakesNeeded` 0), then rendered at the scale shown (≤ 8×, movie ≤ 8,192 px), and
+  cut to their matte (the element lifted without a fill): a radius left a square wrapper's grey around a pill.
+- A track holds its asset weakly: inserting a track whose `AVURLAsset` is gone fails with -12780.
+- Costs (M5, Debug): a still lift 2.7–8.5 s with the page load, linear.app at 8× 30 s; a 6 s live take
+  of a 694×48 element 10.6 s; a 1080p frame with a live layer 1.1 / 3.1 ms p50 / p95.
+- Two 8× WebKit snapshots at once made the GPU process quit; one at a time they don't.
+- Web takes (spec 0010 step 1): media plays on the take's clock (`WebClockScript`: really paused,
+  seeked each frame while in view, `seeked` waited up to 5 s once); `hide` selectors are a style at
+  document start (`WebHideScript`); `inspect_page` adds `overlays` and `brand` (colors via a canvas, so
+  `oklch()` reads as hex). **Sign In…** in the agent bar opens the Web Recording window on its address.
+  cardboard.ai's hero videos pause themselves 2 s after landing on a desktop; hovered, one matched
+  its source frame for frame.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -897,7 +932,7 @@ should hold but need re-measuring.
 | S5 agent chat and reliable web takes (spec 0008) | Done and tested: real Claude Code runs from the prompt and from the chat in the app (sent through accessibility), 60 s apple.com takes checked frame by frame. Not yet tried: Retry and Cancel by hand, VoiceOver, Reduce Motion, other agents |
 
 | Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps, shown elements, playbook | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop); linear.app walkthroughs run from the app through `reco://record-agent`. Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
-| S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Waiting on the user's side-by-side of spike C; the window not yet seen in the app. Phase 2 (real UI layers) is next |
+| S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 (grammar) next. Waiting on the user's side-by-side of spike C; the window not yet seen in the app |
 
 What to build next: `docs/specs/0011-motion-editor.md` (October 2026), phase by phase. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

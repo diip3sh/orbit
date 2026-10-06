@@ -13,15 +13,20 @@ nonisolated final class MotionInstruction: NSObject, AVVideoCompositionInstructi
     let enablePostProcessing = false
     let containsTweening = true
 
-    /// The placeholder track that drives the frames (``MotionCompositionBuilder``); its pixels are unused.
+    /// The placeholder track that drives the frames (``MotionCompositionBuilder``), whose pixels
+    /// are unused, and the live layers' tracks.
     let requiredSourceTrackIDs: [NSValue]?
     let passthroughTrackID = kCMPersistentTrackID_Invalid
 
     let plan: MotionPlan
 
-    init(timeRange: CMTimeRange, placeholderTrackID: CMPersistentTrackID, plan: MotionPlan) {
+    /// The track of each live layer's take.
+    let liveTracks: [MotionPlan.LayerKey: CMPersistentTrackID]
+
+    init(timeRange: CMTimeRange, placeholderTrackID: CMPersistentTrackID, liveTracks: [MotionPlan.LayerKey: CMPersistentTrackID], plan: MotionPlan) {
         self.timeRange = timeRange
         self.plan = plan
-        requiredSourceTrackIDs = [NSNumber(value: placeholderTrackID)]
+        self.liveTracks = liveTracks
+        requiredSourceTrackIDs = ([placeholderTrackID] + liveTracks.values).map { NSNumber(value: $0) }
     }
 }

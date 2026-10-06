@@ -26,6 +26,10 @@ nonisolated struct WebScript: Codable, Equatable, Sendable {
     /// The Scroll lane, sorted and apart.
     var scrolls: [ScrollClip] = []
 
+    /// Selectors of what's hidden on every page of the take, like a cookie banner or a chat button;
+    /// `nil` for nothing (scripts saved before it have none).
+    var hide: [String]?
+
     static let frameRate = 60
 
     /// The shortest a script can be, in seconds.

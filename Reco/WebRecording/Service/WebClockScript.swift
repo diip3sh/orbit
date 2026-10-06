@@ -20,6 +20,11 @@ import Foundation
 ///   `animation-play-state`, holds its time.
 /// - A frame waits up to 5 s for the images in view and the fonts to load; what misses that isn't
 ///   waited for again.
+/// - Media plays on the clock too (spec 0010, step 1): once frozen, every `<video>` and `<audio>` the
+///   page plays is really paused, and each frame seeks the ones in view to where they'd be, looping
+///   at their rate, waiting for `seeked` up to 5 s like images. `play()`, `pause()`, `paused`,
+///   `timeupdate` and `ended` behave for the page as if it played. One with nothing loaded yet, like
+///   `preload="none"`, is loaded first.
 /// - `window.__reco` holds what the renderer calls: `frame(time, x, y, selectors)` freezes
 ///   the clock at the take's `time` on its first call, then steps it, and returns the selectors'
 ///   boxes and the page's height; it returns `null` while a new page is still loading.
@@ -136,6 +141,82 @@ enum WebClockScript {
         }
       }
 
+      // Media the page plays, once the clock is frozen: its time at clock time `at`
+      const realMediaPlay = HTMLMediaElement.prototype.play;
+      const realMediaPause = HTMLMediaElement.prototype.pause;
+      const realPaused = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'paused').get;
+      const playing = new Map();
+      const mediaStalled = new WeakSet();
+      const mediaLoading = new WeakSet();
+      const start = (media) => {
+        playing.set(media, { time: media.currentTime, at: now });
+        realMediaPause.call(media);
+      };
+      HTMLMediaElement.prototype.play = function () {
+        if (base === null) return realMediaPlay.call(this);
+        if (!playing.has(this)) {
+          start(this);
+          for (const type of ['play', 'playing']) this.dispatchEvent(new Event(type));
+        }
+        return Promise.resolve();
+      };
+      HTMLMediaElement.prototype.pause = function () {
+        if (!playing.delete(this)) return realMediaPause.call(this);
+        this.dispatchEvent(new Event('pause'));
+      };
+      Object.defineProperty(HTMLMediaElement.prototype, 'paused', {
+        configurable: true,
+        get() { return playing.has(this) ? false : realPaused.call(this); }
+      });
+
+      // Where each playing medium in view should be at `now`: seeked there, waited for
+      async function syncMedia() {
+        // What started by itself, like an autoplay element that loaded after the freeze
+        for (const media of document.querySelectorAll('video, audio')) {
+          if (!playing.has(media) && !realPaused.call(media)) start(media);
+        }
+        const seeks = [];
+        for (const [media, state] of playing) {
+          let time = state.time + (now - state.at) / 1000 * (media.playbackRate || 1);
+          const duration = media.duration;
+          if (duration > 0 && Number.isFinite(duration)) {
+            if (media.loop) {
+              time %= duration;
+            } else if (time >= duration) {
+              playing.delete(media);
+              media.currentTime = duration;
+              media.dispatchEvent(new Event('ended'));
+              continue;
+            }
+          }
+          if (!media.isConnected || !(media instanceof HTMLVideoElement) || !inView(media)) continue;
+          seeks.push(seek(media, time));
+          media.dispatchEvent(new Event('timeupdate'));
+        }
+        if (!seeks.length) return;
+        const timeout = new Promise((resolve) => realTimeout(resolve, 5000, false));
+        if (await Promise.race([Promise.all(seeks).then(() => true), timeout])) return;
+        for (const [media] of playing) if (media.seeking) mediaStalled.add(media);
+      }
+
+      // Resolves once `media` shows `time`; one that stalled before isn't waited for again
+      const seek = (media, time) => new Promise((resolve) => {
+        const go = () => {
+          if (Math.abs(media.currentTime - time) < 0.0005 && !media.seeking) return resolve();
+          media.addEventListener('seeked', resolve, { once: true });
+          media.currentTime = time;
+          if (mediaStalled.has(media)) resolve();
+        };
+        if (media.readyState >= HTMLMediaElement.HAVE_METADATA) return go();
+        if (!mediaLoading.has(media)) {
+          mediaLoading.add(media);
+          media.preload = 'auto';
+          if (media.networkState !== HTMLMediaElement.NETWORK_LOADING) media.load();
+        }
+        media.addEventListener('loadedmetadata', go, { once: true });
+        if (mediaStalled.has(media)) resolve();
+      });
+
       const settle = () => new Promise((resolve) => realFrame(() => realTimeout(resolve, 0)));
       const inView = (element) => {
         const box = element.getBoundingClientRect();
@@ -185,12 +266,17 @@ enum WebClockScript {
       };
 
       Object.defineProperty(window, '__reco', { value: {
-        freeze(time) { if (base === null) base = now - time * 1000; },
+        freeze(time) {
+          if (base !== null) return;
+          base = now - time * 1000;
+          for (const media of document.querySelectorAll('video, audio')) if (!realPaused.call(media)) start(media);
+        },
         async frame(time, scrollX, scrollY, selectors) {
           if (base === null && document.readyState !== 'complete') return null;
           this.freeze(time);
           advance(base + time * 1000);
           window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
+          await syncMedia();
           await settle();
           await loadInView();
           const boxes = {};

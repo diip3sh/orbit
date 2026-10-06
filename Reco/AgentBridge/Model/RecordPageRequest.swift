@@ -14,6 +14,9 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
     var duration: Double?
     var steps: [Step]
 
+    /// Selectors to hide for the whole take, from `inspect_page`'s overlays.
+    var hide: [String]?
+
     nonisolated struct Step: Codable, Equatable, Sendable {
 
         /// `hover`, `click`, `type` or `scroll`.
@@ -67,7 +70,8 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         guard duration <= WebScript.maximumDuration else {
             throw .invalidArgument("The take would last \(duration) s; the most is \(WebScript.maximumDuration) s.")
         }
-        return RecordPlan(url: url, viewport: viewport, scale: scale, duration: duration, steps: timed)
+        let hide = (hide ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        return RecordPlan(url: url, viewport: viewport, scale: scale, duration: duration, steps: timed, hide: hide.isEmpty ? nil : hide)
     }
 
     private func timing(of step: Step, at index: Int, after previousEnd: Double?) throws(AgentToolError) -> RecordPlan.TimedStep {
@@ -168,7 +172,8 @@ nonisolated extension RecordPageRequest {
             viewport: WebScript.Viewport.allCases.first { $0.size == script.viewport }?.rawValue,
             scale: script.scale,
             duration: Self.rounded(script.duration),
-            steps: (pointer + scrolls).sorted { ($0.start ?? 0) < ($1.start ?? 0) }
+            steps: (pointer + scrolls).sorted { ($0.start ?? 0) < ($1.start ?? 0) },
+            hide: script.hide
         )
     }
 

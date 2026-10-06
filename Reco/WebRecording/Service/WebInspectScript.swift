@@ -11,11 +11,14 @@ import Foundation
 ///
 /// Selectors come from ``WebPickScript/selectorFunctions``, so they are the ones the pick mode makes.
 /// Boxes are in page CSS pixels (the viewport's box plus the scroll). `selectors` (an argument) are
-/// the ones the caller wants the box of: the first element each matches.
+/// the ones the caller wants the box of: the first element each matches, with its corner radius.
 enum WebInspectScript {
 
     /// The most elements listed; `truncated` says when there were more.
     static let maximumElements = 200
+
+    /// The most overlays listed.
+    static let maximumOverlays = 20
 
     /// How far the page is scrolled at a time while it loads what's further down, as a share of the
     /// viewport's height, and how long each step waits.
@@ -56,6 +59,48 @@ enum WebInspectScript {
     };
     const roleOf = (element) => element.getAttribute('role') || implicitRoles[element.localName] || (element.localName === 'input' ? element.type : 'generic');
     const visible = [...document.querySelectorAll(interactive)].filter(isVisible);
+    // Any CSS color as #rrggbb, through a canvas, so oklch() and color() read like the rest; null when transparent
+    const swatch = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+    const hex = (color) => {
+      swatch.clearRect(0, 0, 1, 1);
+      swatch.fillStyle = color;
+      swatch.fillRect(0, 0, 1, 1);
+      const [red, green, blue, alpha] = swatch.getImageData(0, 0, 1, 1).data;
+      return alpha < 128 ? null : '#' + [red, green, blue].map((value) => value.toString(16).padStart(2, '0')).join('');
+    };
+    const painted = (element) => {
+      for (let node = element; node; node = node.parentElement) {
+        const color = hex(getComputedStyle(node).backgroundColor);
+        if (color) return color;
+      }
+      return null;
+    };
+    const brandOf = () => {
+      const background = painted(document.elementFromPoint(innerWidth / 2, innerHeight / 2)) || painted(document.body) || '#ffffff';
+      const heading = [...document.querySelectorAll('h1, h2')].find(isVisible) || document.body;
+      const style = getComputedStyle(heading);
+      const families = style.fontFamily.toLowerCase();
+      const face = /monospace|mono\b/.test(families) ? 'mono' : /(^|,)\s*serif\b/.test(families) && !/sans/.test(families.split(',')[0]) ? 'serif' : 'sans';
+      // The main call to action: the largest painted link or button on the first screen
+      const actions = visible.filter((element) => element.matches('a[href], button, [role=button]') && element.getBoundingClientRect().top < innerHeight)
+        .map((element) => ({ color: hex(getComputedStyle(element).backgroundColor), box: element.getBoundingClientRect() }))
+        .filter((action) => action.color && action.color !== background)
+        .sort((first, second) => second.box.width * second.box.height - first.box.width * first.box.height);
+      const home = [...document.querySelectorAll('a[href]')].filter(isVisible).find((link) => {
+        try {
+          const url = new URL(link.href);
+          return url.origin === location.origin && url.pathname === '/' && link.querySelector('img, svg') && link.getBoundingClientRect().top < 200;
+        } catch {
+          return false;
+        }
+      });
+      const mark = home?.querySelector('img, svg');
+      return {
+        background, text: hex(style.color) || '#000000', accent: actions[0]?.color ?? undefined, face,
+        font: style.fontFamily.split(',')[0].replace(/["']/g, '').trim(),
+        logo: mark ? { selector: selectorFor(mark), box: pageBox(mark) } : undefined
+      };
+    };
     const description = (document.querySelector('meta[name="description" i], meta[property="og:description"]')?.content || '').trim();
     const result = {
       title: document.title,
@@ -68,14 +113,28 @@ enum WebInspectScript {
         // Where a link goes, to inspect the page a click opens
         href: element.localName === 'a' && element.href ? element.href.slice(0, 200) : undefined
       })),
-      truncated: visible.length > \#(maximumElements)
+      truncated: visible.length > \#(maximumElements),
+      // Fixed and sticky, the outermost of each: a navigation bar, a cookie banner, a chat button
+      overlays: [...document.querySelectorAll('body *')].filter((element) => {
+        const position = getComputedStyle(element).position;
+        if (position !== 'fixed' && position !== 'sticky') return false;
+        for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
+          if (['fixed', 'sticky'].includes(getComputedStyle(node).position)) return false;
+        }
+        const box = element.getBoundingClientRect();
+        return box.width > 1 && box.height > 1 && box.bottom > 0 && box.top < innerHeight && isVisible(element);
+      }).slice(0, \#(maximumOverlays)).map((element) => ({
+        selector: selectorFor(element), position: getComputedStyle(element).position, text: textOf(element), box: pageBox(element)
+      })),
+      // A page this can't read is still listed
+      brand: (() => { try { return brandOf(); } catch { return undefined; } })()
     };
     if (selectors.length) {
       result.boxes = {};
       for (const selector of selectors) {
         try {
           const element = document.querySelector(selector);
-          if (element) result.boxes[selector] = pageBox(element);
+          if (element) result.boxes[selector] = { ...pageBox(element), radius: parseFloat(getComputedStyle(element).borderTopLeftRadius) || 0 };
         } catch {}
       }
     }

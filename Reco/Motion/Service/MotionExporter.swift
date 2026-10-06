@@ -16,8 +16,8 @@ enum MotionExporter {
     ) async throws -> URL {
         let canvas = document.canvas
         let settings = settings.conformed(shorterSide: min(canvas.size.width, canvas.size.height), frameRate: Double(canvas.frameRate))
-        let plan = await MotionPlan.build(
-            document, bundle: bundle, shorterSide: settings.resolution.map { CGFloat($0) }, frameRate: settings.frameRate
+        let plan = try await UICapture.plan(
+            for: document, bundle: bundle, shorterSide: settings.resolution.map { CGFloat($0) }, frameRate: settings.frameRate
         )
         let composition = try await MotionCompositionBuilder.composition(for: plan)
         let url = settings.format.outputURL(for: bundle)

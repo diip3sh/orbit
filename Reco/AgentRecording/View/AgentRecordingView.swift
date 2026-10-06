@@ -27,6 +27,13 @@ struct AgentRecordingView: View {
                         .font(.title3)
                         .focused($focus, equals: .address)
                         .onSubmit(submit)
+                    Button("Sign In…") {
+                        if let field = model.signIn() {
+                            focus = field
+                        }
+                    }
+                    .buttonStyle(.editorGhost)
+                    .help("Open the page to sign in. The agent records what you see signed in.")
                 }
                 .padding(EditorTheme.spacing)
 

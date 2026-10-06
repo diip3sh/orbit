@@ -334,9 +334,10 @@ graph LR
   crop it per word; shapes; shadows; lifted UI images; the logo.
 - **Lifted UI (`ui`):** the element's box snapshotted with `WKSnapshotConfiguration.rect` (the
   offscreen window resized to fit elements taller than the viewport) at the largest scale it is
-  shown (layer scale × camera zoom × output pixels per CSS pixel, at most 4×), masked by its own
-  `border-radius`. Cached by a hash of (address, selector, steps, scale).
-- **Live UI (`liveUI`):** a web take of the page cropped to the element: the same frame-exact
+  shown (layer scale × camera zoom × output pixels per CSS pixel, at most 8×), alone on a
+  transparent page, so its own rounded corners are its alpha. Cached by a hash of (address,
+  selector, viewport, steps), one file per scale.
+- **Live UI (a `ui` asset with steps):** a web take of the page cropped to the element: the same frame-exact
   renderer, the same steps as `record_page` (hover, click, type, scroll), baked ahead into a movie
   in `assets/` with its telemetry. Each baked movie is a source track of the composition, so
   AVFoundation decodes and seeks it; the cursor is drawn from the telemetry in the layer's space,
@@ -415,7 +416,7 @@ end of every phase and its scores recorded here.
 |---|---|---|
 | 0 - Benchmark and spikes | M | Done but the side-by-side |
 | 1 - Document, core, compositor | L | Done; the window not yet seen in the app |
-| 2 - Real UI layers | L | Todo |
+| 2 - Real UI layers | L | Done; the window not yet seen in the app |
 | 3 - Grammar v1 | L | Todo |
 | 4 - Agent | L | Todo |
 | 5 - Music and beats | M | Todo |
@@ -535,6 +536,74 @@ frame is within a mean of 3.
   overlays, signed-in pages) and step 3 (`brand`) land here.
 - **Done when:** a card lifted from each benchmark site stays sharp at 3× zoom on a 4K export;
   a live layer types into a real field in sync with its cursor; lift and bake costs are recorded.
+
+#### Phase 2 results (2026-10-06, M5, Debug)
+
+- **Assets** (`document.assets`): an address, a selector and a viewport (1440×900 when left out).
+  A `ui` layer (`{"ui": {"asset", "width"}}`) shows one at its own aspect ratio, a CSS pixel per
+  canvas pixel unless `width` is given. Without `steps` it's a still; with `record_page`'s steps
+  (and an optional `duration`) it's live. Captured into `assets/lifts` and `assets/live` when a
+  plan first needs them, keyed by a hash of what decides the pixels, never written into the
+  document. `UICapture.plan` builds, captures what the plan asks for, and builds again (at most
+  twice: only a capture tells the plan an element's size).
+- **Stills** are lifted at the scale the plan shows them, whole image pixels per CSS pixel up to 8×
+  (4× the canvas on a 4K canvas, about two canvas pixels per CSS pixel); sharper lifts are kept,
+  so a 4K export after a 1080p preview lifts once more. What the lift does, each measured:
+  scrolls as little as it takes (linear.app fades its hero out as the page scrolls: centred it
+  read opacity 0.09); waits for the finite animations on the element, its ancestors and inside it,
+  up to 5 s (the hero fades in ~2 s after loading); hides the elements beside the path from the
+  root rather than every element (under `body * { visibility: hidden }` WebKit left out
+  supabase.com's code card's own background though it computed as visible); turns off
+  `backdrop-filter`; grows the view for an element taller than it.
+- **Live layers:** `inspect_page`'s look at the page, `record_page`'s timing and aiming, and a take
+  rendered frame by frame of only the element's box where the page first shows it (the renderer's
+  `crop`). Captured in two rounds: the box is measured first, then the take is rendered at the
+  scale the plan shows it (whole, ≤ 8×, the movie ≤ 8,192 px): at a fixed 2×, DuckDuckGo's search
+  shown at four times its CSS size on a 4K canvas read soft. The movie is a track of the
+  composition, played from its scene's start, the last frame held when the scene is longer. Each
+  frame is cut to the element's matte, its painted shape lifted without a fill (a corner radius
+  left the square wrapper's grey around DuckDuckGo's pill), and gets the take's cursor drawn in the
+  movie's space, so it turns with the plane; the shadow is cast by the matte too.
+- **Done-when checks:** the three benchmark cards (linear.app's app frame, supabase.com's code
+  card, cardboard.ai's dashboard) pushed 3× on a 4K canvas lifted at 7–8× and read sharp in 1:1
+  crops of the export (cardboard.ai's embedded video is soft at its source). A live layer typed
+  "launch videos from real UI" into duckduckgo.com's search field on a tilted plane, the I-beam on
+  the field as each key landed; the local-page test checks the cursor is on the field when the keys
+  are typed.
+
+| Cost | Measured |
+|---|---|
+| Lift, still (page load and settle included) | supabase.com 2.7 s at 2× and 8×; cardboard.ai 6.2 / 6.5 s; linear.app 8.5 s at 2×, 30 s at 8× (10560×5760 px, 45 MB PNG): WebKit paints on the CPU |
+| Three 4K lifts at 7–8× with their plan | 30.5 s, once; the 9 s 4K HEVC export then took 14.9 s |
+| Bake, live | a 4 s take of a 400×200 panel 6.9 s; a 6 s take of duckduckgo.com's 694×48 search 10.6 s |
+| Frame, 1080p, a live layer with a shadow | 1.1 ms p50, 3.1 ms p95 (load average 3.5); the 6 s export took 1.5 s |
+
+- Two WebKit snapshots of 8× at once (two tests in parallel) made the GPU process quit
+  ("An unknown error occurred"); one at a time they don't. Captures run one at a time per window.
+- **Media on the take's clock** (spec 0010 step 1, in `WebClockScript`): once frozen, every
+  `<video>`/`<audio>` the page plays is really paused and each frame seeks the ones in view to their
+  time on the clock (looping, at their rate), waiting for `seeked` up to 5 s once; `play()`,
+  `pause()`, `paused`, `timeupdate` and `ended` behave for the page as if it played, and
+  `preload="none"` media is loaded first. A local 30 fps clip advances exactly half a frame per
+  60 fps frame (`WebMediaClockTests`; with syncing off it froze). cardboard.ai's hero tiles pause
+  themselves 2 s after landing on a desktop and play under the pointer: a take hovering the shoe
+  tile shows its cuts 0.167, 0.283, 0.05, 0.117 s apart against the source's 0.166, 0.292, 0.042,
+  0.125, at a constant offset (2.89–2.90 s), so frame for frame. One video seeking cost ~15 ms a
+  frame at 1× (67 against 52 ms).
+- **Clean page:** `inspect_page` lists `overlays` (fixed and sticky elements in view, outermost
+  only: each benchmark site's header); `record_page` and motion assets take `hide`, a style
+  injected at document start on every page, a rule per selector. The playbook says to hide what
+  isn't the product, never the navigation.
+- **Signed-in pages:** **Sign In…** in the agent bar opens the Web Recording window on its address
+  (takes share its cookies); the playbook tells the agent the user may be signed in and to inspect
+  the app (`/app`, `/dashboard`, where Log in leads) first. A take of `http://localhost` renders.
+- **Brand** (spec 0010 step 3): `inspect_page`'s `brand` gives the background behind the first
+  screen, the main heading's color, the accent (the largest painted link or button on the first
+  screen), serif, sans or mono with the font's name, and the logo in the home link. linear.app:
+  `#08090a`, Inter, accent `#e5e5e6`, no logo (its logo link isn't `/`); supabase.com `#131413`,
+  Manrope, `#006338`, logo; cardboard.ai `#111315`, Denton serif, `#ffffff`, logo.
+- Spec 0010 step 1's page changes (a cross-fade when a click opens a page) and step 3's browser
+  frame aren't part of this phase.
 
 ### Phase 3 - Grammar v1 (L)
 

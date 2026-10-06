@@ -4,6 +4,7 @@
 //
 
 import CoreGraphics
+import CoreImage
 import Foundation
 import Testing
 @testable import Reco
@@ -23,6 +24,62 @@ struct MotionPlanTests {
         )
         layer.opacity = opacity
         return layer
+    }
+
+    @Test func aUILayerWithoutALiftAsksForOneAndIsntDrawn() async throws {
+        let asset = MotionAsset(id: "card", url: try #require(URL(string: "https://example.com")), selector: ".card")
+        var document = document([MotionLayer(id: "ui", content: .lifted(UIContent(asset: "card")), transform: Transform3D(position: [960, 540, 0]))])
+        document.assets = [asset]
+        let plan = await MotionPlan.build(document, bundle: bundle)
+
+        #expect(plan.liftsNeeded == ["card": 2])
+        #expect(plan.placements(of: plan.scenes[0], at: 0).isEmpty)
+    }
+
+    @Test func aLiveLayerWithoutATakeAsksForOne() async throws {
+        let step = RecordPageRequest.Step(action: "click", selector: "#buy")
+        let asset = MotionAsset(id: "form", url: try #require(URL(string: "https://example.com")), selector: ".form", steps: [step])
+        var document = document([MotionLayer(id: "ui", content: .lifted(UIContent(asset: "form")), transform: Transform3D(position: [960, 540, 0]))])
+        document.assets = [asset]
+        let plan = await MotionPlan.build(document, bundle: bundle)
+
+        // Measured first: only then can the plan say how large the take is shown
+        #expect(plan.bakesNeeded == ["form": 0])
+        #expect(plan.liftsNeeded.isEmpty)
+        #expect(plan.liveLayers.isEmpty)
+    }
+
+    @Test func aUILayerAsksForASharperLiftWhenShownLarger() async throws {
+        let bundle = URL.temporaryDirectory.appending(path: "\(UUID().uuidString).motion")
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        let asset = MotionAsset(id: "card", url: try #require(URL(string: "https://example.com")), selector: ".card")
+        try FileManager.default.createDirectory(at: bundle.appending(path: "assets/lifts"), withIntermediateDirectories: true)
+        // A 400×200 CSS px element lifted at 1×
+        try await ScreenshotService.writePNG(try Self.opaqueImage(width: 400, height: 200), to: UILiftCache.url(of: asset, scale: 1, in: bundle))
+        var document = document([MotionLayer(
+            id: "ui", content: .lifted(UIContent(asset: "card", width: 800)), transform: Transform3D(position: [960, 540, 0])
+        )])
+        document.assets = [asset]
+
+        let plan = await MotionPlan.build(document, bundle: bundle)
+        #expect(plan.scenes[0].layers[0].size == CGSize(width: 800, height: 400))
+        #expect(plan.liftsNeeded == ["card": 2])
+
+        try await ScreenshotService.writePNG(try Self.opaqueImage(width: 800, height: 400), to: UILiftCache.url(of: asset, scale: 2, in: bundle))
+        let sharp = await MotionPlan.build(document, bundle: bundle)
+        #expect(sharp.liftsNeeded.isEmpty)
+        #expect(sharp.scenes[0].layers[0].image?.extent == CGRect(x: 0, y: 0, width: 800, height: 400))
+    }
+
+    private static func opaqueImage(width: Int, height: Int) throws -> CGImage {
+        let space = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let context = try #require(CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.setFillColor(CGColor(gray: 0.5, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return try #require(context.makeImage())
     }
 
     @Test func findsTheSceneOnScreen() async throws {
