@@ -60,7 +60,8 @@ nonisolated extension MotionPlan {
         }
     }
 
-    /// A layer showing a live take, and its scene's time on the video.
+    /// A layer showing a live take, and its scene's time on the video, with the overlap under the
+    /// next scene's transition.
     nonisolated struct LiveLayer: Sendable {
         let key: LayerKey
         let live: Live
@@ -73,9 +74,27 @@ nonisolated extension MotionPlan {
         scenes.enumerated().flatMap { sceneIndex, scene in
             scene.layers.enumerated().compactMap { index, layer in
                 layer.live.map {
-                    LiveLayer(key: LayerKey(scene: sceneIndex, layer: index), live: $0, sceneStart: scene.start, sceneDuration: scene.duration)
+                    LiveLayer(key: LayerKey(scene: sceneIndex, layer: index), live: $0, sceneStart: scene.start, sceneDuration: scene.duration + scene.overlap)
                 }
             }
         }
+    }
+
+    /// Video pixels per CSS pixel for a live layer `width` canvas pixels wide drawn at
+    /// `rasterScale`: whole, at most 8×, and the movie within HEVC's 8,192 px. A take recorded at
+    /// 2× and shown at four times its CSS size on a 4K canvas read soft.
+    static func takeScale(for info: UILiftCache.TakeInfo, width: Double, rasterScale: Double) -> Int {
+        let scale = Int((rasterScale * width / info.crop.width - 0.01).rounded(.up))
+        let fits = Int(UILiftCache.maximumMovieSide / max(info.crop.width, info.crop.height))
+        return max(min(scale, UILiftCache.scales.upperBound, fits), 1)
+    }
+
+    /// Image pixels per CSS pixel for a `ui` layer `width` canvas pixels wide drawn at
+    /// `rasterScale`; 2× before the first lift, when the element's size isn't known yet.
+    static func liftScale(for lift: UILiftCache.Lift?, width: Double, rasterScale: Double) -> Int {
+        guard let lift else { return 2 }
+        // Not a scale up for a rounding error
+        let scale = Int((rasterScale * width / lift.size.width - 0.01).rounded(.up))
+        return min(max(scale, UILiftCache.scales.lowerBound), UILiftCache.scales.upperBound)
     }
 }

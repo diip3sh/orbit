@@ -3,6 +3,7 @@
 //  RecoTests
 //
 
+import CoreGraphics
 import Foundation
 import Testing
 @testable import Reco
@@ -36,6 +37,16 @@ struct MotionDocumentTests {
         let document = try JSONDecoder().decode(MotionDocument.self, from: Fixture.data("motion-demo"))
 
         #expect(try JSONDecoder().decode(MotionDocument.self, from: JSONEncoder().encode(document)) == document)
+    }
+
+    @Test func grammarFieldsRoundTripThroughJSON() throws {
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Fixture.data("motion-grammar"))
+
+        #expect(document.scenes[1].seam == .blurCut)
+        #expect(document.scenes[3].shot?.region == CGRect(x: 0.04, y: 0.06, width: 0.5, height: 0.3))
+        #expect(document.scenes[6].layers[0].moves.last?.words == ["DevOps", "Triage"])
+        #expect(try JSONDecoder().decode(MotionDocument.self, from: JSONEncoder().encode(document)) == document)
+        try document.validate()
     }
 
     @Test func refusesOtherVersions() {

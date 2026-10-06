@@ -5,8 +5,8 @@
 
 import SwiftUI
 
-/// A motion bundle's window: the preview in the canvas's shape on the stage, the transport under it
-/// and Export in the toolbar. Editing comes in spec 0011's phase 6.
+/// A motion bundle's window: the preview in the canvas's shape on the stage, the transport and the
+/// scenes under it, the inspector beside it and Export in the toolbar.
 struct MotionEditorView: View {
     let viewModel: MotionEditorViewModel
 
@@ -16,21 +16,25 @@ struct MotionEditorView: View {
         Group {
             if let document = viewModel.document {
                 let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                VStack(spacing: EditorTheme.spacing) {
-                    PlayerLayerView(player: viewModel.playback.player, cornerRadius: Self.cornerRadius)
-                        .background(.black, in: shape)
-                        .shadow(color: .black.opacity(0.28), radius: 32, y: 18)
-                        .overlay {
-                            shape.strokeBorder(.white.opacity(0.1))
-                        }
-                        .aspectRatio(document.canvas.size, contentMode: .fit)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                HStack(spacing: 0) {
+                    VStack(spacing: EditorTheme.spacing) {
+                        PlayerLayerView(player: viewModel.playback.player, cornerRadius: Self.cornerRadius)
+                            .background(.black, in: shape)
+                            .shadow(color: .black.opacity(0.28), radius: 32, y: 18)
+                            .overlay {
+                                shape.strokeBorder(.white.opacity(0.1))
+                            }
+                            .aspectRatio(document.canvas.size, contentMode: .fit)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    MotionTransportBar(viewModel: viewModel)
-                }
-                .padding(EditorTheme.largeSpacing)
-                .background {
-                    StageDotGrid()
+                        MotionTransportBar(viewModel: viewModel)
+                        MotionScenesLane(viewModel: viewModel)
+                    }
+                    .padding(EditorTheme.largeSpacing)
+                    .background {
+                        StageDotGrid()
+                    }
+                    MotionInspector(viewModel: viewModel)
                 }
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
@@ -44,7 +48,7 @@ struct MotionEditorView: View {
                     .controlSize(.small)
             }
         }
-        .frame(minWidth: 640, minHeight: 420)
+        .frame(minWidth: 960, minHeight: 560)
         .editorWindowBackground()
         .task {
             await viewModel.load()

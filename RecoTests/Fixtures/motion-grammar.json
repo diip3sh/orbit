@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "canvas": { "size": [1920, 1080], "frameRate": 60 },
+  "assets": [{ "id": "card", "url": "https://example.com", "selector": ".card" }],
+  "scenes": [
+    { "id": "title", "duration": 3, "shot": { "shot": "title", "text": "Ship faster.", "detail": "Plans that keep up" } },
+    { "id": "hook", "duration": 2.4, "seam": "blurCut", "shot": { "shot": "hook", "text": "Built for speed", "ui": "card" } },
+    { "id": "hero", "duration": 3.5, "shot": { "shot": "uiHero", "ui": "card" } },
+    { "id": "focus", "duration": 3, "seam": "zoomThrough", "shot": { "shot": "uiFocus", "ui": "card", "region": [[0.04, 0.06], [0.5, 0.3]] } },
+    { "id": "cascade", "duration": 2.5, "seam": "push", "shot": { "shot": "uiCascade", "items": [{ "ui": "card" }, { "ui": "card" }] } },
+    { "id": "features", "duration": 5, "shot": { "shot": "featureSequence", "items": [{ "text": "Plan", "ui": "card" }, { "text": "Build" }] } },
+    {
+      "id": "roll", "duration": 3,
+      "layers": [{
+        "id": "agents", "content": { "text": { "text": "Agents for Coding", "size": 100 } }, "transform": { "position": [960, 540, 0] },
+        "moves": [{ "move": "blurWipe" }, { "move": "roll", "words": ["DevOps", "Triage"] }]
+      }]
+    },
+    { "id": "end", "duration": 3.6, "seam": "fade", "shot": { "shot": "endCard", "text": "Made with Reco", "detail": "reco.app", "ui": "card" } }
+  ]
+}

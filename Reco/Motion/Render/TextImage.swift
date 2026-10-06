@@ -16,13 +16,20 @@ nonisolated struct TextImage: @unchecked Sendable {
     /// The layer's size in canvas pixels.
     let size: CGSize
 
-    /// Each word's and each line's box in canvas pixels from the layer's top-left corner.
+    /// Each character's, word's and line's box in canvas pixels from the layer's top-left corner;
+    /// characters as a reader counts them (composed sequences), spaces included.
+    let characters: [CGRect]
     let words: [CGRect]
     let lines: [CGRect]
 
+    /// The height of a capital, in canvas pixels: what headline sizes are measured by.
+    let capHeight: Double
+
     init(_ content: TextContent, scale: Double) {
+        let font = Self.font(for: content)
+        capHeight = font.capHeight
         let attributed = NSAttributedString(string: content.text, attributes: [
-            .font: Self.font(for: content),
+            .font: font,
             .foregroundColor: NSColor(cgColor: content.color.cgColor) ?? .white,
             .paragraphStyle: Self.paragraphStyle(for: content.alignment)
         ])
@@ -40,21 +47,21 @@ nonisolated struct TextImage: @unchecked Sendable {
         // Boxes from the top-left corner: Core Text's origins are baselines from the bottom-left
         var lineBoxes: [CGRect] = []
         var wordBoxes: [CGRect] = []
+        var characterBoxes: [CGRect] = []
         let text = content.text as NSString
         for (line, origin) in zip(lines, origins) {
             var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
             let width = CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
             let top = size.height - origin.y - ascent
-            lineBoxes.append(CGRect(x: origin.x, y: top, width: width, height: ascent + descent))
-            let range = CTLineGetStringRange(line)
-            text.enumerateSubstrings(in: NSRange(location: range.location, length: range.length), options: .byWords) { _, wordRange, _, _ in
-                let start = CTLineGetOffsetForStringIndex(line, wordRange.location, nil)
-                let end = CTLineGetOffsetForStringIndex(line, NSMaxRange(wordRange), nil)
-                wordBoxes.append(CGRect(x: origin.x + start, y: top, width: end - start, height: ascent + descent))
-            }
+            let box = CGRect(x: origin.x, y: top, width: width, height: ascent + descent)
+            lineBoxes.append(box)
+            // A line's breaking space or newline counts as a character, at the line's end
+            characterBoxes += Self.boxes(of: .byComposedCharacterSequences, in: text, on: line, at: box)
+            wordBoxes += Self.boxes(of: .byWords, in: text, on: line, at: box)
         }
         self.lines = lineBoxes
         words = wordBoxes
+        characters = characterBoxes
 
         let pixels = CGSize(width: (size.width * scale).rounded(.up), height: (size.height * scale).rounded(.up))
         guard pixels.width >= 1, pixels.height >= 1, let space = CGColorSpace(name: CGColorSpace.sRGB),
@@ -68,6 +75,18 @@ nonisolated struct TextImage: @unchecked Sendable {
         context.scaleBy(x: scale, y: scale)
         CTFrameDraw(frame, context)
         image = context.makeImage()
+    }
+
+    /// The boxes of the parts `options` divides `line` into, on the line's own `box`.
+    private static func boxes(of options: NSString.EnumerationOptions, in text: NSString, on line: CTLine, at box: CGRect) -> [CGRect] {
+        let range = CTLineGetStringRange(line)
+        var boxes: [CGRect] = []
+        text.enumerateSubstrings(in: NSRange(location: range.location, length: range.length), options: options) { _, part, _, _ in
+            let start = CTLineGetOffsetForStringIndex(line, part.location, nil)
+            let end = max(CTLineGetOffsetForStringIndex(line, NSMaxRange(part), nil), start)
+            boxes.append(CGRect(x: box.minX + start, y: box.minY, width: end - start, height: box.height))
+        }
+        return boxes
     }
 
     /// SF Pro, New York or SF Mono at the content's size and weight.

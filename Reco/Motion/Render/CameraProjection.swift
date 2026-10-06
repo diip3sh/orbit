@@ -18,8 +18,16 @@ nonisolated struct CameraProjection: Equatable, Sendable {
 
     let canvas: CGSize
 
+    /// The lens's zoom: 2 shows everything twice as large without changing its perspective.
+    var zoom = 1.0
+
     var focalLength: Double {
         MotionCamera.focalLength * canvas.height
+    }
+
+    /// How far to move in for a layer at z 0 to show `zoom` times larger.
+    static func dolly(forZoom zoom: Double, canvas: CGSize) -> Double {
+        MotionCamera.focalLength * canvas.height * (1 - 1 / zoom)
     }
 
     /// Points closer than this to the camera, or behind it, aren't drawn: their planes would flip.
@@ -32,7 +40,7 @@ nonisolated struct CameraProjection: Equatable, Sendable {
     func project(_ point: SIMD3<Double>) -> (point: CGPoint, depth: Double)? {
         let depth = point.z + focalLength - dolly
         guard depth >= nearDepth else { return nil }
-        let factor = focalLength / depth
+        let factor = focalLength * zoom / depth
         return (CGPoint(x: canvas.width / 2 + (point.x - lookAt.x) * factor, y: canvas.height / 2 + (point.y - lookAt.y) * factor), depth)
     }
 }

@@ -26,19 +26,37 @@ struct MotionRenderingTests {
         let plan = await MotionPlan.build(document, bundle: url, shorterSide: 270)
 
         for time in Self.goldenTimes {
-            let name = "motion-demo-\(Int(time * 1000))"
-            let frame = try Self.pixels(of: MotionFrameRenderer.image(at: time, plan: plan))
-            guard let golden = Fixture.url(name, withExtension: "png") else {
-                let written = URL.temporaryDirectory.appending(path: "\(name).png")
-                try Self.writePNG(frame, to: written)
-                Issue.record("No golden frame \(name).png; this frame was written to \(written.path())")
-                continue
-            }
-            let goldenImage = try #require(CIImage(contentsOf: golden))
-            let difference = try Self.difference(frame, Self.pixels(of: goldenImage))
-            #expect(difference.mean < 0.5, "\(name): mean difference \(difference.mean)")
-            #expect(difference.most <= 32, "\(name): largest difference \(difference.most)")
+            try Self.expectGolden("motion-demo-\(Int(time * 1000))", MotionFrameRenderer.image(at: time, plan: plan))
         }
+    }
+
+    /// Each shot of the grammar, its reveals and its seams, drawn from `motion-grammar.json`: the title
+    /// wiping in and settled, the hook blurring in, the hero's band of focus, the focus dimmed, a push
+    /// half way, the cascade, both features, the roll wiping in and rolled, the end card faded in.
+    @Test func grammarGoldenFrames() async throws {
+        let (url, document) = try MotionTestBundle.makeGrammar()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let plan = await MotionPlan.build(document, bundle: url, shorterSide: 270)
+
+        #expect(plan.liftsNeeded.isEmpty)
+        for time in [0.5, 2.0, 3.1, 7.0, 10.5, 12.1, 13.0, 15.0, 18.0, 19.9, 21.0, 22.6, 25.5] {
+            try Self.expectGolden("motion-grammar-\(Int(time * 1000))", MotionFrameRenderer.image(at: time, plan: plan))
+        }
+    }
+
+    /// Compares `image` with the golden frame `name`; a missing one is written to the temporary folder.
+    private static func expectGolden(_ name: String, _ image: CIImage) throws {
+        let frame = try pixels(of: image)
+        guard let golden = Fixture.url(name, withExtension: "png") else {
+            let written = URL.temporaryDirectory.appending(path: "\(name).png")
+            try writePNG(frame, to: written)
+            Issue.record("No golden frame \(name).png; this frame was written to \(written.path())")
+            return
+        }
+        let goldenImage = try #require(CIImage(contentsOf: golden))
+        let difference = try difference(frame, pixels(of: goldenImage))
+        #expect(difference.mean < 0.5, "\(name): mean difference \(difference.mean)")
+        #expect(difference.most <= 32, "\(name): largest difference \(difference.most)")
     }
 
     @Test func thePreviewDrawsWhatTheRendererDraws() async throws {

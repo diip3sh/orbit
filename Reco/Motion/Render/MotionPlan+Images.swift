@@ -1,0 +1,105 @@
+//
+//  MotionPlan+Images.swift
+//  Reco
+//
+
+import CoreGraphics
+import CoreImage
+import ImageIO
+
+// MARK: - Images
+
+/// The images a plan draws once: layer contents, shapes, shadows.
+extension MotionPlan {
+
+    /// Draws shadows once; without color management, as frames are.
+    nonisolated private static let context = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull()])
+
+    /// The image's silhouette in black at the shadow's opacity, blurred, with `padding` canvas pixels
+    /// around it, drawn into a bitmap.
+    nonisolated static func shadow(of image: CIImage, shadow: LayerShadow, padding: Double, scale: Double) -> CIImage? {
+        let inset = padding * scale
+        let silhouette = image
+            .applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: min(max(shadow.opacity, 0), 1))
+            ])
+            .transformed(by: CGAffineTransform(translationX: inset, y: inset))
+            .applyingGaussianBlur(sigma: shadow.radius * scale)
+        let bounds = CGRect(x: 0, y: 0, width: image.extent.width + 2 * inset, height: image.extent.height + 2 * inset).integral
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let bitmap = context.createCGImage(silhouette, from: bounds, format: .RGBA8, colorSpace: space) else { return nil }
+        return CIImage(cgImage: bitmap)
+    }
+
+    nonisolated static func image(
+        of content: LayerContent, scale: Double, size: CGSize, bundle: URL, lifts: [String: UILiftCache.Lift]
+    ) -> CIImage? {
+        switch content {
+        case .text(let text):
+            return TextImage(text, scale: scale).image.map { CIImage(cgImage: $0) }
+        case .shape(let shape):
+            let color = shape.color
+            return roundedRectangle(
+                size: shape.size, radius: shape.cornerRadius, scale: scale, color: CIColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha)
+            )
+        case .image(let image):
+            return picture(at: bundle.appending(path: image.path), pixels: CGSize(width: size.width * scale, height: size.height * scale))
+        case .lifted(let lifted):
+            return lifts[lifted.asset].flatMap { picture(at: $0.url, pixels: CGSize(width: size.width * scale, height: size.height * scale)) }
+        case .group:
+            return nil
+        }
+    }
+
+    /// A rounded rectangle `size` canvas pixels large at `scale` pixels per canvas pixel.
+    nonisolated static func roundedRectangle(size: CGSize, radius: Double, scale: Double, color: CIColor = .white) -> CIImage {
+        CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+            "inputExtent": CIVector(cgRect: CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale)),
+            "inputRadius": radius * scale,
+            "inputColor": color
+        ])?.outputImage ?? CIImage.empty()
+    }
+
+    /// The image file at `url` read at most `pixels` large, stretched to exactly that, as an
+    /// `<img>` with both dimensions set.
+    nonisolated private static func picture(at url: URL, pixels: CGSize) -> CIImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: max(pixels.width, pixels.height).rounded(.up)
+              ] as CFDictionary) else { return nil }
+        return CIImage(cgImage: cgImage).transformed(by: CGAffineTransform(
+            scaleX: pixels.width / CGFloat(cgImage.width), y: pixels.height / CGFloat(cgImage.height)
+        ))
+    }
+
+    /// The layer darkened by `dim` outside `region` (canvas pixels from the top-left corner of a
+    /// layer `height` tall), and out of focus: 10 px of blur at full dim, as the reference's far
+    /// planes. A take's frame has the movie's pixels, so the scale is the image's.
+    nonisolated static func focused(_ image: CIImage, on region: CGRect, dim: Double, height: Double) -> CIImage {
+        let scale = image.extent.height / height
+        let lit = CGRect(
+            x: image.extent.minX + region.minX * scale, y: image.extent.minY + (height - region.maxY) * scale, width: region.width * scale, height: region.height * scale
+        )
+        let kept = 1 - min(dim, 1)
+        let darkened = image.clampedToExtent().applyingGaussianBlur(sigma: min(dim, 1) * 10 * scale).cropped(to: image.extent)
+            .applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: kept, y: 0, z: 0, w: 0),
+                "inputGVector": CIVector(x: 0, y: kept, z: 0, w: 0),
+                "inputBVector": CIVector(x: 0, y: 0, z: kept, w: 0)
+            ])
+        return image.cropped(to: lit).composited(over: darkened)
+    }
+
+    /// A layer's image as its focus leaves it, drawn into a bitmap; `nil` without a focus.
+    nonisolated static func focusedImage(of image: CIImage, layer: Layer) -> CIImage? {
+        guard let region = layer.region, layer.mostDim > 0, let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let bitmap = context.createCGImage(focused(image, on: region, dim: layer.mostDim, height: layer.size.height), from: image.extent, format: .RGBA8, colorSpace: space)
+        else { return nil }
+        return CIImage(cgImage: bitmap).transformed(by: CGAffineTransform(translationX: image.extent.minX, y: image.extent.minY))
+    }
+}

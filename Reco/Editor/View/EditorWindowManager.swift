@@ -240,6 +240,9 @@ extension EditorWindowManager: NSWindowDelegate {
         if let webRecording, window === webRecording.window {
             return webRecording.viewModel.undoManager
         }
+        if let motion = motionEditors.values.first(where: { $0.window === window }) {
+            return motion.viewModel.undoManager
+        }
         return editor(for: window)?.editor.viewModel.undoManager
     }
 
@@ -263,9 +266,13 @@ extension EditorWindowManager: NSWindowDelegate {
             webRecording.viewModel.close()
         } else if let (bundleURL, motion) = motionEditors.first(where: { $0.value.window === window }).map({ ($0.key, $0.value) }) {
             motionEditors[bundleURL] = nil
-            motion.viewModel.close()
-            if motion.accessesOutputDirectory {
-                settings.stopAccessingOutputDirectory()
+            let settings = settings
+            Task {
+                // Saving needs the folder, so its scope is released only afterwards
+                await motion.viewModel.close()
+                if motion.accessesOutputDirectory {
+                    settings.stopAccessingOutputDirectory()
+                }
             }
         } else if let (videoURL, editor) = editor(for: window) {
             editors[videoURL] = nil

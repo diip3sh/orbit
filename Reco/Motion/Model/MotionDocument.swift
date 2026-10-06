@@ -12,6 +12,7 @@ nonisolated struct MotionDocument: Equatable, Sendable {
 
     var version = currentVersion
     var canvas = MotionCanvas()
+    var style = StyleTokens()
     var scenes: [MotionScene] = []
 
     /// UI to lift from web pages, shown by `ui` layers.
@@ -34,6 +35,12 @@ nonisolated struct MotionDocument: Equatable, Sendable {
             // At least a frame, so every scene shows
             guard scene.duration >= 1 / Double(canvas.frameRate) else { throw .invalidDuration(scene.id) }
             guard Set(scene.camera.keyframes.keys).isSubset(of: MotionProperty.camera) else { throw .invalidCameraProperty(scene.id) }
+            if let reason = scene.shot?.problem(assets: assetIDs) {
+                throw .invalidShot(scene.id, reason)
+            }
+            if let reason = scene.camera.moves.lazy.compactMap({ $0.problem(on: nil) }).first {
+                throw .invalidMove(scene.id, reason)
+            }
             var layerIDs = Set<String>()
             try validate(scene.layers, ids: &layerIDs, assets: assetIDs)
         }
@@ -61,6 +68,10 @@ nonisolated struct MotionDocument: Equatable, Sendable {
             guard ids.insert(layer.id).inserted else { throw .duplicateID(layer.id) }
             let scales = [layer.transform.scale] + (layer.keyframes[.scale] ?? []).map(\.value)
             guard scales.allSatisfy({ $0 > 0 }) else { throw .invalidScale(layer.id) }
+            guard Set(layer.keyframes.keys).isSubset(of: MotionProperty.layer) else { throw .invalidCameraProperty(layer.id) }
+            if let reason = layer.moves.lazy.compactMap({ $0.problem(on: layer.content) }).first {
+                throw .invalidMove(layer.id, reason)
+            }
             if case .group(let children) = layer.content {
                 try validate(children, ids: &ids, assets: assets)
             } else if let problem = Self.problem(with: layer, assets: assets) {
@@ -100,6 +111,7 @@ nonisolated extension MotionDocument: Codable {
             throw UnsupportedVersionError(version: version)
         }
         canvas = try container.decodeIfPresent(MotionCanvas.self, forKey: .canvas) ?? MotionCanvas()
+        style = try container.decodeIfPresent(StyleTokens.self, forKey: .style) ?? StyleTokens()
         scenes = try container.decode([MotionScene].self, forKey: .scenes)
         assets = try container.decodeIfPresent([MotionAsset].self, forKey: .assets) ?? []
     }

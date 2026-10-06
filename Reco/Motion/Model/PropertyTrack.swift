@@ -19,6 +19,12 @@ nonisolated struct PropertyTrack: Equatable, Sendable {
         self.keyframes = keyframes.sorted { $0.time < $1.time }
     }
 
+    /// One way from `start` to `end`.
+    init(_ property: MotionProperty, from start: Keyframe, to end: Keyframe) {
+        self.property = property
+        keyframes = [start, end]
+    }
+
     func value(at time: Double) -> Double {
         // The first keyframe after `time`
         let next = keyframes.partitioningIndex { $0.time > time }

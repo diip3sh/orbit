@@ -19,7 +19,27 @@ nonisolated struct MotionPlan: Sendable {
         let parent: Int?
         let base: [MotionProperty: Double]
         let anchor: CGPoint
+
+        /// Keyframes set by hand: a property with them ignores its moves.
         let tracks: [MotionProperty: PropertyTrack]
+
+        /// What the layer's moves do to each property (``MoveEffect``).
+        var moves: [MotionProperty: [PropertyTrack]] = [:]
+
+        /// How a text layer is revealed, and where its characters and lines are.
+        var reveal: TextReveal?
+        var parts: [CGRect] = []
+
+        /// What a focus keeps lit, in canvas pixels from the layer's top-left corner.
+        var region: CGRect?
+
+        /// The image as its focus leaves it, dimmed by ``mostDim`` and blurred outside the region,
+        /// drawn once per plan: blurring a lifted page per frame took 9.4 ms p95 at 1080p (M5).
+        var focusedImage: CIImage?
+
+        var mostDim: Double {
+            moves[.dim]?.flatMap { $0.keyframes.map(\.value) }.max() ?? 0
+        }
 
         /// Whether it has pixels of its own: not a group.
         let isDrawn: Bool
@@ -48,7 +68,7 @@ nonisolated struct MotionPlan: Sendable {
         }
 
         func value(_ property: MotionProperty, at time: Double) -> Double {
-            tracks[property]?.value(at: time) ?? base[property] ?? 0
+            MotionPlan.value(property, base: base[property] ?? 0, track: tracks[property], moves: moves[property], at: time)
         }
     }
 
@@ -61,6 +81,28 @@ nonisolated struct MotionPlan: Sendable {
 
         let camera: [MotionProperty: PropertyTrack]
         let cameraBase: [MotionProperty: Double]
+
+        /// What the camera's moves and the seams on either side do.
+        var cameraMoves: [MotionProperty: [PropertyTrack]] = [:]
+
+        /// How the scene comes in over the one before, drawn under it meanwhile.
+        var transition: SeamExpansion.Transition?
+
+        /// How long it's drawn past its end, under the next scene's transition.
+        var overlap = 0.0
+
+        func cameraValue(_ property: MotionProperty, at time: Double) -> Double {
+            MotionPlan.value(property, base: cameraBase[property] ?? 0, track: camera[property], moves: cameraMoves[property], at: time)
+        }
+    }
+
+    /// A property's value: its keyframes if it has any, else its base changed by its moves.
+    static func value(_ property: MotionProperty, base: Double, track: PropertyTrack?, moves: [PropertyTrack]?, at time: Double) -> Double {
+        if let track {
+            return track.value(at: time)
+        }
+        guard let moves else { return base }
+        return property.isFactor ? moves.reduce(base) { $0 * $1.value(at: time) } : moves.reduce(base) { $0 + $1.value(at: time) }
     }
 
     /// A layer where it lands on the canvas at one moment.
@@ -83,6 +125,10 @@ nonisolated struct MotionPlan: Sendable {
 
         /// The corners of the shadow's image, like ``corners``; `nil` without a shadow.
         var shadowCorners: [CGPoint]?
+
+        /// The camera's blur at each corner in canvas pixels, signed: negative in front of what's
+        /// in focus. Empty without depth of field.
+        var defocus: [Double] = []
     }
 
     let canvas: CGSize
@@ -129,9 +175,11 @@ nonisolated struct MotionPlan: Sendable {
     /// sight, transparent or behind the camera are left out.
     func placements(of scene: Scene, at time: Double) -> [Placement] {
         let camera = CameraProjection(
-            lookAt: CGPoint(x: cameraValue(.positionX, scene, time), y: cameraValue(.positionY, scene, time)), dolly: cameraValue(.positionZ, scene, time),
-            canvas: canvas
+            lookAt: CGPoint(x: scene.cameraValue(.positionX, at: time), y: scene.cameraValue(.positionY, at: time)), dolly: scene.cameraValue(.positionZ, at: time),
+            canvas: canvas, zoom: max(scene.cameraValue(.scale, at: time), 0.01)
         )
+        let aperture = scene.cameraValue(.aperture, at: time)
+        let focus = scene.cameraValue(.focus, at: time) + camera.focalLength - camera.dolly
         var worlds: [simd_double4x4] = []
         var opacities: [Double] = []
         worlds.reserveCapacity(scene.layers.count)
@@ -160,6 +208,9 @@ nonisolated struct MotionPlan: Sendable {
             var placement = Placement(
                 layer: index, corners: corners, depth: center.depth, opacity: opacity, blur: max(layer.value(.blur, at: time), 0) * scale, scale: scale
             )
+            if aperture > 0 {
+                placement.defocus = projected.map { aperture * ($0.depth - focus) / 100 }
+            }
             if layer.shadow != nil {
                 let padding = layer.shadowPadding
                 let padded = [
@@ -172,10 +223,6 @@ nonisolated struct MotionPlan: Sendable {
         }
         // Stable: layers at the same depth keep their order
         return placements.enumerated().sorted { ($0.element.depth, $1.offset) > ($1.element.depth, $0.offset) }.map(\.element)
-    }
-
-    private func cameraValue(_ property: MotionProperty, _ scene: Scene, _ time: Double) -> Double {
-        scene.camera[property]?.value(at: time) ?? scene.cameraBase[property] ?? 0
     }
 
     /// The largest ratio of a projected edge to the layer's own.
@@ -225,49 +272,76 @@ extension MotionPlan {
         // Each asset's element in CSS pixels, once captured or measured
         let sizes = lifts.mapValues(\.size).merging(measured.mapValues(\.crop.size)) { $1 }
         let outputScale = shorterSide.map { $0 / min(canvas.width, canvas.height) } ?? 1
+        // Shots laid out, rolls and cascades split: what's drawn from here on
+        let expanded = DocumentExpansion.expanded(document, sizes: sizes)
         var start = 0.0
-        let scenes = document.scenes.map { scene in
+        var scenes = expanded.scenes.map { scene in
             defer { start += scene.duration }
-            return Scene(
+            let context = MoveContext(sceneDuration: scene.duration, canvas: canvas)
+            var planned = Scene(
                 start: start,
                 duration: scene.duration,
-                layers: flattened(scene.layers, parent: nil, sizes: sizes),
+                layers: flattened(scene.layers, parent: nil, sizes: sizes, context: context),
                 camera: tracks(scene.camera.keyframes),
                 cameraBase: Dictionary(uniqueKeysWithValues: MotionProperty.camera.map { ($0, scene.camera.base($0, canvas: canvas)) })
             )
+            planned.cameraMoves = cameraMoves(scene.camera.moves, of: planned, context: context)
+            return planned
         }
+        addSeams(of: expanded, to: &scenes)
         let color = document.canvas.background
         var plan = MotionPlan(
             canvas: canvas, outputScale: outputScale, frameRate: frameRate ?? document.canvas.frameRate,
             background: CIColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha), scenes: scenes
         )
-        plan.drawImages(for: document, bundle: bundle, lifts: lifts, takes: takes, measured: measured)
+        plan.drawImages(for: expanded, bundle: bundle, lifts: lifts, takes: takes, measured: measured)
         return plan
     }
 
-    /// Each scene's layers, parents first, with their sizes; images come later. A `ui` layer whose
-    /// asset was never lifted has no size yet and isn't drawn.
-    nonisolated private static func flattened(_ layers: [MotionLayer], parent: Int?, sizes: [String: CGSize], into list: [Layer] = []) -> [Layer] {
+    /// Each scene's layers, parents first, with their sizes and moves; images come later. A `ui`
+    /// layer whose asset was never lifted has no size yet and isn't drawn.
+    nonisolated private static func flattened(_ layers: [MotionLayer], parent: Int?, sizes: [String: CGSize], context: MoveContext, into list: [Layer] = []) -> [Layer] {
         var list = list
         for layer in layers {
             var isGroup = false
             if case .group = layer.content {
                 isGroup = true
             }
-            let size = size(of: layer.content, sizes: sizes)
-            list.append(Layer(
+            var context = context
+            var parts: [CGRect] = []
+            let size: CGSize
+            if case .text(let text) = layer.content {
+                let measured = TextImage(text, scale: 0)
+                (size, context.characters, context.lines) = (measured.size, measured.characters.count, measured.lines.count)
+                parts = measured.characters
+                if layer.moves.contains(where: { $0.kind == .lineMask }) {
+                    parts = measured.lines
+                }
+            } else {
+                size = Self.size(of: layer.content, sizes: sizes)
+            }
+            var planned = Layer(
                 parent: parent, base: Dictionary(uniqueKeysWithValues: MotionProperty.allCases.map { ($0, layer.base($0)) }),
                 anchor: layer.transform.anchor, tracks: tracks(layer.keyframes), isDrawn: !isGroup && size.width > 0 && size.height > 0,
                 size: size, shadow: layer.shadow
-            ))
+            )
+            planned.parts = parts
+            for move in layer.moves {
+                let effect = MoveExpansion.effect(of: move, in: context)
+                planned.moves.merge(effect.tracks) { $0 + $1 }
+                planned.reveal = effect.reveal ?? planned.reveal
+                planned.region = effect.region.map { CGRect(x: $0.minX * size.width, y: $0.minY * size.height, width: $0.width * size.width, height: $0.height * size.height) }
+                    ?? planned.region
+            }
+            list.append(planned)
             if case .group(let children) = layer.content {
-                list = flattened(children, parent: list.count - 1, sizes: sizes, into: list)
+                list = flattened(children, parent: list.count - 1, sizes: sizes, context: context, into: list)
             }
         }
         return list
     }
 
-    nonisolated private static func tracks(_ keyframes: [MotionProperty: [Keyframe]]) -> [MotionProperty: PropertyTrack] {
+    nonisolated static func tracks(_ keyframes: [MotionProperty: [Keyframe]]) -> [MotionProperty: PropertyTrack] {
         keyframes.reduce(into: [:]) { tracks, entry in
             tracks[entry.key] = PropertyTrack(entry.key, keyframes: entry.value)
         }
@@ -275,7 +349,8 @@ extension MotionPlan {
 
     nonisolated private static func size(of content: LayerContent, sizes: [String: CGSize]) -> CGSize {
         switch content {
-        case .text(let text): TextImage(text, scale: 0).size
+        // Text is measured with its parts, in `flattened`
+        case .text, .group: .zero
         case .image(let image): image.size
         case .lifted(let lifted):
             sizes[lifted.asset].map { size in
@@ -283,7 +358,6 @@ extension MotionPlan {
                 return CGSize(width: width, height: width * size.height / size.width)
             } ?? .zero
         case .shape(let shape): shape.size
-        case .group: .zero
         }
     }
 
@@ -321,6 +395,7 @@ extension MotionPlan {
                 }
                 let image = Self.image(of: contents[index], scale: rasterScale, size: scenes[sceneIndex].layers[index].size, bundle: bundle, lifts: lifts)
                 scenes[sceneIndex].layers[index].image = image
+                scenes[sceneIndex].layers[index].focusedImage = image.flatMap { Self.focusedImage(of: $0, layer: scenes[sceneIndex].layers[index]) }
                 if let image, let shadow = scenes[sceneIndex].layers[index].shadow {
                     scenes[sceneIndex].layers[index].shadowImage = Self.shadow(
                         of: image, shadow: shadow, padding: scenes[sceneIndex].layers[index].shadowPadding, scale: rasterScale
@@ -328,28 +403,6 @@ extension MotionPlan {
                 }
             }
         }
-    }
-
-    /// Draws shadows once; without color management, as frames are.
-    nonisolated private static let context = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull()])
-
-    /// The image's silhouette in black at the shadow's opacity, blurred, with `padding` canvas pixels
-    /// around it, drawn into a bitmap.
-    nonisolated private static func shadow(of image: CIImage, shadow: LayerShadow, padding: Double, scale: Double) -> CIImage? {
-        let inset = padding * scale
-        let silhouette = image
-            .applyingFilter("CIColorMatrix", parameters: [
-                "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-                "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-                "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: min(max(shadow.opacity, 0), 1))
-            ])
-            .transformed(by: CGAffineTransform(translationX: inset, y: inset))
-            .applyingGaussianBlur(sigma: shadow.radius * scale)
-        let bounds = CGRect(x: 0, y: 0, width: image.extent.width + 2 * inset, height: image.extent.height + 2 * inset).integral
-        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
-              let bitmap = context.createCGImage(silhouette, from: bounds, format: .RGBA8, colorSpace: space) else { return nil }
-        return CIImage(cgImage: bitmap)
     }
 
     nonisolated private static func contents(of layers: [MotionLayer]) -> [LayerContent] {
@@ -387,67 +440,6 @@ extension MotionPlan {
             ))
         } ?? Self.roundedRectangle(size: layer.size, radius: radius, scale: rasterScale)
         scenes[key.scene].layers[key.layer].shadowImage = Self.shadow(of: box, shadow: shadow, padding: layer.shadowPadding, scale: rasterScale)
-    }
-
-    /// Video pixels per CSS pixel for a live layer `width` canvas pixels wide drawn at
-    /// `rasterScale`: whole, at most 8×, and the movie within HEVC's 8,192 px. A take recorded at
-    /// 2× and shown at four times its CSS size on a 4K canvas read soft.
-    nonisolated static func takeScale(for info: UILiftCache.TakeInfo, width: Double, rasterScale: Double) -> Int {
-        let scale = Int((rasterScale * width / info.crop.width - 0.01).rounded(.up))
-        let fits = Int(UILiftCache.maximumMovieSide / max(info.crop.width, info.crop.height))
-        return max(min(scale, UILiftCache.scales.upperBound, fits), 1)
-    }
-
-    /// Image pixels per CSS pixel for a `ui` layer `width` canvas pixels wide drawn at
-    /// `rasterScale`; 2× before the first lift, when the element's size isn't known yet.
-    nonisolated private static func liftScale(for lift: UILiftCache.Lift?, width: Double, rasterScale: Double) -> Int {
-        guard let lift else { return 2 }
-        // Not a scale up for a rounding error
-        let scale = Int((rasterScale * width / lift.size.width - 0.01).rounded(.up))
-        return min(max(scale, UILiftCache.scales.lowerBound), UILiftCache.scales.upperBound)
-    }
-
-    nonisolated private static func image(
-        of content: LayerContent, scale: Double, size: CGSize, bundle: URL, lifts: [String: UILiftCache.Lift]
-    ) -> CIImage? {
-        switch content {
-        case .text(let text):
-            return TextImage(text, scale: scale).image.map { CIImage(cgImage: $0) }
-        case .shape(let shape):
-            let color = shape.color
-            return roundedRectangle(
-                size: shape.size, radius: shape.cornerRadius, scale: scale, color: CIColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha)
-            )
-        case .image(let image):
-            return picture(at: bundle.appending(path: image.path), pixels: CGSize(width: size.width * scale, height: size.height * scale))
-        case .lifted(let lifted):
-            return lifts[lifted.asset].flatMap { picture(at: $0.url, pixels: CGSize(width: size.width * scale, height: size.height * scale)) }
-        case .group:
-            return nil
-        }
-    }
-
-    /// A rounded rectangle `size` canvas pixels large at `scale` pixels per canvas pixel.
-    nonisolated static func roundedRectangle(size: CGSize, radius: Double, scale: Double, color: CIColor = .white) -> CIImage {
-        CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
-            "inputExtent": CIVector(cgRect: CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale)),
-            "inputRadius": radius * scale,
-            "inputColor": color
-        ])?.outputImage ?? CIImage.empty()
-    }
-
-    /// The image file at `url` read at most `pixels` large, stretched to exactly that, as an
-    /// `<img>` with both dimensions set.
-    nonisolated private static func picture(at url: URL, pixels: CGSize) -> CIImage? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: max(pixels.width, pixels.height).rounded(.up)
-              ] as CFDictionary) else { return nil }
-        return CIImage(cgImage: cgImage).transformed(by: CGAffineTransform(
-            scaleX: pixels.width / CGFloat(cgImage.width), y: pixels.height / CGFloat(cgImage.height)
-        ))
     }
 }
 

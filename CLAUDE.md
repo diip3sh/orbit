@@ -35,7 +35,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 696 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 721 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
   reads alpha 254 instead of 255 with Xcode 26.0.1 on macOS 26.5.2, also without this fork's later changes.
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
@@ -861,6 +861,38 @@ Key facts:
   cardboard.ai's hero videos pause themselves 2 s after landing on a desktop; hovered, one matched
   its source frame for frame.
 
+### S6 — Motion editor, phase 3: grammar v1 (`remotion`, spec 0011)
+
+Documents name shots and moves instead of keyframes: `{"shot": "uiHero", "ui": "app"}` in a scene,
+`{"move": "blurWipe"}` on a layer, `"seam": "zoomThrough"` on a scene. The plan lays shots out and
+expands moves when it's built; keyframes set by hand override a property's moves. The window gains a
+scenes lane and an inspector (Scene, Layer, Rules) whose every change is an undo step.
+
+| File | Role |
+|---|---|
+| `Motion/Model/MotionMove.swift`, `MotionSeam.swift`, `MotionShot.swift`, `ShotItem.swift`, `StyleTokens.swift` | The grammar's names in the document (`problem(on:)`, `problem(assets:)` validate them); `MotionCanvas.pacing` |
+| `Motion/Grammar/MotionEasing+Grammar.swift` | `enter`, `enterFast`, `cascade`, `exit`, `move` (measured), `longSettle` (`MotionEasing.settle`) |
+| `Motion/Grammar/MoveExpansion.swift`, `TextReveal.swift`, `ZoomPath.swift` | A move's tracks (factors or amounts on the base), reveals, van Wijk pans; the only place timings and distances live |
+| `Motion/Grammar/ShotLayout.swift`, `DocumentExpansion.swift`, `SeamExpansion.swift` | Shots to layers by `LayoutRules`; rolls and cascades to other layers' moves; seams to camera tracks and transitions |
+| `Motion/Grammar/LayoutRules.swift`, `ReadingTime.swift`, `MotionLint.swift` | The rules, one place each, used by shots and the lint |
+| `Motion/Render/MotionPlan+Grammar.swift`, `MotionPlan+Images.swift` | Camera moves and seams in the plan; images, shadows and focus drawn once |
+| `Motion/Render/MotionFrameRenderer.swift` | Reveals, focus, depth of field, frame blur, push and fade between scenes |
+| `Motion/ViewModel/MotionEditorViewModel+Editing.swift`, `Motion/View/MotionScenesLane.swift`, `MotionInspector.swift` and its sections | Edits with undo, the lane, the inspector |
+
+Key facts:
+- A property's value is its keyframes if it has any, else its base times its factor moves (`scale`,
+  `opacity`, `shadow`) or plus its other moves (`MotionPlan.value`). A camera's `scale` is the lens.
+- Depth of field: camera `focus` (sharp z) and `aperture` (blur per 100 px of depth); a tilted plane
+  gets `CIMaskedVariableBlur` from two gradients projected with it.
+- `CIPerspectiveTransform` maps an image's extent to the quad: a revealed text image keeps its
+  whole extent (clear where hidden), or it stretches.
+- A brand varies the video: the face picks the headline's reveal (sans wipe, serif line mask, mono
+  typing); drift-and-cut drifts every shot but the end card, beats eases the camera.
+- Golden frames `RecoTests/Fixtures/motion-grammar-*.png` from `motion-grammar.json` (a card lifted
+  into the bundle, so nothing loads from the web).
+- Costs (M5, Debug): plans 0.09–0.26 s; 1080p frames 0.6–6.6 ms p95, cardboard.ai's zooming shots in
+  beats 8.3–8.7; a focus is drawn once per plan (9.4 → 4.6 ms p95).
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -932,7 +964,7 @@ should hold but need re-measuring.
 | S5 agent chat and reliable web takes (spec 0008) | Done and tested: real Claude Code runs from the prompt and from the chat in the app (sent through accessibility), 60 s apple.com takes checked frame by frame. Not yet tried: Retry and Cancel by hand, VoiceOver, Reduce Motion, other agents |
 
 | Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps, shown elements, playbook | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop); linear.app walkthroughs run from the app through `reco://record-agent`. Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
-| S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 (grammar) next. Waiting on the user's side-by-side of spike C; the window not yet seen in the app |
+| S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 done: moves, seams, shots, lint, scenes lane and inspector; the benchmark rebuilt in 10 lines and three sites rendered, awaiting the user's side-by-side. Phase 4 (agent) next. The window seen in a window capture; editing by hand not yet tried |
 
 What to build next: `docs/specs/0011-motion-editor.md` (October 2026), phase by phase. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

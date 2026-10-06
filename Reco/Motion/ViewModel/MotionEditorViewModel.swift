@@ -7,7 +7,7 @@ import AppKit
 import AVFoundation
 import OSLog
 
-/// A motion bundle opened in its window: the document, its preview and its export.
+/// A motion bundle opened in its window: the document, its preview, its edits and its export.
 @MainActor
 @Observable
 final class MotionEditorViewModel {
@@ -15,10 +15,19 @@ final class MotionEditorViewModel {
     let bundleURL: URL
     let playback = PlaybackController()
 
-    private(set) var document: MotionDocument?
+    var document: MotionDocument?
+
+    /// The scene the inspector shows, by index, and the layer by id.
+    var selectedScene = 0
+    var selectedLayer: String?
+
+    @ObservationIgnored let undoManager = UndoManager()
+    @ObservationIgnored var coalescedEdits = EditCoalescing()
+    @ObservationIgnored var rebuild: Task<Void, Never>?
+    @ObservationIgnored var save: Task<Void, Never>?
 
     /// Why the bundle couldn't be opened or exported.
-    private(set) var error: String?
+    var error: String?
 
     /// From 0 to 1 while an export runs.
     private(set) var exportProgress: Double?
@@ -27,7 +36,7 @@ final class MotionEditorViewModel {
     /// with everything on is over the 8 ms budget (spec 0011, rendering spike).
     static let previewShorterSide: CGFloat = 1080
 
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "MotionEditorViewModel")
+    let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "MotionEditorViewModel")
 
     init(bundleURL: URL) {
         self.bundleURL = bundleURL
@@ -40,16 +49,8 @@ final class MotionEditorViewModel {
     func load() async {
         do {
             let document = try await MotionStore.read(bundleURL)
-            let canvas = document.canvas
-            let plan = try await UICapture.plan(
-                for: document, bundle: bundleURL, shorterSide: min(min(canvas.size.width, canvas.size.height), Self.previewShorterSide)
-            )
-            let composition = try await MotionCompositionBuilder.composition(for: plan)
+            try await preview(document, at: 0)
             self.document = document
-            playback.load(
-                composition, frames: FrameGrid(frameRate: Double(plan.frameRate), duration: plan.duration),
-                timescale: CMTimeScale(plan.frameRate), at: 0
-            )
         } catch {
             logger.error("Couldn't open \(self.bundleURL.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
             self.error = error.localizedDescription
@@ -75,8 +76,24 @@ final class MotionEditorViewModel {
         }
     }
 
-    /// Releases the player, when the window closes.
-    func close() {
+    /// Plays `document` from `time`, capturing the UI its plan needs first.
+    func preview(_ document: MotionDocument, at time: Double) async throws {
+        let canvas = document.canvas
+        let plan = try await UICapture.plan(
+            for: document, bundle: bundleURL, shorterSide: min(min(canvas.size.width, canvas.size.height), Self.previewShorterSide)
+        )
+        let composition = try await MotionCompositionBuilder.composition(for: plan)
+        try Task.checkCancellation()
+        playback.load(
+            composition, frames: FrameGrid(frameRate: Double(plan.frameRate), duration: plan.duration),
+            timescale: CMTimeScale(plan.frameRate), at: min(time, plan.duration)
+        )
+    }
+
+    /// Releases the player, when the window closes, and saves what's left to save.
+    func close() async {
+        rebuild?.cancel()
         playback.release()
+        await save?.value
     }
 }

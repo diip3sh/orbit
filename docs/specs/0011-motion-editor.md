@@ -417,7 +417,7 @@ end of every phase and its scores recorded here.
 | 0 - Benchmark and spikes | M | Done but the side-by-side |
 | 1 - Document, core, compositor | L | Done; the window not yet seen in the app |
 | 2 - Real UI layers | L | Done; the window not yet seen in the app |
-| 3 - Grammar v1 | L | Todo |
+| 3 - Grammar v1 | L | Done but the side-by-side and the three-site judgement |
 | 4 - Agent | L | Todo |
 | 5 - Music and beats | M | Todo |
 | 6 - Editing | L | Todo |
@@ -613,6 +613,70 @@ frame is within a mean of 3.
   grammar shots; every default that changes is recorded with why.
 - **Done when:** that document is under ~40 lines and passes the side-by-side; the same shot list
   on the three sites gives three videos that don't read as one template.
+
+#### Phase 3 results (2026-10-07, M5, Debug)
+
+What was built, and where it differs from the model above:
+
+- **Moves add to the base; keyframes override.** A move expands (`MoveExpansion`, the one place
+  its timing, distance and easing live) into tracks that multiply the base (`scale`, `opacity`,
+  `shadow`) or add to it (everything else), so moves stack: a drift and a seam's zoom on one
+  camera. A property with keyframes takes them and ignores its moves. New properties: a layer's
+  `shadow` (strength; cast farther as it grows) and `dim` (outside a focus's region); a camera's
+  `scale` (the lens: perspective kept), `blur` (the whole frame), `focus` and `aperture` (depth of
+  field: blur per 100 px of depth off the sharp z, linear across a tilted plane, drawn with
+  `CIMaskedVariableBlur` from two gradients projected with the plane).
+- **Text reveals** aren't keyframes: `TextReveal` (type, wipe, rise) shows a text layer's
+  characters or lines from `start + index × stagger`, cropped from the one image Core Text drew.
+- **Shots are laid out when the plan is built** (`DocumentExpansion`), so a document names them in a
+  line each; the scene's own layers go over them and one with a shot layer's id replaces it. The
+  editor edits a shot's layer by writing such a copy. `roll` and `cascade` become other layers'
+  moves there too (a roll is the line before its last word and a group per word).
+- **Seams** (`SeamExpansion`) are camera tracks on both scenes; `push` and `fade` draw the scene
+  before past its end for 0.5 s (a live layer's track is extended to cover it).
+- **Moves (18):** text `fadeUp`, `blurIn`, `blurWipe`, `lineMask`, `type`, `roll`, `exit`; UI
+  `rise`, `tilt`, `focus`, `detach`, `stateChange`, `cascade`; camera `hold`, `push`, `pan` (van
+  Wijk's path, ρ = √2, `intensity` the zoom it ends at), `pullBack`, `drift`. **Seams (6)** as
+  above. **Shots (7):** `hook`, `title` (its items' text roll the headline's last word), `uiHero`,
+  `uiFocus`, `uiCascade`, `featureSequence`, `endCard`. `stat` (a counter needs per-frame type) and
+  `recording` (an existing take as a layer, phase 7) are left for later.
+- **Variety from the brand:** a sans headline wipes in blurred, a serif rises line by line, a mono
+  is typed; serif headlines are regular weight, sans semibold; `style.alignment` places titles; in
+  drift-and-cut every shot but the end card drifts, alternating direction scene to scene; in beats
+  the camera eases instead (a push, a pull-back, a pan to the focus).
+- **Rules** (`LayoutRules`, `ReadingTime`, `MotionLint`): reading time (held at least
+  max(0.9 s, words ÷ 3.1)), 32 px text at 1080p, the 90% safe area, WCAG contrast on the
+  background, first move 0.1–0.3 s after the seam, at most two starts within 0.1 s (a group's
+  layers count once), exits shorter than entrances, the slowest scene 3× the fastest (from four
+  scenes), typing ≤ 25 cps, no stretch over 1.5 s with nothing moving or to read (but the end
+  card), hooks ≤ 6 words. The accent's share of pixels needs the design check (phase 4).
+- **Editor:** a scenes lane (click to select and seek) and an inspector with Scene (shot, its text,
+  duration, seam), Layer (each move's start, duration and intensity, the grammar's defaults shown,
+  add and remove) and Rules (the lint's findings). Every change is an undo step (coalesced within
+  a second), previewed after 0.15 s and saved after 1 s.
+
+Defaults changed while tuning, and why:
+
+- `uiFocus` in drift-and-cut leans as spike C's composer did (12°, −10°, −4°) and its focus also
+  blurs what it dims (10 px at full dim): flat and only dimmed, it read nothing like Linear Agent's
+  second shot.
+- An end card without a logo sets the name at a headline's size: at 7% of the height it read weak.
+- `blurWipe` blurs a character by 8% of its line's height as it fades in: 9.8 px for a 1080p
+  headline, within the 10 px rule for text (12% gave 15).
+
+Benchmark: Linear Agent's two shots and its title as `uiHero`, `uiFocus` (the agent panel's region)
+and `endCard`, 10 lines of JSON; Linear for Agents' opening as a `title` rolling DevOps, Triage and
+Planning over a `uiHero`, 10 lines. The same five-shot list (hook, uiHero, uiFocus, title, end card)
+with each site's brand (linear.app sans drift-and-cut, supabase.com sans centred, cardboard.ai serif
+in beats) gives three videos; lint finds only a short tagline hold and, by design, scene lengths
+under 3× apart. Awaiting the user's side-by-side and verdict.
+
+Costs: a plan builds in 0.09–0.26 s for these documents (with the Core Text layout of every shot);
+a 1080p preview frame takes 0.4–5.3 ms p50 and 0.6–6.6 ms p95 (load average 2.7), except
+cardboard.ai's `uiHero` and `uiFocus` in beats pacing, 8.3 and 8.7 ms p95: the camera zooms there,
+so a large lift is projected and its depth of field drawn each frame. Blurring a lifted page for a
+focus took the Linear focus shot to 9.4 ms p95; drawn once per plan (as shadows are) it takes 4.6.
+1080p60 HEVC exports of the 14–17 s videos took 2.3–5.7 s (with the UI already lifted).
 
 ### Phase 4 - Agent (L)
 

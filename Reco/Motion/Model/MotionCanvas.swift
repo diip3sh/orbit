@@ -14,6 +14,17 @@ nonisolated struct MotionCanvas: Equatable, Sendable {
 
     /// Near-black, as the dark reference videos (mean luma 12.7–23.7); never pure black.
     var background = RGBAColor(red: 0.031, green: 0.035, blue: 0.039, alpha: 1)
+
+    var pacing = Pacing.driftAndCut
+
+    /// The two ways the reference films move (spec 0011, *Measured references*).
+    nonisolated enum Pacing: String, Codable, Sendable {
+        /// Linear: 3–5 s shots, the camera drifting at constant speed, hard cuts hiding every start
+        /// and stop; eased motion only inside the UI.
+        case driftAndCut
+        /// Raycast, Framer, Notion: 1–2 s beats, eased camera moves, long settles.
+        case beats
+    }
 }
 
 // MARK: - Codable
@@ -26,5 +37,6 @@ nonisolated extension MotionCanvas: Codable {
         size = try container.decodeIfPresent(CGSize.self, forKey: .size) ?? defaults.size
         frameRate = try container.decodeIfPresent(Int.self, forKey: .frameRate) ?? defaults.frameRate
         background = try container.decodeIfPresent(RGBAColor.self, forKey: .background) ?? defaults.background
+        pacing = try container.decodeIfPresent(Pacing.self, forKey: .pacing) ?? defaults.pacing
     }
 }

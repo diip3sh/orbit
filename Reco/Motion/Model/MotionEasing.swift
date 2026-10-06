@@ -9,7 +9,7 @@ import CoreGraphics
 /// the reference videos never overshoot (spec 0011, *Craft defaults*).
 ///
 /// Coded the way a person or an agent writes it: `"linear"`, `"hold"`, `[x1, y1, x2, y2]` for a
-/// cubic Bézier as in CSS, or `{"spring": response}`.
+/// cubic Bézier as in CSS, `{"spring": response}` or `{"settle": timeConstant}`.
 nonisolated enum MotionEasing: Equatable, Sendable {
     case linear
 
@@ -22,6 +22,10 @@ nonisolated enum MotionEasing: Equatable, Sendable {
     /// A critically damped spring that settles in about `response` seconds, scaled to land exactly
     /// on the next keyframe.
     case spring(response: Double)
+
+    /// Starts at full speed and slows exponentially with `timeConstant` seconds, scaled to land on
+    /// the next keyframe: Framer's pull-back measured ~0.9 s (half done at 0.65 s).
+    case settle(timeConstant: Double)
 
     /// The share of the way from one keyframe's value to the next's, `fraction` of the way through
     /// a segment `duration` seconds long.
@@ -40,6 +44,9 @@ nonisolated enum MotionEasing: Equatable, Sendable {
             let settled = { (time: Double) in 1 - (1 + omega * time) * exp(-omega * time) }
             let end = settled(duration)
             return end > 0 ? settled(fraction * duration) / end : fraction
+        case .settle(let timeConstant):
+            let end = 1 - exp(-duration / max(timeConstant, 1e-3))
+            return end > 0 ? (1 - exp(-fraction * duration / max(timeConstant, 1e-3))) / end : fraction
         }
     }
 }
@@ -48,8 +55,9 @@ nonisolated enum MotionEasing: Equatable, Sendable {
 
 nonisolated extension MotionEasing: Codable {
 
-    nonisolated private struct SpringKey: Codable {
-        var spring: Double
+    nonisolated private struct Named: Codable {
+        var spring: Double?
+        var settle: Double?
     }
 
     init(from decoder: any Decoder) throws {
@@ -67,11 +75,15 @@ nonisolated extension MotionEasing: Codable {
             }
             self = .cubicBezier(points[0], points[1], points[2], points[3])
         } else {
-            let spring = try container.decode(SpringKey.self).spring
-            guard spring > 0 else {
-                throw DecodingError.dataCorruptedError(in: container, debugDescription: "A spring's response must be positive")
+            let named = try container.decode(Named.self)
+            switch (named.spring, named.settle) {
+            case (let spring?, nil) where spring > 0: self = .spring(response: spring)
+            case (nil, let settle?) where settle > 0: self = .settle(timeConstant: settle)
+            default:
+                throw DecodingError.dataCorruptedError(
+                    in: container, debugDescription: "An easing is \"linear\", \"hold\", [x1, y1, x2, y2], {\"spring\": response} or {\"settle\": timeConstant}, each positive"
+                )
             }
-            self = .spring(response: spring)
         }
     }
 
@@ -81,7 +93,8 @@ nonisolated extension MotionEasing: Codable {
         case .linear: try container.encode("linear")
         case .hold: try container.encode("hold")
         case let .cubicBezier(firstX, firstY, secondX, secondY): try container.encode([firstX, firstY, secondX, secondY])
-        case .spring(let response): try container.encode(SpringKey(spring: response))
+        case .spring(let response): try container.encode(Named(spring: response))
+        case .settle(let timeConstant): try container.encode(Named(settle: timeConstant))
         }
     }
 }
