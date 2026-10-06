@@ -98,9 +98,7 @@ struct MenuBarView: View {
             }
             .padding(.top, 8)
 
-            MenuBarDivider()
-
-            // What each take captures; video formats and the content filter are in Settings → Video
+            // What each take captures (it opens with its own divider); video formats and the content filter are in Settings → Video
             CaptureSettingsSection(
                 settings: viewModel.settings,
                 audioDeviceService: viewModel.audioDeviceService,
