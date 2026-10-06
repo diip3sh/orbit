@@ -20,7 +20,6 @@ final class LibraryViewModel {
         var recordArea: () -> Void = {}
         var recordWindowOrDisplay: () -> Void = {}
         var newWebRecording: () -> Void = {}
-        var recordWithAgent: () -> Void = {}
     }
 
     var section = LibrarySection.all

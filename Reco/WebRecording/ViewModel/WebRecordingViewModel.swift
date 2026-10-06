@@ -15,14 +15,9 @@ final class WebRecordingViewModel {
 
     private(set) var script: WebScript
 
-    /// The right column, one at a time: the inspector or the agent chat.
-    enum SidePanel {
-        case inspector
-        case agent
-    }
-
-    var sidePanel = SidePanel.inspector
-    var showsSidePanel = true
+    /// The inspector on the right, like the editor's, and the agent chat on the left, hidden until asked for.
+    var showsInspector = true
+    var showsAgent = false
 
     /// The selected clip, on either lane. Choosing anything but a cursor clip stops pick mode.
     var selection: UUID? {
@@ -467,6 +462,11 @@ extension WebRecordingViewModel {
     func cancelRender() {
         renderTask?.cancel()
     }
+
+    /// Opens a movie this window rendered in the editor, e.g. from the agent chat's result card.
+    func openInEditor(_ movie: URL) {
+        onRendered(movie)
+    }
 }
 
 // MARK: - Agent
@@ -607,29 +607,5 @@ extension WebRecordingViewModel {
         playTask?.cancel()
         playTask = nil
         isPlaying = false
-    }
-}
-
-// MARK: - Side Panel
-
-extension WebRecordingViewModel {
-
-    /// The toolbar's two buttons share the column: each shows its panel, or hides the column when its
-    /// panel is the one showing.
-    func toggle(_ panel: SidePanel) {
-        if isShowing(panel) {
-            showsSidePanel = false
-        } else {
-            show(panel)
-        }
-    }
-
-    func show(_ panel: SidePanel) {
-        sidePanel = panel
-        showsSidePanel = true
-    }
-
-    func isShowing(_ panel: SidePanel) -> Bool {
-        showsSidePanel && sidePanel == panel
     }
 }

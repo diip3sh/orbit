@@ -135,7 +135,7 @@ final class EditorWindowManager: NSObject {
         activate(webRecording.window)
     }
 
-    /// The Web Recording window on its agent chat, where Record with AI Agent… starts: a blank page and a
+    /// The Web Recording window with its agent panel open, where Record with AI Agent starts: a blank page and a
     /// new conversation, unless an agent is still running in it.
     func showAgentChat() {
         let webRecording = webRecording ?? makeWebRecording()
@@ -143,13 +143,14 @@ final class EditorWindowManager: NSObject {
             webRecording.viewModel.startNew()
             agentRecording?.startNewChat()
         }
-        webRecording.viewModel.show(.agent)
+        withMotion { webRecording.viewModel.showsAgent = true }
         activate(webRecording.window)
     }
 
     /// The Web Recording window with its last script, kept until it closes. Each render opens in the editor.
     private func makeWebRecording() -> WebRecording {
         let viewModel = WebRecordingViewModel(settings: settings) { [weak self] url in
+            self?.agentRecording?.didRender(url)
             self?.open(url)
         }
         let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel, agent: agentRecording))

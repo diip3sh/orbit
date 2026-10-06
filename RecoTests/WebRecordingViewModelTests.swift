@@ -26,6 +26,23 @@ struct WebRecordingViewModelTests {
         viewModel.undoManager.endUndoGrouping()
     }
 
+    @Test func theInspectorIsShownAndTheAgentHiddenUntilAskedFor() {
+        let viewModel = makeViewModel()
+
+        #expect(viewModel.showsInspector)
+        #expect(!viewModel.showsAgent)
+    }
+
+    @Test func openingAMovieHandsItToTheEditor() {
+        var opened: URL?
+        let viewModel = WebRecordingViewModel(settings: SettingsStore(), storeURL: storeURL) { opened = $0 }
+        let movie = URL(fileURLWithPath: "/tmp/take.mov")
+
+        viewModel.openInEditor(movie)
+
+        #expect(opened == movie)
+    }
+
     @Test func readsAddressesAsWebPages() {
         #expect(WebScript.url(from: " example.com/pricing ")?.absoluteString == "https://example.com/pricing")
         #expect(WebScript.url(from: "localhost:3000")?.absoluteString == "http://localhost:3000")

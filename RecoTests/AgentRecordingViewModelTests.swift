@@ -397,3 +397,30 @@ extension AgentRecordingViewModelTests {
         #expect(!succeeded)
     }
 }
+
+// MARK: - Result card
+
+extension AgentRecordingViewModelTests {
+
+    @Test func aSuccessKeepsItsMovieForTheResultCardUntilTheChatStartsOver() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let tools = AgentTools(settings: SettingsStore(defaults: defaults.make())) { _ in }
+        let model = try makeModel(tools: tools) { _, _, _, _, _, _ in
+            await MainActor.run { tools.job = RenderStatus(renderID: "new", status: .done, progress: 1, movie: "/tmp/new.mov") }
+            return AgentProcess.Result(end: .exited(0), stdout: "", stderr: "")
+        }
+        await model.refreshAgents()
+        model.address = "example.com"
+
+        #expect(model.lastMovie == nil)
+        _ = model.submit()
+        await finish(model)
+        #expect(model.lastMovie == URL(fileURLWithPath: "/tmp/new.mov"))
+
+        model.startNewChat()
+        #expect(model.lastMovie == nil)
+
+        model.didRender(URL(fileURLWithPath: "/tmp/window.mov"))
+        #expect(model.lastMovie?.lastPathComponent == "window.mov")
+    }
+}

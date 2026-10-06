@@ -60,8 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             captureScreen: { [screenshots] in Task { await screenshots.captureScreen() } },
             recordArea: { [viewModel] in Task { await viewModel.presentAreaSelection() } },
             recordWindowOrDisplay: { [viewModel] in viewModel.presentPicker() },
-            newWebRecording: { [weak self] in self?.showWebRecording() },
-            recordWithAgent: { [weak self] in self?.showAgentRecording() }
+            newWebRecording: { [weak self] in self?.showWebRecording() }
         )
         // The Web Recording window shows what an agent looks at and plans, as it does
         agentBridge.tools.onInspected = { [editorWindows] page in editorWindows.webRecordingViewModel?.showAgentInspection(page) }
@@ -144,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editorWindows.showNewWebRecording()
     }
 
-    /// Shows the Record with AI Agent panel, to have a coding agent record a web page.
+    /// Shows the Web Recording window with its agent panel open, to have a coding agent record a web page.
     func showAgentRecording() {
         editorWindows.showAgentChat()
     }

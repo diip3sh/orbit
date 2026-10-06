@@ -5,93 +5,60 @@
 
 import SwiftUI
 
-/// The Web Recording window's Agent tab (spec 0008): the conversation with a coding agent about the
-/// window's page, what it did step by step, the render's progress, and the message box.
+/// The Web Recording window's agent panel (spec 0008): the conversation with a coding agent about the
+/// window's page, what it did step by step, the render's progress and result, and the message box.
 struct AgentChatView: View {
     @Bindable var model: AgentRecordingViewModel
 
     /// The window's page, which every message is about.
     let page: URL?
 
+    /// Opens a movie in the editor.
+    let openMovie: (URL) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reducesMotion
+
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: EditorTheme.mediumSpacing) {
-                    if model.transcript.entries.isEmpty {
-                        AgentChatEmpty()
-                    }
-                    ForEach(model.transcript.entries) { entry in
-                        AgentChatRow(entry: entry)
-                    }
-                    if case .running(let agent) = model.phase {
-                        AgentChatProgress(agent: agent, progress: model.progress)
-                    }
-                    if case .failed(let reason) = model.phase {
-                        AgentRecordingFailure(reason: reason, retry: model.retry)
-                            .background(EditorTheme.softHairline, in: .rect(cornerRadius: 10))
-                    }
-                }
-                .padding(EditorTheme.spacing)
-            }
-            .defaultScrollAnchor(.bottom)
-            .scrollIndicators(.automatic)
+            AgentChatHeader(model: model)
 
             Rectangle()
                 .fill(EditorTheme.hairline)
                 .frame(height: 1)
 
+            ScrollView {
+                VStack(alignment: .leading, spacing: EditorTheme.mediumSpacing) {
+                    if model.transcript.entries.isEmpty {
+                        AgentAssistantBubble(text: "Describe the video you want, and I'll explore this page and record it.")
+                    }
+                    ForEach(model.transcript.groups) { group in
+                        AgentChatRow(group: group)
+                    }
+                    if case .running(let agent) = model.phase {
+                        if let progress = model.progress {
+                            AgentChatProgress(progress: progress)
+                        } else {
+                            AgentTypingIndicator(agent: agent)
+                        }
+                    }
+                    if case .failed(let reason) = model.phase {
+                        AgentRecordingFailure(reason: reason, retry: model.retry)
+                    }
+                    if let movie = model.lastMovie, !model.isRunning, !model.transcript.entries.isEmpty {
+                        AgentChatResult(movie: movie) { openMovie(movie) }
+                    }
+                }
+                .padding(EditorTheme.spacing)
+                .animation(reducesMotion ? EditorTheme.fadeMotion : EditorTheme.motion, value: model.transcript)
+                .animation(reducesMotion ? EditorTheme.fadeMotion : EditorTheme.motion, value: model.phase)
+                .animation(reducesMotion ? EditorTheme.fadeMotion : EditorTheme.motion, value: model.lastMovie)
+                .animation(reducesMotion ? EditorTheme.fadeMotion : EditorTheme.motion, value: model.progress == nil)
+            }
+            .defaultScrollAnchor(.bottom)
+            .scrollIndicators(.automatic)
+
             AgentChatComposer(model: model, page: page)
         }
         .task { await model.refreshAgents() }
-        .editorMotion(value: model.transcript)
-        .editorMotion(value: model.phase)
-    }
-}
-
-/// What the tab says before the first message.
-private struct AgentChatEmpty: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
-            Label("Record with an agent", systemImage: "sparkles")
-                .font(.headline)
-            Text("""
-                Describe the video and a coding agent records this page. You see what it looks at and plans as it \
-                works; its clips stay on the timeline to change and render again, or ask it for another take.
-                """)
-                .font(.callout)
-                .foregroundStyle(EditorTheme.dim)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.vertical, EditorTheme.smallSpacing)
-    }
-}
-
-/// The agent at work, with the render's percent once it has started.
-private struct AgentChatProgress: View {
-    let agent: AgentKind
-    let progress: Double?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: EditorTheme.tightSpacing) {
-            HStack(spacing: EditorTheme.smallSpacing) {
-                ProgressView()
-                    .controlSize(.small)
-                Text(progress == nil ? "\(agent.displayName) is working…" : "Rendering…")
-                    .font(.callout)
-                    .foregroundStyle(EditorTheme.dim)
-                if let progress {
-                    Spacer()
-                    Text(progress, format: .percent.precision(.fractionLength(0)))
-                        .font(.callout)
-                        .monospacedDigit()
-                        .foregroundStyle(EditorTheme.dim)
-                }
-            }
-            if let progress {
-                ProgressView(value: progress)
-                    .progressViewStyle(.linear)
-            }
-        }
-        .accessibilityElement(children: .combine)
     }
 }

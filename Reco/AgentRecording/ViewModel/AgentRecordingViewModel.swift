@@ -57,6 +57,10 @@ final class AgentRecordingViewModel {
     private(set) var isLookingForAgents = false
     private(set) var phase = Phase.idle
 
+    /// The movie the chat's last run ended with, for its result card: the agent's own render, or the one
+    /// the window made from the plan it staged.
+    private(set) var lastMovie: URL?
+
     /// What the last run asked, for Retry.
     private(set) var lastRequest: AgentRecordingRequest?
 
@@ -206,6 +210,7 @@ final class AgentRecordingViewModel {
     func run(_ request: AgentRecordingRequest) {
         guard !isRunning else { return }
         lastRequest = request
+        lastMovie = nil
         transcript.addRequest(request.summary)
         startingRenderID = tools.job?.renderID
         tools.hostsRun = true
@@ -225,9 +230,15 @@ final class AgentRecordingViewModel {
     func startNewChat() {
         guard !isRunning else { return }
         transcript = AgentTranscript()
+        lastMovie = nil
         if case .failed = phase {
             phase = .idle
         }
+    }
+
+    /// The Web Recording window rendered a movie, which the chat shows once its run is over.
+    func didRender(_ movie: URL) {
+        lastMovie = movie
     }
 
     /// Adds what the agent streamed to the transcript.
@@ -269,6 +280,7 @@ final class AgentRecordingViewModel {
             if tools.job?.status == .planned {
                 onPlanStaged?()
             } else {
+                lastMovie = tools.job?.movie.map { URL(fileURLWithPath: $0) }
                 onSucceeded?()
             }
         case .cancelled:

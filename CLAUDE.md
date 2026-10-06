@@ -718,9 +718,10 @@ Key facts:
 
 ### S4 — Agent recording (`feat/agent-bridge`, spec 0007)
 
-**Record with AI Agent…** in the menu bar and the Library, and the shortcut of the same name (Settings → Shortcuts →
-Web Recording, no default), open the Web Recording window on its Agent chat (`EditorWindowManager.showAgentChat()`,
-S5); the Spotlight-style bar it used to open was removed on 2026-10-02. Reco runs the agent's command line headlessly with only its own
+The agent is part of the one Web Recording window (**New Web Recording…**, and the Library's New): its **AI Agent** button
+at the toolbar's leading edge opens the chat panel on the left. The shortcut **Record with AI Agent** (Settings → Shortcuts →
+Web Recording, no default) and the failure notification's action open the same window with the panel open
+(`EditorWindowManager.showAgentChat()`, S5); the menu bar and the Library have no row of their own. The Spotlight-style bar it used to open was removed on 2026-10-02. Reco runs the agent's command line headlessly with only its own
 three MCP tools allowed; the agent records through the bridge (S3) and the editor opens. While it
 runs the bar and the menu bar (a sparkle, "AI", then the render's percent) show it; **Cancel** stops
 the command line. A failure shows its reason with **Retry** in the bar and in a notification.
@@ -761,8 +762,9 @@ Key facts:
 
 ### S5 — Agent chat (`feat/ui-polish`, spec 0008)
 
-The Web Recording window's right column, one fixed width (340 pt), holds the **Inspector** or the **Agent**
-chat: the toolbar's sidebar button and **AI Agent** each show theirs, or hide the column if it's showing: a chat with Claude Code or Cursor about the window's page. Their `stream-json`
+The Web Recording window is laid out like the editor: the **inspector** on the right (system `.inspector`, 340 pt,
+`showsInspector`), and the **Agent** chat on the left (340 pt and a hairline, `showsAgent`, hidden by default), which the toolbar's
+**AI Agent** button at the leading edge slides in and out from the leading edge: a chat with Claude Code or Cursor about the window's page. Their `stream-json`
 output (`AgentStreamEvent`, measured formats) fills `AgentRecordingViewModel.transcript` with requests,
 replies and tool steps; a follow-up resumes the conversation (`--resume`). Reco's tools report what the
 agent inspects and plans (`AgentTools.onInspected`/`onPlanned`), so the preview highlights its elements,
@@ -774,6 +776,13 @@ sits in the timeline header, not over the page. The header is laid out like the 
 that add a hover, click, typing or scroll (and delete the selected clip) on the left, Play in the middle, progress and
 the time on the right; Render is the accent button, like Export. The stage has no dot grid, only an edge and a soft shadow. Details and file map: `docs/specs/0008-agent-chat.md`.
 
+- **The chat's look** (iMessage-like): a header with the agent and model menus; the agent's words in light rounded
+  bubbles on the left, the user's in accent bubbles on the right, consecutive tool steps as one activity card
+  (`AgentTranscript.groups`), a typing indicator until the render starts and then a progress card, and a result card
+  once a run has a movie (`AgentRecordingViewModel.lastMovie`: the agent's own render, or the window's from its
+  staged plan) that opens it in the editor. The composer is a pill field with a round Send (Stop while running), under it
+  a round New Chat button and suggestion chips that fill the field without sending. Bubbles enter with a spring from
+  their own bottom corner (opacity only with Reduce Motion).
 - **Tests and a running Reco:** the test host is Reco, so a test run takes the bridge's socket from the
   running app. An agent run going at the time loses Reco, and its `--mcp` client starts a second copy.
   Don't run tests during an agent run; relaunch Reco after testing. `AgentToolsTests` render into a
