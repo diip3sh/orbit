@@ -77,7 +77,7 @@ private struct AgentToolState: View {
                 .controlSize(.mini)
                 .accessibilityLabel("Running")
         case .done:
-            LineIcon(.iconsaxTickCircle)
+            LineIcon(.hugeiconsCheckmarkCircle)
                 .foregroundStyle(EditorTheme.dim)
                 .accessibilityLabel("Done")
         case .failed:

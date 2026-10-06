@@ -101,17 +101,17 @@ private struct QuickAccessControls: View {
 
     var body: some View {
         HStack(spacing: EditorTheme.tightSpacing) {
-            Button(action: model.close) { Label { Text("Close") } icon: { LineIcon(.iconsaxClose) } }
+            Button(action: model.close) { Label { Text("Close") } icon: { LineIcon(.hugeiconsCancel) } }
                 .help("Close")
             Spacer()
             // Annotate goes first once annotation exists:
             // Button("Annotate", systemImage: "pencil", action: model.annotate)
             Button { Task { await model.recognizeText() } } label: {
-                Label { Text("Recognize Text") } icon: { LineIcon(.iconsaxTextScan) }
+                Label { Text("Recognize Text") } icon: { LineIcon(.hugeiconsScanText) }
             }
             .help("Recognize Text")
             .disabled(model.isRecognizingText)
-            Button(action: model.pin) { Label { Text("Pin") } icon: { LineIcon(.tablerPin) } }
+            Button(action: model.pin) { Label { Text("Pin") } icon: { LineIcon(.hugeiconsPin) } }
                 .help("Pin")
         }
         .labelStyle(.iconOnly)
@@ -165,7 +165,7 @@ private struct ShortcutLabel: View {
             .opacity(isConfirmed ? 0 : 1)
             .accessibilityHidden(isConfirmed)
             HStack(spacing: EditorTheme.tightSpacing) {
-                LineIcon(.iconsaxTickCircle)
+                LineIcon(.hugeiconsCheckmarkCircle)
                     .accessibilityHidden(true)
                 Text(confirmation)
             }
