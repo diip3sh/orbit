@@ -471,7 +471,7 @@ Reco/Editor/
               AutoZoomGenerator, KeyLabelFormatter, BackgroundImageLoader, RecordingLibrary
   ViewModel/  EditorViewModel, PlaybackController, RecordingsViewModel
   View/       EditorWindowManager, EditorView, PlayerLayerView, EditorTimelineView, TrimHandle,
-              ZoomLane, ZoomFocusPad, TransportBar, EditorInspector, ExportPage, RecordingsView,
+              ZoomLane, ZoomFocusPad, TransportBar, EditorInspector, ExportOptions, RecordingsView,
               RecordingTile
 ```
 

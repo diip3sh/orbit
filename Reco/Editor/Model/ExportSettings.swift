@@ -17,6 +17,11 @@ nonisolated struct ExportSettings: Equatable, Sendable {
     /// Frames per second, or `nil` for the recording's.
     var frameRate: Int?
 
+    /// What the export page starts with: HEVC, or ProRes 4444 for a transparent canvas, the only format that keeps it.
+    static func initial(transparentCanvas: Bool) -> Self {
+        ExportSettings(format: transparentCanvas ? .proRes4444 : .hevc)
+    }
+
     /// The shorter sides offered for a canvas whose shorter side is `shorterSide`: only smaller ones.
     static func resolutions(below shorterSide: CGFloat) -> [Int] {
         [2160, 1440, 1080, 720].filter { CGFloat($0) < shorterSide }

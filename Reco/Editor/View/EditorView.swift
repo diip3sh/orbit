@@ -8,29 +8,47 @@
 import SwiftUI
 
 /// An editor window's content: the preview on the stage, the transport and the timeline under it,
-/// and the inspector.
+/// and the inspector. Export is a mode of the same window: the timeline slides down out of it, the
+/// preview grows into the room, and the inspector shows the export's options; Back (Esc) undoes it.
 struct EditorView: View {
     let viewModel: EditorViewModel
 
     @State private var showsInspector = true
-    @State private var showsExport = false
+
+    /// The export's visit, while it shows.
+    @State private var export: ExportSession?
     @Environment(\.accessibilityReduceMotion) private var reducesMotion
+
+    /// Entering and leaving export: critically damped like every state change, a little quicker than
+    /// `EditorTheme.motion` since nothing travels far.
+    private static let exportMotion = Animation.spring(response: 0.25, dampingFraction: 1)
 
     var body: some View {
         Group {
             if let source = viewModel.source {
-                // Export is a page pushed over the editor, and Back returns to it: it slides in from the
-                // trailing edge and leaves the same way, the editor stepping aside under it
-                ZStack {
-                    if showsExport {
-                        ExportPage(viewModel: viewModel) { showsExport = false }
-                            .transition(reducesMotion ? .opacity : .move(edge: .trailing))
-                    } else {
-                        editor(for: source)
-                            .transition(reducesMotion ? .opacity : .offset(x: -80).combined(with: .opacity))
+                VStack(spacing: 0) {
+                    EditorStage(viewModel: viewModel)
+                    if export == nil {
+                        timeline(for: source)
+                            .transition(reducesMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                     }
                 }
-                .editorMotion(value: showsExport)
+                // The timeline leaves below the window's edge, not over it
+                .clipped()
+                // One inspector for both modes, so the column stays put and only its content changes: the
+                // editor's sections, or the export's options, which always show
+                .inspector(isPresented: export == nil ? $showsInspector : .constant(true)) {
+                    Group {
+                        if let export {
+                            ExportOptions(viewModel: viewModel, session: export)
+                        } else {
+                            EditorInspector(viewModel: viewModel)
+                        }
+                    }
+                    .transition(.opacity)
+                    .inspectorColumnWidth(min: 300, ideal: EditorInspector.idealWidth, max: 460)
+                }
+                .toolbar { toolbar }
                 .transition(.opacity)
             } else if let error = viewModel.error {
                 ContentUnavailableView {
@@ -61,33 +79,38 @@ struct EditorView: View {
         }
     }
 
-    private func editor(for source: EditorSource) -> some View {
-        VStack(spacing: 0) {
-            EditorStage(viewModel: viewModel)
+    private func timeline(for source: EditorSource) -> some View {
+        VStack(spacing: EditorTheme.smallSpacing) {
+            TransportBar(viewModel: viewModel)
+            EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
+        }
+        .padding(.horizontal, EditorTheme.largeSpacing)
+        .padding(.top, EditorTheme.smallSpacing)
+        .padding(.bottom, EditorTheme.spacing)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(EditorTheme.hairline)
+                .frame(height: 1)
+        }
+    }
 
-            VStack(spacing: EditorTheme.smallSpacing) {
-                TransportBar(viewModel: viewModel)
-                EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        if let export {
+            ToolbarItem(placement: .navigation) {
+                Button("Editor", systemImage: "chevron.left", action: closeExport)
+                    .labelStyle(.titleAndIcon)
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(export.isExporting)
+                    .help("Back to the editor (Esc)")
             }
-            .padding(.horizontal, EditorTheme.largeSpacing)
-            .padding(.top, EditorTheme.smallSpacing)
-            .padding(.bottom, EditorTheme.spacing)
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(EditorTheme.hairline)
-                    .frame(height: 1)
+            ToolbarItem(placement: .principal) {
+                Text("Export")
+                    .font(.headline)
             }
-        }
-        .inspector(isPresented: $showsInspector) {
-            EditorInspector(viewModel: viewModel)
-                .inspectorColumnWidth(min: 260, ideal: 300, max: 380)
-        }
-        .toolbar {
+        } else {
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    viewModel.playback.pause()
-                    showsExport = true
-                } label: {
+                Button(action: openExport) {
                     Label("Export…", image: "button-export")
                 }
                 .buttonStyle(.editorPrimary)
@@ -104,6 +127,22 @@ struct EditorView: View {
                 }
                 .help(showsInspector ? "Hide the inspector" : "Show the inspector")
             }
+        }
+    }
+
+    /// Export opens and closes on a paused frame: it is for looking, not editing.
+    private func openExport() {
+        viewModel.playback.pause()
+        withAnimation(reducesMotion ? EditorTheme.fadeMotion : Self.exportMotion) {
+            export = ExportSession(viewModel: viewModel)
+        }
+    }
+
+    private func closeExport() {
+        viewModel.playback.pause()
+        export?.cancel()
+        withAnimation(reducesMotion ? EditorTheme.fadeMotion : Self.exportMotion) {
+            export = nil
         }
     }
 }
