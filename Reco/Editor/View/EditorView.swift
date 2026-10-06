@@ -73,6 +73,10 @@ struct EditorView: View {
         // SwiftUI shrank the window to it (900×592) as it opened, whatever size it was given
         .frame(minWidth: 900, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)
         .editorWindowBackground()
+        // Export names the page in the title bar, beside its back button, with the recording under it, as
+        // macOS titles a step: a title in the toolbar's middle read as a stray glass button
+        .navigationTitle(export == nil ? recordingName : "Export")
+        .navigationSubtitle(export == nil ? "" : recordingName)
         .editorMotion(.smooth, value: viewModel.source == nil)
         .task {
             await viewModel.load()
@@ -104,10 +108,6 @@ struct EditorView: View {
                     .disabled(export.isExporting)
                     .help("Back to the editor (Esc)")
             }
-            ToolbarItem(placement: .principal) {
-                Text("Export")
-                    .font(.headline)
-            }
         } else {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: openExport) {
@@ -128,6 +128,10 @@ struct EditorView: View {
                 .help(showsInspector ? "Hide the inspector" : "Show the inspector")
             }
         }
+    }
+
+    private var recordingName: String {
+        viewModel.videoURL.deletingPathExtension().lastPathComponent
     }
 
     /// Export opens and closes on a paused frame: it is for looking, not editing.

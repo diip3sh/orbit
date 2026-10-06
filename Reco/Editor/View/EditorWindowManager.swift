@@ -83,7 +83,8 @@ final class EditorWindowManager: NSObject {
         // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
         hostingController.sizingOptions = .minSize
         // The export and inspector buttons are SwiftUI toolbar items
-        hostingController.sceneBridgingOptions = [.toolbars]
+        // The title too: export renames the window "Export", with the recording's name under it
+        hostingController.sceneBridgingOptions = [.toolbars, .title]
         let window = makeWindow(hostingController, title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1533, height: 943))
         window.representedURL = videoURL
         editors[videoURL] = Editor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)

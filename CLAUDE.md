@@ -328,7 +328,8 @@ preview stays, the transport and timeline slide down out of the window and the p
 inspector's content changes, to the export's options (`ExportOptions`, in the inspector's own sections and `SegmentedChoice`).
 One `.inspector` serves both modes so the column never moves; it opens at `EditorInspector.idealWidth` (380 pt, picked by hand
 in a 1533 pt window) and always shows during export. Both ways run on a 0.25 s critically damped spring, a cross-fade with
-Reduce Motion. **Back**/Esc returns; Esc is Cancel while an export runs, and Back is disabled then. Export opens and leaves on a
+Reduce Motion. The window's title becomes **Export**, the recording's name under it as its subtitle, beside **‹ Editor**
+(the editor window bridges `.title`; a `.principal` title read as a stray glass button). **Back**/Esc returns; Esc is Cancel while an export runs, and Back is disabled then. Export opens and leaves on a
 paused frame, and the editor's keys (S, Z, ⌫, arrows, Space) go with the transport. `ExportSession` holds one visit's settings,
 running export and result, so the toolbar and the inspector share it. It writes
 `<name>-edited.mp4` (HEVC, H.264) or `.mov` (ProRes 422) next to the recording, then offers **Share…** (`ShareLink`: AirDrop, Mail,
