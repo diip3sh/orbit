@@ -12,6 +12,9 @@ import SwiftUI
 struct ExportOptions: View {
     let viewModel: EditorViewModel
     @Bindable var session: ExportSession
+    /// Whether the title bar's name is being edited, which Esc must end before it leaves export.
+    let isRenaming: Bool
+    let back: () -> Void
 
     @Namespace private var highlight
 
@@ -23,6 +26,10 @@ struct ExportOptions: View {
         let frameRates = ExportSettings.frameRates(below: frameRate)
 
         VStack(spacing: 0) {
+            navigation
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding([.horizontal, .top])
+
             ScrollView {
                 VStack(spacing: 0) {
                     InspectorSection("Format") {
@@ -107,6 +114,21 @@ struct ExportOptions: View {
             facts.append(ExportFact(title: "File Size", value: Int64(exportedBytes).formatted(.byteCount(style: .file))))
         }
         return facts
+    }
+
+    /// Back to the editor; forward has nowhere to go from export, so it is there only to read as the pair.
+    private var navigation: some View {
+        ControlGroup {
+            Button("Editor", systemImage: "chevron.left", action: back)
+                // Esc ends a rename first
+                .keyboardShortcut(isRenaming ? nil : .cancelAction)
+                .disabled(session.isExporting)
+                .help("Back to the editor (Esc)")
+            Button("Export", systemImage: "chevron.right") {}
+                .disabled(true)
+        }
+        .controlGroupStyle(.navigation)
+        .fixedSize()
     }
 
     private var actions: some View {

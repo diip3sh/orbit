@@ -336,7 +336,7 @@ didn't reach a field in the toolbar, and its field editor took Esc) that renames
 telemetry and project (`RecordingRename`, `RecordingRenamer`; Return or leaving the field commits, Esc cancels, and Esc doesn't
 also trigger Back meanwhile). A web recording's `Reco_Web_` prefix is kept but hidden in the field, and names ending in `-edited`
 are refused, since the Library tells kinds apart by file name alone. Back is a back/forward pair (`ControlGroup`, `.navigation` style;
-forward always disabled) in the inspector's own toolbar, at its leading edge. **Back**/Esc returns; Esc is Cancel while an export runs, and Back is disabled then. Export opens and leaves on a
+forward always disabled) at the top of the export's inspector, above Format, and stays there as the options scroll. **Back**/Esc returns; Esc is Cancel while an export runs, and Back is disabled then. Export opens and leaves on a
 paused frame, and the editor's keys (S, Z, ⌫, arrows, Space) go with the transport. `ExportSession` holds one visit's settings,
 running export and result, so the toolbar and the inspector share it. It writes
 `<name>-edited.mp4` (HEVC, H.264) or `.mov` (ProRes 422) next to the recording, then offers **Share…** (`ShareLink`: AirDrop, Mail,

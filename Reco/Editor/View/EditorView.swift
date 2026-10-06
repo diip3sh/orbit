@@ -43,9 +43,7 @@ struct EditorView: View {
                 .inspector(isPresented: export == nil ? $showsInspector : .constant(true)) {
                     Group {
                         if let export {
-                            ExportOptions(viewModel: viewModel, session: export)
-                                // Over the inspector, at its leading edge, as a browser's back and forward
-                                .toolbar { exportNavigation(export) }
+                            ExportOptions(viewModel: viewModel, session: export, isRenaming: isRenaming, back: closeExport)
                         } else {
                             EditorInspector(viewModel: viewModel)
                         }
@@ -133,23 +131,6 @@ struct EditorView: View {
                 }
                 .help(showsInspector ? "Hide the inspector" : "Show the inspector")
             }
-        }
-    }
-
-    /// Back to the editor; forward has nowhere to go from export, so it is there only to read as the pair.
-    @ToolbarContentBuilder
-    private func exportNavigation(_ export: ExportSession) -> some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            ControlGroup {
-                Button("Editor", systemImage: "chevron.left", action: closeExport)
-                    // Esc ends a rename first
-                    .keyboardShortcut(isRenaming ? nil : .cancelAction)
-                    .disabled(export.isExporting)
-                    .help("Back to the editor (Esc)")
-                Button("Export", systemImage: "chevron.right") {}
-                    .disabled(true)
-            }
-            .controlGroupStyle(.navigation)
         }
     }
 
