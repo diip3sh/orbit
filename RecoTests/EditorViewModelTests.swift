@@ -276,6 +276,62 @@ struct EditorViewModelTests {
         #expect(!FileManager.default.fileExists(atPath: file.path(percentEncoded: false)))
     }
 
+    @Test func backgroundMusicAddsATrackRemovingItTakesItAwayAndUndoBringsItBack() async throws {
+        let video = try await writeRecording()
+        defer { try? FileManager.default.removeItem(at: video.deletingLastPathComponent()) }
+        let music = video.deletingLastPathComponent().appending(path: "Song.mov")
+        try await TestRecording.write(to: music, size: CGSize(width: 64, height: 48), frameCount: 15, frameRate: 30, withTone: true)
+        let viewModel = EditorViewModel(videoURL: video)
+        let undoManager = viewModel.undoManager
+        undoManager.groupsByEvent = false
+        /// Each in its own undo step, as each event is in the app.
+        func step(_ change: () -> Void) {
+            undoManager.beginUndoGrouping()
+            change()
+            undoManager.endUndoGrouping()
+        }
+        await viewModel.load()
+        let silent = try #require(viewModel.playback.player.currentItem)
+        #expect(try await silent.asset.loadTracks(withMediaType: .audio).isEmpty)
+
+        step { viewModel.setBackgroundAudio(music) }
+
+        #expect(viewModel.project.audio.background?.name == "Song")
+        #expect(undoManager.undoActionName == "Background Audio")
+        let withMusic = try await nextItem(after: silent, of: viewModel)
+        #expect(try await withMusic.asset.loadTracks(withMediaType: .audio).count == 1)
+
+        // Volume and mute change the mix, not the player item
+        step {
+            viewModel.audio.background?.track.volume = 0.6
+            viewModel.audio.background?.track.isMuted = true
+        }
+        #expect(viewModel.project.audio.background?.track == .init(volume: 0.6, isMuted: true))
+        #expect(viewModel.playback.player.currentItem === withMusic)
+
+        step { viewModel.removeBackgroundAudio() }
+        let removed = try await nextItem(after: withMusic, of: viewModel)
+        #expect(try await removed.asset.loadTracks(withMediaType: .audio).isEmpty)
+
+        undoManager.undo()
+        let restored = try await nextItem(after: removed, of: viewModel)
+        #expect(try await restored.asset.loadTracks(withMediaType: .audio).count == 1)
+        #expect(viewModel.project.audio.background?.track == .init(volume: 0.6, isMuted: true))
+        await viewModel.close()
+    }
+
+    /// The player item that replaces `item` once the rebuild that follows an edit has finished.
+    private func nextItem(after item: AVPlayerItem, of viewModel: EditorViewModel) async throws -> AVPlayerItem {
+        for _ in 0..<500 {
+            try await Task.sleep(for: .milliseconds(10))
+            if let current = viewModel.playback.player.currentItem, current !== item {
+                return current
+            }
+        }
+        Issue.record("No new player item")
+        throw CancellationError()
+    }
+
     @Test func anEditThatChangesNothingIsNotAnUndoStep() {
         let viewModel = EditorViewModel(videoURL: videoURL)
 

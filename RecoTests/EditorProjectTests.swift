@@ -26,6 +26,7 @@ struct EditorProjectTests {
         project.cursor.loops = true
         project.clickHighlights.effect = .ripple
         project.audio.clickVolume = 0.4
+        project.audio.background = BackgroundAudio(bookmark: Data([1, 2, 3]), name: "Song", track: .init(volume: 0.2, isMuted: true))
         project.zoomMotion = .fast
         project.motionBlur = 0.6
         project.cursor.smoothing = .off
@@ -101,6 +102,7 @@ struct EditorProjectTests {
 
         let audio = try JSONDecoder().decode(AudioMixSettings.self, from: Data(#"{ "tracks": [{ "volume": 0.5, "isMuted": true }] }"#.utf8))
         #expect(audio.tracks == [AudioMixSettings.Track(volume: 0.5, isMuted: true)])
-        #expect(audio.clickVolume == 0 && !audio.addsAudio)
+        #expect(audio.clickVolume == 0 && audio.background == nil && !audio.addsAudio)
+        #expect(AudioMixSettings(background: BackgroundAudio(bookmark: Data(), name: "Song")).addsAudio)
     }
 }

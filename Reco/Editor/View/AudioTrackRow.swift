@@ -16,6 +16,8 @@ struct AudioTrackRow: View {
         VStack(spacing: EditorTheme.tightSpacing) {
             HStack {
                 Text(name)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 Spacer()
                 Text(settings.isMuted ? 0 : settings.volume, format: .percent.precision(.fractionLength(0)))
                     .font(.caption)

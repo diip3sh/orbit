@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The editor's right column: the tab bar, a notice when the telemetry is missing, then the chosen tab's
 /// sections. Selecting a zoom on the timeline turns to Motion, where its settings are.
@@ -21,7 +22,7 @@ struct EditorInspector: View {
         let trackNames = viewModel.source?.audioTrackNames ?? []
 
         VStack(spacing: 0) {
-            InspectorTabBar(selection: $tab) { $0.isAvailable(hasAudio: !trackNames.isEmpty) }
+            InspectorTabBar(selection: $tab) { $0.isAvailable }
                 .padding([.horizontal, .top])
 
             ScrollView {
@@ -40,7 +41,10 @@ struct EditorInspector: View {
                     case .background:
                         CanvasInspectorSection(viewModel: viewModel)
                     case .audio:
-                        AudioInspectorSection(viewModel: viewModel, trackNames: trackNames)
+                        if !trackNames.isEmpty {
+                            AudioInspectorSection(viewModel: viewModel, trackNames: trackNames)
+                        }
+                        BackgroundAudioInspectorSection(viewModel: viewModel)
                     case .cursor:
                         CursorInspectorSection(viewModel: viewModel)
                         ClicksInspectorSection(viewModel: viewModel)
@@ -287,6 +291,44 @@ struct AudioInspectorSection: View {
         InspectorSection("Audio") {
             ForEach(trackNames.indices, id: \.self) { index in
                 AudioTrackRow(name: trackNames[index], settings: $viewModel.audio[track: index])
+            }
+        }
+    }
+}
+
+/// The music looped under the whole video, with its volume and mute, or a button to choose a file.
+struct BackgroundAudioInspectorSection: View {
+    @Bindable var viewModel: EditorViewModel
+    @State private var choosesFile = false
+
+    var body: some View {
+        InspectorSection("Background Audio") {
+            Group {
+                if let background = Binding(unwrapping: $viewModel.audio.background) {
+                    AudioTrackRow(name: background.wrappedValue.name, settings: background.track)
+                    Button {
+                        viewModel.removeBackgroundAudio()
+                    } label: {
+                        Label("Remove", systemImage: "trash")
+                            .frame(maxWidth: .infinity)
+                    }
+                } else {
+                    Button {
+                        choosesFile = true
+                    } label: {
+                        Label("Add Background Audio…", systemImage: "music.note")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            .transition(.opacity)
+        } footer: {
+            Text("Loops under the whole video, fading in and out at the ends.")
+        }
+        .editorMotion(value: viewModel.audio.background != nil)
+        .fileImporter(isPresented: $choosesFile, allowedContentTypes: [.audio]) { result in
+            if case .success(let url) = result {
+                viewModel.setBackgroundAudio(url)
             }
         }
     }

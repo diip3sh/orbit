@@ -16,6 +16,11 @@ enum CompositionBuilder {
     /// of the volume, 20 ms 20%, and 25 ms 2%.
     nonisolated static let fadeDuration = 0.025
 
+    /// The background music fades in over this long and out over ``backgroundFadeOut``, each at most a quarter of the
+    /// output. Chosen 2026-10-08, not yet checked by ear: a longer end reads as a song ending, a shorter one as a cut.
+    nonisolated static let backgroundFadeIn = 1.0
+    nonisolated static let backgroundFadeOut = 2.0
+
     /// Every part, for a new player item or an export.
     static func composition(
         for source: EditorSource, plan: RenderPlan, audio: AudioMixSettings, extra: ExtraAudio = ExtraAudio()
@@ -46,7 +51,8 @@ enum CompositionBuilder {
         return composition
     }
 
-    /// Each audio track at its volume, and the click sounds at theirs, faded at every cut.
+    /// Each audio track at its volume, and the click sounds at theirs, faded at every cut. The background music
+    /// runs through the cuts, fading only at the ends of the output.
     static func audioMix(for source: EditorSource, timeMap: TimeMap, settings: AudioMixSettings, extra: ExtraAudio = ExtraAudio()) -> AVAudioMix {
         let fades = audioFades(for: timeMap)
         var parameters = source.audioTrackIDs.indices.map { index in
@@ -55,9 +61,39 @@ enum CompositionBuilder {
         if extra.clicks != nil {
             parameters.append(inputParameters(trackID: extraTrackID(1, for: source), volume: Float(settings.clickVolume), fades: fades))
         }
+        if extra.background != nil, let background = settings.background {
+            let ends = backgroundFades(outputDuration: timeMap.outputDuration)
+            let volume = background.track.effectiveVolume
+            let music = AVMutableAudioMixInputParameters()
+            music.trackID = extraTrackID(2, for: source)
+            music.setVolumeRamp(fromStartVolume: 0, toEndVolume: volume, timeRange: timeRange(ends.in))
+            music.setVolumeRamp(fromStartVolume: volume, toEndVolume: 0, timeRange: timeRange(ends.out))
+            parameters.append(music)
+        }
         let mix = AVMutableAudioMix()
         mix.inputParameters = parameters
         return mix
+    }
+
+    /// The fade-in and fade-out of the background music, in output seconds. Each is at most a quarter of the output,
+    /// so a short one still has a middle.
+    nonisolated static func backgroundFades(outputDuration: Double) -> (in: Range<Double>, out: Range<Double>) {
+        let fadeIn = min(backgroundFadeIn, outputDuration / 4)
+        let fadeOut = min(backgroundFadeOut, outputDuration / 4)
+        return (0..<fadeIn, outputDuration - fadeOut..<outputDuration)
+    }
+
+    /// Where a `length` long file starts when looped to fill `duration` from the start, and how much of it plays: the
+    /// last copy is cut at the end. In `CMTime`, so the copies meet with no gap or overlap and the end is exact.
+    nonisolated static func loopRanges(length: CMTime, filling duration: CMTime) -> [CMTimeRange] {
+        guard length > .zero, duration > .zero else { return [] }
+        var ranges: [CMTimeRange] = []
+        var start = CMTime.zero
+        while start < duration {
+            ranges.append(CMTimeRange(start: start, duration: min(length, CMTimeSubtract(duration, start))))
+            start = CMTimeAdd(start, length)
+        }
+        return ranges
     }
 
     /// Where audio fades, in output seconds: out at the end of each kept range a cut follows, and
@@ -100,7 +136,32 @@ enum CompositionBuilder {
                 }
             }
         }
+        if let background = extra.background {
+            try await insertBackground(background, as: extraTrackID(2, for: source), filling: ranges, into: composition)
+        }
         return composition
+    }
+
+    /// The music at `url`, repeated from the start of the output to exactly its end: longer than the video's, the
+    /// compositor would draw black frames past it. Left out when the file has no audio any more.
+    private static func insertBackground(
+        _ url: URL, as trackID: CMPersistentTrackID, filling ranges: [CMTimeRange], into composition: AVMutableComposition
+    ) async throws {
+        let music = AVURLAsset(url: url)
+        guard let track = try? await music.loadTracks(withMediaType: .audio).first,
+              let compositionTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: trackID) else {
+            return
+        }
+        let output = ranges.reduce(CMTime.zero) { CMTimeAdd($0, $1.duration) }
+        let musicRange = try await track.load(.timeRange)
+        // ponytail: a file that doesn't loop cleanly clicks at the seam; a crossfade needs two alternating tracks
+        // A track holds its asset weakly, as with the click sounds
+        try withExtendedLifetime(music) {
+            for loop in loopRanges(length: musicRange.duration, filling: output) {
+                let part = CMTimeRange(start: musicRange.start, duration: loop.duration)
+                try compositionTrack.insertTimeRange(part, of: track, at: loop.start)
+            }
+        }
     }
 
     /// `track`'s `ranges`, end to end, as a new track of `composition` with ID `trackID`.
@@ -128,13 +189,19 @@ enum CompositionBuilder {
         parameters.trackID = trackID
         parameters.setVolume(volume, at: .zero)
         for fade in fades {
-            let timeRange = CMTimeRange(
-                start: CMTime(seconds: fade.range.lowerBound, preferredTimescale: CMTimeScale(NSEC_PER_SEC)),
-                end: CMTime(seconds: fade.range.upperBound, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+            parameters.setVolumeRamp(
+                fromStartVolume: fade.fadesIn ? 0 : volume, toEndVolume: fade.fadesIn ? volume : 0, timeRange: timeRange(fade.range)
             )
-            parameters.setVolumeRamp(fromStartVolume: fade.fadesIn ? 0 : volume, toEndVolume: fade.fadesIn ? volume : 0, timeRange: timeRange)
         }
         return parameters
+    }
+
+    /// `range`, in output seconds, as a time range.
+    private static func timeRange(_ range: Range<Double>) -> CMTimeRange {
+        CMTimeRange(
+            start: CMTime(seconds: range.lowerBound, preferredTimescale: CMTimeScale(NSEC_PER_SEC)),
+            end: CMTime(seconds: range.upperBound, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        )
     }
 
     /// The kept ranges in the recording's time scale. The last one ends where the recording does.

@@ -16,11 +16,7 @@ struct InspectorTabTests {
         #expect(groups == groups.sorted())
     }
 
-    @Test func cameraAndCaptionsAreUnavailableAndAudioNeedsATrack() {
-        #expect(!InspectorTab.camera.isAvailable(hasAudio: true))
-        #expect(!InspectorTab.caption.isAvailable(hasAudio: true))
-        #expect(InspectorTab.audio.isAvailable(hasAudio: true))
-        #expect(!InspectorTab.audio.isAvailable(hasAudio: false))
-        #expect(InspectorTab.background.isAvailable(hasAudio: false))
+    @Test func onlyCameraAndCaptionsAreUnavailable() {
+        #expect(InspectorTab.allCases.filter { !$0.isAvailable } == [.camera, .caption])
     }
 }

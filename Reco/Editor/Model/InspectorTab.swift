@@ -47,22 +47,21 @@ nonisolated enum InspectorTab: CaseIterable, Hashable, Sendable {
     }
 
     /// Whether the tab has anything to edit. Camera needs the camera as its own track and captions a
-    /// transcript; neither is recorded yet (spec 0004, N19 and N5).
-    func isAvailable(hasAudio: Bool) -> Bool {
+    /// transcript; neither is recorded yet (spec 0004, N19 and N5). Audio is always there: a silent
+    /// recording can still get music.
+    var isAvailable: Bool {
         switch self {
         case .camera, .caption: false
-        case .audio: hasAudio
-        case .background, .cursor, .keyboard, .motion: true
+        case .background, .audio, .cursor, .keyboard, .motion: true
         }
     }
 
-    /// Why ``isAvailable(hasAudio:)`` is false, for the tab's tooltip.
+    /// Why ``isAvailable`` is false, for the tab's tooltip.
     var unavailableReason: String {
         switch self {
         case .camera: "Camera: recorded into the video, so it can't be edited"
-        case .audio: "Audio: this recording has none"
         case .caption: "Captions: coming soon"
-        case .background, .cursor, .keyboard, .motion: title
+        case .background, .audio, .cursor, .keyboard, .motion: title
         }
     }
 }

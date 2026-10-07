@@ -12,4 +12,7 @@ nonisolated struct ExtraAudio: Equatable, Sendable {
 
     /// The click sounds at every press (see ``ClickSound``), once they are written.
     var clicks: URL?
+
+    /// The chosen music, once its bookmark is resolved. Looped under the whole output (see ``CompositionBuilder``).
+    var background: URL?
 }

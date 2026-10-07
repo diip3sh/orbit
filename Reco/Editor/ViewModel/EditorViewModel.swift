@@ -53,6 +53,9 @@ final class EditorViewModel {
     /// timeline and cuts only choose which parts play. `nil` inside when there are no presses.
     @ObservationIgnored var clickSoundFile: Task<URL?, Never>?
 
+    /// The music's bookmark and the task opening its file (access stays on until it's replaced or the window closes).
+    @ObservationIgnored var backgroundAudio: (bookmark: Data, url: Task<URL?, Never>)?
+
     /// The keyboard layout in use when the editor opened, the system's arrow for recordings made
     /// without the cursor, and the background picture.
     @ObservationIgnored private var resources = RenderResources.none

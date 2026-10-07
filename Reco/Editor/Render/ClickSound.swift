@@ -13,7 +13,7 @@ nonisolated enum ClickSound {
     static let sampleRate = 48_000.0
 
     /// 20 ms of a mouse click: a ticking body (2.4 kHz, decaying over 4 ms) over a brighter edge (5.2 kHz, over
-    /// 1.5 ms). Synthesised, so there is no licensed asset; the numbers were picked by ear on 2026-10-07. It starts
+    /// 1.5 ms). Synthesised, so there is no licensed asset; the numbers were chosen on 2026-10-07 and not yet checked by ear. It starts
     /// at a zero crossing, so the first sample is silent and the click can't pop.
     static let samples: [Float] = (0..<Int(0.02 * sampleRate)).map { index in
         let time = Double(index) / sampleRate

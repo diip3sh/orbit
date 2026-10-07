@@ -116,6 +116,60 @@ struct CompositionBuilderTests {
         #expect(try await plain.asset.loadTracks(withMediaType: .audio).count == 1)
     }
 
+    @Test func loopsFillTheOutputExactlyAndTheLastOneIsCut() {
+        func seconds(_ ranges: [CMTimeRange]) -> [[Double]] {
+            ranges.map { [$0.start.seconds, $0.duration.seconds] }
+        }
+        func time(_ seconds: Double) -> CMTime {
+            CMTime(seconds: seconds, preferredTimescale: 600)
+        }
+
+        #expect(seconds(CompositionBuilder.loopRanges(length: time(2), filling: time(6))) == [[0, 2], [2, 2], [4, 2]])
+        #expect(seconds(CompositionBuilder.loopRanges(length: time(2), filling: time(5))) == [[0, 2], [2, 2], [4, 1]])
+        #expect(seconds(CompositionBuilder.loopRanges(length: time(10), filling: time(3))) == [[0, 3]])
+        #expect(CompositionBuilder.loopRanges(length: .zero, filling: time(3)).isEmpty)
+        #expect(CompositionBuilder.loopRanges(length: time(2), filling: .zero).isEmpty)
+    }
+
+    @Test func backgroundMusicFadesInOverASecondAndOutOverTwoButNeverMoreThanAQuarter() {
+        let long = CompositionBuilder.backgroundFades(outputDuration: 60)
+        #expect(long.in == 0..<1 && long.out == 58..<60)
+        let short = CompositionBuilder.backgroundFades(outputDuration: 6)
+        #expect(short.in == 0..<1 && short.out == 4.5..<6)
+        let tiny = CompositionBuilder.backgroundFades(outputDuration: 2)
+        #expect(tiny.in == 0..<0.5 && tiny.out == 1.5..<2)
+    }
+
+    @Test func backgroundMusicLoopsToTheOutputsEndNoFurtherAndRunsThroughCuts() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30, withTone: true)
+        // Half a second, so a 0.7 s output holds it once and a bit
+        let music = folder.appending(path: "music.mov")
+        try await TestRecording.write(to: music, size: CGSize(width: 64, height: 48), frameCount: 15, frameRate: 30, withTone: true)
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        // Cut 0.2 to 0.5: the output is 0.7 s, with the fades 0.175 s each
+        var project = EditorProject(cuts: [0.2..<0.5])
+        project.audio[track: 0].isMuted = true
+        project.audio.background = BackgroundAudio(bookmark: Data(), name: "music", track: .init(volume: 0.8))
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
+        let extra = ExtraAudio(background: music)
+
+        let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio, extra: extra)
+        let mixed = try await mixedAudio(of: composition)
+
+        #expect(try await composition.asset.loadTracks(withMediaType: .audio).count == 2)
+        #expect(abs(try await composition.asset.load(.duration).seconds - 0.7) < 0.001)
+        #expect(abs(Double(mixed.count) / TestRecording.sampleRate - 0.7) < 0.003)
+        // Full volume between the fades, through the cut (0.2 s) and the loop's seam (0.5 s), and silent at both ends
+        #expect(abs(peak(of: mixed, from: 0.2, to: 0.5) - 0.4) < 0.03)
+        #expect(peak(of: mixed, from: 0, to: 0.002) < 0.01)
+        #expect(peak(of: mixed, from: mixed.count - 100, to: mixed.count) < 0.02)
+
+        project.audio.background?.track.isMuted = true
+        let muted = try await mixedAudio(of: try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio, extra: extra))
+        #expect(peak(of: muted, from: 0, to: 0.7) < 0.001)
+    }
+
     /// The grey level of frame `index` of a 30 fps video.
     private func level(ofFrame index: Int, in asset: AVURLAsset) async throws -> Int {
         let generator = AVAssetImageGenerator(asset: asset)
@@ -150,6 +204,10 @@ struct CompositionBuilderTests {
 
     /// The loudest sample between two output times.
     private func peak(of samples: [Float], from start: Double, to end: Double) -> Float {
-        samples[Int(start * TestRecording.sampleRate)..<Int(end * TestRecording.sampleRate)].map(abs).max() ?? 0
+        peak(of: samples, from: Int(start * TestRecording.sampleRate), to: Int(end * TestRecording.sampleRate))
+    }
+
+    private func peak(of samples: [Float], from start: Int, to end: Int) -> Float {
+        samples[start..<end].map(abs).max() ?? 0
     }
 }

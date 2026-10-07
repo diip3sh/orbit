@@ -17,9 +17,12 @@ nonisolated struct AudioMixSettings: Codable, Equatable, Sendable {
     /// doesn't depend on it.
     var clickVolume = 0.0
 
+    /// Music looped under the whole video, if one was chosen.
+    var background: BackgroundAudio?
+
     /// Whether the mix has audio of its own, besides the recording's tracks.
     var addsAudio: Bool {
-        clickVolume > 0
+        clickVolume > 0 || background != nil
     }
 
     /// The settings of audio track `index`, which exist for every track.
@@ -58,5 +61,6 @@ extension AudioMixSettings {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         tracks = try container.decodeIfPresent([Track].self, forKey: .tracks) ?? tracks
         clickVolume = try container.decodeIfPresent(Double.self, forKey: .clickVolume) ?? clickVolume
+        background = try container.decodeIfPresent(BackgroundAudio.self, forKey: .background)
     }
 }

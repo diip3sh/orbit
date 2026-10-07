@@ -17,6 +17,7 @@ nonisolated enum EditorError: LocalizedError {
     case projectNotSaved(any Error)
     case exportFailed(any Error)
     case unreadableBackground
+    case unreadableBackgroundAudio
     case renameFailed(any Error)
 
     var errorDescription: String? {
@@ -43,6 +44,8 @@ nonisolated enum EditorError: LocalizedError {
             "The video couldn't be exported. \(error.localizedDescription)"
         case .unreadableBackground:
             "The background image couldn't be opened, so its color is shown instead."
+        case .unreadableBackgroundAudio:
+            "The background audio couldn't be opened, so it's left out."
         case .renameFailed(let error):
             "The recording couldn't be renamed. \(error.localizedDescription)"
         }

@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 831 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 835 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -378,7 +378,7 @@ Key facts:
 The timeline always spans the whole recording: cut parts are dimmed and the playhead skips them.
 Each kept part has a handle on both edges; dragging one trims or restores. **S** splits at
 the playhead, clicking selects the part between splits and cuts, **⌫** cuts it. The inspector's
-Audio section sets each track's volume and mute.
+Audio tab sets each track's volume and mute, and holds the background audio (below).
 
 | File | Role |
 |---|---|
@@ -482,7 +482,7 @@ buttons, click sound). Movement (Mellow, Smooth, Fast, None) is in the Motion ta
 | `Editor/Model/CursorStyle.swift` | The inspector's settings (`Appearance`, `alwaysUsesArrow`, `loops`); `Smoothing.frequency` holds the presets' springs; `init(from:)` takes defaults for missing keys |
 | `Editor/Render/OverlayImages.swift` | `whiteArrow()` and `dot()`, the cursor styles' images, drawn once per plan; `ring(diameter:color:filled:)` |
 | `Editor/Model/ClickHighlightStyle.swift` | `Effect` (off, circle, ripple) with the rings' count, start size and timing; an old project's `isEnabled` decodes into it |
-| `Editor/Render/ClickSound.swift`, `Service/ClickSoundWriter.swift`, `Render/ExtraAudio.swift` | The click sound's samples, press onsets and mixing (pure); the file written from them; the extra files a composition holds |
+| `Editor/Render/ClickSound.swift`, `Service/ClickSoundWriter.swift`, `Render/ExtraAudio.swift`, `Model/BackgroundAudio.swift`, `Service/BackgroundAudioLoader.swift` | The click sound's samples, press onsets and mixing (pure); the file written from them; the extra files a composition holds (clicks, background music); the chosen music (bookmark, name, volume and mute) and its opening |
 | `Editor/ViewModel/EditorViewModel+Audio.swift` | Writes the click file the first time it's wanted, deletes it on close |
 | `Service/StandardCursors.swift` | `png(of:)`, shared with the recorder, and `arrowSprite`, the fallback read when the editor opens |
 
@@ -523,7 +523,7 @@ Key facts:
   5.5, a 3840×2160 frame on the default canvas (3572×2160), three clicks 0.1 s apart all showing, 300 frames each:
   no effect 2.6 ms p50 / 3.4 ms p95, Circle (3 rings) 3.6 / 4.1, Ripple (6 rings) 3.8 / 4.2.
 - **Click sound** (`AudioMixSettings.clickVolume`, 0 is off, Clicks section): a synthesised 20 ms click (2.4 kHz body, 5.2 kHz
-  edge, picked by ear on 2026-10-07; no licensed asset) at every press of every button, on the source timeline.
+  edge, chosen on 2026-10-07, not yet checked by ear; no licensed asset) at every press of every button, on the source timeline.
   Written once per editor window as Apple Lossless CAF (48 kHz mono, a second of samples at a time) in
   `temporaryDirectory/Reco Click Sounds/<UUID>.caf` the first time the volume is above 0, inserted per kept range
   like the recording's tracks (so cuts leave out the clicks inside them) as a track above the recording's IDs and mixed
@@ -532,6 +532,17 @@ Key facts:
   (and `ExportSession` counts it for the size estimate). ALAC keeps each onset to the sample (the first non-zero sample
   is the onset or the one after it, since the click starts at a zero crossing); AAC would shift it by its priming.
   Measured on an M2, Debug: 10 minutes with 3,000 presses writes in 0.97 s to 3.3 MB (the silent 10 minutes alone: 146 KB).
+- **Background audio** (`AudioMixSettings.background`, Audio tab → Background Audio, 2026-10-08): one chosen audio file, kept as a
+  security-scoped bookmark (`BackgroundImageLoader.bookmark(for:)`) with its name, volume (30% when added) and mute; replacing it
+  keeps the volume. Looped (`CompositionBuilder.loopRanges`, in `CMTime` so the copies meet exactly) at output times from 0 to
+  exactly the video's end, never longer, since the compositor draws black past the video's last frame. It runs through cuts (no
+  cut fades) and fades in over 1 s and out over 2 s, each at most a quarter of the output (`backgroundFades`, picked by
+  ear). Its own track above the click sounds' (`extraTrackID(2, …)`), so exports include it like the clicks. The file is opened
+  once per bookmark (`EditorViewModel.backgroundAudio`, access kept on while the window is open and ended when it closes or
+  the file is replaced); adding, removing or changing it makes a new player item (`needsNewAudioFiles`), volume and mute only
+  the mix. An unreadable file shows `unreadableBackgroundAudio` and is left out. The Audio tab is always available (a silent
+  recording can get music); the per-track section shows only when the recording has tracks. No music is bundled (licensing).
+  `ponytail:` a file that doesn't loop cleanly clicks at the seam; a crossfade needs two alternating tracks.
 - A track holds its asset weakly: inserting from a click file whose `AVURLAsset` was already released failed with -12780, so
   `CompositionBuilder` keeps it alive (`withExtendedLifetime`) until the insert is done.
 - Projects saved before these settings decode with defaults (`init(from:)` in extensions, like `EditorProject`): the
@@ -606,7 +617,7 @@ slate gradient.
 | `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar, centred, never larger than the screen less 40 pt; the editor and Web Recording open at 1533×943 (the size picked by hand on 2026-10-05) |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the transport in the timeline's header |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart; a line at each label, dots between; labels carry their units, "0.5s", "1m 30s", "1h", since a clock's "0:00.5" didn't say what it counted), the playhead's knob, the zoom blocks |
-| `Editor/Model/InspectorTab.swift`, `Editor/View/InspectorTabBar.swift` | The inspector's tabs (2026-10-07): Background · Camera ‖ Audio ‖ Cursor · Keyboard ‖ Captions ‖ Motion, as icons on one capsule track with a line between groups and a sliding fill; only the chosen tab's sections show (Canvas; Audio; Cursor and Clicks; Keystrokes; Zoom). Camera and Captions stay disabled until the camera is its own track and a transcript exists (spec 0004, N19, N5); Audio without tracks too. The tab is `EditorView` state, so it survives export; selecting a zoom turns to Motion. Motion holds the zoom's and the cursor's movement (Mellow, Smooth, Fast; the cursor's also None) and Motion Blur (a slider, Off at 0): `ZoomMotion` sets the camera spring at 6, 10 or 16 rad/s (96% of a move in 0.83, 0.5 or 0.31 s), saved in the project as `zoomMotion`, blur as `motionBlur` |
+| `Editor/Model/InspectorTab.swift`, `Editor/View/InspectorTabBar.swift` | The inspector's tabs (2026-10-07): Background · Camera ‖ Audio ‖ Cursor · Keyboard ‖ Captions ‖ Motion, as icons on one capsule track with a line between groups and a sliding fill; only the chosen tab's sections show (Canvas; Audio; Cursor and Clicks; Keystrokes; Zoom). Camera and Captions stay disabled until the camera is its own track and a transcript exists (spec 0004, N19, N5); Audio is always available. The tab is `EditorView` state, so it survives export; selecting a zoom turns to Motion. Motion holds the zoom's and the cursor's movement (Mellow, Smooth, Fast; the cursor's also None) and Motion Blur (a slider, Off at 0): `ZoomMotion` sets the camera spring at 6, 10 or 16 rad/s (96% of a move in 0.83, 0.5 or 0.31 s), saved in the project as `zoomMotion`, blur as `motionBlur` |
 | `Editor/View/Inspector*.swift`, `EditorInspectorSections.swift`, `TickSlider.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | `EditorInspector` and its sections, which fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides. Every slider is a `TickSlider`: a track with ticks, accent fill up to a bar at the value, dragged 1:1 from the grab (a press away from the bar takes it there first), VoiceOver adjustable in 20 steps, without a focus ring |
 | `Editor/View/ExportOptions.swift`, `ExportProgressBar.swift` | Export's inspector: format, size and frame rate as `SegmentedChoice` tabs (an option can be disabled), the quality as rows with their estimated sizes, Export and Copy to Clipboard (side by side, or stacked when the column is narrow) pinned under a line; progress |
 
