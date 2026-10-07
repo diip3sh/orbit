@@ -178,7 +178,9 @@ struct MotionAgentTests {
 
         var long = document
         long.scenes = (0..<20).map { MotionScene(id: "s\($0)", duration: 1, shot: MotionShot(.title, text: "Scene \($0)")) }
-        let picked = ContactSheet.moments(in: MotionSummary(long, bundle: URL(filePath: "/tmp/a.motion"), sizes: [:]))
+        let every = ContactSheet.moments(in: MotionSummary(long, bundle: URL(filePath: "/tmp/a.motion"), sizes: [:]))
+        #expect(every.count == 20)
+        let picked = ContactSheet.picked(every)
         #expect(picked.count == ContactSheet.maximumFrames)
         #expect(picked.first?.scene == "s0")
         #expect(picked.last?.scene == "s19")
@@ -208,6 +210,26 @@ struct MotionAgentTests {
         #expect(accentFindings.count == 1)
         #expect(accentFindings.first?.contains("the accent covers") == true)
         #expect(DesignCheck.findings(in: [loud], at: [moment], accent: nil).isEmpty)
+    }
+
+    /// A scene whose only layer comes in at 1 s opens on its bare ground; the grammar's shots don't.
+    @Test func theDesignCheckFindsABareOpening() async throws {
+        let (url, grammar) = try MotionTestBundle.makeGrammar()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let plan = await MotionPlan.build(grammar, bundle: url, shorterSide: 270)
+        #expect(DesignCheck.bareOpenings(in: plan, scenes: grammar.scenes.map(\.id)).isEmpty)
+
+        let late = try JSONDecoder().decode(MotionDocument.self, from: Data(#"""
+        {
+          "version": 1,
+          "scenes": [{ "id": "late", "duration": 3, "layers": [
+            { "id": "a", "content": { "text": { "text": "Comes in late", "size": 120 } }, "transform": { "position": [960, 540, 0] },
+              "moves": [{ "move": "fadeUp", "start": 1 }] }
+          ] }]
+        }
+        """#.utf8))
+        let findings = DesignCheck.bareOpenings(in: await MotionPlan.build(late, bundle: URL.temporaryDirectory), scenes: ["late"])
+        #expect(findings.count == 1 && findings.first?.hasPrefix("late") == true)
     }
 
     private func image(_ draw: (CGContext) -> Void) throws -> CGImage {

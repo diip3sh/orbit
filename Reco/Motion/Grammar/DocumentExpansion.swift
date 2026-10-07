@@ -11,9 +11,15 @@ import Foundation
 /// expand on its layer (``MoveExpansion``).
 nonisolated enum DocumentExpansion {
 
-    /// A roll's words swap in 0.2 s (0.1–0.23 measured on Linear for Agents), moving 0.35 em.
+    /// A roll's words swap in 0.2 s (0.1–0.23 measured on Linear for Agents), moving 0.5 em: the word
+    /// leaving is half gone when the next starts in, so the two never sit on each other (at 0.35 em
+    /// together, "agents" and "Delegate" read as one blot mid-swap).
     static let rollTransition = 0.2
-    static let rollDistance = 0.35
+    static let rollDistance = 0.5
+    static let rollHandover = 0.1
+
+    /// A roll waits this long after its headline is revealed, so the line is read before it changes.
+    static let rollReading = 0.4
 
     /// Rows of a cascade start 2–2.5 frames apart at 30 fps, the whole group within 0.5 s.
     static let cascadeStagger = 0.075
@@ -107,7 +113,8 @@ nonisolated enum DocumentExpansion {
         let perCharacter = reveal.map { characterTime(of: $0, characters: text.text.count, in: context) } ?? 0
         let revealStart = reveal.map { MoveExpansion.timing(of: $0, in: context).start } ?? 0
         let revealEnd = reveal.map { MoveExpansion.timing(of: $0, in: context) }.map { $0.start + $0.duration } ?? 0
-        let start = roll.start ?? (reveal == nil ? 1 : revealEnd + 0.5)
+        // Never while the headline is still coming in: a roll set at 0.1 s swapped words under its wipe
+        let start = max(roll.start ?? 0, reveal == nil ? 1 : revealEnd + rollReading)
         let interval = (roll.duration ?? 0.5 * Double(words.count - 1)) / Double(max(words.count - 1, 1))
 
         // A word-by-word reveal goes by words: the part's first word starts at its turn
@@ -207,7 +214,7 @@ nonisolated enum DocumentExpansion {
         let (start, interval) = turns
         var keyframes: [MotionProperty: [Keyframe]] = [:]
         if index > 0 {
-            let entering = start + Double(index - 1) * interval
+            let entering = start + Double(index - 1) * interval + rollHandover
             keyframes[.opacity] = [Keyframe(time: entering, value: 0, easing: .enter), Keyframe(time: entering + rollTransition, value: 1)]
             keyframes[.positionY] = [Keyframe(time: entering, value: top + distance, easing: .enter), Keyframe(time: entering + rollTransition, value: top)]
         }

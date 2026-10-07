@@ -95,8 +95,9 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
     /// like and forbids the tells; it never asks for a number of elements.
     static let launchPlaybook = """
         How to make it:
-        1. Research. Call inspect_page on the page and on the two to four pages its product or features navigation links to; if \
-        you have web search or fetch, read what the product says about itself. Write the pitch in one sentence: what it is, for \
+        1. Research. Call inspect_page on the page and on one or two pages its product or features navigation links to (each \
+        call loads and measures a page: they're the slow part of research); if you have web search or fetch, read what the \
+        product says about itself. Write the pitch in one sentence: what it is, for \
         whom, and what's new (the user's line first, if they gave one).
         2. Script. A hook over the product in the first 3 s, six words at most, never a logo intro. Then four to six beats from the \
         shot catalogue, each one idea: the product itself early (uiHero), its two or three strongest features shown on their real \
@@ -108,10 +109,11 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         carries on, fade at most once.
         4. UI. Assets from inspect_page's liftable on the pages you inspected: product screenshots, app mockups and feature \
         cards, the largest that show the product; never a block of marketing text. Hide the page's overlays that cover them. \
-        Write the video with edit_motion (a name, the style, the assets, the scenes), then capture_ui; fix an asset it can't \
-        capture with set_asset, or drop it.
+        At most one live asset (with steps), and none where inspect_page's render_cost at 2 is over 4: a take renders the page \
+        frame by frame, minutes on a heavy page. Write the whole video in one edit_motion call (a name, the style, the assets, \
+        the scenes), then capture_ui; fix an asset it can't capture with set_asset, or drop it.
         5. Check. Call preview_motion and look at the picture: cut-off or overlapping text, an empty or wrong element, a frame \
-        that says nothing. Fix it and the findings with edit_motion, then preview again; stop after three previews.
+        that says nothing. Fix it and every finding in one edit_motion call, then preview again; stop after two previews.
         6. Export with export_recording: the bundle, format h264, resolution 2160 (sharp 4K: the video is drawn, not scaled).
         """
 

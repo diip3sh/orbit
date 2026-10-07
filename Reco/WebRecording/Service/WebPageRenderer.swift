@@ -30,6 +30,14 @@ final class WebPageRenderer: NSObject {
     private var frameCall: (id: Int, continuation: CheckedContinuation<PageFrame?, Never>)?
     private var frameCallCount = 0
 
+    /// Whether a frame call outlasted ``frameTimeout``.
+    private var frameStalled = false
+
+    /// A frame waits at most 5 s for media and 5 s for images; one not back in 30 s never will: with
+    /// Reco hidden, WebKit stopped the page's animation frames and a live take waited 13 minutes for
+    /// one, holding an agent's run until its time ran out.
+    static let frameTimeout = Duration.seconds(30)
+
     /// How long a page runs in real time once loaded, before the take freezes its clock.
     static let settleTime = Duration.seconds(1)
 
@@ -66,8 +74,7 @@ final class WebPageRenderer: NSObject {
     /// motion document's live layer (spec 0011). The telemetry stays the viewport's.
     func render(to url: URL, crop: CGRect? = nil, bitsPerPixel: Double, progress: (Double) -> Void) async throws -> Rendered {
         guard let pageURL = script.url else { throw WebRenderError.noURL }
-        // Ordered in, off every display, so WebKit sees a visible window
-        window.orderFrontRegardless()
+        orderIn()
         defer { window.orderOut(nil) }
 
         try await load(pageURL)
@@ -272,6 +279,7 @@ final class WebPageRenderer: NSObject {
                 return frame
             }
             guard !hasCrashed else { throw WebRenderError.pageCrashed }
+            guard !frameStalled else { throw WebRenderError.stalled }
             reloads += 1
             guard reloads <= Self.maximumReloads else { throw WebRenderError.loadFailed("The page kept reloading.") }
             try await waitWhileLoading()
@@ -286,6 +294,12 @@ final class WebPageRenderer: NSObject {
         let id = frameCallCount
         return await withCheckedContinuation { continuation in
             frameCall = (id, continuation)
+            Task { [weak self] in
+                try? await Task.sleep(for: Self.frameTimeout)
+                guard let self, frameCall?.id == id else { return }
+                frameStalled = true
+                finishFrameCall(id)
+            }
             Task {
                 var frame: PageFrame?
                 do {
@@ -408,12 +422,19 @@ extension WebPageRenderer {
     /// it's ordered in: what lifts UI for motion documents (``UICapture``).
     func withLoadedPage<T>(_ body: (WKWebView) async throws -> T) async throws -> T {
         guard let pageURL = script.url else { throw WebRenderError.noURL }
-        window.orderFrontRegardless()
+        orderIn()
         defer { window.orderOut(nil) }
 
         try await load(pageURL)
         try await Task.sleep(for: Self.settleTime)
         return try await body(webView)
+    }
+
+    /// Orders the window in, off every display, so WebKit sees a visible window and draws. A hidden
+    /// app's windows aren't visible, so Reco is unhidden first, without coming forward.
+    private func orderIn() {
+        NSApp.unhideWithoutActivation()
+        window.orderFrontRegardless()
     }
 }
 

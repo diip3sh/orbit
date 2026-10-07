@@ -59,7 +59,12 @@ nonisolated extension MoveContext {
 nonisolated enum MoveExpansion {
 
     /// The first move starts this long after its seam: 0.1–0.3 s (HyperFrames); never at 0, a tell.
-    static let entranceStart = 0.2
+    /// At 0.2 s, with UI fading in over its whole rise, a Linear film cut every 2 s showed bare ground
+    /// for the first 0.3–0.8 s of each shot (2026-10-07).
+    static let entranceStart = 0.1
+
+    /// UI coming in is there almost at once and settles as it moves: the cut is the transition.
+    static let uiAppearance = 0.15
 
     /// A drift runs this long past its scene, so a push or a fade into the next scene still sees it moving.
     static let driftOverrun = 1.0
@@ -114,7 +119,7 @@ nonisolated enum MoveExpansion {
         case .blurWipe, .lineMask, .wordByWord, .type:
             effect.reveal = reveal(move, start: start, duration: duration, in: context)
         case .rise:
-            add(.opacity, 0, 1, easing: .cascade)
+            effect.tracks[.opacity] = [ramp(.opacity, (0, 1), start: start, duration: min(uiAppearance, duration), easing: .enterFast)]
             // From 0.9–0.97 and at most 16 px (agentic-product-demo)
             add(.scale, 1 - 0.04 * amount, 1, easing: .cascade)
             add(.positionY, 16 * unit * amount, 0, easing: .cascade)
@@ -159,8 +164,8 @@ nonisolated enum MoveExpansion {
             .positionX: [ramp(.positionX, (-way.x, 0), start: start, duration: duration, easing: .longSettle)],
             .positionY: [ramp(.positionY, (-way.y, 0), start: start, duration: duration, easing: .longSettle)],
             .rotationY: [ramp(.rotationY, (turn, 0), start: start, duration: duration, easing: .longSettle)],
-            .opacity: [ramp(.opacity, (0, 1), start: start, duration: min(0.5, duration), easing: .enter)],
-            .blur: [ramp(.blur, (14 * context.unit * amount, 0), start: start, duration: min(0.6, duration), easing: .enter)]
+            .opacity: [ramp(.opacity, (0, 1), start: start, duration: min(uiAppearance, duration), easing: .enterFast)],
+            .blur: [ramp(.blur, (14 * context.unit * amount, 0), start: start, duration: min(0.4, duration), easing: .enter)]
         ]
     }
 

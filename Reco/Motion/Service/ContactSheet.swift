@@ -26,13 +26,18 @@ enum ContactSheet {
     nonisolated static let gap = 8
 
     /// Each scene's moment: 0.2 s after its last entrance ends, or 40% in when they end sooner, and
-    /// a frame before it ends at the latest. More scenes than fit are picked evenly.
+    /// a frame before it ends at the latest. The design check reads all of them.
     nonisolated static func moments(in summary: MotionSummary) -> [Moment] {
-        let moments = summary.scenes.map { scene in
+        summary.scenes.map { scene in
             let entrances = scene.layers.flatMap(Self.moves).filter { $0.move.kind != .exit }.map(\.ends)
             let settled = max((entrances.max() ?? 0) + 0.2, 0.4 * scene.duration)
             return Moment(scene: scene.id, time: scene.start + min(settled, scene.duration - 1 / Double(summary.frameRate)))
         }
+    }
+
+    /// The moments the sheet shows: all of them, or ``maximumFrames`` picked evenly. A Linear film's
+    /// 24 scenes were checked on 12 frames, and the half never seen held most of its faults.
+    nonisolated static func picked(_ moments: [Moment]) -> [Moment] {
         guard moments.count > maximumFrames else { return moments }
         return (0..<maximumFrames).map { moments[$0 * (moments.count - 1) / (maximumFrames - 1)] }
     }
@@ -41,9 +46,8 @@ enum ContactSheet {
         layer.moves + (layer.layers ?? []).flatMap(moves)
     }
 
-    /// The frames at `moments`, drawn as an export draws them, `frameShorterSide` tall.
-    static func frames(of document: MotionDocument, bundle: URL, at moments: [Moment]) async throws -> [CGImage] {
-        let plan = try await UICapture.plan(for: document, bundle: bundle, shorterSide: frameShorterSide)
+    /// The frames at `moments`, drawn as an export draws them, from a plan `frameShorterSide` tall.
+    static func frames(of plan: MotionPlan, at moments: [Moment]) async throws -> [CGImage] {
         let composition = try await MotionCompositionBuilder.composition(for: plan)
         var frames: [CGImage] = []
         for moment in moments {

@@ -11,6 +11,7 @@ nonisolated enum WebRenderError: LocalizedError, Equatable {
     case loadFailed(String)
     case loadTimedOut
     case pageCrashed
+    case stalled
     case snapshotFailed
     case writerFailed
 
@@ -20,6 +21,7 @@ nonisolated enum WebRenderError: LocalizedError, Equatable {
         case .loadFailed(let reason): "The page couldn't be loaded: \(reason)"
         case .loadTimedOut: "The page took longer than a minute to load."
         case .pageCrashed: "The page crashed."
+        case .stalled: "The page stopped drawing frames."
         case .snapshotFailed: "The page couldn't be drawn."
         case .writerFailed: "The movie couldn't be written."
         }

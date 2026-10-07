@@ -15,6 +15,30 @@ nonisolated extension ShotLayout {
     /// The caps' size: 2.5 % of the frame's height in cap height, SF Mono's being 0.7 of its size.
     static let closingCapHeight = 0.025
 
+    /// When the first word cuts in.
+    static let closingSwaps = 0.25
+
+    /// When a closing's parts come, from its scene's start.
+    nonisolated struct ClosingTimes {
+        /// The last word held 0.74 s, then the name and it sliding together over 1.4 s, the line under
+        /// them 0.3 s later and the logo alone 1.55 s after that.
+        let slide, settled, underline, logo: Double
+
+        init(words: Int) {
+            slide = closingSwaps + 0.42 * Double(max(words - 1, 0)) + 0.74
+            settled = slide + 1.4
+            underline = settled + 0.3
+            logo = underline + 1.55
+        }
+    }
+
+    /// The least a closing needs: everything in, and what's last on screen read for 1.2 s. Cut at 3 s,
+    /// a Linear closing never came together.
+    static func closingLength(words: Int, hasLogo: Bool) -> Double {
+        let times = ClosingTimes(words: words)
+        return (hasLogo ? times.logo : times.underline) + 1.2
+    }
+
     static func closing(_ shot: MotionShot, in context: Context) -> Layout {
         let size = context.size
         let words = (shot.items ?? []).compactMap(\.text).filter { !$0.isEmpty }
@@ -26,11 +50,8 @@ nonisolated extension ShotLayout {
             return content
         }
         let middle = size.height / 2
-        let swaps = 0.25
-        let slide = swaps + 0.42 * Double(words.count - 1) + 0.74
-        let settled = slide + 1.4
-        let underline = settled + 0.3
-        let logo = underline + 1.55
+        let (swaps, times) = (closingSwaps, ClosingTimes(words: words.count))
+        let (slide, settled, underline, logo) = (times.slide, times.settled, times.underline, times.logo)
         let ending = shot.asset == nil ? Double.infinity : logo
         // The lockup: the name and the last word a space apart, centred
         let nameContent = caps(name, style.text)

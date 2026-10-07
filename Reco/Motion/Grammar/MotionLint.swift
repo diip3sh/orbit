@@ -12,7 +12,7 @@ nonisolated enum MotionLint {
 
     nonisolated enum Rule: String, Sendable {
         case readingTime, textSize, safeArea, contrast, firstMove, simultaneousMoves, exitLength
-        case sceneLengths, typingRate, stillness, hookLength
+        case sceneLengths, typingRate, stillness, hookLength, endingLength, rollLength, busyField
     }
 
     nonisolated struct Finding: Equatable, Sendable {
@@ -45,6 +45,23 @@ nonisolated enum MotionLint {
             if source.shot?.kind == .hook, let text = source.shot?.text, ReadingTime.words(in: text) > 6 {
                 findings.append(Finding(rule: .hookLength, scene: scene.id, message: "A hook is six words at most; this one has \(ReadingTime.words(in: text))."))
             }
+            if let shot = source.shot, shot.kind == .closing {
+                let words = (shot.items ?? []).compactMap(\.text).filter { !$0.isEmpty }.count
+                let needed = ShotLayout.closingLength(words: words, hasLogo: shot.asset != nil)
+                if scene.duration < needed - 1e-6 {
+                    let message = "A closing with \(words) words needs \(seconds(needed)) s to come together; this one has \(scene.duration.formatted()) s."
+                    findings.append(Finding(rule: .endingLength, scene: scene.id, message: message))
+                }
+            }
+            findings += rollFindings(scene.layers, scene: scene)
+            if let field = source.field, field.isBusy {
+                findings.append(Finding(rule: .busyField, scene: scene.id, message: "The \(field.rawValue) field competes with what's over it: use plain or satin."))
+            }
+        }
+        if document.canvas.field.isBusy, let first = document.scenes.first {
+            findings.append(Finding(
+                rule: .busyField, scene: first.id, message: "The canvas's \(document.canvas.field.rawValue) field competes with what's over it: use plain or satin."
+            ))
         }
         let lengths = document.scenes.map(\.duration)
         if lengths.count >= 4, let longest = lengths.max(), let shortest = lengths.min(), longest < 3 * shortest {
@@ -57,6 +74,29 @@ nonisolated enum MotionLint {
     }
 
     // MARK: - Timing
+
+    /// A roll's last word must come in early enough to be read before its scene ends: the swaps start
+    /// only once the headline is revealed (``DocumentExpansion/rollReading``).
+    private static func rollFindings(_ layers: [MotionLayer], scene: MotionScene) -> [Finding] {
+        layers.flatMap { layer -> [Finding] in
+            guard case .group(let children) = layer.content else { return [] }
+            let words = children.filter { $0.id.hasPrefix(layer.id + ".roll") }
+            guard let last = words.last, words.count > 1, let entering = last.keyframes[.opacity]?.first?.time else {
+                return rollFindings(children, scene: scene)
+            }
+            let needed = entering + DocumentExpansion.rollTransition + 0.5
+            guard needed > scene.duration + 1e-6 else { return [] }
+            return [Finding(
+                rule: .rollLength, scene: scene.id, layer: layer.id,
+                message: "The roll's last word comes in at \(seconds(entering)) s, too late to read: make the scene \(seconds(needed)) s or give the roll fewer words."
+            )]
+        }
+    }
+
+    /// Seconds to a tenth, as findings give them.
+    private static func seconds(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(1)))
+    }
 
     /// A layer's moves at the times they resolve to.
     nonisolated private struct TimedMove {

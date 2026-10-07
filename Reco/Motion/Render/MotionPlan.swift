@@ -303,7 +303,9 @@ extension MotionPlan {
         var scenes = expanded.scenes.map { scene in
             defer { start += scene.duration }
             let context = MoveContext(sceneDuration: scene.duration, canvas: canvas)
-            let field = scene.field ?? document.canvas.field
+            // A closing is drawn on black, whatever the video's field: over a dithered sphere its small
+            // caps didn't read
+            let field = scene.shot?.kind == .closing ? .plain : scene.field ?? document.canvas.field
             var planned = Scene(
                 start: start,
                 duration: scene.duration,

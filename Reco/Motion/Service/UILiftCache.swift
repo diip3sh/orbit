@@ -160,8 +160,9 @@ nonisolated enum UILiftCache {
     }
 
     /// Changes when a still is lifted differently, so bundles lift theirs again: 2 hides the
-    /// layers a progressive blur is made of, 3 everything inside what's hidden (``UILiftScript/isolate``).
-    static let liftVersion = 3
+    /// layers a progressive blur is made of, 3 everything inside what's hidden (``UILiftScript/isolate``),
+    /// 4 fills a translucent element with the page's opaque colour (``UILiftScript/place``).
+    static let liftVersion = 4
 
     private static func key(of asset: MotionAsset) -> String {
         var source = "\(asset.url.absoluteString)\n\(asset.selector)\n\(Int(asset.viewport.width))x\(Int(asset.viewport.height))"

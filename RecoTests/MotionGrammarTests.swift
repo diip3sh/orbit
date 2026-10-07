@@ -69,9 +69,10 @@ struct MotionGrammarTests {
     @Test func typingRevealsFifteenCharactersASecond() throws {
         let reveal = try #require(MoveExpansion.effect(of: MotionMove(.type), in: context(characters: 30)).reveal)
         #expect(reveal.style == .type)
-        #expect(reveal.progress(ofPart: 14, at: 0.2 + 14.0 / 15 - 0.01) == 0)
-        #expect(reveal.progress(ofPart: 14, at: 0.2 + 14.0 / 15 + 0.01) == 1)
-        #expect(abs(reveal.end(parts: 30) - (0.2 + 29.0 / 15)) < 1e-9)
+        let start = MoveExpansion.entranceStart
+        #expect(reveal.progress(ofPart: 14, at: start + 14.0 / 15 - 0.01) == 0)
+        #expect(reveal.progress(ofPart: 14, at: start + 14.0 / 15 + 0.01) == 1)
+        #expect(abs(reveal.end(parts: 30) - (start + 29.0 / 15)) < 1e-9)
     }
 
     @Test func aWipeTakes44MillisecondsACharacter() throws {

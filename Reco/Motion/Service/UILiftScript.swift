@@ -11,8 +11,11 @@ enum UILiftScript {
 
     /// Scrolls the element `selector` matches into view, as little as it takes, and returns
     /// `{box: [x, y, width, height], fill, radius}` in viewport CSS pixels, or `null` when there's
-    /// none. `fill` is the nearest painted background from the element up: a card with a transparent
-    /// background would otherwise lose the page behind it. `radius` is its top-left corner's.
+    /// none. `fill` is the colour the page paints under the element's content: the backgrounds from the
+    /// root down to the element blended over white, as the browser composites them, so it's opaque. A
+    /// card with a transparent background would otherwise lose the page behind it, and one with a
+    /// translucent one let the video's ground through: linear.app's panels are 3 % white over black, and
+    /// their lifts' coverage was 7–70 %. `radius` is its top-left corner's.
     ///
     /// `scrollIntoView`, not `scrollTo`: cardboard.ai scrolls inside its own container, where
     /// `window.scrollTo` left its tiles out of view. As little as it takes: linear.app fades its hero
@@ -36,10 +39,19 @@ enum UILiftScript {
     ]);
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const box = element.getBoundingClientRect();
-    const clear = 'rgba(0, 0, 0, 0)';
-    let fill = clear;
-    for (let node = element; node && fill === clear; node = node.parentElement) fill = getComputedStyle(node).backgroundColor;
-    if (fill === clear) fill = getComputedStyle(document.body).backgroundColor;
+    const backgrounds = [];
+    for (let node = element; node; node = node.parentElement) backgrounds.push(getComputedStyle(node).backgroundColor);
+    const paint = document.createElement('canvas');
+    paint.width = paint.height = 1;
+    const pen = paint.getContext('2d', { willReadFrequently: true });
+    pen.fillStyle = '#ffffff';
+    pen.fillRect(0, 0, 1, 1);
+    for (const color of backgrounds.reverse()) {
+      pen.fillStyle = color;
+      pen.fillRect(0, 0, 1, 1);
+    }
+    const [red, green, blue] = pen.getImageData(0, 0, 1, 1).data;
+    const fill = `rgb(${red}, ${green}, ${blue})`;
     const corner = getComputedStyle(element).borderTopLeftRadius;
     const radius = corner.endsWith('%') ? parseFloat(corner) / 100 * Math.min(box.width, box.height) : parseFloat(corner) || 0;
     return { box: [box.x, box.y, box.width, box.height], fill, radius };

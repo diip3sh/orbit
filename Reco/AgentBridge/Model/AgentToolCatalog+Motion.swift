@@ -19,12 +19,9 @@ nonisolated extension AgentToolCatalog {
         Video: canvas {size [1920,1080], frameRate 60, background "#rrggbb", field, pacing}, style {text, dim, accent: \
         "#rrggbb"; face sans|serif|mono; alignment leading|center} from inspect_page's brand, assets, scenes. Pacing \
         driftAndCut: 3–5 s shots, the camera drifting at constant speed, hard cuts (Linear). beats: 1–2 s beats, eased \
-        camera moves (Raycast). Field, what scenes are drawn over, moving slowly and coloured from the accent: ember (grain \
-        pooling in two corners, type in the dark between: bold brands), matrix (a lit sphere in ordered dither: technical \
-        brands), halo (a ring of smoke: behind an end card's logo), sunlit (a soft grain wave: calm or playful titles), \
-        satin (black satin out of focus, lit afresh for each scene, a slab of matte glass across a wide one's corner, \
-        monochrome: dark UI in macro), plain (the background colour, the \
-        default).
+        camera moves (Raycast). Field, what scenes are drawn over: plain (the background colour, the default: the product's UI \
+        crisp on its own ground, as Linear's films) or satin (black satin out of focus, lit afresh for each scene, a slab of \
+        matte glass across a wide one's corner, monochrome: dark UI in macro, as Raycast's).
 
         Asset: {id, url, selector, viewport [w,h] (default [1440,900]), hide [selectors], glass}: an element of a real page, \
         lifted alone with its rounded corners: a product screenshot, an app mockup, a card, a logo; never a whole section. \
@@ -41,17 +38,18 @@ nonisolated extension AgentToolCatalog {
 
         Scene: {id, duration, seam, shot, field (else the canvas's), layers, camera}. Shots and their slots (ui is an asset id):
         - hook: text (6 words at most) over ui, the product dimmed.
-        - title: text, detail (a line under it), items [{text}]: the headline's last word rolls through the items' text \
+        - title: text, detail (a line under it), items [{text}]: once the headline is in, its last word rolls through the \
+        items' text, about 0.5 s each; each must complete the headline as its own phrase \
         ("Agents for DevOps" → "Triage" → "Planning").
-        - uiHero: ui on a plane lying back, larger than the frame, a band in focus.
+        - uiHero: ui flat and as large as the frame allows, the camera pulling back onto it.
         - uiFocus: ui flat and close, region [[x,y],[w,h]] in fractions of it: the view frames that part, the rest dims.
-        - uiCascade: items [{ui}], two or more, rising one after another.
+        - uiCascade: items [{ui}], two or more, rising one after another, side by side when they're tall.
         - featureSequence: items [{text, ui}], one feature at a time, each its slice of the scene.
         - endCard: text (the name; at a headline's size without a logo) or ui (the logo), detail (the address or a call to \
         action, in the accent). Still: give it about 3.5 s.
         - closing: text (the name), items [{text}] (the product's words, the last joining the name), detail (a line under \
         them), ui (the logo, shown alone last): New Raycast's ending in small mono caps, a word cut in every 0.42 s. Give it \
-        field plain and 0.42 s a word plus about 5.5 s.
+        0.42 s a word plus 4.5 s, 1.6 s more with ui; it's drawn on black.
         Seams, how a scene begins: cut (most), cutOnMotion (carries the camera's speed on), zoomThrough, blurCut, push, fade \
         (rare).
         Moves {move, start, duration, intensity, direction, words, region, to}: text fadeUp, blurIn, blurWipe (letters sharpen \
@@ -82,7 +80,7 @@ nonisolated extension AgentToolCatalog {
         "canvas":{"type":"object"},"style":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
         "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","cutOnMotion","zoomThrough","blurCut","push","fade"]},
         "shot":{"type":"object","description":"{shot: hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard|closing, text, detail, ui, items, region}"},
-        "field":{"type":"string","enum":["ember","matrix","halo","sunlit","satin","plain"]},
+        "field":{"type":"string","enum":["satin","plain"]},
         "moves":{"type":"array","items":{"type":"object"}}},
         "required":["op"],"additionalProperties":false}}},
         "required":["operations"],"additionalProperties":false}

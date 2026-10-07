@@ -21,6 +21,7 @@ struct UICaptureTests {
       <div style="height: 1200px"></div>
       <div id="card" style="width: 400px; height: 200px; margin-left: 100px; border-radius: 24px; background: rgb(34, 34, 34)"></div>
       <div style="background: rgb(0, 0, 255); padding: 20px"><div id="clear" style="width: 300px; height: 100px"></div></div>
+      <div style="background: rgb(0, 0, 0); padding: 20px"><div id="glassy" style="width: 300px; height: 100px; background: rgba(255, 255, 255, 0.2)"></div></div>
       <div id="tall" style="width: 200px; height: 1500px; background: rgb(255, 0, 0)"></div>
     </body></html>
     """
@@ -47,7 +48,7 @@ struct UICaptureTests {
     }
 
     @Test func liftsAnElementAloneWithRealAlphaAtItsScale() async throws {
-        let lifted = try await lift(["card": "#card", "clear": "#clear", "tall": "#tall"])
+        let lifted = try await lift(["card": "#card", "clear": "#clear", "glassy": "#glassy", "tall": "#tall"])
         defer { try? FileManager.default.removeItem(at: lifted.bundle) }
 
         let card = try lifted.lift("card")
@@ -65,6 +66,12 @@ struct UICaptureTests {
         let clear = try Pixels(try lifted.lift("clear").url).color(column: 300, row: 100)
         #expect(clear.blue > 200)
         #expect(clear.alpha == 255)
+
+        // A translucent one keeps the page under it, blended, so nothing shows through it: Linear's
+        // panels are a few percent white over black
+        let glassy = try Pixels(try lifted.lift("glassy").url).color(column: 300, row: 100)
+        #expect(glassy.alpha == 255)
+        #expect(abs(Int(glassy.red) - 51) <= 6 && abs(Int(glassy.blue) - 51) <= 6)
 
         // Taller than the view: lifted whole
         let tall = try lifted.lift("tall")

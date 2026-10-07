@@ -149,4 +149,13 @@ struct MotionPlanTests {
         #expect(MotionPlan.liftScale(for: bar, width: 576, rasterScale: 40) == 14)
         #expect(MotionPlan.liftScale(for: page, width: 1440, rasterScale: 14) == 8)
     }
+
+    /// A live take's frame is never more pixels than a 4K frame: linear.app's hero at 6× rendered for
+    /// 20 minutes and failed.
+    @Test func aLiveTakeIsNoLargerThanA4KFrame() {
+        let hero = UILiftCache.TakeInfo(crop: CGRect(x: 0, y: 0, width: 1320, height: 720), radius: 12, scale: 0, duration: 4)
+        #expect(MotionPlan.takeScale(for: hero, width: 1690, rasterScale: 2) == 2)
+        let field = UILiftCache.TakeInfo(crop: CGRect(x: 0, y: 0, width: 400, height: 60), radius: 8, scale: 0, duration: 4)
+        #expect(MotionPlan.takeScale(for: field, width: 1600, rasterScale: 2) == 8)
+    }
 }

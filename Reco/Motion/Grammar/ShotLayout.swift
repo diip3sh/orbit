@@ -114,8 +114,9 @@ nonisolated enum ShotLayout {
         var layout = Layout()
         if let asset = shot.asset {
             var product = uiLayer("\(context.scene.id).product", asset: asset, width: size.width * 1.15, at: [size.width / 2, size.height / 2, 0])
-            product.opacity = 0.3
-            product.blur = 6 * size.height / 1080
+            // Linear's dark UI at 0.3 and 6 px read as a black frame
+            product.opacity = 0.45
+            product.blur = 4 * size.height / 1080
             layout.layers.append(product)
         }
         let content = text(shot.text ?? "", size: size.height * 0.11, color: context.style.text, width: textWidth(in: context), style: context.style, alignment: .center)
@@ -155,17 +156,17 @@ nonisolated enum ShotLayout {
         return layout
     }
 
-    /// The product lying back on a plane larger than the frame, a band of it in focus (spike C's
-    /// Linear Agent shot: rotated 30°, 6°, −11°).
+    /// The product flat and as large as the frame allows, arriving at once and settling as the camera
+    /// pulls back onto it. It used to lie back on a plane larger than the frame with a band in focus
+    /// (spike C's Linear Agent shot); the user found the tilted, cut-off, half-blurred UI the weakest
+    /// shot of a Linear film (2026-10-07).
     private static func uiHero(_ shot: MotionShot, in context: Context) -> Layout {
         let size = context.size
-        let depth = size.height * 0.24
-        var plane = uiLayer("\(context.scene.id).product", asset: shot.asset ?? "", width: size.width * 1.2, at: [size.width / 2, size.height * 0.55, depth])
-        plane.transform.rotation = [30, 6, -11]
-        var layout = Layout(layers: [plane])
-        // Sharp where the plane's middle is; 9 px of blur ~300 px of depth off it
-        layout.camera.keyframes[.focus] = [Keyframe(time: 0, value: depth)]
-        layout.camera.keyframes[.aperture] = [Keyframe(time: 0, value: 3)]
+        let asset = shot.asset ?? ""
+        let width = LayoutRules.fittedWidth(of: context.sizes[asset], in: CGSize(width: size.width * 0.88, height: size.height * 0.82))
+        var element = uiLayer("\(context.scene.id).product", asset: asset, width: width, at: [size.width / 2, size.height / 2, 0], moves: [MotionMove(.rise)])
+        element.shadow = LayerShadow(opacity: 0.5, radius: 40 * size.height / 1080, offset: 28 * size.height / 1080)
+        var layout = Layout(layers: [element])
         if context.canvas.pacing == .beats {
             layout.camera.moves.append(MotionMove(.pullBack))
         }
@@ -207,23 +208,30 @@ nonisolated enum ShotLayout {
         return layout
     }
 
-    /// Elements stacked in a column entering one after another.
+    /// Elements side by side or stacked, entering one after another: in a row when that shows them
+    /// larger (tall panels), else in a column. Three 400×560 panels stacked came out 190 px wide.
     private static func uiCascade(_ shot: MotionShot, in context: Context) -> Layout {
         let size = context.size
         let assets = (shot.items ?? []).compactMap(\.asset)
         let gap = size.height * 0.025
-        // As wide as fits 80% of the height between them
-        var width = size.width * 0.55
-        let heights = { (width: Double) in assets.map { height(of: $0, width: width, in: context) } }
-        let total = heights(width).reduce(0, +) + gap * Double(assets.count - 1)
-        if total > size.height * 0.8 {
-            width *= (size.height * 0.8 - gap * Double(assets.count - 1)) / (total - gap * Double(assets.count - 1))
-        }
-        var top = -(heights(width).reduce(0, +) + gap * Double(assets.count - 1)) / 2
+        let spacing = gap * Double(max(assets.count - 1, 0))
+        let ratios = assets.map { height(of: $0, width: 1, in: context) }
+        // A column as wide as fits 80% of the height, at most 55% of the width; a row as tall as fits
+        // 86% of the width, at most 70% of the height
+        let columnWidth = min(size.width * 0.55, (size.height * 0.8 - spacing) / max(ratios.reduce(0, +), 1e-6))
+        let rowHeight = min(size.height * 0.7, (size.width * 0.86 - spacing) / max(ratios.map { 1 / max($0, 1e-6) }.reduce(0, +), 1e-6))
+        let columnArea = ratios.map { columnWidth * columnWidth * $0 }.reduce(0, +)
+        let rowArea = ratios.map { rowHeight * rowHeight / max($0, 1e-6) }.reduce(0, +)
+        let inRow = rowArea > columnArea
+        let widths = ratios.map { inRow ? rowHeight / max($0, 1e-6) : columnWidth }
+        let extent = inRow ? widths.reduce(0, +) + spacing : ratios.map { $0 * columnWidth }.reduce(0, +) + spacing
+        var edge = -extent / 2
         var rows: [MotionLayer] = []
-        for (index, (asset, height)) in zip(assets, heights(width)).enumerated() {
-            rows.append(uiLayer("\(context.scene.id).item\(index)", asset: asset, width: width, at: [0, top + height / 2, 0]))
-            top += height + gap
+        for (index, (asset, width)) in zip(assets, widths).enumerated() {
+            let along = inRow ? width : width * ratios[index]
+            let center: SIMD3<Double> = inRow ? [edge + along / 2, 0, 0] : [0, edge + along / 2, 0]
+            rows.append(uiLayer("\(context.scene.id).item\(index)", asset: asset, width: width, at: center))
+            edge += along + gap
         }
         let group = MotionLayer(
             id: "\(context.scene.id).items", content: .group(rows), transform: Transform3D(position: [size.width / 2, size.height / 2, 0]),
@@ -241,9 +249,11 @@ nonisolated enum ShotLayout {
         let slice = context.scene.duration / Double(max(items.count, 1))
         var layout = Layout()
         for (index, item) in items.enumerated() {
-            let start = Double(index) * slice + (index == 0 ? MoveExpansion.entranceStart : 0.1)
-            // Out 0.1 s apart in the order they came (index, line, the UI to the left), the UI 0.3 s
-            // before the next comes in, so no more than two leave at once; the last stays
+            // Each comes in as the one before leaves, so the frame is never bare between them: 0.6 s
+            // of nothing between Linear's Pulse and Documents showed only the field
+            let start = index == 0 ? MoveExpansion.entranceStart : Double(index) * slice - 0.2
+            // Out 0.1 s apart in the order they came (index, line, the UI to the left), the UI's 0.3 s
+            // exit ending as its slice does, so no more than two leave at once; the last stays
             let leaving = { (order: Int) -> [MotionMove] in
                 guard index < items.count - 1 else { return [] }
                 var exit = MotionMove(.exit, start: Double(index + 1) * slice - 0.3 - 0.1 * Double(2 - order), duration: 0.3)

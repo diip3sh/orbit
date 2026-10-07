@@ -81,13 +81,20 @@ nonisolated extension MotionPlan {
     }
 
     /// Video pixels per CSS pixel for a live layer `width` canvas pixels wide drawn at
-    /// `rasterScale`: whole, at most 8×, and the movie within HEVC's 8,192 px. A take recorded at
-    /// 2× and shown at four times its CSS size on a 4K canvas read soft.
+    /// `rasterScale`: whole, at most 8×, the movie within HEVC's 8,192 px, and a frame of it no more
+    /// pixels than ``largestTakeFrame``. A take recorded at 2× and shown at four times its CSS size on
+    /// a 4K canvas read soft.
     static func takeScale(for info: UILiftCache.TakeInfo, width: Double, rasterScale: Double) -> Int {
         let scale = Int((rasterScale * width / info.crop.width - 0.01).rounded(.up))
         let fits = Int(UILiftCache.maximumMovieSide / max(info.crop.width, info.crop.height))
-        return max(min(scale, UILiftCache.maximumScale, fits), 1)
+        let affordable = Int((largestTakeFrame / max(info.crop.width * info.crop.height, 1)).squareRoot())
+        return max(min(scale, UILiftCache.maximumScale, fits, affordable), 1)
     }
+
+    /// The most pixels a frame of a live take may have: a 4K frame's. A take costs its page's render
+    /// time for every one of them: linear.app's 1320×720 hero at 6× (34 million a frame) rendered for
+    /// 20 minutes and failed; at 2× it's about a minute for 4 s, a little soft on a 4K canvas.
+    static let largestTakeFrame = 3840.0 * 2160
 
     /// Image pixels per CSS pixel for a `ui` layer `width` canvas pixels wide drawn at
     /// `rasterScale`, past 8× only while the lift fits ``UILiftCache/maximumLiftSide``; 2× before the

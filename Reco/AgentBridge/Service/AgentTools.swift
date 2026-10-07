@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import OSLog
 
 /// Runs the tools an agent calls (spec 0006): inspect a page, record it, follow the render and
 /// export the recording.
@@ -14,6 +15,8 @@ import Foundation
 @MainActor
 @Observable
 final class AgentTools {
+
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "AgentTools")
 
     /// The latest render, or `nil` before the first. Only this type sets it, except in tests.
     var job: RenderStatus?
@@ -84,6 +87,12 @@ final class AgentTools {
     /// Runs tool `name` with its JSON `arguments`. The text is JSON for the agent; a failure is
     /// reported as an error text, not thrown.
     func call(_ name: String, arguments: Data) async -> Reply {
+        // How long each call takes: a launch run's 20 minutes are its calls and the agent's turns between
+        let started = ContinuousClock.now
+        defer {
+            let took = (ContinuousClock.now - started).formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 1)))
+            Self.logger.info("\(name, privacy: .public) took \(took, privacy: .public)")
+        }
         do {
             switch name {
             case AgentToolCatalog.inspectPage:
