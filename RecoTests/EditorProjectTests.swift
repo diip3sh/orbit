@@ -21,6 +21,11 @@ struct EditorProjectTests {
         project.keystrokes.showsAllKeys = true
         project.cursor.smoothing = .mellow
         project.cursor.hidesWhenIdle = true
+        project.cursor.appearance = .dot
+        project.cursor.alwaysUsesArrow = true
+        project.cursor.loops = true
+        project.clickHighlights.effect = .ripple
+        project.audio.clickVolume = 0.4
         project.zoomMotion = .fast
         project.canvas.aspect = .portrait
         project.canvas.background = .image
@@ -65,5 +70,34 @@ struct EditorProjectTests {
         #expect(try await ProjectStore.read(for: video) == nil)
         try await ProjectStore.write(project, for: video)
         #expect(try await ProjectStore.read(for: video) == project)
+    }
+
+    @Test func readsTheClickSwitchOfProjectsSavedBeforeEffects() throws {
+        func effect(_ json: String) throws -> ClickHighlightStyle.Effect {
+            try JSONDecoder().decode(ClickHighlightStyle.self, from: Data(json.utf8)).effect
+        }
+
+        #expect(try effect(#"{ "isEnabled": false, "size": 30 }"#) == .off)
+        #expect(try effect(#"{ "isEnabled": true }"#) == .circle)
+        #expect(try effect(#"{ "isEnabled": false, "effect": "ripple" }"#) == .ripple)
+        #expect(try JSONDecoder().decode(ClickHighlightStyle.self, from: Data(#"{ "isEnabled": false, "size": 30 }"#.utf8)).size == 30)
+    }
+
+    @Test func readsCursorAndAudioSettingsSavedBeforeTheNewOnesWithDefaults() throws {
+        let cursor = try JSONDecoder().decode(
+            CursorStyle.self, from: Data(#"{ "isEnabled": false, "size": 2, "smoothing": "fast", "animatesClicks": false, "hidesWhenIdle": true }"#.utf8)
+        )
+        var expected = CursorStyle()
+        expected.isEnabled = false
+        expected.size = 2
+        expected.smoothing = .fast
+        expected.animatesClicks = false
+        expected.hidesWhenIdle = true
+        #expect(cursor == expected)
+        #expect(cursor.appearance == .recorded && !cursor.alwaysUsesArrow && !cursor.loops)
+
+        let audio = try JSONDecoder().decode(AudioMixSettings.self, from: Data(#"{ "tracks": [{ "volume": 0.5, "isMuted": true }] }"#.utf8))
+        #expect(audio.tracks == [AudioMixSettings.Track(volume: 0.5, isMuted: true)])
+        #expect(audio.clickVolume == 0 && !audio.addsAudio)
     }
 }

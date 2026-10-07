@@ -137,4 +137,36 @@ struct CursorPathTests {
 
         #expect(try self.path(telemetry).opacity(at: 4) == 1)
     }
+
+    @Test func glidesOntoTheFirstFramesPositionOverTheLoop() throws {
+        let cursor = sweep(speed: 100, until: 9.5)
+        let telemetry = telemetry(cursor: cursor, clicks: [click(at: 8.5, CGPoint(x: 900, y: 400))])
+        let plain = try path(telemetry)
+
+        let looping = try #require(CursorPath(
+            telemetry: telemetry, style: CursorStyle(), duration: 10, videoHeight: 800, loop: .init(start: 0.5, glide: 8..<9.5)
+        ))
+
+        // Before the glide it is the plain path
+        #expect(looping.position(at: 3) == plain.position(at: 3))
+        #expect(looping.position(at: 8) == plain.position(at: 8))
+        // At its end, and after, where the first frame is, which the glide doesn't change
+        for time in [9.5, 9.9] {
+            #expect(looping.position(at: time) == plain.position(at: 0.5))
+        }
+        // Half way there it is between, on the way
+        let middle = looping.position(at: 8.75)
+        #expect(middle.x > plain.position(at: 0.5).x && middle.x < plain.position(at: 8.75).x)
+    }
+
+    @Test func aGlideOfNoLengthMovesTheCursorAtOnce() throws {
+        let telemetry = telemetry(cursor: sweep(speed: 100, until: 5))
+
+        let looping = try #require(CursorPath(
+            telemetry: telemetry, style: CursorStyle(), duration: 10, videoHeight: 800, loop: .init(start: 0, glide: 4..<4)
+        ))
+
+        #expect(looping.position(at: 3.9).x > 400)
+        #expect(looping.position(at: 4) == looping.position(at: 0))
+    }
 }

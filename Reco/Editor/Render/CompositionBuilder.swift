@@ -17,11 +17,14 @@ enum CompositionBuilder {
     nonisolated static let fadeDuration = 0.025
 
     /// Every part, for a new player item or an export.
-    static func composition(for source: EditorSource, plan: RenderPlan, audio: AudioMixSettings) async throws -> EditorComposition {
+    static func composition(
+        for source: EditorSource, plan: RenderPlan, audio: AudioMixSettings, extra: ExtraAudio = ExtraAudio()
+    ) async throws -> EditorComposition {
         EditorComposition(
-            asset: try await asset(for: source, timeMap: plan.timeMap),
+            asset: try await asset(for: source, timeMap: plan.timeMap, extra: extra),
             videoComposition: videoComposition(for: source, plan: plan),
-            audioMix: audioMix(for: source, timeMap: plan.timeMap, settings: audio)
+            audioMix: audioMix(for: source, timeMap: plan.timeMap, settings: audio, extra: extra),
+            extraAudio: extra
         )
     }
 
@@ -43,24 +46,17 @@ enum CompositionBuilder {
         return composition
     }
 
-    /// Each audio track at its volume, faded at every cut.
-    static func audioMix(for source: EditorSource, timeMap: TimeMap, settings: AudioMixSettings) -> AVAudioMix {
+    /// Each audio track at its volume, and the click sounds at theirs, faded at every cut.
+    static func audioMix(for source: EditorSource, timeMap: TimeMap, settings: AudioMixSettings, extra: ExtraAudio = ExtraAudio()) -> AVAudioMix {
         let fades = audioFades(for: timeMap)
-        let mix = AVMutableAudioMix()
-        mix.inputParameters = source.audioTrackIDs.indices.map { index in
-            let volume = settings[track: index].effectiveVolume
-            let parameters = AVMutableAudioMixInputParameters()
-            parameters.trackID = source.audioTrackIDs[index]
-            parameters.setVolume(volume, at: .zero)
-            for fade in fades {
-                let timeRange = CMTimeRange(
-                    start: CMTime(seconds: fade.range.lowerBound, preferredTimescale: CMTimeScale(NSEC_PER_SEC)),
-                    end: CMTime(seconds: fade.range.upperBound, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-                )
-                parameters.setVolumeRamp(fromStartVolume: fade.fadesIn ? 0 : volume, toEndVolume: fade.fadesIn ? volume : 0, timeRange: timeRange)
-            }
-            return parameters
+        var parameters = source.audioTrackIDs.indices.map { index in
+            inputParameters(trackID: source.audioTrackIDs[index], volume: settings[track: index].effectiveVolume, fades: fades)
         }
+        if extra.clicks != nil {
+            parameters.append(inputParameters(trackID: extraTrackID(1, for: source), volume: Float(settings.clickVolume), fades: fades))
+        }
+        let mix = AVMutableAudioMix()
+        mix.inputParameters = parameters
         return mix
     }
 
@@ -85,23 +81,60 @@ enum CompositionBuilder {
     // MARK: - Private
 
     /// The recording's video and audio tracks, with only the kept ranges, under their own track
-    /// IDs so the video composition and the mix can name them.
-    private static func asset(for source: EditorSource, timeMap: TimeMap) async throws -> AVComposition {
+    /// IDs so the video composition and the mix can name them, then the extra audio the same way.
+    private static func asset(for source: EditorSource, timeMap: TimeMap, extra: ExtraAudio) async throws -> AVComposition {
         let composition = AVMutableComposition()
         let ranges = timeRanges(of: timeMap, in: source)
         for mediaType in [AVMediaType.video, .audio] {
             for track in try await source.asset.loadTracks(withMediaType: mediaType) {
-                guard let compositionTrack = composition.addMutableTrack(withMediaType: mediaType, preferredTrackID: track.trackID) else {
-                    throw AVError(.unknown)
-                }
-                var cursor = CMTime.zero
-                for range in ranges {
-                    try compositionTrack.insertTimeRange(range, of: track, at: cursor)
-                    cursor = CMTimeAdd(cursor, range.duration)
+                try insert(track, as: track.trackID, ranges: ranges, into: composition)
+            }
+        }
+        // Optional, so a click file that went missing leaves the recording as it is; the mix names a track that isn't there
+        if let clicks = extra.clicks {
+            let clickAsset = AVURLAsset(url: clicks)
+            if let track = try? await clickAsset.loadTracks(withMediaType: .audio).first {
+                // A track holds its asset weakly: released before the insert, it failed with -12780
+                try withExtendedLifetime(clickAsset) {
+                    try insert(track, as: extraTrackID(1, for: source), ranges: ranges, into: composition)
                 }
             }
         }
         return composition
+    }
+
+    /// `track`'s `ranges`, end to end, as a new track of `composition` with ID `trackID`.
+    private static func insert(_ track: AVAssetTrack, as trackID: CMPersistentTrackID, ranges: [CMTimeRange], into composition: AVMutableComposition) throws {
+        guard let compositionTrack = composition.addMutableTrack(withMediaType: track.mediaType, preferredTrackID: trackID) else {
+            throw AVError(.unknown)
+        }
+        var cursor = CMTime.zero
+        for range in ranges {
+            try compositionTrack.insertTimeRange(range, of: track, at: cursor)
+            cursor = CMTimeAdd(cursor, range.duration)
+        }
+    }
+
+    /// The ID of extra track `number` (from 1), above the recording's own so the mix can name it without loading it.
+    private static func extraTrackID(_ number: Int, for source: EditorSource) -> CMPersistentTrackID {
+        ((source.audioTrackIDs + [source.videoTrackID]).max() ?? source.videoTrackID) + CMPersistentTrackID(number)
+    }
+
+    /// `volume` from the start, ramped to nothing and back at each of `fades`.
+    private static func inputParameters(
+        trackID: CMPersistentTrackID, volume: Float, fades: [(range: Range<Double>, fadesIn: Bool)]
+    ) -> AVMutableAudioMixInputParameters {
+        let parameters = AVMutableAudioMixInputParameters()
+        parameters.trackID = trackID
+        parameters.setVolume(volume, at: .zero)
+        for fade in fades {
+            let timeRange = CMTimeRange(
+                start: CMTime(seconds: fade.range.lowerBound, preferredTimescale: CMTimeScale(NSEC_PER_SEC)),
+                end: CMTime(seconds: fade.range.upperBound, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+            )
+            parameters.setVolumeRamp(fromStartVolume: fade.fadesIn ? 0 : volume, toEndVolume: fade.fadesIn ? volume : 0, timeRange: timeRange)
+        }
+        return parameters
     }
 
     /// The kept ranges in the recording's time scale. The last one ends where the recording does.

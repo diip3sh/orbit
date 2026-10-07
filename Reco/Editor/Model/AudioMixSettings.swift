@@ -13,6 +13,15 @@ nonisolated struct AudioMixSettings: Codable, Equatable, Sendable {
     /// One per audio track, in the recording's order. Tracks past the end play unchanged.
     var tracks: [Track] = []
 
+    /// The volume of a click sound at every press, from 0 (none) to 1. Here because it is mixed audio: the plan
+    /// doesn't depend on it.
+    var clickVolume = 0.0
+
+    /// Whether the mix has audio of its own, besides the recording's tracks.
+    var addsAudio: Bool {
+        clickVolume > 0
+    }
+
     /// The settings of audio track `index`, which exist for every track.
     subscript(track index: Int) -> Track {
         get { index < tracks.count ? tracks[index] : Track() }
@@ -36,5 +45,18 @@ nonisolated struct AudioMixSettings: Codable, Equatable, Sendable {
         var effectiveVolume: Float {
             isMuted ? 0 : Float(volume)
         }
+    }
+}
+
+// MARK: - Decoding
+
+extension AudioMixSettings {
+
+    /// Settings added after a project was saved take their defaults when missing.
+    nonisolated init(from decoder: any Decoder) throws {
+        self.init()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        tracks = try container.decodeIfPresent([Track].self, forKey: .tracks) ?? tracks
+        clickVolume = try container.decodeIfPresent(Double.self, forKey: .clickVolume) ?? clickVolume
     }
 }

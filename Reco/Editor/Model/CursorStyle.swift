@@ -11,6 +11,15 @@ import Foundation
 nonisolated struct CursorStyle: Codable, Equatable, Sendable {
     var isEnabled = true
 
+    var appearance = Appearance.recorded
+
+    /// Draws the recording's arrow where it showed another shape (I-beam, hand, resize), so the cursor is
+    /// one shape throughout. Only for ``Appearance/recorded``.
+    var alwaysUsesArrow = false
+
+    /// Glides the cursor back to where it started over the last second, so the video loops.
+    var loops = false
+
     /// A multiple of the cursor's size on screen.
     var size = 1.0
 
@@ -21,6 +30,14 @@ nonisolated struct CursorStyle: Codable, Equatable, Sendable {
 
     /// Whether the cursor fades out when it hasn't moved or clicked for a while.
     var hidesWhenIdle = false
+
+    /// What the cursor looks like.
+    nonisolated enum Appearance: String, Codable, CaseIterable, Sendable {
+        /// The system cursors that were recorded.
+        case recorded
+        case white
+        case dot
+    }
 
     /// How closely the drawn cursor follows the recorded one.
     nonisolated enum Smoothing: String, Codable, CaseIterable, Sendable {
@@ -39,5 +56,24 @@ nonisolated struct CursorStyle: Codable, Equatable, Sendable {
             case .fast: 25
             }
         }
+    }
+}
+
+// MARK: - Decoding
+
+extension CursorStyle {
+
+    /// Settings added after a project was saved take their defaults when missing.
+    nonisolated init(from decoder: any Decoder) throws {
+        self.init()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? isEnabled
+        appearance = try container.decodeIfPresent(Appearance.self, forKey: .appearance) ?? appearance
+        alwaysUsesArrow = try container.decodeIfPresent(Bool.self, forKey: .alwaysUsesArrow) ?? alwaysUsesArrow
+        loops = try container.decodeIfPresent(Bool.self, forKey: .loops) ?? loops
+        size = try container.decodeIfPresent(Double.self, forKey: .size) ?? size
+        smoothing = try container.decodeIfPresent(Smoothing.self, forKey: .smoothing) ?? smoothing
+        animatesClicks = try container.decodeIfPresent(Bool.self, forKey: .animatesClicks) ?? animatesClicks
+        hidesWhenIdle = try container.decodeIfPresent(Bool.self, forKey: .hidesWhenIdle) ?? hidesWhenIdle
     }
 }

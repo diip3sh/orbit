@@ -42,7 +42,11 @@ nonisolated enum FrameRenderer {
     private static func video(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CIImage {
         var image = frame
         for click in ClickMarker.active(in: plan.clicks, at: time, duration: plan.clickDuration) {
-            image = ring(for: click, at: time, plan: plan).composited(over: image)
+            for index in 0..<plan.clickEffect.ringCount {
+                if let progress = plan.clickEffect.progress(ofRing: index, atAge: (time - click.time) / plan.clickDuration) {
+                    image = ring(for: click, progress: progress, plan: plan).composited(over: image)
+                }
+            }
         }
         // Clicks are on the content, so they zoom with it and move onto the canvas; the chip doesn't zoom
         let placement = transform(to: plan.camera.viewport(at: time), size: plan.videoSize).concatenating(plan.canvas.videoTransform)
@@ -58,11 +62,11 @@ nonisolated enum FrameRenderer {
         return image.cropped(to: plan.canvas.videoFrame)
     }
 
-    /// The click's ring, growing from 40% of its size with an ease-out while it fades.
-    private static func ring(for click: ClickMarker, at time: Double, plan: RenderPlan) -> CIImage {
-        let progress = (time - click.time) / plan.clickDuration
+    /// The click's ring `progress` of the way, growing from the effect's start size with an ease-out while it fades.
+    private static func ring(for click: ClickMarker, progress: Double, plan: RenderPlan) -> CIImage {
         let growth = 1 - pow(1 - progress, 3)
-        let diameter = click.diameter * (0.4 + 0.6 * growth)
+        let start = plan.clickEffect.startScale
+        let diameter = click.diameter * (start + (1 - start) * growth)
         let scale = diameter / plan.clickRing.extent.width
         let placement = CGAffineTransform(scaleX: scale, y: scale)
             .concatenating(CGAffineTransform(translationX: click.position.x - diameter / 2, y: click.position.y - diameter / 2))

@@ -26,7 +26,7 @@ final class EditorViewModel {
     private(set) var project = EditorProject()
     private(set) var timeMap = TimeMap(cuts: [], sourceDuration: 0, frameRate: 60)
 
-    private(set) var selection: EditorSelection?
+    var selection: EditorSelection?
 
     /// Clicks and keystrokes on the timeline, or `nil` without telemetry.
     private(set) var markers: TimelineMarkers?
@@ -49,6 +49,10 @@ final class EditorViewModel {
     @ObservationIgnored private var composition: EditorComposition?
     @ObservationIgnored private var rebuild: Task<Void, Never>?
 
+    /// The click sounds' file, once something asked for them: written once per window, since it is on the source
+    /// timeline and cuts only choose which parts play. `nil` inside when there are no presses.
+    @ObservationIgnored var clickSoundFile: Task<URL?, Never>?
+
     /// The keyboard layout in use when the editor opened, the system's arrow for recordings made
     /// without the cursor, and the background picture.
     @ObservationIgnored private var resources = RenderResources.none
@@ -65,7 +69,7 @@ final class EditorViewModel {
     /// How long edits must settle before they are saved.
     private static let autosaveDelay = Duration.seconds(1)
 
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "EditorViewModel")
+    let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "EditorViewModel")
 
     init(videoURL: URL) {
         self.videoURL = videoURL
@@ -99,9 +103,10 @@ final class EditorViewModel {
             resources.background = await BackgroundImageLoader.image(from: bookmark)
         }
         let plan = await RenderPlan.build(project: project, source: source, resources: resources)
+        let extra = await extraAudio(for: project.audio, source: source)
         let composition: EditorComposition
         do {
-            composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
+            composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio, extra: extra)
         } catch {
             fail(.unreadableVideo(error))
             return
@@ -244,6 +249,7 @@ final class EditorViewModel {
         rebuild?.cancel()
         playback.release()
         thumbnails = []
+        await releaseAudioFiles()
         await flushSave()
     }
 
@@ -272,10 +278,12 @@ final class EditorViewModel {
         var drawn = project
         drawn.splits = previous.splits
         drawn.audio = previous.audio
-        if drawn != previous {
+        if drawn != previous || needsNewAudioFiles {
             rebuildPlan()
         } else if project.audio != previous.audio, let source, let plan {
-            let audioMix = CompositionBuilder.audioMix(for: source, timeMap: plan.timeMap, settings: project.audio)
+            let audioMix = CompositionBuilder.audioMix(
+                for: source, timeMap: plan.timeMap, settings: project.audio, extra: composition?.extraAudio ?? ExtraAudio()
+            )
             composition?.audioMix = audioMix
             playback.setAudioMix(audioMix)
         }
@@ -306,10 +314,11 @@ final class EditorViewModel {
                 backgroundBookmark = bookmark
             }
             let plan = await RenderPlan.build(project: project, source: source, resources: resources)
+            let extra = await extraAudio(for: self.project.audio, source: source)
             guard !Task.isCancelled, let playing = self.plan, var composition else { return }
-            guard plan.timeMap != playing.timeMap else {
+            guard plan.timeMap != playing.timeMap || extra != composition.extraAudio else {
                 composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan)
-                composition.audioMix = CompositionBuilder.audioMix(for: source, timeMap: plan.timeMap, settings: self.project.audio)
+                composition.audioMix = CompositionBuilder.audioMix(for: source, timeMap: plan.timeMap, settings: self.project.audio, extra: extra)
                 self.plan = plan
                 self.composition = composition
                 playback.setVideoComposition(composition.videoComposition)
@@ -319,7 +328,7 @@ final class EditorViewModel {
 
             let playhead = playing.timeMap.sourceTime(atOutput: playback.currentTime)
             do {
-                let rebuilt = try await CompositionBuilder.composition(for: source, plan: plan, audio: self.project.audio)
+                let rebuilt = try await CompositionBuilder.composition(for: source, plan: plan, audio: self.project.audio, extra: extra)
                 guard !Task.isCancelled else { return }
                 show(rebuilt, plan: plan, atSource: playhead)
             } catch {
@@ -422,79 +431,5 @@ extension EditorViewModel {
     /// Moves kept range `index`'s end to source time `time`, cutting or restoring the recording there.
     func moveEnd(ofKeptRange index: Int, to time: Double) {
         edit("Trim") { $0.cuts = timeMap.cuts(movingEndOf: index, to: time) }
-    }
-}
-
-// MARK: - Zooming
-
-extension EditorViewModel {
-
-    /// The selected zoom, for the inspector's controls. Each change is an edit, which makes it manual.
-    var selectedZoom: ZoomSegment? {
-        get {
-            guard case .zoom(let id) = selection else { return nil }
-            return project.zooms.first { $0.id == id }
-        }
-        set {
-            guard let newValue else { return }
-            edit("Zoom", coalescing: true) { $0.zooms = $0.zooms.replacing(newValue) }
-        }
-    }
-
-    /// Whether a zoom can start at the playhead: it's outside the others, with room for the shortest.
-    var canAddZoom: Bool {
-        newZoomAtPlayhead != nil
-    }
-
-    func selectZoom(_ id: ZoomSegment.ID) {
-        selection = .zoom(id)
-    }
-
-    /// Adds a zoom at the playhead and selects it. It follows the cursor when there is one to follow.
-    func addZoom() {
-        guard let zoom = newZoomAtPlayhead else { return }
-        edit("Add Zoom") { $0.zooms = $0.zooms.inserting(zoom) }
-        selection = .zoom(zoom.id)
-    }
-
-    /// Moves a zoom by `offset` seconds, up to its neighbours and the recording's ends.
-    func moveZoom(_ id: ZoomSegment.ID, by offset: Double) {
-        guard let source else { return }
-        edit("Move Zoom") { $0.zooms = $0.zooms.moving(id, by: offset, duration: source.duration) }
-    }
-
-    func moveZoomStart(_ id: ZoomSegment.ID, to time: Double) {
-        edit("Resize Zoom") { $0.zooms = $0.zooms.movingStart(of: id, to: time) }
-    }
-
-    func moveZoomEnd(_ id: ZoomSegment.ID, to time: Double) {
-        guard let source else { return }
-        edit("Resize Zoom") { $0.zooms = $0.zooms.movingEnd(of: id, to: time, duration: source.duration) }
-    }
-
-    /// Replaces the automatic zooms with new ones from the telemetry, keeping the manual ones.
-    func regenerateZooms() {
-        guard let source, let telemetry = source.telemetry else { return }
-        let generated = AutoZoomGenerator.segments(for: telemetry, duration: source.duration)
-        edit("Regenerate Zooms") { $0.zooms = $0.zooms.regenerated(with: generated) }
-    }
-
-    /// Whether zoomed parts look soft: the recording has fewer than 2 video pixels per screen
-    /// point, e.g. a Retina display recorded without Native Resolution.
-    var zoomsLookSoft: Bool {
-        (source?.telemetry?.pixelsPerPoint ?? 2) < 2
-    }
-
-    /// The filmstrip's picture nearest source time `time`, once loaded.
-    func thumbnail(at time: Double) -> CGImage? {
-        guard !thumbnails.isEmpty, timeMap.sourceDuration > 0 else { return nil }
-        let index = Int(time / timeMap.sourceDuration * Double(thumbnails.count))
-        return thumbnails[min(max(index, 0), thumbnails.count - 1)]
-    }
-
-    private var newZoomAtPlayhead: ZoomSegment? {
-        guard let source else { return nil }
-        let focus: ZoomSegment.Focus = source.telemetry?.cursor.isEmpty == false ? .followCursor : .fixed(center: CGPoint(x: 0.5, y: 0.5))
-        return project.zooms.newZoom(at: timeMap.snapped(playheadSourceTime), focus: focus, duration: source.duration)
     }
 }

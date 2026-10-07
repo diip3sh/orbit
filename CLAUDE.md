@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 721 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 825 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -419,7 +419,7 @@ the automatic zooms.
 | `Editor/Render/CameraPath.swift` | The view over time, sampled at 120 Hz: a critically damped spring per axis, scale in log space, follow-cursor with a dead zone |
 | `Editor/Render/FrameRenderer.swift` | Draws clicks, magnifies the frame to the view, then draws the keystroke chip unmagnified |
 | `Editor/View/ZoomLane.swift`, `ZoomFocusPad.swift` | The timeline's zoom lane; the inspector's fixed-focus picker |
-| `Editor/ViewModel/EditorViewModel.swift` | `// MARK: - Zooming` extension; `selection` is an `EditorSelection` (a segment or a zoom), and ⌫ removes either |
+| `Editor/ViewModel/EditorViewModel+Zooming.swift` | The zooming extension (moved out of `EditorViewModel.swift`, which was at the 500-line limit); `selection` is an `EditorSelection` (a segment or a zoom), and ⌫ removes either |
 
 Key facts:
 - A new project (no `.edit.json`) gets the automatic zooms; they're saved with the first edit.
@@ -450,8 +450,9 @@ Key facts:
 
 A recording made without the cursor gets it back in the editor: drawn from its recorded images at a
 smoothed position, sharp when zoomed, with its hot spot on every click highlight. The inspector's
-Cursor section shows or hides it and sets its size, movement (Mellow, Smooth, Fast), shrinking on
-click and hiding when idle.
+Cursor tab (2026-10-07) holds the Cursor section (show or hide, style, size with Reset, "Always Use Pointer",
+shrinking on click, hiding when idle, "Loop Position") and the Clicks section (effect, color, size, duration,
+buttons, click sound). Movement (Mellow, Smooth, Fast) is in the Motion tab.
 
 | File | Role |
 |---|---|
@@ -459,7 +460,11 @@ click and hiding when idle.
 | `Editor/Render/CursorShapeTrack.swift` | Shape changes without the brief ones, each image decoded once per plan; an arrow when the telemetry has none |
 | `Editor/Render/Spring.swift` | The critically damped spring the camera and the cursor share |
 | `Editor/Render/FrameRenderer.swift` | Draws the cursor after zooming, scaled in one step from its recorded resolution |
-| `Editor/Model/CursorStyle.swift` | The inspector's settings; `Smoothing.frequency` holds the presets' springs |
+| `Editor/Model/CursorStyle.swift` | The inspector's settings (`Appearance`, `alwaysUsesArrow`, `loops`); `Smoothing.frequency` holds the presets' springs; `init(from:)` takes defaults for missing keys |
+| `Editor/Render/OverlayImages.swift` | `whiteArrow()` and `dot()`, the cursor styles' images, drawn once per plan; `ring(diameter:color:filled:)` |
+| `Editor/Model/ClickHighlightStyle.swift` | `Effect` (off, circle, ripple) with the rings' count, start size and timing; an old project's `isEnabled` decodes into it |
+| `Editor/Render/ClickSound.swift`, `Service/ClickSoundWriter.swift`, `Render/ExtraAudio.swift` | The click sound's samples, press onsets and mixing (pure); the file written from them; the extra files a composition holds |
+| `Editor/ViewModel/EditorViewModel+Audio.swift` | Writes the click file the first time it's wanted, deletes it on close |
 | `Service/StandardCursors.swift` | `png(of:)`, shared with the recorder, and `arrowSprite`, the fallback read when the editor opens |
 
 Key facts:
@@ -480,6 +485,36 @@ Key facts:
   frame, so its image's size doesn't matter (34×46 px costs the same as the 280×400 px arrow);
   `highQualityDownsample` adds at most 0.2 ms. These were measured under load (load average 3),
   where a frame without the cursor took 7.5 ms p50, 10.7 ms p95, against 4.2 and 7.4 in phase 4.
+- **Styles** (`CursorStyle.appearance`): macOS (the recorded images; "Always Use Pointer" draws the recorded arrow, or the
+  system's `arrowSprite`, in place of every shape), White (the macOS arrow outline in white with a 1.25 pt black
+  stroke and a soft shadow, hot spot on the tip) and Dot (a 16 pt translucent grey disc with a white edge, hot spot
+  at the centre). White and Dot are drawn once per plan at 8 pixels per point, so they stay sharp at the 10× zoom
+  the recorded arrow is sized for; `style.size` scales them like any cursor. HDR plans convert them with
+  `encoded(in:)` like the recorded ones.
+- **Loop Position** (`CursorStyle.loops`): over the last second of output (less when the last kept range is shorter: the
+  glide stays inside it) the path eases onto where the first frame has the cursor, so the last frame's position equals
+  the first's exactly (`CursorPath.Loop`, `RenderPlan.cursorLoop(for:)`; the target is the path without the glide,
+  so it is set last in the init). Only the position loops: the cursor's size, shape and idle fade don't.
+- **Click effects** (`ClickHighlightStyle.effect`): None; Circle, the old ring (faint fill, grows from 40%); Ripple, two
+  unfilled rings that grow from 20% with the same cubic ease-out, each fading as it grows, each lasting 70% of the
+  duration, the second starting 30% after the first, so the effect ends with the duration and
+  `ClickMarker.active` is unchanged. One ring image per plan either way. Measured on an M2 (Mac14,2), Debug, load average
+  5.5, a 3840×2160 frame on the default canvas (3572×2160), three clicks 0.1 s apart all showing, 300 frames each:
+  no effect 2.6 ms p50 / 3.4 ms p95, Circle (3 rings) 3.6 / 4.1, Ripple (6 rings) 3.8 / 4.2.
+- **Click sound** (`AudioMixSettings.clickVolume`, 0 is off, Clicks section): a synthesised 20 ms click (2.4 kHz body, 5.2 kHz
+  edge, picked by ear on 2026-10-07; no licensed asset) at every press of every button, on the source timeline.
+  Written once per editor window as Apple Lossless CAF (48 kHz mono, a second of samples at a time) in
+  `temporaryDirectory/Reco Click Sounds/<UUID>.caf` the first time the volume is above 0, inserted per kept range
+  like the recording's tracks (so cuts leave out the clicks inside them) as a track above the recording's IDs and mixed
+  at the volume with the same 25 ms cut fades; deleted when the window closes. Lowering the volume to 0 only changes
+  the mix: the file and the player item stay. Exports read every audio track through the mix, so they include it
+  (and `ExportSession` counts it for the size estimate). ALAC keeps each onset to the sample (the first non-zero sample
+  is the onset or the one after it, since the click starts at a zero crossing); AAC would shift it by its priming.
+  Measured on an M2, Debug: 10 minutes with 3,000 presses writes in 0.97 s to 3.3 MB (the silent 10 minutes alone: 146 KB).
+- A track holds its asset weakly: inserting from a click file whose `AVURLAsset` was already released failed with -12780, so
+  `CompositionBuilder` keeps it alive (`withExtendedLifetime`) until the insert is done.
+- Projects saved before these settings decode with defaults (`init(from:)` in extensions, like `EditorProject`): the
+  synthesised `Decodable` throws on a missing key.
 
 ### S1 — Editor, phase 6: canvas and export polish (`feat/editor-shell`, spec 0003)
 

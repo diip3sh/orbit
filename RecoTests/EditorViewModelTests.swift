@@ -5,6 +5,7 @@
 //  Created by Diip3sh on 26.09.26.
 //
 
+import AVFoundation
 import CoreGraphics
 import Foundation
 import Testing
@@ -228,6 +229,46 @@ struct EditorViewModelTests {
         let video = folder.appending(path: "recording.mov")
         try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30)
         return video
+    }
+
+    @Test func turningTheClickSoundUpAddsATrackAndTurningItDownKeepsThePlayerItem() async throws {
+        let video = try await writeRecording()
+        defer { try? FileManager.default.removeItem(at: video.deletingLastPathComponent()) }
+        var telemetry = InputTelemetry(capture: .init(kind: .display, videoSize: CGSize(width: 64, height: 48)), keystrokesAvailable: false)
+        telemetry.geometry = [
+            .init(time: 0, screenRect: CGRect(x: 0, y: 0, width: 32, height: 24), contentRect: CGRect(x: 0, y: 0, width: 32, height: 24), contentScale: 1, scaleFactor: 2)
+        ]
+        telemetry.clicks = [.init(time: 0.3, location: CGPoint(x: 16, y: 12), button: .left, isDown: true, clickCount: 1)]
+        try JSONEncoder().encode(telemetry).write(to: InputTelemetry.sidecarURL(for: video))
+        let viewModel = EditorViewModel(videoURL: video)
+        await viewModel.load()
+        let item = try #require(viewModel.playback.player.currentItem)
+        #expect(try await item.asset.loadTracks(withMediaType: .audio).isEmpty)
+        #expect(viewModel.clickSoundFile == nil)
+
+        viewModel.edit("Audio") { $0.audio.clickVolume = 0.5 }
+
+        // The file is written first, then the player item is rebuilt with it
+        var turnedUp: AVPlayerItem?
+        for _ in 0..<500 where turnedUp == nil {
+            try await Task.sleep(for: .milliseconds(10))
+            if let current = viewModel.playback.player.currentItem, current !== item {
+                turnedUp = current
+            }
+        }
+        let rebuilt = try #require(turnedUp)
+        #expect(try await rebuilt.asset.loadTracks(withMediaType: .audio).count == 1)
+        let file = try #require(await viewModel.clickSoundFile?.value)
+        #expect(FileManager.default.fileExists(atPath: file.path(percentEncoded: false)))
+
+        // The file stays, silent, so the item does too
+        viewModel.edit("Audio") { $0.audio.clickVolume = 0 }
+        #expect(viewModel.playback.player.currentItem === rebuilt)
+        viewModel.edit("Audio") { $0.audio.clickVolume = 0.8 }
+        #expect(viewModel.playback.player.currentItem === rebuilt)
+
+        await viewModel.close()
+        #expect(!FileManager.default.fileExists(atPath: file.path(percentEncoded: false)))
     }
 
     @Test func anEditThatChangesNothingIsNotAnUndoStep() {

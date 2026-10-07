@@ -139,7 +139,7 @@ struct RenderPlanTests {
 
     @Test func buildsNoOverlaysWhenTheyAreOff() async {
         var project = EditorProject(cuts: [2..<3])
-        project.clickHighlights.isEnabled = false
+        project.clickHighlights.effect = .off
         project.keystrokes.isEnabled = false
 
         let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: RenderResources(keyLabels: KeyLabelFormatter.current()))
@@ -203,5 +203,55 @@ struct RenderPlanTests {
             let images = [plan.clickRing, plan.chipImages.first, plan.canvas.backdrop, plan.cursorShapes.sprite(at: 1)?.image]
             #expect(images.allSatisfy { $0.map { abs($0.brightestRed - white) < 0.001 } ?? false })
         }
+    }
+
+    @Test func theCursorLoopEndsAtTheLastFrameShown() {
+        // The last kept frame is the one before 9 s
+        let loop = RenderPlan.cursorLoop(for: TimeMap(cuts: [9..<10], sourceDuration: 10, frameRate: 60))
+
+        #expect(loop.start == 0)
+        #expect(abs(loop.glide.upperBound - 539.0 / 60) < 1e-9)
+        #expect(abs(loop.glide.lowerBound - (539.0 / 60 - CursorPath.loopDuration)) < 1e-9)
+    }
+
+    @Test func theCursorLoopStaysInsideTheLastKeptRange() {
+        // Kept: 0..<1 and a last range of 0.4 s, shorter than the glide
+        let loop = RenderPlan.cursorLoop(for: TimeMap(cuts: [1..<9.6], sourceDuration: 10, frameRate: 60))
+
+        #expect(abs(loop.glide.lowerBound - 9.6) < 1e-9)
+        #expect(abs(loop.glide.upperBound - (10 - 1.0 / 60)) < 1e-9)
+    }
+
+    @Test func buildsALoopingCursorOnlyWhenAsked() async {
+        var telemetry = telemetry
+        telemetry.capture.cursorInVideo = false
+        telemetry.cursor = (0...600).map { InputTelemetry.CursorSample(time: Double($0) / 60, location: CGPoint(x: 300 + Double($0) / 3, y: 380)) }
+        var project = EditorProject()
+        project.cursor.animatesClicks = false
+
+        let plain = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: .none)
+        project.cursor.loops = true
+        let looping = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: .none)
+
+        #expect(plain.cursor?.position(at: 9.9) != plain.cursor?.position(at: 0))
+        #expect(looping.cursor?.position(at: 10 - 1.0 / 60) == looping.cursor?.position(at: 0))
+    }
+
+    @Test func buildsTheChosenCursorImages() async {
+        var telemetry = telemetry
+        telemetry.capture.cursorInVideo = false
+        telemetry.cursor = [.init(time: 0, location: CGPoint(x: 500, y: 380))]
+        var project = EditorProject()
+
+        project.cursor.appearance = .dot
+        let dot = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: .none)
+        project.cursor.appearance = .white
+        let white = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: .none)
+
+        // Drawn once at 8 pixels per point
+        #expect(dot.cursorShapes.sprite(at: 5)?.image.extent.size == CGSize(width: 128, height: 128))
+        #expect(dot.cursorShapes.sprite(at: 5)?.pointsPerPixel == 1.0 / 8)
+        #expect(white.cursorShapes.sprite(at: 5)?.pointsPerPixel == 1.0 / 8)
+        #expect(white.cursorShapes.sprite(at: 5)?.image.extent.width != 128)
     }
 }

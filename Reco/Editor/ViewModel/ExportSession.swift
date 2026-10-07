@@ -92,7 +92,7 @@ final class ExportSession {
             size: viewModel.exportSize(resolution: settings.resolution),
             frameRate: settings.outputFrameRate(recordingRate: source.frameRate),
             duration: viewModel.timeMap.outputDuration,
-            hasAudio: !source.audioTrackIDs.isEmpty
+            hasAudio: !source.audioTrackIDs.isEmpty || viewModel.project.audio.addsAudio
         )
     }
 

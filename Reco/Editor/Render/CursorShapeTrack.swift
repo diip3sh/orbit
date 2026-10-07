@@ -42,11 +42,22 @@ nonisolated struct CursorShapeTrack: Sendable {
         self.changes = changes
     }
 
+    /// Only `sprite`, throughout.
+    init(sprite: Sprite) {
+        self.init(sprites: [sprite], changes: [(0, 0)])
+    }
+
     /// - Parameters:
     ///   - duration: The recording's length in seconds.
     ///   - arrow: Drawn when the telemetry has no shapes, e.g. `NSCursor.currentSystem` returned
     ///     nothing while recording.
-    init(telemetry: InputTelemetry, duration: Double, arrow: InputTelemetry.CursorSprite?) {
+    ///   - arrowOnly: Draws the recorded arrow, or `arrow` without one, in place of every shape.
+    init(telemetry: InputTelemetry, duration: Double, arrow: InputTelemetry.CursorSprite?, arrowOnly: Bool = false) {
+        if arrowOnly {
+            let recorded = telemetry.cursorSprites.first { $0.kind == .arrow }
+            self = (recorded ?? arrow).flatMap(Sprite.init).map { Self(sprite: $0) } ?? .none
+            return
+        }
         var sprites: [Sprite] = []
         var indices: [Int: Int] = [:]
         for sprite in telemetry.cursorSprites {

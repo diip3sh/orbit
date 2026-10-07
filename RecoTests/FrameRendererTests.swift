@@ -40,17 +40,24 @@ struct FrameRendererTests {
     /// otherwise. The overlays are drawn in `dynamicRange`, as plans draw them.
     private func plan(
         at time: Double, zooms: [ZoomSegment] = [], cursor: InputTelemetry.CursorSprite? = nil, canvas: CanvasStyle = .plain,
-        dynamicRange: DynamicRange = .sdr
+        dynamicRange: DynamicRange = .sdr, cursorStyle: CursorStyle? = nil, clickEffect: ClickHighlightStyle.Effect = .circle
     ) -> RenderPlan {
-        RenderPlan(
+        let drawn = cursorStyle.flatMap {
+            RenderPlan.drawnCursor(for: cursorTelemetry, style: $0, duration: 10, videoHeight: bounds.height, arrow: nil)
+        }
+        return RenderPlan(
             timeMap: TimeMap(cuts: [], sourceDuration: 10, frameRate: 60),
             videoSize: bounds.size,
             camera: CameraPath(zooms: zooms, cursor: [], duration: 10),
-            cursor: cursor.flatMap { _ in CursorPath(telemetry: cursorTelemetry, style: CursorStyle(), duration: 10, videoHeight: bounds.height) },
-            cursorShapes: cursor.map { CursorShapeTrack(telemetry: cursorTelemetry, duration: 10, arrow: $0).encoded(in: dynamicRange) } ?? .none,
+            cursor: drawn?.path ?? cursor.flatMap { _ in CursorPath(telemetry: cursorTelemetry, style: CursorStyle(), duration: 10, videoHeight: bounds.height) },
+            cursorShapes: drawn?.shapes.encoded(in: dynamicRange)
+                ?? cursor.map { CursorShapeTrack(telemetry: cursorTelemetry, duration: 10, arrow: $0).encoded(in: dynamicRange) } ?? .none,
             clicks: [ClickMarker(time: time, position: CGPoint(x: 100, y: 200), diameter: 100)],
             clickDuration: 0.5,
-            clickRing: OverlayImages.encoded(OverlayImages.ring(diameter: 100, color: CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)), in: dynamicRange),
+            clickRing: OverlayImages.encoded(
+                OverlayImages.ring(diameter: 100, color: CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1), filled: clickEffect == .circle), in: dynamicRange
+            ),
+            clickEffect: clickEffect,
             keystrokes: [KeystrokeChip(time: time, image: 0)],
             chipImages: [OverlayImages.encoded(OverlayImages.chip(label: "⌘C", height: 30), in: dynamicRange)],
             canvas: CanvasLayout(style: canvas, videoSize: bounds.size, shorterSide: nil, background: nil).encoded(in: dynamicRange),
@@ -87,6 +94,52 @@ struct FrameRendererTests {
         #expect((60...200).contains(image.pixel(at: CGPoint(x: 100, y: 200))[0]))
         #expect(image.pixel(at: CGPoint(x: 125, y: 200)) == [0, 0, 0, 255])
         #expect(image.pixel(at: CGPoint(x: 300, y: 100)) == [0, 0, 0, 255])
+    }
+
+    @Test func aRippleDrawsTwoEmptyRingsThatEndWithTheDuration() {
+        let frame = CIImage(color: .black).cropped(to: bounds)
+
+        // Halfway through, the first ring has come 71% of the way: 98 px wide, stroke 39 to 49 px out, 29% opaque. The
+        // second, 30% later, 29% of the way: 71 px wide, stroke 28 to 35 px out, 71% opaque
+        let image = render(frame, at: 1.25, plan: plan(at: 1, clickEffect: .ripple))
+        #expect((60...90).contains(image.pixel(at: CGPoint(x: 144, y: 200))[0]))
+        #expect((165...200).contains(image.pixel(at: CGPoint(x: 132, y: 200))[0]))
+        // Empty inside the rings and between them, unlike a circle
+        #expect(image.pixel(at: CGPoint(x: 120, y: 200))[0] == 0)
+        #expect(image.pixel(at: CGPoint(x: 137, y: 200))[0] == 0)
+        #expect(image.pixel(at: CGPoint(x: 155, y: 200))[0] == 0)
+
+        #expect(render(frame, at: 1.5, plan: plan(at: 1, clickEffect: .ripple)).pixel(at: CGPoint(x: 132, y: 200))[0] == 0)
+    }
+
+    @Test func noEffectDrawsNoRing() {
+        let frame = CIImage(color: .black).cropped(to: bounds)
+
+        #expect(render(frame, at: 1, plan: plan(at: 1, clickEffect: .off)).pixel(at: CGPoint(x: 118, y: 200)) == [0, 0, 0, 255])
+    }
+
+    @Test func theDotCursorIsCentredOnThePoint() {
+        let frame = CIImage(color: .black).cropped(to: bounds)
+
+        // 16 pt at 2 px per point: 32 px wide, a 3 px white edge, and a grey (white at 45%, 90% opaque, so about half) inside
+        let image = render(frame, at: 5, plan: plan(at: 1, cursorStyle: CursorStyle(appearance: .dot)))
+        for offset in [CGPoint(x: 14, y: 0), CGPoint(x: -15, y: 0), CGPoint(x: 0, y: 14), CGPoint(x: 0, y: -15)] {
+            #expect(image.pixel(at: CGPoint(x: 100 + offset.x, y: 200 + offset.y))[0] > 240)
+        }
+        #expect((100...140).contains(image.pixel(at: CGPoint(x: 100, y: 200))[0]))
+        #expect(image.pixel(at: CGPoint(x: 100 + 18, y: 200)) == [0, 0, 0, 255])
+    }
+
+    @Test func theWhiteArrowsTipIsOnThePoint() {
+        let frame = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5)).cropped(to: bounds)
+
+        // The arrow's left edge runs down from the tip at 2 px per point: a black outline 2.5 px wide on it, white inside
+        let image = render(frame, at: 5, plan: plan(at: 1, cursorStyle: CursorStyle(appearance: .white)))
+        #expect(image.pixel(at: CGPoint(x: 99, y: 190))[0] < 60)
+        #expect(image.pixel(at: CGPoint(x: 103, y: 190)) == [255, 255, 255, 255])
+        // Nothing left of it or above its tip but the faint shadow
+        #expect(abs(Int(image.pixel(at: CGPoint(x: 85, y: 190))[0]) - 128) < 6)
+        #expect(abs(Int(image.pixel(at: CGPoint(x: 100, y: 215))[0]) - 128) < 6)
     }
 
     @Test func theRingGrowsAndFades() {

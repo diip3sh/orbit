@@ -168,15 +168,34 @@ struct CursorInspectorSection: View {
 
     var body: some View {
         let telemetry = viewModel.source?.telemetry
+        let isRecordedStyle = viewModel.cursor.appearance == .recorded
 
         InspectorSection("Cursor") {
             Toggle("Show Cursor", isOn: $viewModel.cursor.isEnabled)
-            InspectorSlider("Size", value: $viewModel.cursor.size, in: 0.5...3) {
+            InspectorField("Style") {
+                TilePicker(selection: $viewModel.cursor.appearance, values: CursorStyle.Appearance.allCases) { appearance in
+                    switch appearance {
+                    case .recorded: "macOS"
+                    case .white: "White"
+                    case .dot: "Dot"
+                    }
+                } picture: { appearance in
+                    CursorStylePicture(appearance: appearance)
+                }
+            }
+            InspectorSlider("Size", value: $viewModel.cursor.size, in: 0.5...3, defaultValue: 1) {
                 Text("\($0, format: .number.precision(.fractionLength(1)))×")
             }
+            Toggle("Always Use Pointer", isOn: $viewModel.cursor.alwaysUsesArrow)
+                .disabled(!isRecordedStyle)
+                .opacity(isRecordedStyle ? 1 : 0.4)
             Toggle("Shrink on Click", isOn: $viewModel.cursor.animatesClicks)
             Toggle("Hide When Idle", isOn: $viewModel.cursor.hidesWhenIdle)
+            Toggle("Loop Position", isOn: $viewModel.cursor.loops)
         } footer: {
+            if viewModel.cursor.loops {
+                Text("In the last second the cursor glides back to where it started, so the video loops.")
+            }
             if telemetry?.capture.cursorInVideo == true {
                 Text("""
                     This recording shows the system cursor, so it can't be changed. For new recordings, \
@@ -188,22 +207,42 @@ struct CursorInspectorSection: View {
     }
 }
 
-/// The click highlights' color, size, duration and buttons.
+/// The click highlights' effect, color, size, duration and buttons, and the click sound.
 struct ClicksInspectorSection: View {
     @Bindable var viewModel: EditorViewModel
 
     var body: some View {
+        let hasEffect = viewModel.clickHighlights.effect != .off
+
         InspectorSection("Clicks") {
-            Toggle("Highlight Clicks", isOn: $viewModel.clickHighlights.isEnabled)
-            ColorPicker("Color", selection: $viewModel.clickHighlights.color.cgColor)
-            InspectorSlider("Size", value: $viewModel.clickHighlights.size, in: 16...120) {
-                Text("\($0, format: .number.precision(.fractionLength(0))) pt")
+            InspectorField("Effect") {
+                TilePicker(selection: $viewModel.clickHighlights.effect, values: ClickHighlightStyle.Effect.allCases) { effect in
+                    switch effect {
+                    case .off: "None"
+                    case .circle: "Circle"
+                    case .ripple: "Ripple"
+                    }
+                } picture: { effect in
+                    ClickEffectPicture(effect: effect)
+                }
             }
-            InspectorSlider("Duration", value: $viewModel.clickHighlights.duration, in: 0.2...1.5) {
-                Text("\($0, format: .number.precision(.fractionLength(1))) s")
+            // Dimmed rather than hidden, so the column doesn't jump
+            Group {
+                ColorPicker("Color", selection: $viewModel.clickHighlights.color.cgColor)
+                InspectorSlider("Size", value: $viewModel.clickHighlights.size, in: 16...120) {
+                    Text("\($0, format: .number.precision(.fractionLength(0))) pt")
+                }
+                InspectorSlider("Duration", value: $viewModel.clickHighlights.duration, in: 0.2...1.5) {
+                    Text("\($0, format: .number.precision(.fractionLength(1))) s")
+                }
+                InspectorField("Buttons") {
+                    SegmentedChoice(selection: $viewModel.clickHighlights.buttons, options: [(.all, "All"), (.left, "Left Only"), (.right, "Right Only")])
+                }
             }
-            InspectorField("Buttons") {
-                SegmentedChoice(selection: $viewModel.clickHighlights.buttons, options: [(.all, "All"), (.left, "Left Only"), (.right, "Right Only")])
+            .disabled(!hasEffect)
+            .opacity(hasEffect ? 1 : 0.4)
+            InspectorSlider("Click Sound", value: $viewModel.audio.clickVolume, in: 0...1) {
+                $0 == 0 ? Text("Off") : Text($0, format: .percent.precision(.fractionLength(0)))
             }
         }
         .disabled(viewModel.source?.telemetry == nil)

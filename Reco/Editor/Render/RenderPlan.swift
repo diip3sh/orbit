@@ -36,6 +36,9 @@ nonisolated struct RenderPlan: Sendable {
     /// The ring at the largest marker's diameter; the others scale it down.
     let clickRing: CIImage
 
+    /// How many rings a click draws, and when.
+    var clickEffect = ClickHighlightStyle.Effect.circle
+
     /// Key presses to show, sorted by time. Empty when the overlay is off.
     let keystrokes: [KeystrokeChip]
 
@@ -71,6 +74,7 @@ extension RenderPlan {
 
         let videoSize = source.naturalSize
         let dynamicRange = target.keepsHDR ? source.dynamicRange : .sdr
+        let timeMap = TimeMap(cuts: project.cuts, sourceDuration: source.duration, frameRate: source.frameRate)
         // The costliest parts, and independent, so they're built alongside the rest. For 10 minutes
         // with 455 zooms, 3,000 clicks and 12,000 keys (M1, Debug), the camera takes 38 ms and the
         // cursor 35; the plan builds in 42 ms instead of 105
@@ -79,7 +83,10 @@ extension RenderPlan {
             stiffness: project.zoomMotion.frequency
         )
         async let cursor = source.telemetry.flatMap {
-            drawnCursor(for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: resources.arrow)
+            drawnCursor(
+                for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: resources.arrow,
+                loop: project.cursor.loops ? cursorLoop(for: timeMap) : nil
+            )
         }
         let canvas = CanvasLayout(style: project.canvas, videoSize: videoSize, shorterSide: target.shorterSide, background: resources.background)
             .encoded(in: dynamicRange)
@@ -88,7 +95,7 @@ extension RenderPlan {
         var keystrokes: [KeystrokeChip] = []
         var labels: [String] = []
         if let telemetry = source.telemetry {
-            if project.clickHighlights.isEnabled {
+            if project.clickHighlights.effect != .off {
                 clicks = clickMarkers(for: telemetry, style: project.clickHighlights, videoHeight: videoSize.height)
             }
             if project.keystrokes.isEnabled, let keyLabels = resources.keyLabels {
@@ -99,16 +106,18 @@ extension RenderPlan {
         let ringDiameter = clicks.map(\.diameter).max() ?? 0
         let chipHeight = min(canvas.videoFrame.width, canvas.videoFrame.height) * chipHeightFraction
         return RenderPlan(
-            timeMap: TimeMap(cuts: project.cuts, sourceDuration: source.duration, frameRate: source.frameRate),
+            timeMap: timeMap,
             videoSize: videoSize,
             camera: await camera,
             cursor: await cursor?.path,
             cursorShapes: await cursor?.shapes.encoded(in: dynamicRange) ?? .none,
             clicks: clicks,
             clickDuration: project.clickHighlights.duration,
-            clickRing: clicks.isEmpty
-                ? .empty()
-                : OverlayImages.encoded(OverlayImages.ring(diameter: ringDiameter, color: project.clickHighlights.color.cgColor), in: dynamicRange),
+            clickRing: clicks.isEmpty ? .empty() : OverlayImages.encoded(
+                OverlayImages.ring(diameter: ringDiameter, color: project.clickHighlights.color.cgColor, filled: project.clickHighlights.effect == .circle),
+                in: dynamicRange
+            ),
+            clickEffect: project.clickHighlights.effect,
             keystrokes: keystrokes,
             chipImages: labels.map { OverlayImages.encoded(OverlayImages.chip(label: $0, height: chipHeight), in: dynamicRange) },
             canvas: canvas,
@@ -153,12 +162,28 @@ extension RenderPlan {
 
     /// The cursor to draw and its images, or `nil` when the video shows the system's or it's off.
     nonisolated static func drawnCursor(
-        for telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, arrow: InputTelemetry.CursorSprite?
+        for telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, arrow: InputTelemetry.CursorSprite?,
+        loop: CursorPath.Loop? = nil
     ) -> (path: CursorPath, shapes: CursorShapeTrack)? {
         guard !telemetry.capture.cursorInVideo, style.isEnabled,
-              let path = CursorPath(telemetry: telemetry, style: style, duration: duration, videoHeight: videoHeight)
+              let path = CursorPath(telemetry: telemetry, style: style, duration: duration, videoHeight: videoHeight, loop: loop)
         else { return nil }
-        return (path, CursorShapeTrack(telemetry: telemetry, duration: duration, arrow: arrow))
+        // The images are drawn once, here, whatever the appearance
+        let shapes = switch style.appearance {
+        case .recorded: CursorShapeTrack(telemetry: telemetry, duration: duration, arrow: arrow, arrowOnly: style.alwaysUsesArrow)
+        case .white: CursorShapeTrack(sprite: OverlayImages.whiteArrow())
+        case .dot: CursorShapeTrack(sprite: OverlayImages.dot())
+        }
+        return (path, shapes)
+    }
+
+    /// What makes the cursor loop: it ends the last frame where the first one has it, gliding there over the last
+    /// second of output (less when the last kept range is shorter, since the glide stays inside it).
+    nonisolated static func cursorLoop(for timeMap: TimeMap) -> CursorPath.Loop {
+        let frames = FrameGrid(frameRate: timeMap.frameRate, duration: timeMap.outputDuration)
+        let end = timeMap.sourceTime(atOutput: frames.time(ofFrame: frames.lastFrame))
+        let rangeStart = timeMap.keptRanges.last?.lowerBound ?? 0
+        return CursorPath.Loop(start: timeMap.sourceTime(atOutput: 0), glide: max(end - CursorPath.loopDuration, rangeStart)..<end)
     }
 
     /// The cursor's positions in the video while a zoom follows it, from the one in effect at the

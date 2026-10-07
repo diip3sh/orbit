@@ -51,11 +51,26 @@ nonisolated struct CursorPath: Sendable {
     /// Video pixels per screen point times the style's size, whenever the capture geometry changed.
     private let scales: [(time: Double, scale: Double)]
 
+    /// What a video that loops makes of the path: it glides onto the first frame's position.
+    nonisolated struct Loop: Sendable {
+        /// Source time of the first frame shown.
+        let start: Double
+
+        /// Source times the glide covers, ending at the last frame shown.
+        let glide: Range<Double>
+    }
+
+    /// How long a video that loops takes to bring the cursor back to where it started.
+    static let loopDuration = 1.0
+
+    /// Where the path glides to, and when. Set last, since the target is the path without the glide.
+    private var loop: (target: CGPoint, glide: Range<Double>)?
+
     /// - Parameters:
     ///   - duration: The recording's length in seconds.
     ///   - videoHeight: The video's height in pixels, to flip positions into Core Image space.
     /// - Returns: `nil` without cursor positions or capture geometry.
-    init?(telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat) {
+    init?(telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, loop: Loop? = nil) {
         let moves = Self.withoutJitter(telemetry.cursor)
         guard !moves.isEmpty, !telemetry.geometry.isEmpty else { return nil }
         let samples = Self.smoothed(
@@ -75,6 +90,9 @@ nonisolated struct CursorPath: Sendable {
         presses = style.animatesClicks ? Self.presses(in: telemetry.clicks) : []
         idle = style.hidesWhenIdle ? Self.idleSpans(moves: moves, clicks: telemetry.clicks) : []
         scales = telemetry.geometry.map { ($0.time, $0.contentScale * $0.scaleFactor * style.size) }
+        if let loop {
+            self.loop = (position(at: loop.start), loop.glide)
+        }
     }
 
     /// Where the cursor's hot spot is at source time `time`, in Core Image pixels.
@@ -96,6 +114,12 @@ nonisolated struct CursorPath: Sendable {
             let weight = 1 - Self.ease((time - click.time) / (end - click.time))
             position.x += click.offset.dx * weight
             position.y += click.offset.dy * weight
+        }
+        if let loop, time >= loop.glide.lowerBound {
+            // At the glide's end, the last frame's position is the first frame's
+            let weight = time >= loop.glide.upperBound ? 1 : Self.ease((time - loop.glide.lowerBound) / (loop.glide.upperBound - loop.glide.lowerBound))
+            position.x = position.x * (1 - weight) + loop.target.x * weight
+            position.y = position.y * (1 - weight) + loop.target.y * weight
         }
         return position
     }

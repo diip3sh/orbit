@@ -84,6 +84,38 @@ struct CompositionBuilderTests {
         #expect(peak(of: muted, from: 0, to: 0.7) < 0.001)
     }
 
+    @Test func clickSoundsAreMixedAtTheirVolumeAndLeftOutOfCuts() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30, withTone: true)
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        // Cut 0.2 to 0.5. Clicks at 0.1 (output 0.1), 0.3 (cut) and 0.6 (output 0.3)
+        var project = EditorProject(cuts: [0.2..<0.5])
+        project.audio[track: 0].isMuted = true
+        project.audio.clickVolume = 0.5
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
+        let clicks = folder.appending(path: "clicks.caf")
+        try await ClickSoundWriter.write(onsets: [4_800, 14_400, 28_800], frameCount: 52_800, to: clicks)
+        let loudest = try #require(ClickSound.samples.map(abs).max())
+
+        let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio, extra: ExtraAudio(clicks: clicks))
+        let mixed = try await mixedAudio(of: composition)
+
+        #expect(try await composition.asset.loadTracks(withMediaType: .audio).count == 2)
+        #expect(composition.extraAudio.clicks == clicks)
+        #expect(abs(peak(of: mixed, from: 0.1, to: 0.12) - loudest * 0.5) < 0.02)
+        #expect(abs(peak(of: mixed, from: 0.3, to: 0.32) - loudest * 0.5) < 0.02)
+        // Nothing of the click in the cut, nor between the others
+        #expect(peak(of: mixed, from: 0.13, to: 0.29) < 0.001)
+
+        project.audio.clickVolume = 1
+        let louder = try await mixedAudio(of: try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio, extra: ExtraAudio(clicks: clicks)))
+        #expect(abs(peak(of: louder, from: 0.1, to: 0.12) - loudest) < 0.02)
+
+        // The recording's own track is still muted, and without the file there is only it
+        let plain = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
+        #expect(try await plain.asset.loadTracks(withMediaType: .audio).count == 1)
+    }
+
     /// The grey level of frame `index` of a 30 fps video.
     private func level(ofFrame index: Int, in asset: AVURLAsset) async throws -> Int {
         let generator = AVAssetImageGenerator(asset: asset)
