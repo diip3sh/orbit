@@ -40,7 +40,8 @@ struct AgentProcessTests {
         let result = await run("/bin/sleep", ["30"], timeout: .seconds(1))
 
         #expect(result.end == .timedOut)
-        #expect(start.duration(to: .now) < .seconds(4))
+        // Well under the 30 s sleep: a busy CI runner took 6.5 s once
+        #expect(start.duration(to: .now) < .seconds(15))
     }
 
     @Test func cancellingTheTaskStopsTheProcess() async throws {
@@ -52,7 +53,8 @@ struct AgentProcessTests {
         let result = await task.value
 
         #expect(result.end == .cancelled)
-        #expect(start.duration(to: .now) < .seconds(4))
+        // Well under the 30 s sleep: a busy CI runner took 6.5 s once
+        #expect(start.duration(to: .now) < .seconds(15))
     }
 
     @Test func aMissingExecutableIsALaunchFailure() async {
