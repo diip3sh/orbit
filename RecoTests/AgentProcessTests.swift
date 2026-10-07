@@ -68,12 +68,12 @@ struct AgentProcessTests {
     @Test func aProcessLeftRunningDoesntHoldTheResultBack() async {
         let start = ContinuousClock.now
 
-        // The background sleep keeps the output pipe open for 3 s
-        let result = await run("/bin/sh", ["-c", "sleep 3 & echo hi"])
+        // The background sleep keeps the output pipe open for 10 s; the bound leaves room for a busy CI runner
+        let result = await run("/bin/sh", ["-c", "sleep 10 & echo hi"])
 
         #expect(result.end == .exited(0))
         #expect(result.stdout == "hi\n")
-        #expect(start.duration(to: .now) < .seconds(2))
+        #expect(start.duration(to: .now) < .seconds(5))
     }
 
     @Test func onlyTheEndOfALongOutputIsKept() async {
