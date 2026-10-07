@@ -182,4 +182,17 @@ struct AutoZoomGeneratorTests {
         #expect(zooms.allSatisfy { $0.range.lowerBound >= 0 && $0.range.upperBound <= duration && !$0.range.isEmpty })
         #expect(zip(zooms, zooms.dropFirst()).allSatisfy { $0.range.upperBound <= $1.range.lowerBound })
     }
+
+    @Test func aWebTakesZoomEndsWhenItsPageScrollsOrIsReplaced() {
+        var web = telemetry(clicks: [(2, CGPoint(x: 0.4, y: 0.4)), (10, CGPoint(x: 0.5, y: 0.5))])
+        web.capture.kind = .web
+        // The page scrolls a second after the first click; the second opens a page
+        web.scrolls = [3.0, 3.0167].map { .init(time: $0, location: .zero, delta: CGVector(dx: 0, dy: -10)) }
+        web.navigations = [.init(time: 10.2, url: "https://example.com/next")]
+
+        #expect(zooms(web).map(\.range) == [1.5..<3.3, 9.5..<10.5])
+        // A screen recording's zooms stay as they were
+        web.capture.kind = .display
+        #expect(zooms(web).map(\.range) == [1.5..<3.5, 9.5..<11.5])
+    }
 }

@@ -60,8 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             captureScreen: { [screenshots] in Task { await screenshots.captureScreen() } },
             recordArea: { [viewModel] in Task { await viewModel.presentAreaSelection() } },
             recordWindowOrDisplay: { [viewModel] in viewModel.presentPicker() },
-            newWebRecording: { [weak self] in self?.showWebRecording() },
-            recordWithAgent: { [weak self] in self?.showAgentRecording() }
+            newWebRecording: { [weak self] in self?.showWebRecording() }
         )
         // The Web Recording window shows what an agent looks at and plans, as it does
         agentBridge.tools.onInspected = { [editorWindows] page in editorWindows.webRecordingViewModel?.showAgentInspection(page) }
@@ -74,19 +73,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.notificationService.showAgentRecording = { [weak self] in self?.showAgentRecording() }
 
         // Hidden first so the last card, the capture toolbar and the notch shelf never land in the next
-        // shot, even with Show Reco on; a cancelled or failed capture brings them back
+        // shot, even with Show Reco on. The card and the shelf come back when nothing was captured; the
+        // bar doesn't, because it was only ever the way in: Esc on an area selection closes it and leaves
+        // the screen as it was, rather than opening the bar again.
         screenshots.onWillCapture = { [quickAccess, captureToolbar, notchShelf] in
             quickAccess.hide()
             captureToolbar.hide(animated: false)
             notchShelf.hide()
         }
-        screenshots.onDidCapture = { [quickAccess, captureToolbar, notchShelf] screenshot in
+        screenshots.onDidCapture = { [quickAccess, notchShelf] screenshot in
             notchShelf.restore()
             if let screenshot {
                 quickAccess.show(screenshot)
             } else {
                 quickAccess.restore()
-                captureToolbar.show()
+            }
+        }
+        hideNotchShelfWhileRecording()
+    }
+
+    /// The shelf's black shape sits over the notch, where a display recording would show it as a bar, even
+    /// with Show Reco on. `state` turns `.recording` before the stream starts, so no frame catches it.
+    private func hideNotchShelfWhileRecording() {
+        withObservationTracking {
+            _ = viewModel.state
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                if self.viewModel.state == .idle {
+                    self.notchShelf.restore()
+                } else {
+                    self.notchShelf.hide()
+                }
+                self.hideNotchShelfWhileRecording()
             }
         }
     }
@@ -124,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editorWindows.showNewWebRecording()
     }
 
-    /// Shows the Record with AI Agent panel, to have a coding agent record a web page.
+    /// Shows the Web Recording window with its agent panel open, to have a coding agent record a web page.
     func showAgentRecording() {
         editorWindows.showAgentChat()
     }

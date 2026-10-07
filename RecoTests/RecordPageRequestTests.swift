@@ -43,26 +43,26 @@ struct RecordPageRequestTests {
         let plan = try request(steps: [hover("#a"), click("#b"), scroll(y: 500)]).plan()
 
         let ranges: [Range<Double>] = plan.steps.map(\.range)
-        #expect(ranges == [0.5..<1.5, 2.0..<3.0, 3.5..<5.0])
-        // The last step's end and a second to finish
-        #expect(plan.duration == 6.0)
+        #expect(ranges == [1.0..<2.5, 3.3..<4.8, 5.6..<7.6])
+        // The last step's end and the tail to finish
+        #expect(plan.duration == 9.1)
     }
 
-    @Test func defaultsAreTheDesktopAtTwiceTheSize() throws {
+    @Test func defaultsAreTheDesktopAtItsOwnSize() throws {
         let plan = try request(url: "example.com/pricing").plan()
 
         #expect(plan.url.absoluteString == "https://example.com/pricing")
         #expect(plan.viewport == WebScript.Viewport.desktop.size)
-        #expect(plan.scale == 2)
+        #expect(plan.scale == 1)
     }
 
     @Test func explicitStartsAndDurationsAreKept() throws {
-        let plan = try request(viewport: "phone", scale: 1, duration: 10, steps: [click("#a", start: 2, duration: 0.5), scroll(y: 100, duration: 3)]).plan()
+        let plan = try request(viewport: "phone", scale: 2, duration: 10, steps: [click("#a", start: 2, duration: 0.5), scroll(y: 100, duration: 3)]).plan()
 
         let ranges: [Range<Double>] = plan.steps.map(\.range)
-        #expect(ranges == [2.0..<2.5, 3.0..<6.0])
+        #expect(ranges == [2.0..<2.5, 3.3..<6.3])
         #expect(plan.duration == 10)
-        #expect(plan.scale == 1)
+        #expect(plan.scale == 2)
         #expect(plan.viewport == WebScript.Viewport.phone.size)
     }
 
@@ -70,7 +70,7 @@ struct RecordPageRequestTests {
         let plan = try request(steps: [click("#a", start: 5), hover("#b")]).plan()
 
         let starts: [Double] = plan.steps.map(\.range.lowerBound)
-        #expect(starts == [5.0, 6.5])
+        #expect(starts == [5.0, 7.3])
     }
 
     @Test func overlapsOnTheSameLaneNameBothSteps() {
@@ -90,7 +90,7 @@ struct RecordPageRequestTests {
     @Test func aStepMayStartWhereAnotherEnds() throws {
         let plan = try request(steps: [hover("#a", start: 1, duration: 1), hover("#b", start: 2)]).plan()
 
-        #expect(plan.steps[1].range == 2.0..<3.0)
+        #expect(plan.steps[1].range == 2.0..<3.5)
     }
 
     @Test func badStepsAreExplained() {
@@ -121,7 +121,7 @@ struct RecordPageRequestTests {
     }
 
     @Test func theDurationHasToHoldTheStepsAndStayUnderTheMaximum() {
-        #expect(problem(request(duration: 1, steps: [hover()]))?.contains("at least 1.5") == true)
+        #expect(problem(request(duration: 1, steps: [hover()]))?.contains("at least 2.5") == true)
         #expect(problem(request(duration: 130))?.contains("120") == true)
         #expect(problem(request(steps: [scroll(y: 1, start: 119, duration: 1.5)]))?.contains("120") == true)
         #expect(problem(request(duration: 120, steps: [hover()])) == nil)
@@ -131,6 +131,7 @@ struct RecordPageRequestTests {
         let plan = try request().plan()
 
         #expect(plan.steps.isEmpty)
-        #expect(plan.duration == WebScript.minimumDuration)
+        // The tail alone, longer than the shortest a script can be
+        #expect(plan.duration == RecordPlan.tail)
     }
 }

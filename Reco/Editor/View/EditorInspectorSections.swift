@@ -12,6 +12,10 @@ import SwiftUI
 struct EditorInspector: View {
     @Bindable var viewModel: EditorViewModel
 
+    /// The width it opens at, picked by hand on 2026-10-07 in a 1533 pt window: room for five aspect tiles
+    /// with their names and the sliders' values. The export page's options use the same column.
+    static let idealWidth: CGFloat = 380
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {

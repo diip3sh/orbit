@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 581 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 721 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -54,6 +54,12 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   `InspectorSection.swift`), and opening Web Recording crashed with `EXC_BAD_ACCESS` in an "outlined copy" of it.
   A crash in compiler-generated copy code right after such an edit: `rm -rf
   /tmp/bc-build/dd/Build/Intermediates.noindex/Reco.build` and rebuild.
+- Never subclass `NSHostingView<Content>` with a generic `Content`: Swift 6.3.3's Release optimizer
+  (Xcode 26.6, `EarlyPerfInliner`, x86_64 whole-module) crashes in the deinit of such a subclass. Measured
+  2026-10-05: Debug was fine and so was a local arm64 Release build, so it showed up only in CI's Release
+  job. `FirstMouseHostingView` (capture toolbar) and `NotchHostingView` (notch shelf) are
+  `NSHostingView<AnyView>`, their call sites wrapping the root in `AnyView(...)`. `xcodebuild`'s summary
+  hides a compiler crash like this; read the raw log or the `.xcresult` for it.
 - **Never launch an ad-hoc signed build.** Its designated requirement is pinned to its cdhash
   (`designated => cdhash H"…"`), which changes on every build, while TCC stores the cert-anchored
   requirement (`anchor apple generic and certificate leaf[subject.CN] = "Apple Development: …"`). So
@@ -252,9 +258,12 @@ was grabbed (`PanelDragger`), and a flick that projects past the screen's edge (
 throws it off at the release speed and closes it; a slow drag stays where dropped, a flick inwards too. Drag the shot into
 any app to drop the image. The card and the capture toolbar have no window shadow: it outlines
 the rectangle around their rounded glass. Nothing is written until **Save**. The card stays until
-closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate` wires
-`ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and `onDidCapture` to
-`show(_:)` for a new screenshot or `restore()` (same card, same place) when the capture is cancelled or fails.
+closed, copied, saved, pinned, or replaced by the next screenshot. **Esc** closes it, like the Close button and
+a flick: the panel is key while it shows, so `QuickAccessView` handles it (`.onExitCommand`), not the window.
+`AppDelegate` wires `ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and
+`onDidCapture` to `show(_:)` for a new screenshot or `restore()` (same card, same place) when the capture is
+cancelled or fails. The capture toolbar is hidden the same way but **isn't** brought back by a cancelled capture:
+it was only the way in, so Esc on an area selection closes that state and leaves the screen as it was.
 
 - **Copy** (C14): PNG data only; the button turns to ✓ Copied as the card starts closing, so it confirms during the
   fade. **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed
@@ -266,9 +275,9 @@ closed, copied, saved, pinned, or replaced by the next screenshot. `AppDelegate`
 |---|---|
 | `QuickAccess/View/QuickAccessController.swift`, `QuickAccessPanel.swift` | Non-activating borderless `.floating` dark panel (key on appearing, `hidesOnDeactivate = false`), enter/exit through `panelPresentation` (`exitDelay` before ordering out; leaving panels are tracked so `hide()` clears them too), placement (`panelFrame`), owns the card's view model and the pins |
 | `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin` |
-| `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius), hover scrim and controls (`.editorAccent` Copy/Save, dark corner icons), a solid toast; icons are 1.5 pt line
-SVGs in `Assets.xcassets/LineIcons` as template vectors, drawn by `LineIcon` in `CornerButtonStyle`'s dark circles (both shared with pins): Iconsax Linear (MIT) for close, tick and
-the text scan (its scan frame around text lines), Tabler's pin (MIT) since Iconsax has none; a `DragGesture` on the edge drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the shot. Annotate goes first in the top-right corner once it exists (one line) |
+| `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius), hover scrim and controls (Copy and Save both `.editorPrimary`: secondary's accent text over the shot read as a disabled Copy; dark corner icons), a solid toast; icons are 1.5 pt line
+SVGs in `Assets.xcassets/LineIcons` as template vectors, drawn by `LineIcon` in `CornerButtonStyle`'s dark circles (both shared with pins): Hugeicons
+stroke-rounded (MIT) cancel, checkmark circle, scan text and pin, as in the capture toolbar (the app's icons are SF Symbols and Hugeicons only); a `DragGesture` on the edge drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the shot. Annotate goes first in the top-right corner once it exists (one line) |
 | `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, 8 pt rounded corners with a faint edge, the card's close button on hover; appears from and closes into its bottom-left corner (`panelPresentation`, a `PanelPresence` per pin) |
 | `QuickAccess/Service/ImageDownsampler.swift` | Card preview drawn from the captured `CGImage` off the main actor |
 | `Screenshot/Service/TextRecognizer.swift` | Vision `RecognizeTextRequest` (accurate, automatic language) off the main actor; `joined(_:)` orders lines top to bottom |
@@ -296,7 +305,8 @@ video), **Edit Last Recording** in the menu bar, and `reco://edit-last`. Keys: s
 | File | Role |
 |---|---|
 | `Editor/View/EditorWindowManager.swift` | One `NSWindow` + `NSHostingController` per recording, owned by `AppDelegate`; `.regular` activation policy while any is open; holds the output folder's security scope until the window's project is saved |
-| `Editor/ViewModel/EditorViewModel.swift` | Loads source + project, `edit(_:_:)` (one undo step, registers redo), 1 s debounced autosave, `close()` |
+| `Editor/ViewModel/EditorViewModel.swift` | Loads source + project, `edit(_:_:)` (one undo step, registers redo), 1 s debounced autosave, `rename(to:)` (saves, moves the files, reopens at the playhead, `onRename` re-keys the window), `close()` |
+| `Editor/Model/RecordingRename.swift`, `Editor/Service/RecordingRenamer.swift`, `Editor/View/RecordingNameField.swift` | Pure rules (valid names, the field's name without the web prefix, which files move); the all-or-nothing move; the title bar's click-to-rename field |
 | `Editor/ViewModel/PlaybackController.swift` | `AVPlayer`, coalesced zero-tolerance seeks (QA1820), frame stepping, end of item |
 | `Editor/Service/EditorSourceLoader.swift` | Asset properties + telemetry off the main actor; telemetry problems never block opening |
 | `Editor/Service/ProjectStore.swift`, `Editor/Model/EditorProject.swift` | `<name>.edit.json` v1 (`cuts`), atomic writes; only written after an edit |
@@ -314,17 +324,44 @@ Key facts:
 
 Click highlights (a ring that grows and fades) and a keystroke chip, drawn live in the preview and
 into exports by one custom compositor. An inspector (toolbar toggle) holds their styles; **Export…**
-writes `<name>-edited.mp4` (HEVC, H.264) or `.mov` (ProRes 422) next to the recording, then offers **Share…** (`ShareLink`: AirDrop, Mail, Messages…) and
-**Show in Finder**.
+switches the window to **export** (2026-10-07; a sheet until 2026-10-06, then a page that slid over the editor): the
+preview stays, the transport and timeline slide down out of the window and the preview grows into the room, and only the
+inspector's content changes, to the export's options (`ExportOptions`, in the inspector's own sections and `SegmentedChoice`).
+One `.inspector` serves both modes so the column never moves; it opens at `EditorInspector.idealWidth` (380 pt, picked by hand
+in a 1533 pt window) and always shows during export. Both ways run on a 0.25 s critically damped spring, a cross-fade with
+Reduce Motion. The title bar shows the recording's name in both modes (`RecordingNameField`, in the leading toolbar item; the window's title is
+hidden and not bridged, since SwiftUI draws a bridged title whatever `titleVisibility` says, and set by hand for the Window
+menu; a flexible `ToolbarSpacer` holds the buttons at the trailing edge): a click turns it into an AppKit field (`@FocusState`
+didn't reach a field in the toolbar, and its field editor took Esc) that renames the movie and its
+telemetry and project (`RecordingRename`, `RecordingRenamer`; Return or leaving the field commits, Esc cancels, and Esc doesn't
+also trigger Back meanwhile). A web recording's `Reco_Web_` prefix is kept but hidden in the field, and names ending in `-edited`
+are refused, since the Library tells kinds apart by file name alone. Back is a back/forward pair (`ControlGroup`, `.navigation` style;
+forward always disabled) in the title bar, in front of the recording's name (`ControlGroup`'s navigation style is a capsule only in a
+toolbar; in the inspector it drew a bordered box). **Back**/Esc returns; Esc is Cancel while an export runs, and Back is disabled then. Export opens and leaves on a
+paused frame, and the editor's keys (S, Z, ⌫, arrows, Space) go with the transport. `ExportSession` holds one visit's settings,
+running export and result, so the toolbar and the inspector share it. The inspector is laid out in this order: **Export As**
+(MP4 (HEVC), ProRes, GIF), **Output Size** (Original, 720p, 1080p, 4K, with the pixel size under it; only sizes under the canvas's are
+enabled), **Frame Rate** (15, 30, 60 fps; not above the recording's, and a GIF's at most 30) and **Quality** (Studio, Social Media, Web,
+Web (Low), as rows each with its estimated size; none for a GIF, whose size depends on what's on screen). Under a line, **Export ↩**
+writes `<name>-edited.mp4`, `.mov` (ProRes 422, or 4444 when the canvas is transparent) or `.gif` next to the recording, then offers
+**Share…** (`ShareLink`: AirDrop, Mail, Messages…) and **Show in Finder** with the file's real size; **Copy to Clipboard ⌘↩** exports the
+same file to a temporary folder and puts its URL (and a GIF's data) on the pasteboard (`FilePasteboard`). Under the buttons, "Estimated max
+size" for the chosen quality. The estimate is honest because the export encodes to a bitrate it sets itself: MP4 at 0.20, 0.10, 0.05 and
+0.025 bits per pixel per frame for the four qualities (plus AAC at 128 kbit/s), ProRes 422 as HQ, 422, LT and Proxy at Apple's target
+rates for 1080p29.97 scaled to the size and frame rate (220, 147, 102, 45 Mbit/s; 4444: 330) with 16-bit PCM audio, all times the output
+duration (`ExportSettings.estimatedBytes`). Measured on 640×360 frames of grain, 2 s: the MP4's average bitrate came out at 1.06, 1.07 and
+1.05 times the target for Studio, Social Media and Web; Web (Low), whose 0.025 is under what that content costs at the encoder's coarsest,
+came out at 1.55. Flat frames come out far under, so the number is a maximum.
+Web Recording has no export of its own: Render opens the editor, and this is its export.
 
 | File | Role |
 |---|---|
 | `Editor/Render/RenderPlan.swift` | `Sendable` snapshot built off the main actor on every edit: click markers already in Core Image pixels, keystroke chips, and images drawn once (`OverlayImages`) |
 | `Editor/Render/FrameRenderer.swift` | `(source frame, source time, plan) -> CIImage`; the only place pixels are decided |
-| `Editor/Render/EditorCompositor.swift`, `EditorInstruction.swift`, `CompositionBuilder.swift` | `AVVideoCompositing` with one shared `CIContext`; the instruction carries the plan; the same video composition feeds `AVPlayerItem` and `AVAssetExportSession` |
+| `Editor/Render/EditorCompositor.swift`, `EditorInstruction.swift`, `CompositionBuilder.swift` | `AVVideoCompositing` with one shared `CIContext`; the instruction carries the plan; the same video composition feeds `AVPlayerItem` and the export's reader |
 | `Editor/Service/KeyLabelFormatter.swift` | Key code + modifiers → "⇧⌘K" with the current layout (`UCKeyTranslate`); TIS is read on the main actor only |
-| `Editor/Service/ExportService.swift` | `AVAssetExportSession.export(to:as:)` + `states(updateInterval:)`; cancelling the task cancels it |
-| `Editor/View/EditorInspectorSections.swift`, `ExportSheet.swift` | Style controls (bound through `EditorViewModel.clickHighlights`/`keystrokes`), format + progress |
+| `Editor/Service/ExportService.swift`, `MovieEncoder.swift`, `GIFEncoder.swift`, `GIFMuxer.swift` | The export: an `AVAssetReader` (the composition's frames and the mixed audio) feeding an `AVAssetWriter` (HEVC at the quality's average bitrate in MP4, a ProRes flavour in MOV, AAC or PCM), fed per input on a queue with `requestMediaDataWhenReady`; cancelling the task stops the reader and removes the partial file. A GIF is written a frame at a time: ImageIO encodes each frame on its own and `GIFMuxer` joins them (ImageIO's own animated GIF holds every frame until the end: 19 GB for 30 s of 1786×1080 at 30 fps, against 54 MB above idle this way, measured), each delay in whole centiseconds from the cumulative rounding |
+| `Editor/View/EditorInspectorSections.swift`, `ExportOptions.swift`, `Editor/ViewModel/ExportSession.swift` | Style controls (bound through `EditorViewModel.clickHighlights`/`keystrokes`); export's options (format, size, frame rate, quality, actions, progress) and its state; `Model/ExportSettings.swift` (pure: availability rules and size estimates), `ExportQuality.swift`, `ExportFormat.swift`, `ExportDestination.swift` |
 
 Key facts:
 - **Privacy:** keystrokes show only shortcuts (⌘/⌃/⌥) and special keys unless "Show All Keys" is on.
@@ -448,8 +485,8 @@ Key facts:
 
 The recording sits on a canvas: a shape (original, 16:9, 9:16, 1:1, 4:3), a gradient, color,
 picture or transparent background, padding, rounded corners and a shadow. New projects get the
-styled default. Export picks a size and frame rate, and adds ProRes 4444, which keeps a
-transparent background; HDR recordings stay HDR in HEVC and ProRes. The Library (S7) lists
+styled default. Export picks a format (MP4, ProRes, GIF), size, frame rate and quality, and ProRes becomes 4444, which keeps a
+transparent background; HDR recordings stay HDR in MP4 and ProRes. The Library (S7) lists
 the recordings with pictures; a click opens one in the editor.
 
 | File | Role |
@@ -460,19 +497,25 @@ the recordings with pictures; a click opens one in the editor.
 | `Editor/Render/RenderResources.swift`, `RenderTarget.swift` | What plans draw with from the system (key labels, arrow, background picture); what a plan is for (the preview, or an export's size and dynamic range) |
 | `Editor/Render/HDREditorCompositor.swift`, `Editor/Model/DynamicRange.swift` | 10-bit or half-float frames in, half-float out; SDR, PQ or HLG from the track's transfer function |
 | `Editor/Service/BackgroundImageLoader.swift` | Security-scoped bookmark to the chosen picture, read upright, in sRGB, at most 4096 px |
-| `Editor/Model/ExportSettings.swift`, `Editor/View/ExportSheet.swift` | Format, size (a shorter side) and frame rate; only smaller ones are offered |
+| `Editor/Model/ExportSettings.swift`, `Editor/View/ExportOptions.swift` | Format, quality, size (a shorter side: 720, 1080, 2160, only those under the canvas's) and frame rate (15, 30, 60, not above the recording's; a GIF's at most 30: 60 fps delays are 1 or 2 cs, which browsers slow to 10 cs); the quality's estimated sizes |
 
 Key facts:
 - The canvas keeps the video's shorter side (9:16 from 4K is 2160×3840), and padding (8%), corner
   radius (1.5%) and the shadow's blur (3%) are shares of it. An export at another size is drawn at
   that size, not scaled afterwards. Zoom and canvas placement are one transform, so the video is
   resampled once; the cursor is drawn at its final scale.
+- Exporting at the original size uses `CanvasLayout.nativeShorterSide`: a canvas just big enough that the
+  unzoomed video keeps its own pixels inside the padding (the preview keeps the video's shorter side, for
+  its frame budget). Exports shrink frames with `highQualityDownsample` (`RenderPlan.downsamplesSmoothly`);
+  linear sampling blurred a Retina recording's text at 1080p. Its export cost isn't measured yet.
+- With padding, Original grows by it (`CanvasLayout.paddedRatio`), so the padding is equal on every side; a
+  fixed shape whose ratio differs from the video's puts the rest on one axis.
 - Frames are drawn region by region (`CanvasLayout.regions`): the padding from the backdrop alone,
   the video in 8 bands, its rounded corners with the mask. Core Image evaluates every overlay
   across the whole region it renders; in bands it skips them where they aren't. Measured on an M1,
   Debug, 4K with a ring and a chip, load average 4–6: 3 ms p50 plain (7 drawn whole), 3.7–5 ms on
   the default canvas (9 whole), p95 under 7.5 ms. The backdrop takes 4 ms to draw (17 the first time).
-- A transparent background keeps its alpha only in ProRes 4444; other formats export it black.
+- A transparent background keeps its alpha only in ProRes 4444 (the ProRes tab's 4444 when the canvas is transparent); other formats export it black.
 - HDR frames are drawn without color management too: the plan draws its overlays once in the
   recording's encoding (`OverlayImages.encoded`), SDR white at 203 nits (BT.2408). Their
   semi-transparent parts (the chip's backing, the cursor's shadow, a fading ring) blend in PQ's
@@ -480,7 +523,7 @@ Key facts:
   ring and a chip, load average 2–3: 4–4.6 ms p50 and 5–8 ms p95, against 6.7–8.1 and 10–13 with
   a color-managed context; SDR took 3–3.5 in the same runs. Converting the backdrop costs 9–11 ms
   more per HDR plan (20 the first time), alongside the camera and cursor. The composition is
-  tagged BT.2020 and the recording's PQ or HLG; H.264 exports are SDR.
+  tagged BT.2020 and the recording's PQ or HLG; GIF exports are SDR.
 
 ### S1 — Editor design (`feat/editor-shell`)
 
@@ -500,15 +543,15 @@ slate gradient.
 | `Editor/View/EditorTheme.swift` | System colors by role, spacing on a 4-point grid, and the motion tokens: `motion` (spring, response 0.35, critically damped: every state change), `quickMotion` (0.15: hover, release), `momentumMotion` (damping 0.8: only after a flick), `fadeMotion` (Reduce Motion's cross-fade) and `release(velocity:distance:)` (a drag's release speed handed to a spring) |
 | `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `GlassEffectContainer`), a material with a hairline before; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on (`nil` skips it); `withMotion { }` is the same for code with no environment; Increase Contrast adds a `dim` edge to every glass surface |
 | `Editor/View/EditorBackdrop.swift`, `StageDotGrid.swift` | The frosted desktop behind the window; the dot grid behind the preview, fading out before the stage's edges |
-| `Editor/View/EditorButtonStyle.swift` | `.editorPrimary` (off-white), `.editorAccent` (white on the accent colour: the floating capture panels and the editor's Export) and `.editorGhost` (hairline) text buttons; every press shows on the frame it lands, only hover and release ease |
+| `Editor/View/EditorButtonStyle.swift` | The two text buttons, Liquid Glass capsules (`glassEffect(_:in: .capsule)`, interactive): `.editorPrimary`, glass tinted with the accent colour and white text, only for the one action a place leads to (Export…, export's Export and then Share…, Render, the card's Copy and Save); `.editorSecondary`, clear glass with accent text and its icon white on a 20 pt accent disc, for every other text button. Icons come from the button's `Label(_:image:)`: `Assets.xcassets/ButtonIcons`, Phosphor Bold (MIT) from Iconify as 14 pt template PNGs (`button-export`, `-share`, `-folder`, `-close`, `-retry`, `-agent`, `-settings`, `-render`). Solid with Reduce Transparency, a material before macOS 26, an edge with Increase Contrast; the press scales to 0.97 on the frame it lands, only hover and release ease |
 | `View/PanelPresentation.swift`, `PanelPresence.swift` | `panelPresentation(isPresented:anchor:motion:blur:)`: a floating panel fades and, with `blur`, pops in where it is from that many points out of focus — no direction, where a scale has one, since the corner furthest from the anchor travels the most and the eye reads the panel as growing from that corner (the capture toolbar and its picker use `blur`; the card, pins, agent bar and countdown use the scale). Only opacity, blur and scale are animated, so a window resize in the same update isn't. Opacity only with Reduce Motion; `exitDelay` is how long its window stays; `PanelPresence` carries the flag for controllers whose view model can't |
-| `View/MenuRowButtonStyle.swift` | `.menuRow` for the popover's rows, and `MenuRowHighlight` (also under `MenuBarToggle`): Control Center's highlight, a 10 pt continuous rounded fill the row's full height, 6 pt in from the sides, 0.1 on hover, 0.16 the moment it's pressed, dimmed when disabled |
+| `View/MenuRowButtonStyle.swift` | `.menuRow` for the popover's rows, and `MenuRowHighlight`: Control Center's highlight (not on `MenuBarToggle` rows, whose switch is the only control), a 10 pt continuous rounded fill the row's full height, 6 pt in from the sides, 0.1 on hover, 0.16 the moment it's pressed, dimmed when disabled |
 | `Model/GesturePhysics.swift` | Pure: `project` (momentum), `rubberband`/`rubberbanded` (resistance past a boundary), `relativeVelocity`, `velocityMatchedDuration`, `flickExit`, and `VelocityTracker` (the last 0.1 s of a drag) |
 | `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar, centred, never larger than the screen less 40 pt; the editor and Web Recording open at 1533×943 (the size picked by hand on 2026-10-05) |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the transport in the timeline's header |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart; a line at each label, dots between; labels carry their units, "0.5s", "1m 30s", "1h", since a clock's "0:00.5" didn't say what it counted), the playhead's knob, the zoom blocks |
 | `Editor/View/Inspector*.swift`, `EditorInspectorSections.swift`, `TickSlider.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | `EditorInspector` and its sections, which fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides. Every slider is a `TickSlider`: a track with ticks, accent fill up to a bar at the value, dragged 1:1 from the grab (a press away from the bar takes it there first), VoiceOver adjustable in 20 steps, without a focus ring |
-| `Editor/View/ExportSheet.swift`, `ExportProgressBar.swift` | Native pickers in a grid with a line on what the format is for; progress |
+| `Editor/View/ExportOptions.swift`, `ExportProgressBar.swift` | Export's inspector: format, size and frame rate as `SegmentedChoice` tabs (an option can be disabled), the quality as rows with their estimated sizes, Export and Copy to Clipboard (side by side, or stacked when the column is narrow) pinned under a line; progress |
 
 Key facts:
 - Glass only on controls over the stage, never on the timeline (content) or over the live video:
@@ -646,11 +689,19 @@ Key facts (measured on an M5, macOS 26.5, spec 0005):
   loads, and a frame call still in flight when the new page commits is ended (WebKit fails it only
   once garbage collected, 106 s measured). A 6 s 2× take of apple.com/macbook-pro that clicks Buy
   and scrolls the store rendered in 17.8 s.
+- **Requests:** a frame waits off the clock for the page's `fetch`/`XMLHttpRequest` calls and the bodies it reads
+  (`answerRequests` in `WebClockScript`), so a slow API's answer shows at once instead of the take running a step
+  ahead; 5 s at most, then those are forgotten (long polls, streams). Websockets and server-sent events aren't
+  counted. A 3 s apple.com take took 10.6–10.8 s with it, 10.3–10.9 s without.
 - **Loading:** a frame waits up to 5 s for images in view and fonts; what misses that isn't waited
   for again (a hung image cost one frame 5 s, not every frame). The first load waits for the page's
   `didFinish`, so a subresource that hangs from the start fails the take after a minute.
 - **Speed:** snapshots are painted on the CPU: 2880×1800 took 14 ms (simple page), 35 ms
   (apple.com) and 310 ms (linear.app; 64 ms at 1×). A 3 s apple.com take rendered in 8.5 s.
+  Measured again 2026-10-06 (apple.com 2×, per frame): snapshot 11–14 ms, append 2 ms; the frame step
+  waited 7 ms for a real animation frame (`settle`), now dropped since the snapshot forces a rendering
+  update anyway, and frames came out pixel-identical. A first render also waits for the page's images
+  (`loadInView`): 37 ms a frame cold against 1 ms warm.
 - The take and the preview share the default website data store, so a cookie banner dismissed in
   the preview stays dismissed in the take.
 - App Transport Security blocks plain `http://` pages (measured on neverssl.com); `http://localhost` loads.
@@ -695,9 +746,10 @@ Key facts:
 
 ### S4 — Agent recording (`feat/agent-bridge`, spec 0007)
 
-**Record with AI Agent…** in the menu bar and the Library, and the shortcut of the same name (Settings → Shortcuts →
-Web Recording, no default), open the Web Recording window on its Agent chat (`EditorWindowManager.showAgentChat()`,
-S5); the Spotlight-style bar it used to open was removed on 2026-10-02. Reco runs the agent's command line headlessly with only its own
+The agent is part of the one Web Recording window (**New Web Recording…**, and the Library's New): its **AI Agent** button
+at the toolbar's leading edge opens the chat panel on the left. The shortcut **Record with AI Agent** (Settings → Shortcuts →
+Web Recording, no default) and the failure notification's action open the same window with the panel open
+(`EditorWindowManager.showAgentChat()`, S5); the menu bar and the Library have no row of their own. The Spotlight-style bar it used to open was removed on 2026-10-02. Reco runs the agent's command line headlessly with only its own
 three MCP tools allowed; the agent records through the bridge (S3) and the editor opens. While it
 runs the bar and the menu bar (a sparkle, "AI", then the render's percent) show it; **Cancel** stops
 the command line. A failure shows its reason with **Retry** in the bar and in a notification.
@@ -723,7 +775,8 @@ Key facts:
 - The bar lists every agent whose command line is on the login shell's `PATH` (`refreshAgents`), ready when
   `AgentInvocation.bringsServer(for:)` or connected; otherwise it says which to connect. Antigravity (`agy`) is left
   out: its headless mode has no per-run tool allowlist, only `--dangerously-skip-permissions` (checked 2026-10-02).
-- Only Reco's tools run: Claude `--tools "" --allowedTools mcp__reco__*`, Codex `approve` mode and a
+- Only Reco's tools run: Claude `--tools WebSearch,WebFetch --allowedTools mcp__reco__* WebSearch WebFetch` (read-only web
+  research, spec 0009), Codex `approve` mode and a
   read-only sandbox, OpenCode inline permission config, Gemini policy file, Grok `dontAsk` (its read-only
   built-ins remain), Cursor workspace `cli.json`. Codex wasn't run (not installed).
 - The run's limit is **15 minutes** (a 30 s apple.com take at 2x is 1–2 minutes; linear.app needs 18 for 60 s).
@@ -738,8 +791,9 @@ Key facts:
 
 ### S5 — Agent chat (`feat/ui-polish`, spec 0008)
 
-The Web Recording window's right column, one fixed width (340 pt), holds the **Inspector** or the **Agent**
-chat: the toolbar's sidebar button and **AI Agent** each show theirs, or hide the column if it's showing: a chat with Claude Code or Cursor about the window's page. Their `stream-json`
+The Web Recording window is laid out like the editor: the **inspector** on the right (system `.inspector`, 340 pt,
+`showsInspector`), and the **Agent** chat on the left (340 pt and a hairline, `showsAgent`, hidden by default), which the toolbar's
+**AI Agent** button at the leading edge slides in and out from the leading edge: a chat with Claude Code or Cursor about the window's page. Their `stream-json`
 output (`AgentStreamEvent`, measured formats) fills `AgentRecordingViewModel.transcript` with requests,
 replies and tool steps; a follow-up resumes the conversation (`--resume`). Reco's tools report what the
 agent inspects and plans (`AgentTools.onInspected`/`onPlanned`), so the preview highlights its elements,
@@ -751,6 +805,13 @@ sits in the timeline header, not over the page. The header is laid out like the 
 that add a hover, click, typing or scroll (and delete the selected clip) on the left, Play in the middle, progress and
 the time on the right; Render is the accent button, like Export. The stage has no dot grid, only an edge and a soft shadow. Details and file map: `docs/specs/0008-agent-chat.md`.
 
+- **The chat's look** (iMessage-like): a header with the agent and model menus; the agent's words in light rounded
+  bubbles on the left, the user's in accent bubbles on the right, consecutive tool steps as one activity card
+  (`AgentTranscript.groups`), a typing indicator until the render starts and then a progress card, and a result card
+  once a run has a movie (`AgentRecordingViewModel.lastMovie`: the agent's own render, or the window's from its
+  staged plan) that opens it in the editor. The composer is a pill field with a round Send (Stop while running), under it
+  a round New Chat button and suggestion chips that fill the field without sending. Bubbles enter with a spring from
+  their own bottom corner (opacity only with Reduce Motion).
 - **Tests and a running Reco:** the test host is Reco, so a test run takes the bridge's socket from the
   running app. An agent run going at the time loses Reco, and its `--mcp` client starts a second copy.
   Don't run tests during an agent run; relaunch Reco after testing. `AgentToolsTests` render into a
@@ -759,25 +820,40 @@ the time on the right; Render is the accent button, like Export. The stage has n
   Mac (macOS 26.6) with or without the chat changes: rendering `http://localhost:1` succeeds instead of
   failing. Not yet looked into.
 
-### S6 — Walkthrough editor (`feat/ui-polish`, spec 0009)
+### S6 — Walkthrough editor (`feat/ui-polish`, `feat/walkthrough-show`, spec 0009)
 
 Effects are properties of a web script's steps, previewed with Play and rendered by the editor.
-- **Zoom per step:** `PointerClip.zoom`; `WebCamera` times it (in 0.4 s before, out 0.6 s after), `WebStage`
-  previews it, and `renderTake` writes the exact zooms into `<movie>.edit.json` (none → the editor auto-zooms).
+- **Show:** `PointerClip.show` (`record_page` `steps[].show`) names what the video zooms on during a step,
+  measured where the step starts and fitted by `WebCamera.fit` (≤ 3×, 80% of the view, none under 1.1×). Once
+  any clip shows one, only show clips zoom, and the take always writes `<movie>.edit.json`. A zoom ends 0.3 s
+  after the page scrolls or is replaced and isn't made when that comes within 0.5 s (`PageChanges`, also used
+  by web takes' auto-zooms); zooms under 1 s apart pan across.
+- **Takes:** before each cursor step Reco scrolls its element into view (≤ 1 s, 15% from the edge); scrolls to
+  an element aim as they start; a page a click opens shows from its top (URLs compared without fragment) and
+  is recorded in telemetry `navigations`. Each step is checked where it starts (`WebTakeIssues`): missing,
+  outside the view, covered, a click left out, a shown element out of view; `record_page` returns them as
+  `warnings`, and a run Reco started may call it twice (`AgentTools.maximumRecordings`).
+- **Method:** the prompt makes the agent research the product (Claude Code runs get read-only `WebSearch` and
+  `WebFetch`), plan four to six beats and give every cursor step a show. Defaults: first step at 1 s, 0.8 s
+  apart, 1.5 s per hover or click, 2 s per scroll, scale 1.
+- **Zoom per step:** `PointerClip.zoom`, the window's own (agents use show); `WebCamera` times it (in 0.4 s
+  before, out 0.6 s after), `WebStage` previews it, and `renderTake` writes the exact zooms into
+  `<movie>.edit.json` (none → the editor auto-zooms).
 - **Type:** `PointerClip.Action.type` + `text` clicks a field and types into it (`typedText(at:)`,
   `WebTypingScript` in an isolated world: native setter + `input`), in the take and the preview.
-- Agents get both through `record_page` (`zoom`, `type` + `text`). From the chat (`AgentRecordingRequest.rendersVideo`
+- Agents get both through `record_page` (`show`, `type` + `text`). From the chat (`AgentRecordingRequest.rendersVideo`
   false, `AgentTools.stagesPlans`) `record_page` only puts the plan on the timeline (status `planned`); the window renders
   it when the run ends, and the user can change and render it again. Stages 3–6 (spotlight, captions,
   narration, browser frame, speed, 9:16) are planned in the spec.
 
 ### Menu bar popover
 
-**Take Screenshot…** and **Record Screen…** open the capture toolbar (below) for that kind; while a take is saved,
-Saving Recording… instead. Then
-Capture (system audio, microphone and its device; camera), Library…, New Web Recording…, Record with AI
-Agent…, Settings… and Quit. The take's own controls are only on the toolbar. Frame rate, codecs, container, alpha, HDR and the content filter are in
-Settings → Video, the audio codec in Settings → Audio; Edit Last Recording shows only when there is one.
+288 pt wide. First the ways in: **Screenshot** and **Record** (with their shortcuts, ⇧⌘1 / ⇧⌘2) open the capture
+toolbar (below) for that kind (while a take is saved, Saving Recording… instead), then **Product Record** (the Web
+Recording window) and **Library**, and Edit Last Recording when there is one. Then Capture (system audio, microphone
+and its device; camera), whose expanded rows sit on the popover itself, with no second background; then Settings… and
+Quit. The take's own controls are only on the toolbar. Frame rate, codecs, container, alpha, HDR and the content filter
+are in Settings → Video, the audio codec in Settings → Audio.
 
 ### Capture toolbar (`feat/ui-polish`)
 
@@ -896,19 +972,29 @@ and a white stop square, for any start (menu, shortcut, `reco://`); it goes once
 **Library…** in the menu bar, and clicking Reco in the Dock (`applicationShouldHandleReopen`), open Reco's
 main window, which stays open unlike the popover: a sidebar (All, Recordings, Web Recordings, Exports,
 Screenshots, with counts), a grid of pictures, search, and **New** (Capture Area/Window/Screen, Record
-Area…, Record Window or Display…, New Web Recording…, Record with AI Agent…). A click opens a movie in the
+Area…, Record Window or Display…, New Web Recording…). A click opens a movie in the
 editor and a screenshot in Preview; the context menu shows in Finder, copies (a screenshot as PNG, a movie
 as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`. The grid is under date
 headers, newest first: Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
-list the screenshot history folder (spec 0012).
+list the screenshot history folder (spec 0012). Down the right edge the dates repeat as a rail
+(`LibraryDateRail`), adapted from Chánh Đại's Line Nav: only a short line per date, 10 pt apart, that lengthens
+and brightens for the date at the top of the grid and for the one under the pointer, whose title shows to the
+line's left, over the grid, in large text with no background; a click scrolls the grid to it. The grid reserves only the lines'
+44 pt and hides the rail for a single date. The grid sits on the content colour (`controlBackgroundColor`): on the
+window's own colour it matched the sidebar within a few levels (55 against 57 in dark mode). Tiles are 16:10
+pictures that fill their frame (screenshots too, cropped), 10 pt continuous corners and a faint edge, with the
+name and, dimmed, the kind's symbol and the date under them. Which date is current is
+`LibraryDateGroup.active(in:headerTops:topLine:)`, fed by each header's own offset — a lazy grid measures
+only the headers it has built, so an unmeasured date is one below the fold and is skipped.
 
 | File | Role |
 |---|---|
 | `Library/Model/LibraryItem.swift` | Pure: kinds by name and type (`Reco_Web_` web, `-edited` export, `Reco_Screenshot_` PNG), companions, `LibrarySection` |
-| `Library/Model/LibraryDateGroup.swift` | Pure: `groups(of:now:calendar:)`, the date headers |
+| `Library/Model/LibraryDateGroup.swift` | Pure: `groups(of:now:calendar:)`, the date headers, and `active(in:headerTops:topLine:)`, which date the rail marks |
 | `Library/Service/LibraryStore.swift` | Lists the recordings, screenshot and history folders (a folder read once when two are the same; a history name also saved is listed from the screenshot folder), thumbnails (movie frame or `CGImageSource`), trash |
 | `Library/Service/FolderWatcher.swift` | `DispatchSource` vnode writes on all three folders, 0.3 s settle, so new saves show at once (a folder that doesn't exist yet isn't watched until the window is reopened; the history folder is made at launch) |
 | `Library/ViewModel/LibraryViewModel.swift`, `Library/View/` | Sections, search, intents; `Actions` wired in `AppDelegate`; window in `EditorWindowManager.showLibrary()` |
+| `Library/View/LibraryDateRail.swift` | The dates down the right edge: a line per date, the current one marked, its title on hover, a click that scrolls to it |
 
 - The screenshot folder is the Desktop by default, so only `Reco_Screenshot_*.png` there are listed; reading
   it is what asks for Desktop access the first time.
@@ -936,7 +1022,8 @@ text sent to the agent never includes a password's value.
 A black shape over the notch of every screen (a 120×8 pt pill at the top centre where there is none). The pointer
 on it makes it peek (+7.5 pt each side, +5 down, shadow); staying 300 ms opens it into a 560 pt panel with the
 newest 20 screenshots (saved and history): click copies the PNG (tile says Copied for 1.2 s), drag drops the file.
-Collapses 500 ms after the pointer leaves. **Settings → General → Screenshot History → Show Screenshots in the Notch** (default on).
+Collapses 500 ms after the pointer leaves. **Settings → General → Screenshot History → Show Screenshots in the Notch** (default off).
+Hidden while a take records or saves (`AppDelegate.hideNotchShelfWhileRecording`), so a display recording never shows it as a bar over the notch, Show Reco or not. Hover rings a tile in the accent; a press dims and shrinks it on the frame it lands and lets go after 4 pt, so the file drag still starts.
 
 | File | Role |
 |---|---|
@@ -975,6 +1062,7 @@ scrolls:       [{ time, location, delta: [dx,dy] }]
 keys:          [{ time, keyCode, modifiers: [..], isRepeat }]
 cursorSprites: [{ id, kind?, size, hotspot, png: base64 }]
 cursorShapes:  [{ time, sprite }]
+navigations:   [{ time, url }]                         // web takes: a page a click opened; missing → none
 ```
 CG geometry types encode as arrays (`CGRect` → `[[x,y],[w,h]]`). Bump `version` on incompatible changes
 and update `InputTelemetry.supportedVersions`; version 2 files lack `cursorInVideo` and the cursor fields.

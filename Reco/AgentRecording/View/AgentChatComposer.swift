@@ -3,81 +3,70 @@
 //  Reco
 //
 
-import AppKit
 import SwiftUI
 
-/// The agent chat's message box: what the video should show, or a change to the last take; the agent
-/// and model; New Chat; and Send, or Stop while the agent works.
+/// The agent chat's message box: a pill for what the video should show, or a change to the last take, with
+/// Send (Stop while the agent works), and under it New Chat and a few things to start from.
 struct AgentChatComposer: View {
-    @Bindable var model: AgentRecordingViewModel
+    let model: AgentRecordingViewModel
     let page: URL?
 
     @State private var message = ""
     @FocusState private var isFocused: Bool
     @Environment(\.colorSchemeContrast) private var contrast
 
+    private static let suggestions = ["Tour the whole page", "Hover the main menu", "Click the main button", "Scroll to the end"]
+
     var body: some View {
         VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
-            TextField(placeholder, text: $message, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(2...6)
-                .focused($isFocused)
-                .onSubmit(send)
-                // Nothing to type for without a page or an agent, so nothing typed is lost
-                .disabled(model.isRunning || page == nil || model.agent == nil)
-
-            if model.available.isEmpty {
-                HStack(spacing: EditorTheme.smallSpacing) {
-                    Text(model.unavailableReason ?? (model.isLookingForAgents ? "Looking for agents…" : ""))
-                        .font(.caption)
-                        .foregroundStyle(EditorTheme.dim)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if model.unavailableReason != nil {
-                        Button("Set Up Agents…", action: Self.openAgentSettings)
-                            .buttonStyle(.editorGhost)
-                    }
-                }
-            } else {
-                HStack(spacing: EditorTheme.tightSpacing) {
-                    Picker("Agent", selection: $model.agent) {
-                        ForEach(model.available) { kind in
-                            Text(kind.displayName).tag(AgentKind?.some(kind))
-                        }
-                    }
-                    .fixedSize()
-                    .disabled(model.isRunning)
-                    Picker("Model", selection: $model.model) {
-                        Text("Default").tag(String?.none)
-                        ForEach(model.models, id: \.self) { name in
-                            Text(name).tag(String?.some(name))
-                        }
-                    }
-                    .fixedSize()
-                    .disabled(model.isRunning)
-                    Spacer(minLength: 0)
-                    Button("New Chat", systemImage: "square.and.pencil", action: model.startNewChat)
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.editorGhost)
-                        .help("Start a new conversation")
-                        .disabled(model.isRunning || model.transcript.entries.isEmpty)
-                    // Send turns into Stop in the same place while the agent works
+            let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+            HStack(alignment: .bottom, spacing: EditorTheme.smallSpacing) {
+                TextField(placeholder, text: $message, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...6)
+                    .focused($isFocused)
+                    .onSubmit(send)
+                    // Nothing to type for without a page or an agent, so nothing typed is lost
+                    .disabled(!canType)
+                    .padding(.vertical, EditorTheme.tightSpacing + 2)
+                Button(model.isRunning ? "Stop" : "Send", systemImage: model.isRunning ? "stop.fill" : "arrow.up") {
                     if model.isRunning {
-                        Button("Stop", systemImage: "stop.fill", action: model.cancel)
-                            .labelStyle(.iconOnly)
-                            .buttonStyle(.editorPrimary)
-                            .keyboardShortcut(".", modifiers: .command)
-                            .help("Stop the agent (⌘.)")
+                        model.cancel()
                     } else {
-                        Button("Send", systemImage: "arrow.up", action: send)
-                            .labelStyle(.iconOnly)
-                            .buttonStyle(.editorPrimary)
-                            .keyboardShortcut(.defaultAction)
-                            .help("Send (↩); ⌥↩ for a new line")
-                            .disabled(!canSend)
+                        send()
                     }
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
+                .labelStyle(.iconOnly)
+                .contentTransition(.symbolEffect(.replace))
+                .buttonStyle(.agentAccentCircle)
+                .keyboardShortcut(model.isRunning ? KeyboardShortcut(".", modifiers: .command) : .defaultAction)
+                .help(model.isRunning ? "Stop the agent (⌘.)" : "Send (↩); ⌥↩ for a new line")
+                .disabled(!model.isRunning && !canSend)
+                .editorMotion(EditorTheme.quickMotion, value: model.isRunning)
+            }
+            .padding(.leading, EditorTheme.mediumSpacing)
+            .padding(.trailing, EditorTheme.tightSpacing)
+            .padding(.vertical, EditorTheme.tightSpacing)
+            .background(Color.primary.opacity(0.06), in: shape)
+            .overlay {
+                shape.strokeBorder(outline)
+                    .editorMotion(EditorTheme.quickMotion, value: isFocused)
+            }
+
+            ChipFlow(spacing: EditorTheme.smallSpacing) {
+                Button("New Chat", systemImage: "arrow.counterclockwise", action: model.startNewChat)
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.agentCircle)
+                    .help("Start a new conversation")
+                    .disabled(model.isRunning || model.transcript.entries.isEmpty)
+                ForEach(Self.suggestions, id: \.self) { suggestion in
+                    Button(suggestion) {
+                        message = suggestion
+                        isFocused = true
+                    }
+                    .buttonStyle(.agentChip)
+                    .disabled(!canType)
+                }
             }
 
             if page == nil {
@@ -90,28 +79,30 @@ struct AgentChatComposer: View {
         .onAppear { isFocused = page != nil }
     }
 
+    private var outline: Color {
+        if isFocused {
+            return EditorTheme.accent.opacity(0.6)
+        }
+        return contrast == .increased ? EditorTheme.dim : EditorTheme.softHairline
+    }
+
     /// A first message describes the video; later ones change it.
     private var placeholder: String {
-        model.transcript.entries.isEmpty
-            ? "Describe the video: hover Pricing, click Start free, scroll to the FAQ…"
-            : "Ask for a change: slower scroll, click Sign in too…"
+        model.transcript.entries.isEmpty ? "Describe the video…" : "Ask for a change…"
+    }
+
+    private var canType: Bool {
+        !model.isRunning && page != nil && model.agent != nil
     }
 
     /// A page, an agent and something asked.
     private var canSend: Bool {
-        page != nil && model.agent != nil && !model.isRunning && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        canType && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func send() {
         guard canSend, let page else { return }
         model.send(message, about: page)
         message = ""
-    }
-
-    /// Opens Settings on its Agents tab.
-    static func openAgentSettings() {
-        UserDefaults.standard.set(AgentsSettingsView.tag, forKey: AgentsSettingsView.tabStorageKey)
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 }

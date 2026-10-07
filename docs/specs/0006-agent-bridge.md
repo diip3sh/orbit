@@ -102,15 +102,15 @@ variables and `OPENCODE_CONFIG` could now be followed, but aren't.
 
 Errors are returned as `isError` text for the model to act on; only protocol failures throw.
 
-1. `inspect_page` `{url, viewport?}` returns `{title, url, viewport, page_height, elements[{selector, role, text, box}], truncated}`
-   in page CSS pixels at scroll 0. At most 200 elements; selectors are the ones pick mode makes
+1. `inspect_page` `{url, viewport?}` returns `{title, description?, url, viewport, page_height, elements[{selector, role, text, box, href?}], truncated}`
+   in page CSS pixels at scroll 0, after scrolling down the page and back (spec 0009). At most 200 elements; selectors are the ones pick mode makes
    (`WebPickScript.selectorFunctions`). A password's or checkbox's value is never used as text.
-2. `record_page` `{url, viewport?, scale?, duration?, steps[{action, selector?, y?, start?, duration?}]}`
-   returns a `RenderStatus {render_id, status, progress, movie?, telemetry?, unmatched_selectors?, error?}`.
-   Steps without a start follow the previous one by 0.5 s (first at 0.5 s); the take ends 1 s after the
-   last step, at most 120 s. Same-lane overlaps are errors; a hover may overlap a scroll. A scroll to a
-   selector brings it near the top, leaving 15% of the viewport above it (a guess for sticky headers,
-   not measured).
+2. `record_page` `{url, viewport?, scale?, duration?, steps[{action, selector?, show?, y?, start?, duration?, text?}]}`
+   returns a `RenderStatus {render_id, status, progress, movie?, telemetry?, warnings?, error?}`.
+   Steps without a start follow the previous one by 0.8 s (first at 1 s); the take ends 1.5 s after the
+   last step, at most 120 s. Scale defaults to 1. Same-lane overlaps are errors; a hover may overlap a
+   scroll. A scroll to a selector brings it near the top, leaving 15% of the viewport above it (a guess
+   for sticky headers, not measured). `show`, warnings and the scrolls Reco adds: spec 0009.
 3. `render_status` `{render_id}` waits and reports the same.
 
 Limits:

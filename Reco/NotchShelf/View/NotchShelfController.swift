@@ -42,6 +42,7 @@ private final class NotchHostingView: NSHostingView<AnyView> {
     var activeRect: () -> CGRect = { .zero }
     var onEnter: (() -> Void)?
     var onExit: (() -> Void)?
+    var onMove: ((CGPoint?) -> Void)?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -63,11 +64,16 @@ private final class NotchHostingView: NSHostingView<AnyView> {
         trackingAreas.filter { $0.owner === self }.forEach(removeTrackingArea)
         guard let window else { return }
         let rect = convert(window.convertFromScreen(activeRect()), from: nil)
-        addTrackingArea(NSTrackingArea(rect: rect, options: [.activeAlways, .mouseEnteredAndExited], owner: self, userInfo: nil))
+        addTrackingArea(NSTrackingArea(rect: rect, options: [.activeAlways, .mouseEnteredAndExited, .mouseMoved], owner: self, userInfo: nil))
     }
 
     override func mouseEntered(with event: NSEvent) { onEnter?() }
-    override func mouseExited(with event: NSEvent) { onExit?() }
+    override func mouseExited(with event: NSEvent) {
+        onMove?(nil)
+        onExit?()
+    }
+
+    override func mouseMoved(with event: NSEvent) { onMove?(convert(event.locationInWindow, from: nil)) }
 
     /// The top edge counts: a pointer pushed against the top of the screen sits on its last row, which
     /// `CGRect.contains` leaves out.
@@ -94,6 +100,7 @@ private final class NotchShelf {
         hostingView.activeRect = { [weak viewModel] in viewModel?.activeRect ?? .zero }
         hostingView.onEnter = { [weak viewModel] in viewModel?.pointerEntered() }
         hostingView.onExit = { [weak viewModel] in viewModel?.pointerExited() }
+        hostingView.onMove = { [weak viewModel] in viewModel?.pointer = $0 }
         panel.contentView = hostingView
         panel.setFrame(geometry.window, display: false)
         observeState()

@@ -15,14 +15,9 @@ final class WebRecordingViewModel {
 
     private(set) var script: WebScript
 
-    /// The right column, one at a time: the inspector or the agent chat.
-    enum SidePanel {
-        case inspector
-        case agent
-    }
-
-    var sidePanel = SidePanel.inspector
-    var showsSidePanel = true
+    /// The inspector on the right, like the editor's, and the agent chat on the left, hidden until asked for.
+    var showsInspector = true
+    var showsAgent = false
 
     /// The selected clip, on either lane. Choosing anything but a cursor clip stops pick mode.
     var selection: UUID? {
@@ -41,6 +36,9 @@ final class WebRecordingViewModel {
 
     /// Where the cursor is at the playhead, in viewport CSS pixels.
     private(set) var cursorPreview: CGPoint?
+
+    /// The box of the element the clip at the playhead shows, in viewport CSS pixels, for the camera.
+    private(set) var shownPreview: CGRect?
 
     /// The elements an agent just found in the page, in viewport CSS pixels at the top of the page;
     /// shown for ``agentHighlightTime`` (spec 0008).
@@ -405,9 +403,9 @@ final class WebRecordingViewModel {
         let script = script
         let time = playhead
         showTask = Task {
-            let location = await preview.show(script, at: time, scrolling: scrolling)
+            let shown = await preview.show(script, at: time, scrolling: scrolling)
             guard !Task.isCancelled else { return }
-            cursorPreview = location
+            (cursorPreview, shownPreview) = shown
         }
     }
 
@@ -453,7 +451,7 @@ extension WebRecordingViewModel {
             do {
                 let movie = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
                     self?.renderProgress = progress
-                }
+                }.movie
                 onRendered(movie)
             } catch {
                 if !(error is CancellationError) {
@@ -466,6 +464,11 @@ extension WebRecordingViewModel {
 
     func cancelRender() {
         renderTask?.cancel()
+    }
+
+    /// Opens a movie this window rendered in the editor, e.g. from the agent chat's result card.
+    func openInEditor(_ movie: URL) {
+        onRendered(movie)
     }
 }
 
@@ -585,7 +588,7 @@ extension WebRecordingViewModel {
         let presses = script.presses(after: pressedThrough, through: time)
         pressedThrough = time
         Task {
-            let location = await preview.show(script, at: time, scrolling: true)
+            let (location, shown) = await preview.show(script, at: time, scrolling: true)
             // The page hears the pointer as in the take, so hovers and clicks happen while it plays
             if let location {
                 if location != hovered {
@@ -598,7 +601,7 @@ extension WebRecordingViewModel {
             }
             isMovingPage = false
             if isPlaying {
-                cursorPreview = location
+                (cursorPreview, shownPreview) = (location, shown)
             }
         }
     }
@@ -607,29 +610,5 @@ extension WebRecordingViewModel {
         playTask?.cancel()
         playTask = nil
         isPlaying = false
-    }
-}
-
-// MARK: - Side Panel
-
-extension WebRecordingViewModel {
-
-    /// The toolbar's two buttons share the column: each shows its panel, or hides the column when its
-    /// panel is the one showing.
-    func toggle(_ panel: SidePanel) {
-        if isShowing(panel) {
-            showsSidePanel = false
-        } else {
-            show(panel)
-        }
-    }
-
-    func show(_ panel: SidePanel) {
-        sidePanel = panel
-        showsSidePanel = true
-    }
-
-    func isShowing(_ panel: SidePanel) -> Bool {
-        showsSidePanel && sidePanel == panel
     }
 }

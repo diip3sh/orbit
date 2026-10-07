@@ -86,7 +86,7 @@ is only there when a model is chosen.
 
 | Agent | Arguments | Why only Reco's tools run |
 |---|---|---|
-| Claude Code `claude` | `-p <P> --tools "" --allowedTools mcp__reco__* --permission-mode dontAsk --no-session-persistence [--model M] --output-format text` | `--tools ""` turns every built-in tool off; `dontAsk` denies what isn't pre-approved; the glob approves Reco's tools. `--tools` and `--allowedTools` take any number of values, so the prompt goes right after `-p`. |
+| Claude Code `claude` | `-p <P> --tools WebSearch,WebFetch --allowedTools mcp__reco__* WebSearch WebFetch --permission-mode dontAsk --no-session-persistence [--model M] --output-format text` | `--tools` leaves only read-only web search and fetch of the built-in tools, for research (spec 0009); `dontAsk` denies what isn't pre-approved; the glob approves Reco's tools. `--tools` and `--allowedTools` take any number of values, so the prompt goes right after `-p`. |
 | Codex `codex` | `exec --skip-git-repo-check --ephemeral --sandbox read-only -c mcp_servers.reco.default_tools_approval_mode="approve" [-m M] <P>` | `exec` never asks, so MCP calls are rejected unless the server's approval mode is `approve`; the shell stays read-only. The `-c` value is one argument, quotes included. |
 | OpenCode `opencode` | `run [-m provider/model] <P>`, with `OPENCODE_CONFIG_CONTENT={"permission":{"*":"deny","reco_*":"allow"}}` | The inline config merges over the user's; the last matching rule wins; an MCP tool is `<server>_<tool>`. |
 | Gemini CLI `gemini` | `--skip-trust --allowed-mcp-server-names reco --policy <W>/reco-policy.toml -o text [-m M] -p <P>` | The policy denies `*` at priority 100 and allows `mcpName = "reco"` at 200. |

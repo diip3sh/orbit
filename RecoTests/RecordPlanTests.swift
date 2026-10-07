@@ -30,7 +30,7 @@ struct RecordPlanTests {
     }
 
     @Test func aScrollToAnElementLeavesAMarginAboveIt() throws {
-        let expected = CGFloat(1200 - RecordPlan.scrollMargin * 900)
+        let expected = CGFloat(1200 - ScrollClip.Target.margin * 900)
 
         #expect(try scrollTop(of: "#pricing", at: 1200) == expected)
     }
@@ -48,6 +48,14 @@ struct RecordPlanTests {
         #expect(script.scrolls.map(\.offset.y) == [2100])
     }
 
+    @Test func aScrollToAnElementAimsAgainInTheTake() throws {
+        let boxes = ["#pricing": PageInspection.Box(left: 0, top: 1200, width: 100, height: 50)]
+
+        let script = try plan([Step(action: "scroll", selector: "#pricing")]).script(page: page(boxes: boxes)).script
+
+        #expect(script.scrolls.first?.target == ScrollClip.Target(selector: "#pricing", placement: .top))
+    }
+
     @Test func aScrollToAnElementThePageDoesntHaveFails() throws {
         let missing = try plan([Step(action: "scroll", selector: "#gone")])
 
@@ -55,22 +63,57 @@ struct RecordPlanTests {
         #expect(throws: AgentToolError.self) { try missing.script(page: page(boxes: nil)) }
     }
 
+    @Test func aClickOnAnElementThePageDoesntHaveFails() throws {
+        #expect(throws: AgentToolError.self) { try plan([Step(action: "click", selector: "#gone")]).script(page: page()) }
+    }
+
     @Test func aClickAimsAtTheElementsCentreWhereThePageIsScrolledToThen() throws {
         let boxes = ["#buy": PageInspection.Box(left: 100, top: 700, width: 200, height: 60)]
-        // The scroll ends at 2 s; the click follows half a second later
+        // The scroll ends at 2 s; the click follows the gap later
         let steps = [Step(action: "scroll", offset: 500, start: 0.5, duration: 1.5), Step(action: "click", selector: "#buy")]
 
         let result = try plan(steps).script(page: page(boxes: boxes))
 
         let click = try #require(result.script.pointer.first)
-        #expect(click.range == 2.5..<3.5)
+        #expect(click.range == 2.8..<4.3)
         #expect(click.action == .click)
         #expect(click.target.selector == "#buy")
         #expect(click.target.point == CGPoint(x: 200, y: 230))
-        #expect(result.unmatched.isEmpty)
+        #expect(result.warnings.isEmpty)
         let presses = result.script.presses(after: 0, through: 10)
-        #expect(presses.map(\.time) == [2.5, 2.6])
+        #expect(presses.map(\.time) == [2.8, 2.9])
         #expect(presses.map(\.isDown) == [true, false])
+    }
+
+    @Test func aCursorStepBringsItsElementIntoViewFirst() throws {
+        let boxes = ["#plan": PageInspection.Box(left: 100, top: 1500, width: 200, height: 100)]
+
+        let script = try plan([Step(action: "hover", selector: "#plan")]).script(page: page(boxes: boxes)).script
+
+        // In the second before the hover, to a margin above the viewport's bottom: 1600 - 900 + 135
+        let scroll = try #require(script.scrolls.first)
+        #expect(scroll.range == 0..<1)
+        #expect(scroll.target == ScrollClip.Target(selector: "#plan", placement: .intoView))
+        #expect(scroll.offset.y == 835)
+        #expect(script.pointer.first?.target.point == CGPoint(x: 200, y: 715))
+    }
+
+    @Test func anElementInViewStaysPut() throws {
+        let boxes = ["#buy": PageInspection.Box(left: 100, top: 300, width: 200, height: 60)]
+
+        let script = try plan([Step(action: "hover", selector: "#buy")]).script(page: page(boxes: boxes)).script
+
+        #expect(script.scrolls.map(\.offset) == [.zero])
+    }
+
+    @Test func thereIsNoScrollIntoViewWithoutRoomForIt() throws {
+        let boxes = ["#a": PageInspection.Box(left: 0, top: 100, width: 10, height: 10), "#b": PageInspection.Box(left: 0, top: 200, width: 10, height: 10)]
+        let steps = [Step(action: "hover", selector: "#a", start: 0.1), Step(action: "hover", selector: "#b", start: 1.7)]
+
+        let script = try plan(steps).script(page: page(boxes: boxes)).script
+
+        // 0.1 s before the first, 0.1 s between them: neither has the 0.2 s a scroll needs
+        #expect(script.scrolls.isEmpty)
     }
 
     @Test func aHoverBeforeTheScrollIsAimedWithoutIt() throws {
@@ -83,69 +126,95 @@ struct RecordPlanTests {
     }
 
     @Test func anElementThePageDoesntHaveIsAimedAtTheMiddleAndReported() throws {
-        let steps = [Step(action: "hover", selector: "#gone"), Step(action: "click", selector: "#gone"), Step(action: "hover", selector: "#also")]
+        let steps = [Step(action: "hover", selector: "#gone"), Step(action: "type", selector: "#gone", text: "hi"), Step(action: "hover", selector: "#also")]
 
         let result = try plan(steps).script(page: page())
 
         #expect(result.script.pointer.map(\.target.point) == Array(repeating: CGPoint(x: 720, y: 450), count: 3))
-        #expect(result.unmatched == ["#gone", "#also"])
+        #expect(result.warnings.count == 2)
+        #expect(result.warnings.first?.hasPrefix("At 1.0 s no element matched \"#gone\"") == true)
         // The selector stays: the page may have it by the time of the take
         #expect(result.script.pointer.first?.target.selector == "#gone")
     }
 
+    @Test func stepsAfterAClickAreAimedWhenTheTakeGetsThere() throws {
+        let boxes = ["#plan-link": PageInspection.Box(left: 100, top: 100, width: 100, height: 20)]
+        let steps = [
+            Step(action: "click", selector: "#plan-link"), Step(action: "hover", selector: "#plan-hero", show: "#plan-hero"),
+            Step(action: "scroll", selector: "#forecast")
+        ]
+
+        let result = try plan(steps).script(page: page(boxes: boxes))
+
+        // On a page the click may open: no error, no warning, the middle until the take finds them
+        #expect(result.warnings.isEmpty)
+        #expect(result.script.pointer.last?.target.point == CGPoint(x: 720, y: 450))
+        let scroll = try #require(result.script.scrolls.last)
+        #expect(scroll.target == ScrollClip.Target(selector: "#forecast", placement: .top))
+        #expect(scroll.offset == .zero)
+    }
+
     @Test func theScriptCarriesThePlansSettings() throws {
-        let request = RecordPageRequest(url: "example.com/x", viewport: "tablet", scale: 1, duration: 8, steps: [])
+        let request = RecordPageRequest(url: "example.com/x", viewport: "tablet", scale: 2, duration: 8, steps: [])
 
         let script = try request.plan().script(page: page()).script
 
         #expect(script.url?.absoluteString == "https://example.com/x")
         #expect(script.viewport == WebScript.Viewport.tablet.size)
-        #expect(script.scale == 1)
+        #expect(script.scale == 2)
         #expect(script.duration == 8)
     }
 
     @Test func selectorsAreDistinctAndInOrder() throws {
         let steps = [
-            Step(action: "hover", selector: "#b"), Step(action: "click", selector: "#a"),
+            Step(action: "hover", selector: "#b", show: "#c"), Step(action: "click", selector: "#a"),
             Step(action: "scroll", selector: "#b"), Step(action: "scroll", offset: 5)
         ]
 
-        #expect(try plan(steps).selectors == ["#b", "#a"])
+        #expect(try plan(steps).selectors == ["#b", "#c", "#a"])
     }
 
-    @Test func aStepsZoomReachesItsClip() throws {
+    @Test func aStepsShowReachesItsClip() throws {
+        let boxes = ["#buy": PageInspection.Box(left: 100, top: 100, width: 200, height: 60), "#shot": PageInspection.Box(left: 0, top: 200, width: 600, height: 400)]
+
+        let result = try plan([Step(action: "hover", selector: "#buy", show: " #shot ")]).script(page: page(boxes: boxes))
+
+        #expect(result.script.pointer.first?.show == "#shot")
+        #expect(result.warnings.isEmpty)
+    }
+
+    @Test func aShowThePageDoesntHaveIsReported() throws {
         let boxes = ["#buy": PageInspection.Box(left: 100, top: 100, width: 200, height: 60)]
 
-        let script = try plan([Step(action: "hover", selector: "#buy", zoom: 2)]).script(page: page(boxes: boxes)).script
+        let result = try plan([Step(action: "hover", selector: "#buy", show: "#gone")]).script(page: page(boxes: boxes))
 
-        #expect(script.pointer.first?.zoom == 2)
+        #expect(result.warnings.count == 1)
+        #expect(result.warnings.first?.contains("the shown element \"#gone\"") == true)
     }
 
-    @Test func zoomIsCheckedAndOnlyForTheCursor() {
-        #expect(throws: AgentToolError.self) { try plan([Step(action: "click", selector: "#a", zoom: 10)]) }
-        #expect(throws: AgentToolError.self) { try plan([Step(action: "click", selector: "#a", zoom: 1)]) }
-        #expect(throws: AgentToolError.self) { try plan([Step(action: "scroll", offset: 100, zoom: 2)]) }
-        #expect((try? plan([Step(action: "click", selector: "#a", zoom: 4)])) != nil)
+    @Test func showIsCheckedAndOnlyForTheCursor() {
+        #expect(throws: AgentToolError.self) { try plan([Step(action: "click", selector: "#a", show: " ")]) }
+        #expect(throws: AgentToolError.self) { try plan([Step(action: "scroll", offset: 100, show: "#a")]) }
+        #expect((try? plan([Step(action: "type", selector: "#a", show: "#form", text: "hi")])) != nil)
     }
 
-    @Test func zoomDecodesFromTheToolsArguments() throws {
-        let json = Data(##"{"url":"example.com","steps":[{"action":"click","selector":"#a","zoom":1.5}]}"##.utf8)
+    @Test func showDecodesFromTheToolsArguments() throws {
+        let json = Data(##"{"url":"example.com","steps":[{"action":"click","selector":"#a","show":"#b"}]}"##.utf8)
 
         let request = try JSONDecoder().decode(RecordPageRequest.self, from: json)
 
-        #expect(request.steps.first?.zoom == 1.5)
+        #expect(request.steps.first?.show == "#b")
     }
 
     @Test func aTypeStepTypesItsTextAndLastsAsLongAsIt() throws {
         let boxes = ["#q": PageInspection.Box(left: 100, top: 100, width: 300, height: 40)]
         let text = String(repeating: "x", count: 20)
 
-        let script = try plan([Step(action: "type", selector: "#q", zoom: 2, text: text)]).script(page: page(boxes: boxes)).script
+        let script = try plan([Step(action: "type", selector: "#q", text: text)]).script(page: page(boxes: boxes)).script
 
         let clip = try #require(script.pointer.first)
         #expect(clip.action == .type)
         #expect(clip.text == text)
-        #expect(clip.zoom == 2)
         #expect(abs((clip.range.upperBound - clip.range.lowerBound) - PointerClip.typingDuration(for: text)) < 1e-9)
     }
 
@@ -158,4 +227,3 @@ struct RecordPlanTests {
         #expect(throws: AgentToolError.self) { try plan([Step(action: "type", text: "hi")]) }
     }
 }
-

@@ -15,7 +15,7 @@ struct LibraryTile: View {
     @State private var isHovered = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 8)
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 
         Button {
             viewModel.open(item)
@@ -25,37 +25,36 @@ struct LibraryTile: View {
                     .aspectRatio(16 / 10, contentMode: .fit)
                     .overlay {
                         if let thumbnail {
-                            // A screenshot keeps its shape; a movie fills the frame
+                            // Every picture fills its tile, so the grid reads as one even sheet
                             Image(decorative: thumbnail, scale: 1)
                                 .resizable()
-                                .aspectRatio(contentMode: item.isMovie ? .fill : .fit)
+                                .scaledToFill()
                                 .transition(.opacity)
                         }
                     }
                     .clipShape(shape)
-                    .overlay(alignment: .topLeading) {
-                        Image(systemName: item.kind.symbol)
-                            .font(.caption)
-                            .foregroundStyle(.white)
-                            .padding(5)
-                            .background(.black.opacity(0.55), in: .circle)
-                            .padding(EditorTheme.smallSpacing)
-                            .accessibilityHidden(true)
-                    }
+                    // A faint edge, so a picture as light as the window still has one
                     .overlay {
                         shape.strokeBorder(isHovered ? EditorTheme.faint : EditorTheme.softHairline)
                     }
 
-                VStack(alignment: .leading, spacing: EditorTheme.tightSpacing) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(item.name)
-                        .font(.callout.weight(.medium))
+                        .font(.callout)
+                        .foregroundStyle(EditorTheme.ink)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Text(item.date, format: .dateTime.day().month().year().hour().minute())
-                        .font(.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(EditorTheme.dim)
+                    HStack(spacing: EditorTheme.tightSpacing) {
+                        Image(systemName: item.kind.symbol)
+                            .imageScale(.small)
+                            .accessibilityHidden(true)
+                        Text(item.date, format: .dateTime.month(.abbreviated).day().hour().minute())
+                            .monospacedDigit()
+                    }
+                    .font(.caption)
+                    .foregroundStyle(EditorTheme.dim)
                 }
+                .padding(.horizontal, 2)
             }
             .contentShape(.rect)
         }

@@ -56,4 +56,34 @@ struct LibraryDateGroupTests {
         )
         #expect(groups.map(\.title) == ["Today", "Yesterday", "Last Week"])
     }
+
+    @Test func theDateBeingReadIsTheLastOnePastTheTopOfTheGrid() {
+        let groups = LibraryDateGroup.groups(
+            of: [item("today", date(10, 1)), item("sept", date(9, 12)), item("august", date(8, 3))],
+            now: date(10, 1, hour: 12), calendar: calendar
+        )
+        #expect(groups.map(\.title) == ["Today", "September 2026", "August 2026"])
+        // 16 pt is where a header counts as read, the grid's own top padding
+        let tops: [String: CGFloat] = ["Today": -300, "September 2026": -40, "August 2026": 260]
+
+        #expect(LibraryDateGroup.active(in: groups, headerTops: tops, topLine: 16) == "September 2026")
+        // At the top of the grid, before anything has scrolled
+        #expect(LibraryDateGroup.active(in: groups, headerTops: ["Today": 16, "September 2026": 700], topLine: 16) == "Today")
+        // The last group's header at the line
+        #expect(LibraryDateGroup.active(in: groups, headerTops: tops, topLine: 300) == "August 2026")
+    }
+
+    @Test func aDateTheGridHasntBuiltYetIsSkipped() {
+        let groups = LibraryDateGroup.groups(
+            of: [item("today", date(10, 1)), item("sept", date(9, 12)), item("august", date(8, 3))],
+            now: date(10, 1, hour: 12), calendar: calendar
+        )
+
+        // Nothing measured yet: the first date
+        #expect(LibraryDateGroup.active(in: groups, headerTops: [:], topLine: 16) == "Today")
+        // Only the ones below the fold are up: the first of those
+        #expect(LibraryDateGroup.active(in: groups, headerTops: ["September 2026": 400, "August 2026": 900], topLine: 16) == "September 2026")
+        // A section with nothing in it has no date
+        #expect(LibraryDateGroup.active(in: [], headerTops: [:], topLine: 16) == nil)
+    }
 }

@@ -5,64 +5,75 @@
 
 import SwiftUI
 
-/// The Web Recording window's content: the live page on the stage, the script's timeline under it,
-/// the inspector or the agent chat beside them (spec 0008), and Render.
+/// The Web Recording window's content, laid out like the editor: the live page on the stage, the script's
+/// timeline under it, the inspector on the right and, when asked for, the agent chat on the left (spec 0008).
 struct WebRecordingView: View {
     let viewModel: WebRecordingViewModel
 
-    /// The agent chat's runs; `nil` leaves the window without an Agent tab.
+    /// The agent chat's runs; `nil` leaves the window without the agent.
     let agent: AgentRecordingViewModel?
+
+    @Environment(\.accessibilityReduceMotion) private var reducesMotion
 
     var body: some View {
         @Bindable var viewModel = viewModel
-        VStack(spacing: 0) {
-            WebStage(viewModel: viewModel)
-
-            WebTimelineView(viewModel: viewModel)
-                .padding(.horizontal, EditorTheme.largeSpacing)
-                .padding(.top, EditorTheme.smallSpacing)
-                .padding(.bottom, EditorTheme.spacing)
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(EditorTheme.hairline)
-                        .frame(height: 1)
-                }
-        }
-        .inspector(isPresented: $viewModel.showsSidePanel) {
-            Group {
-                if viewModel.sidePanel == .agent, let agent {
-                    AgentChatView(model: agent, page: viewModel.script.url)
-                } else {
-                    WebRecordingInspector(viewModel: viewModel)
-                        .disabled(!viewModel.isEditable)
-                }
+        HStack(spacing: 0) {
+            if let agent, viewModel.showsAgent {
+                AgentChatView(model: agent, page: viewModel.script.url, openMovie: viewModel.openInEditor)
+                    .frame(width: Self.panelWidth)
+                    .overlay(alignment: .trailing) {
+                        Rectangle()
+                            .fill(EditorTheme.hairline)
+                            .frame(width: 1)
+                    }
+                    // In and out along the same path, from the edge the button sits at
+                    .transition(reducesMotion ? .opacity : .move(edge: .leading).combined(with: .opacity))
             }
-            // One width for both panels, so switching doesn't move the page
-            .inspectorColumnWidth(Self.sidePanelWidth)
+
+            VStack(spacing: 0) {
+                WebStage(viewModel: viewModel)
+
+                WebTimelineView(viewModel: viewModel)
+                    .padding(.horizontal, EditorTheme.largeSpacing)
+                    .padding(.top, EditorTheme.smallSpacing)
+                    .padding(.bottom, EditorTheme.spacing)
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(EditorTheme.hairline)
+                            .frame(height: 1)
+                    }
+            }
+        }
+        .inspector(isPresented: $viewModel.showsInspector) {
+            WebRecordingInspector(viewModel: viewModel)
+                .disabled(!viewModel.isEditable)
+                .inspectorColumnWidth(Self.panelWidth)
         }
 
         .toolbar {
             if agent != nil {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("AI Agent", systemImage: "sparkles") {
-                        viewModel.toggle(.agent)
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        withAnimation(reducesMotion ? EditorTheme.fadeMotion : EditorTheme.motion) {
+                            viewModel.showsAgent.toggle()
+                        }
+                    } label: {
+                        Label("AI Agent", image: "button-agent")
                     }
-                    .labelStyle(.titleAndIcon)
-                    .buttonStyle(.editorGhost)
-                    .background(viewModel.isShowing(.agent) ? EditorTheme.softHairline : .clear, in: .capsule)
-                    .help(viewModel.isShowing(.agent) ? "Hide the agent" : "Have a coding agent script and record this page")
+                    .buttonStyle(.editorSecondary)
+                    // The open panel beside it shows the state; a fill behind glass only muddied it
+                    .accessibilityAddTraits(viewModel.showsAgent ? .isSelected : [])
+                    .help(viewModel.showsAgent ? "Hide the agent" : "Have a coding agent script and record this page")
                 }
                 .hidingSharedBackground()
-                if #available(macOS 26, *) {
-                    ToolbarSpacer(.fixed, placement: .primaryAction)
-                }
             }
             ToolbarItem(placement: .primaryAction) {
-                Button("Render", systemImage: "film") {
+                Button {
                     viewModel.render()
+                } label: {
+                    Label("Render", image: "button-render")
                 }
-                .labelStyle(.titleAndIcon)
-                .buttonStyle(.editorAccent)
+                .buttonStyle(.editorPrimary)
                 .help("Render the script into a recording and open it in the editor")
                 // One render at a time: the agent's uses the same renderer
                 .disabled(!viewModel.canRender || agent?.isRunning == true)
@@ -73,16 +84,16 @@ struct WebRecordingView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Button("Inspector", systemImage: "sidebar.trailing") {
-                    viewModel.toggle(.inspector)
+                    viewModel.showsInspector.toggle()
                 }
-                .help(viewModel.isShowing(.inspector) ? "Hide the inspector" : "Show the inspector")
+                .help(viewModel.showsInspector ? "Hide the inspector" : "Show the inspector")
             }
         }
         // Filling the window, like the editor's root, so SwiftUI never fits the window down to it
-        .frame(minWidth: 900, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)
+        .frame(minWidth: viewModel.showsAgent ? 900 + Self.panelWidth : 900, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)
         .editorWindowBackground()
     }
 
-    /// Wide enough for the chat's messages and the inspector's controls.
-    private static let sidePanelWidth: CGFloat = 340
+    /// Wide enough for the chat's messages and the inspector's controls, and the editor's inspector's width.
+    private static let panelWidth: CGFloat = 340
 }

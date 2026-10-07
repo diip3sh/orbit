@@ -34,10 +34,17 @@ struct LibraryTests {
         #expect(LibraryItem.recordingKind(of: URL(filePath: "/r/Reco_2026.mov"), contentType: movie) == .recording)
         #expect(LibraryItem.recordingKind(of: URL(filePath: "/r/Reco_Web_2026.mov"), contentType: movie) == .webRecording)
         #expect(LibraryItem.recordingKind(of: URL(filePath: "/r/Reco_Web_2026-edited.mp4"), contentType: .mpeg4Movie) == .export)
+        #expect(LibraryItem.recordingKind(of: URL(filePath: "/r/Reco_Web_2026-edited.gif"), contentType: .gif) == .export)
+        #expect(LibraryItem.recordingKind(of: URL(filePath: "/r/Reco_2026.gif"), contentType: .gif) == nil)
         #expect(LibraryItem.recordingKind(of: URL(filePath: "/r/Reco.telemetry.json"), contentType: .json) == nil)
         #expect(LibraryItem.isScreenshot(URL(filePath: "/d/Reco_Screenshot_2026.png"), contentType: .png))
         #expect(!LibraryItem.isScreenshot(URL(filePath: "/d/Screenshot 2026.png"), contentType: .png))
         #expect(!LibraryItem.isScreenshot(URL(filePath: "/d/Reco_Screenshot_notes.txt"), contentType: .plainText))
+    }
+
+    @Test func aGIFExportOpensInTheViewerNotTheEditor() {
+        #expect(LibraryItem(url: URL(filePath: "/r/Reco-edited.gif"), kind: .export, date: .now).isMovie == false)
+        #expect(LibraryItem(url: URL(filePath: "/r/Reco-edited.mp4"), kind: .export, date: .now).isMovie)
     }
 
     @Test func aRecordingTakesItsSidecarsAlong() {

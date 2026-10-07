@@ -30,6 +30,10 @@ final class NotchShelfViewModel {
     /// The pointer is on the shelf
     private(set) var isHovering = false
 
+    /// Where the pointer is in the shelf's window (top-left origin), for the tiles' hover: SwiftUI's own
+    /// hover follows only the active app, and Reco seldom is one
+    var pointer: CGPoint?
+
     /// The collapsed shape grows a little while the pointer is on it, until it opens
     var isPeeking: Bool { isHovering && !isExpanded }
 
@@ -131,6 +135,7 @@ final class NotchShelfViewModel {
         closeTask = nil
         isHovering = false
         isExpanded = false
+        pointer = nil
     }
 
     // MARK: - Screenshots

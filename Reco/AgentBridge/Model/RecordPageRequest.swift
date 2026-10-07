@@ -25,8 +25,8 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         var start: Double?
         var duration: Double?
 
-        /// Hover, click and type only: how much the camera magnifies the element around the step.
-        var zoom: Double?
+        /// Hover, click and type only: a CSS selector for the element the video zooms on during the step.
+        var show: String?
 
         /// Type only: what to type into the field.
         var text: String?
@@ -34,7 +34,7 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         // swiftlint:disable:next nesting - the schema's key is y, too short a name for a property
         private enum CodingKeys: String, CodingKey {
             case offset = "y"
-            case action, selector, start, duration, zoom, text
+            case action, selector, start, duration, show, text
         }
     }
 
@@ -45,7 +45,8 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
     func plan() throws(AgentToolError) -> RecordPlan {
         let url = try Self.pageURL(url)
         let viewport = try Self.viewportSize(viewport)
-        let scale = scale ?? 2
+        // 1×, since a minute of a heavy page takes 15 minutes and more to render at 2×
+        let scale = scale ?? 1
         guard [1, 2].contains(scale) else { throw .invalidArgument("scale must be 1 or 2.") }
 
         var timed: [RecordPlan.TimedStep] = []
@@ -84,8 +85,8 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         case "hover", "click", "type":
             guard hasSelector else { throw .invalidArgument("\(name): \(step.action) needs a selector from inspect_page.") }
             guard step.offset == nil else { throw .invalidArgument("\(name): y is for scroll only.") }
-            if let zoom = step.zoom, !WebCamera.scaleRange.contains(zoom) {
-                throw .invalidArgument("\(name): zoom must be from \(WebCamera.scaleRange.lowerBound) to \(WebCamera.scaleRange.upperBound).")
+            if let show = step.show, show.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw .invalidArgument("\(name): show needs a selector from inspect_page.")
             }
             if step.action == "type" {
                 guard let text = step.text, !text.isEmpty, text.count <= Self.maximumTextLength else {
@@ -96,16 +97,16 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
             }
             action = PointerClip.Action(rawValue: step.action)
             minimum = PointerClip.minimumDuration
-            fallback = step.text.map(PointerClip.typingDuration(for:)) ?? PointerClip.defaultDuration
+            fallback = step.text.map(PointerClip.typingDuration(for:)) ?? RecordPlan.pointerDuration
         case "scroll":
             guard hasSelector != (step.offset != nil) else { throw .invalidArgument("\(name): scroll needs either a selector or y, not both.") }
             if let offset = step.offset, offset < 0 {
                 throw .invalidArgument("\(name): y must be 0 or more.")
             }
-            guard step.zoom == nil, step.text == nil else { throw .invalidArgument("\(name): zoom and text aren't for scroll.") }
+            guard step.show == nil, step.text == nil else { throw .invalidArgument("\(name): show and text aren't for scroll.") }
             action = nil
             minimum = ScrollClip.minimumDuration
-            fallback = ScrollClip.defaultDuration
+            fallback = RecordPlan.scrollDuration
         default:
             throw .invalidArgument("\(name): action must be hover, click, type or scroll.")
         }
@@ -116,7 +117,7 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         guard length >= minimum else { throw .invalidArgument("\(name): duration must be at least \(minimum) s.") }
         return RecordPlan.TimedStep(
             index: index, action: action, selector: hasSelector ? selector : nil, offset: step.offset, range: start..<start + length,
-            zoom: step.zoom, text: step.text
+            show: step.show?.trimmingCharacters(in: .whitespacesAndNewlines), text: step.text
         )
     }
 

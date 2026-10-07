@@ -29,7 +29,7 @@ struct PinView: View {
             .overlay { shape.strokeBorder(.white.opacity(0.15)) }
             .gesture(WindowDragGesture())
             .overlay(alignment: .topLeading) {
-                Button(action: close) { Label { Text("Close") } icon: { LineIcon(.iconsaxClose) } }
+                Button(action: close) { Label { Text("Close") } icon: { LineIcon(.hugeiconsCancel) } }
                     .labelStyle(.iconOnly)
                     .buttonStyle(CornerButtonStyle())
                     .help("Close")

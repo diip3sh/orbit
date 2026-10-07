@@ -82,11 +82,21 @@ final class EditorWindowManager: NSObject {
         let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel))
         // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
         hostingController.sizingOptions = .minSize
-        // The export and inspector buttons are SwiftUI toolbar items
+        // The name field, export and inspector buttons are SwiftUI toolbar items. The title isn't bridged: the
+        // window keeps it for the Window menu, hidden, since SwiftUI draws a bridged title whatever titleVisibility
+        // says, and removing it from its toolbar also took the space that holds the buttons at the trailing edge
         hostingController.sceneBridgingOptions = [.toolbars]
         let window = makeWindow(hostingController, title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1533, height: 943))
         window.representedURL = videoURL
+        window.titleVisibility = .hidden
         editors[videoURL] = Editor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
+        // A renamed recording is found, and reopened, under its new name
+        viewModel.onRename = { [weak self] old, new in
+            guard let self, let editor = editors.removeValue(forKey: old.standardizedFileURL) else { return }
+            editors[new.standardizedFileURL] = editor
+            editor.window.representedURL = new
+            editor.window.title = new.deletingPathExtension().lastPathComponent
+        }
 
         // A regular app gets a Dock icon, ⌘-Tab and the main menu with Undo and Redo
         NSApp.setActivationPolicy(.regular)
@@ -135,7 +145,7 @@ final class EditorWindowManager: NSObject {
         activate(webRecording.window)
     }
 
-    /// The Web Recording window on its agent chat, where Record with AI Agent… starts: a blank page and a
+    /// The Web Recording window with its agent panel open, where Record with AI Agent starts: a blank page and a
     /// new conversation, unless an agent is still running in it.
     func showAgentChat() {
         let webRecording = webRecording ?? makeWebRecording()
@@ -143,13 +153,14 @@ final class EditorWindowManager: NSObject {
             webRecording.viewModel.startNew()
             agentRecording?.startNewChat()
         }
-        webRecording.viewModel.show(.agent)
+        withMotion { webRecording.viewModel.showsAgent = true }
         activate(webRecording.window)
     }
 
     /// The Web Recording window with its last script, kept until it closes. Each render opens in the editor.
     private func makeWebRecording() -> WebRecording {
         let viewModel = WebRecordingViewModel(settings: settings) { [weak self] url in
+            self?.agentRecording?.didRender(url)
             self?.open(url)
         }
         let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel, agent: agentRecording))

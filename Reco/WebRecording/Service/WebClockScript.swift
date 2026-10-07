@@ -20,10 +20,14 @@ import Foundation
 ///   `animation-play-state`, holds its time.
 /// - A frame waits up to 5 s for the images in view and the fonts to load; what misses that isn't
 ///   waited for again.
+/// - A frame first waits, off the clock, for the page's `fetch` and `XMLHttpRequest` calls (and the
+///   bodies it reads) to be answered, so a slow API shows its answer at once instead of putting the take a
+///   step ahead of the page. Up to 5 s: a long poll or a stream isn't waited for again.
 /// - `window.__reco` holds what the renderer calls: `frame(time, x, y, selectors)` freezes
-///   the clock at the take's `time` on its first call, then steps it; it returns `null` while a new
-///   page is still loading. `hold(x, y)` seeks animations the pointer just started and names the
-///   cursor there.
+///   the clock at the take's `time` on its first call, then steps it, and returns the selectors'
+///   boxes and the page's height; it returns `null` while a new page is still loading.
+///   `hold(x, y, selector)` seeks animations the pointer just started, names the cursor there and,
+///   given the selector the cursor aims at, what covers its element at that point.
 enum WebClockScript {
 
     static let source = #"""
@@ -135,7 +139,33 @@ enum WebClockScript {
         }
       }
 
-      const settle = () => new Promise((resolve) => realFrame(() => realTimeout(resolve, 0)));
+      // Requests the page is waiting on. A frame waits off the clock until they're answered (or 5 s, after
+      // which those are forgotten), then the images their answers put in view load as above
+      const requests = new Set();
+      function track(promise) {
+        const token = {};
+        requests.add(token);
+        const done = () => requests.delete(token);
+        promise.then(done, done);
+        return promise;
+      }
+      const realFetch = window.fetch.bind(window);
+      window.fetch = (...args) => track(realFetch(...args));
+      for (const read of ['arrayBuffer', 'blob', 'formData', 'json', 'text']) {
+        const realRead = Response.prototype[read];
+        Response.prototype[read] = function () { return track(realRead.call(this)); };
+      }
+      const realSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function (...args) {
+        track(new Promise((resolve) => this.addEventListener('loadend', resolve, { once: true })));
+        return realSend.apply(this, args);
+      };
+      async function answerRequests() {
+        const deadline = realNow() + 5000;
+        while (requests.size && realNow() < deadline) await new Promise((resolve) => realTimeout(resolve, 10));
+        requests.clear();
+      }
+
       const inView = (element) => {
         const box = element.getBoundingClientRect();
         return box.width > 0 && box.bottom > 0 && box.right > 0 && box.top < innerHeight && box.left < innerWidth;
@@ -176,28 +206,41 @@ enum WebClockScript {
         return 'default';
       }
 
+      const find = (selector) => { try { return document.querySelector(selector); } catch { return null; } };
+      const describe = (element) => {
+        const name = element.localName + (element.id ? '#' + element.id : '') + [...element.classList].slice(0, 2).map((name) => '.' + name).join('');
+        const text = (element.getAttribute('aria-label') || element.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+        return text ? `${name} ("${text}")` : name;
+      };
+
       Object.defineProperty(window, '__reco', { value: {
         freeze(time) { if (base === null) base = now - time * 1000; },
         async frame(time, scrollX, scrollY, selectors) {
           if (base === null && document.readyState !== 'complete') return null;
           this.freeze(time);
           advance(base + time * 1000);
+          // No wait for a real frame: the snapshot that follows forces a rendering update, which runs
+          // the page's scroll handlers before it paints. Measured on apple.com at 2×, warm: 7 ms a frame
           window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
-          await settle();
+          await answerRequests();
           await loadInView();
           const boxes = {};
           for (const selector of selectors) {
-            let element = null;
-            try { element = document.querySelector(selector); } catch {}
+            const element = find(selector);
             // One that isn't rendered, e.g. display: none, has no box, so the cursor goes to the target's point
             const box = element?.getClientRects().length ? element.getBoundingClientRect() : null;
             boxes[selector] = box ? [box.x, box.y, box.width, box.height] : null;
           }
-          return boxes;
+          return { boxes, height: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0) };
         },
-        hold(x, y) {
+        hold(x, y, selector) {
           syncAnimations();
-          return x === null ? 'default' : cursorAt(x, y);
+          if (x === null) return { cursor: 'default', cover: null };
+          // What gets the pointer instead of the target, like a menu an earlier hover left open
+          const element = selector ? find(selector) : null;
+          const hit = element ? document.elementFromPoint(x, y) : null;
+          const cover = hit && !element.contains(hit) && !hit.contains(element) ? describe(hit) : null;
+          return { cursor: cursorAt(x, y), cover };
         }
       } });
     })();

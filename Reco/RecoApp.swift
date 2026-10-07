@@ -27,7 +27,6 @@ struct RecoApp: App {
                 editLastRecording: appDelegate.editLastRecording,
                 showLibrary: appDelegate.showLibrary,
                 showWebRecording: appDelegate.showWebRecording,
-                showAgentRecording: appDelegate.showAgentRecording,
                 agentRecording: appDelegate.agentRecording
             )
                 .task {

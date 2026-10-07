@@ -70,12 +70,12 @@ graph TD
 | `RenderPlan`          | Immutable, `Sendable` snapshot of everything needed to draw any frame, precomputed off the main actor.                                          |
 | `EditorCompositor`    | `AVVideoCompositing` implementation. Stateless: it draws whichever frame AVFoundation asks for with the plan from its instruction.              |
 | `FrameRenderer`       | Pure function `(source frame, time, plan) -> CIImage`. The single place where pixels are decided.                                               |
-| `ExportService`       | Runs `AVAssetExportSession` with the same composition, with progress and cancellation.                                                          |
+| `ExportService`       | Reads the same composition with an `AVAssetReader` and encodes it (HEVC, ProRes, GIF), with progress and cancellation.                                                          |
 
 
 ### Decisions
 
-1. **One render path.** Preview (`AVPlayerItem.videoComposition`) and export (`AVAssetExportSession.videoComposition`) use the same custom compositor and `FrameRenderer`. What you see is what you export - by construction, not by testing.
+1. **One render path.** Preview (`AVPlayerItem.videoComposition`) and export (`AVAssetReaderVideoCompositionOutput.videoComposition`) use the same custom compositor and `FrameRenderer`. What you see is what you export - by construction, not by testing.
 2. **Everything is precomputed; frames are stateless.** AVFoundation requests frames out of order (scrubbing) and in parallel (export). Springs, smoothing and auto-zoom are therefore integrated once, when the plan is built, into sampled tracks. Drawing a frame is lookups plus a small Core Image graph - no simulation state, no locks, no allocation of large buffers.
 3. **Effects live in source time.** Every time in the project (zoom segments, cuts) is seconds on the *original* video, which is also the telemetry's timeline. Only `TimeMap` knows about cuts; it maps output time to source time. Adding or moving a cut never invalidates an effect.
 4. **Non-destructive and sidecar-based.** The project is `<name>.edit.json` next to `<name>.mov` and `<name>.telemetry.json`. Deleting it resets the edit.
@@ -307,7 +307,7 @@ The core of the editor. After this phase, adding an effect means adding a precom
 - **Click highlights:** a ring or ripple at the mapped click location, animated by the time since the click. Style options: color, size, duration, left/right only.
 - **Keystroke overlay:** `KeyLabelFormatter` maps a key code to a label using the current keyboard layout (`UCKeyTranslate`), plus a fixed table for special keys (⏎ ⌫ ⇥ ⎋ arrows) and modifier glyphs (⌃⌥⇧⌘). Chips are rendered once per unique label and fade after a hold time. **Privacy default: shortcuts only** (keys pressed with ⌘/⌃/⌥, and special keys). Showing all keys is opt-in with a warning, since telemetry includes anything typed, passwords too.
 - An inspector (`.inspector`) with the style controls.
-- `ExportService`: `AVAssetExportSession` with `export(to:as:)` and `states(updateInterval:)` for progress, a codec preset (HEVC, H.264, ProRes 422) and cancellation. It writes `<name>-edited.<ext>` to the output folder and reveals it in Finder.
+- `ExportService`: first `AVAssetExportSession` presets (HEVC, H.264, ProRes 422), since 2026-10-07 a reader and writer (`MovieEncoder`, `GIFEncoder`) with progress from the last frame's time and cancellation. It writes `<name>-edited.<ext>` to the output folder and reveals it in Finder.
 
 **Done when**
 
@@ -325,7 +325,7 @@ The core of the editor. After this phase, adding an effect means adding a precom
 - One chip shows at a time: the latest press, held 1.5 s and fading over the last 0.3 s, or until the next press. Auto-repeats are skipped. The chip is 6% of the video's shorter side, centred at the bottom.
 - `KeyLabelFormatter` reads the layout on the main actor when the editor opens (Text Input Sources aren't safe off it); tests use the installed US layout (`com.apple.keylayout.US`) rather than a fixture file.
 - Inspector edits coalesce: the same control changed again within 1 s joins its undo step, which covers slider drags and the color panel alike.
-- HEVC and H.264 export to MP4, ProRes 422 to MOV. An earlier export with the same name is replaced; a cancelled or failed one leaves no file.
+- HEVC exports to MP4, ProRes to MOV and GIF to GIF (H.264 was dropped on 2026-10-07). An earlier export with the same name is replaced; a cancelled or failed one leaves no file.
 - Measured on an M1 (Debug build, synthetic 4K source with a ring and a chip): a frame renders in about 5 ms p50 and 8 ms p95, right at the budget, with color management off; converting every pixel to linear light and back took 10 and 13 ms. A plan for a 10-minute recording with 3,000 clicks and 12,000 keys builds in about 24 ms.
 - `AVAssetExportSession.export(to:as:)` is back-deployed below macOS 26, and its fallback body brought in a completion-handler thunk that collided with the one `AssetWriter`'s `await finishWriting()` used, crashing every stop. `AssetWriter` now finishes through an explicit continuation.
 - New shared helpers: `InputTelemetry.geometry(at:)` (the geometry entry in effect at a time) and `RandomAccessCollection.partitioningIndex(where:)`, the binary search every sorted-track lookup uses.
@@ -445,7 +445,7 @@ Needs Phase 0 data and recordings made with the cursor hidden (`cursorInVideo ==
 
 - New projects get a styled canvas: a gradient, 8% padding, corners 1.5% round and a shadow, each a share of the frame's shorter side. `CanvasStyle.plain` is the recording as it is.
 - The canvas keeps the video's shorter side (9:16 from 4K is 2160×3840). Export sizes are shorter sides (2160, 1440, 1080, 720, those smaller than the canvas's) and frame rates 60, 30 or 24 below the recording's. An export is drawn at its size (its own plan, `RenderTarget`), not scaled afterwards, so at the original size it matches the preview pixel for pixel.
-- No reader/writer path: the presets take the video composition's size and frame rate. Bitrate is still the presets' (see Risks).
+- No reader/writer path at first: the presets took the video composition's size and frame rate. Added on 2026-10-07 (see Risks).
 - Zoom and canvas placement are one transform, so the video is resampled once, and the cursor is drawn at its final scale.
 - Frames are drawn region by region into the output buffer (`FrameRenderer.draw`, `CanvasLayout.regions`): the padding from the backdrop alone, the video in 8 bands, and its rounded corners with the mask. Core Image evaluates every overlay across the whole region it renders; in bands it skips them where they aren't. Measured on an M1 in Debug, for a 4K frame with a ring and a chip under load (load average 4 to 6): 3 ms p50 plain, against 7 drawn whole, and 3.7 to 5 ms on the default canvas, against 9; p95 stays under 7.5 ms. This also halves Phase 2's plain render time.
 - The backdrop (background and shadow) is drawn once per plan into an IOSurface-backed buffer that frames read in place: 4 ms at 4K, 17 ms the first time. The shadow is blurred at an eighth of the size. Of the backdrops measured per frame, a gradient generated per frame cost as much and a half-size bitmap more.
@@ -471,7 +471,7 @@ Reco/Editor/
               AutoZoomGenerator, KeyLabelFormatter, BackgroundImageLoader, RecordingLibrary
   ViewModel/  EditorViewModel, PlaybackController, RecordingsViewModel
   View/       EditorWindowManager, EditorView, PlayerLayerView, EditorTimelineView, TrimHandle,
-              ZoomLane, ZoomFocusPad, TransportBar, EditorInspector, ExportSheet, RecordingsView,
+              ZoomLane, ZoomFocusPad, TransportBar, EditorInspector, ExportOptions, RecordingsView,
               RecordingTile
 ```
 
@@ -484,7 +484,7 @@ Phase 0 added `CursorKind` and `StandardCursors` next to the existing telemetry 
 - `NSCursor.currentSystem` **is on its way out.** It is to be deprecated (it will always be nil in a future macOS); it works in the sandbox today. The fallback is an arrow at the recorded positions, with smoothing, size and idle hiding still available. It is revisited on each macOS beta.
 - **A raw recording with the cursor hidden has no cursor.** That is intended, and the notification leads to the editor, but it has to be clear in the setting's description.
 - **Zoom quality** depends on the recording's resolution. It is mitigated by the native-resolution hint and not solved by upscaling.
-- **Export presets** don't expose bitrate. Phase 6 didn't need the reader/writer path; it stays the fallback if bitrate control is wanted.
+- **Export presets** don't expose bitrate or a ProRes flavour, so since 2026-10-07 the export is a reader and writer: the quality levels set the bitrate and the flavour, which is also what makes the estimated size honest. There is no longer an estimate-free export: the page shows the size each quality will have, and the real one once the file exists.
 - **Keyboard layout drift:** labels use the editing Mac's layout, not the recording Mac's. This is acceptable for v1; the input source ID could be added to telemetry if it matters.
 
 ## Open questions

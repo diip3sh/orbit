@@ -47,34 +47,38 @@ struct MenuBarDivider: View {
 
 // MARK: - Toggle Row
 
-/// A menu bar style toggle with a switch on the right side and hover effect
+/// A menu bar style toggle with a switch on the right side. The whole row flips it, like Control Center's; it has
+/// no hover highlight, and the switch's own motion answers the click.
 struct MenuBarToggle: View {
     let name: String
     @Binding var isOn: Bool
     var isDisabled: Bool = false
-    @State private var isHovered = false
     /// Off while the popover's settings are locked, from the countdown until the file is saved
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
-        HStack {
-            Text(name)
-                .font(.body.weight(.medium))
-                .foregroundStyle(isDisabled || !isEnabled ? .secondary : .primary)
-            Spacer()
-            Toggle("", isOn: $isOn)
-                .toggleStyle(.switch)
-                .scaleEffect(0.8)
-                .disabled(isDisabled)
+        Button {
+            isOn.toggle()
+        } label: {
+            HStack {
+                Text(name)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(isDisabled || !isEnabled ? .secondary : .primary)
+                Spacer()
+                Toggle("", isOn: $isOn)
+                    .toggleStyle(.switch)
+                    .scaleEffect(0.8)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .contentShape(.rect)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .contentShape(.rect)
-        .background(MenuRowHighlight(opacity: isHovered && !isDisabled && isEnabled ? 0.1 : 0))
-        .onHover { hovering in
-            isHovered = hovering
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        // One switch to VoiceOver, not a button around a switch
+        .accessibilityRepresentation {
+            Toggle(name, isOn: $isOn)
         }
-        .editorMotion(EditorTheme.quickMotion, value: isHovered)
     }
 }
 

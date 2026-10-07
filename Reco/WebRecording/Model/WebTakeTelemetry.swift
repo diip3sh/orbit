@@ -7,7 +7,7 @@ import CoreGraphics
 import Foundation
 
 /// A web take's telemetry, recorded frame by frame as it renders: the cursor where it moved, the
-/// clicks, and the cursor's shape where it changed.
+/// clicks, the scrolling, the pages a click opened, and the cursor's shape where it changed.
 ///
 /// Locations are viewport CSS pixels. The one ``InputTelemetry/Geometry`` entry maps them into the
 /// video by the script's scale.
@@ -29,8 +29,13 @@ nonisolated struct WebTakeTelemetry: Sendable {
     }
 
     /// Records one frame at `time`: where the cursor is, if anywhere, the presses and releases
-    /// delivered with it, and the cursor's shape, `nil` for the arrow.
-    mutating func record(time: Double, cursor location: CGPoint?, presses: [WebScript.Press], shape: CursorKind?) {
+    /// delivered with it, the cursor's shape, `nil` for the arrow, and how far the page scrolled since
+    /// the last frame, as a wheel would report it (negative going down the page).
+    mutating func record(time: Double, cursor location: CGPoint?, presses: [WebScript.Press], shape: CursorKind?, scrolled: CGVector = .zero) {
+        if scrolled != .zero {
+            let viewport = telemetry.geometry[0].contentRect
+            telemetry.scrolls.append(.init(time: time, location: location ?? CGPoint(x: viewport.midX, y: viewport.midY), delta: scrolled))
+        }
         guard let location else { return }
         if telemetry.cursor.last?.location != location {
             telemetry.cursor.append(.init(time: time, location: location))
@@ -46,6 +51,11 @@ nonisolated struct WebTakeTelemetry: Sendable {
         if telemetry.cursorShapes.last?.sprite != sprite {
             telemetry.cursorShapes.append(.init(time: time, sprite: sprite))
         }
+    }
+
+    /// Records that the page at `url` replaced the one before at `time`.
+    mutating func navigated(to url: URL, at time: Double) {
+        telemetry.navigations.append(.init(time: time, url: url.absoluteString))
     }
 
     /// The finished telemetry, with each kind's sprite from `sprite(kind, id)`.

@@ -12,6 +12,9 @@ struct SegmentedChoice<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, title: String)]
 
+    /// Whether an option can be chosen; one that can't is dimmed.
+    var isEnabled: (Value) -> Bool = { _ in true }
+
     @Namespace private var highlight
 
     var body: some View {
@@ -39,6 +42,8 @@ struct SegmentedChoice<Value: Hashable>: View {
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+                .disabled(!isEnabled(option.value))
+                .opacity(isEnabled(option.value) ? 1 : 0.4)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }

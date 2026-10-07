@@ -318,13 +318,13 @@ struct NotchShelfViewModelTests {
         #expect(notch.bottom == 14)
     }
 
-    @Test func theNotchSettingIsOnUnlessTurnedOff() {
+    @Test func theNotchSettingIsOffUnlessTurnedOn() {
         let defaults = TemporaryDefaults()
         let suite = defaults.make()
         let settings = SettingsStore(defaults: suite)
-        #expect(settings.showsScreenshotsInNotch)
+        #expect(!settings.showsScreenshotsInNotch)
 
-        settings.showsScreenshotsInNotch = false
-        #expect(!SettingsStore(defaults: suite).showsScreenshotsInNotch)
+        settings.showsScreenshotsInNotch = true
+        #expect(SettingsStore(defaults: suite).showsScreenshotsInNotch)
     }
 }

@@ -42,6 +42,9 @@ nonisolated struct InputTelemetry: Codable, Equatable, Sendable {
     /// The cursor's appearance, recorded whenever it changed. Each entry applies until the next.
     var cursorShapes: [CursorShape] = []
 
+    /// When a web take's page was replaced by another, e.g. by a click on a link (spec 0009).
+    var navigations: [Navigation] = []
+
     // MARK: - Types
 
     /// What kind of content ``Capture`` describes.
@@ -149,6 +152,12 @@ nonisolated struct InputTelemetry: Codable, Equatable, Sendable {
     nonisolated struct CursorShape: Codable, Equatable, Sendable {
         var time: Double
         var sprite: Int
+    }
+
+    /// A new page, at its address.
+    nonisolated struct Navigation: Codable, Equatable, Sendable {
+        var time: Double
+        var url: String
     }
 
     // MARK: - Conversion
@@ -311,6 +320,7 @@ extension InputTelemetry {
         keys = try container.decode([Key].self, forKey: .keys)
         cursorSprites = try container.decodeIfPresent([CursorSprite].self, forKey: .cursorSprites) ?? []
         cursorShapes = try container.decodeIfPresent([CursorShape].self, forKey: .cursorShapes) ?? []
+        navigations = try container.decodeIfPresent([Navigation].self, forKey: .navigations) ?? []
     }
 }
 

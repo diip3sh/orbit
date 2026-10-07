@@ -14,7 +14,8 @@ import OSLog
 @Observable
 final class EditorViewModel {
 
-    let videoURL: URL
+    /// Changes only when ``rename(to:)`` moves the recording.
+    var videoURL: URL
     let playback = PlaybackController()
 
     /// The window's undo manager. ``EditorWindowManager`` hands it to AppKit, so ⌘Z and ⇧⌘Z reach it.
@@ -41,7 +42,7 @@ final class EditorViewModel {
 
     /// The project as last read from or written to disk.
     @ObservationIgnored private var savedProject = EditorProject()
-    @ObservationIgnored private var autosave: Task<Void, Never>?
+    @ObservationIgnored private(set) var autosave: Task<Void, Never>?
 
     /// What the player shows and export writes. Behind the project while a rebuild runs.
     @ObservationIgnored private var plan: RenderPlan?
@@ -58,6 +59,9 @@ final class EditorViewModel {
     /// Which edits share an undo step.
     @ObservationIgnored private var coalescedEdits = EditCoalescing()
 
+    /// Told after a rename moved the recording, so the window follows it.
+    @ObservationIgnored var onRename: ((_ old: URL, _ new: URL) -> Void)?
+
     /// How long edits must settle before they are saved.
     private static let autosaveDelay = Duration.seconds(1)
 
@@ -67,9 +71,10 @@ final class EditorViewModel {
         self.videoURL = videoURL
     }
 
-    /// Loads the recording and its project; the window shows a placeholder meanwhile.
-    func load() async {
-        guard source == nil else { return }
+    /// Loads the recording and its project; the window shows a placeholder meanwhile. With `time`, loads
+    /// again (its files moved) and shows source time `time`.
+    func load(reloadingAt time: Double? = nil) async {
+        guard source == nil || time != nil else { return }
         let source: EditorSource
         let project: EditorProject
         do {
@@ -110,7 +115,7 @@ final class EditorViewModel {
         savedProject = project
         markers = source.telemetry.map(TimelineMarkers.init)
         updateTimeline()
-        show(composition, plan: plan, atSource: 0)
+        show(composition, plan: plan, atSource: time ?? 0)
         if project.canvas.imageBookmark != nil, resources.background == nil {
             fail(.unreadableBackground)
         }
@@ -190,27 +195,39 @@ final class EditorViewModel {
         set { edit("Audio", coalescing: true) { $0.audio = newValue } }
     }
 
-    /// The exported frame's size for a shorter side of `resolution` pixels, or the canvas's own.
+    /// The exported frame's size for a shorter side of `resolution` pixels, or the one that keeps the video's
+    /// own pixels.
     func exportSize(resolution: Int?) -> CGSize {
         guard let source else { return .zero }
-        return CanvasLayout.size(for: source.naturalSize, aspect: project.canvas.aspect, shorterSide: resolution.map { CGFloat($0) })
+        return CanvasLayout.size(
+            for: source.naturalSize, aspect: project.canvas.aspect, padding: project.canvas.padding,
+            shorterSide: exportShorterSide(resolution)
+        )
     }
 
-    /// Exports the edited video as `<name>-edited` next to the recording and returns where, or `nil`
-    /// while the recording isn't loaded. Cancelling the calling task cancels the export.
-    func export(_ settings: ExportSettings) async throws -> URL? {
+    private func exportShorterSide(_ resolution: Int?) -> CGFloat? {
+        guard let source else { return nil }
+        return resolution.map { CGFloat($0) }
+            ?? CanvasLayout.nativeShorterSide(for: source.naturalSize, aspect: project.canvas.aspect, padding: project.canvas.padding)
+    }
+
+    /// Exports the edited video as `<name>-edited` to `destination` and returns where, or `nil` while the
+    /// recording isn't loaded. Cancelling the calling task cancels the export.
+    func export(_ settings: ExportSettings, to destination: ExportDestination = .recordingFolder) async throws -> URL? {
         await rebuild?.value
         guard let source, var composition else { return nil }
         // Drawn at the export's size, frame rate and dynamic range; otherwise the same as the preview
-        let target = RenderTarget(shorterSide: settings.resolution.map { CGFloat($0) }, keepsHDR: settings.format.keepsHDR)
+        let target = RenderTarget(shorterSide: exportShorterSide(settings.resolution), keepsHDR: settings.keepsHDR)
         let plan = await RenderPlan.build(project: project, source: source, resources: resources, target: target)
-        composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan, frameRate: settings.frameRate.map { Double($0) })
-        let url = settings.format.outputURL(for: videoURL)
+        composition.videoComposition = CompositionBuilder.videoComposition(
+            for: source, plan: plan, frameRate: settings.outputFrameRate(recordingRate: source.frameRate)
+        )
+        let url = destination.outputURL(for: videoURL, format: settings.format)
         exportProgress = 0
         defer { exportProgress = nil }
 
         do {
-            try await ExportService.export(composition, to: url, as: settings.format) { [weak self] in
+            try await ExportService.export(composition, to: url, as: settings) { [weak self] in
                 self?.exportProgress = $0
             }
         } catch {
@@ -227,9 +244,7 @@ final class EditorViewModel {
         rebuild?.cancel()
         playback.release()
         thumbnails = []
-        autosave?.cancel()
-        await autosave?.value
-        await save()
+        await flushSave()
     }
 
     // MARK: - Private
@@ -331,7 +346,7 @@ final class EditorViewModel {
         }
     }
 
-    private func save() async {
+    func save() async {
         guard project != savedProject else { return }
         let project = project
         do {
@@ -342,7 +357,7 @@ final class EditorViewModel {
         }
     }
 
-    private func fail(_ error: EditorError) {
+    func fail(_ error: EditorError) {
         logger.error("\(self.videoURL.lastPathComponent): \(error.localizedDescription)")
         self.error = error
     }

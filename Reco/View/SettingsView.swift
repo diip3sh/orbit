@@ -50,8 +50,8 @@ struct ShortcutsSettingsView: View {
     var body: some View {
         Form {
             Section("Capture Toolbar") {
-                KeyboardShortcuts.Recorder("Take Screenshot…", name: .showScreenshotToolbar)
-                KeyboardShortcuts.Recorder("Record Screen…", name: .showRecordingToolbar)
+                KeyboardShortcuts.Recorder("Screenshot", name: .showScreenshotToolbar)
+                KeyboardShortcuts.Recorder("Record", name: .showRecordingToolbar)
             }
 
             Section("Recording") {

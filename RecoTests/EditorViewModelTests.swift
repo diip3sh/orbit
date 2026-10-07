@@ -237,4 +237,52 @@ struct EditorViewModelTests {
 
         #expect(!viewModel.undoManager.canUndo)
     }
+
+    @Test func renamingMovesTheFilesAndReopensTheRecording() async throws {
+        let video = try await writeRecording()
+        let folder = video.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let viewModel = EditorViewModel(videoURL: video)
+        await viewModel.load()
+        var renamed: (old: URL, new: URL)?
+        viewModel.onRename = { renamed = ($0, $1) }
+        viewModel.edit("Cut") { $0.cuts = [0.5..<1] }
+
+        await viewModel.rename(to: "Demo")
+
+        let new = folder.appending(path: "Demo.mov")
+        #expect(viewModel.videoURL == new)
+        #expect(renamed?.old == video && renamed?.new == new)
+        #expect(viewModel.error == nil)
+        #expect(viewModel.source != nil)
+        // The pending edit was saved first, to the project that moved with the movie
+        #expect(!FileManager.default.fileExists(atPath: video.path()))
+        #expect(try await ProjectStore.read(for: new)?.cuts == [0.5..<1])
+        #expect(viewModel.project.cuts == [0.5..<1])
+    }
+
+    @Test func aRefusedNameChangesNothingAndSaysWhy() async throws {
+        let video = try await writeRecording()
+        defer { try? FileManager.default.removeItem(at: video.deletingLastPathComponent()) }
+        let viewModel = EditorViewModel(videoURL: video)
+        await viewModel.load()
+
+        await viewModel.rename(to: "Demo-edited")
+
+        #expect(viewModel.videoURL == video)
+        #expect(viewModel.error != nil)
+        #expect(FileManager.default.fileExists(atPath: video.path()))
+    }
+
+    @Test func renamingToTheSameNameDoesNothing() async throws {
+        let video = try await writeRecording()
+        defer { try? FileManager.default.removeItem(at: video.deletingLastPathComponent()) }
+        let viewModel = EditorViewModel(videoURL: video)
+        await viewModel.load()
+
+        await viewModel.rename(to: " recording ")
+
+        #expect(viewModel.videoURL == video)
+        #expect(viewModel.error == nil)
+    }
 }

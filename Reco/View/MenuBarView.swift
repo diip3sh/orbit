@@ -16,7 +16,6 @@ struct MenuBarView: View {
     let editLastRecording: () -> Void
     let showLibrary: () -> Void
     let showWebRecording: () -> Void
-    let showAgentRecording: () -> Void
     let agentRecording: AgentRecordingViewModel
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
@@ -43,39 +42,63 @@ struct MenuBarView: View {
                 MenuBarDivider()
             }
 
-            // Saving; the take's controls, and choosing what to capture, are on the capture toolbar
-            if viewModel.state == .stopping {
-                // Finishing the file takes a moment; nothing can start meanwhile
-                HStack(spacing: EditorTheme.mediumSpacing) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .frame(width: 20)
-                    Text("Saving Recording…")
-                        .foregroundStyle(.secondary)
-                    Spacer()
+            // The ways in first; saving, the take's controls and choosing what to capture are on the capture toolbar
+            VStack(spacing: 0) {
+                if viewModel.state == .stopping {
+                    // Finishing the file takes a moment; nothing can start meanwhile
+                    HStack(spacing: EditorTheme.mediumSpacing) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 20)
+                        Text("Saving Recording…")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, EditorTheme.mediumSpacing)
+                    .padding(.vertical, EditorTheme.smallSpacing)
+                } else if viewModel.state == .idle {
+                    MenuBarActionButton(
+                        title: "Screenshot", systemImage: "camera.viewfinder", isDisabled: viewModel.countdown.isRunning,
+                        shortcut: .showScreenshotToolbar
+                    ) {
+                        dismiss()
+                        showScreenshotToolbar()
+                    }
+                    MenuBarActionButton(
+                        title: "Record", systemImage: "record.circle", isDisabled: viewModel.countdown.isRunning,
+                        shortcut: .showRecordingToolbar
+                    ) {
+                        dismiss()
+                        showRecordingToolbar()
+                    }
                 }
-                .padding(.horizontal, EditorTheme.mediumSpacing)
-                .padding(.vertical, EditorTheme.smallSpacing)
-                .padding(.top, EditorTheme.smallSpacing)
-            } else if viewModel.state == .idle {
-                MenuBarActionButton(
-                    title: "Take Screenshot…", systemImage: "camera.viewfinder", isDisabled: viewModel.countdown.isRunning,
-                    shortcut: .showScreenshotToolbar
-                ) {
+
+                MenuBarActionButton(title: "Product Record", systemImage: "globe") {
+                    showWebRecording()
                     dismiss()
-                    showScreenshotToolbar()
                 }
-                .padding(.top, 8)
-                MenuBarActionButton(
-                    title: "Record Screen…", systemImage: "record.circle", isDisabled: viewModel.countdown.isRunning,
-                    shortcut: .showRecordingToolbar
-                ) {
+
+                MenuBarActionButton(title: "Library", systemImage: "square.grid.2x2") {
+                    showLibrary()
                     dismiss()
-                    showRecordingToolbar()
+                }
+
+                if viewModel.lastRecordingURL != nil {
+                    MenuBarActionButton(title: "Edit Last Recording", systemImage: "film") {
+                        editLastRecording()
+                        dismiss()
+                    }
+                }
+
+                if agentRecording.isRunning {
+                    MenuBarActionButton(title: "Cancel Agent Recording", systemImage: "xmark.circle") {
+                        agentRecording.cancel()
+                    }
                 }
             }
+            .padding(.top, 8)
 
-            // What each take captures; video formats and the content filter are in Settings → Video
+            // What each take captures (it opens with its own divider); video formats and the content filter are in Settings → Video
             CaptureSettingsSection(
                 settings: viewModel.settings,
                 audioDeviceService: viewModel.audioDeviceService,
@@ -84,37 +107,6 @@ struct MenuBarView: View {
             )
             // Fixed from the countdown until the file is saved
             .disabled(viewModel.state != .idle || viewModel.countdown.isRunning)
-
-            MenuBarDivider()
-
-            // Bottom Actions
-            if viewModel.lastRecordingURL != nil {
-                MenuBarActionButton(title: "Edit Last Recording", systemImage: "film") {
-                    editLastRecording()
-                    dismiss()
-                }
-            }
-
-            MenuBarActionButton(title: "Library…", systemImage: "square.grid.2x2") {
-                showLibrary()
-                dismiss()
-            }
-
-            MenuBarActionButton(title: "New Web Recording…", systemImage: "globe") {
-                showWebRecording()
-                dismiss()
-            }
-
-            if agentRecording.isRunning {
-                MenuBarActionButton(title: "Cancel Agent Recording", systemImage: "xmark.circle") {
-                    agentRecording.cancel()
-                }
-            } else {
-                MenuBarActionButton(title: "Record with AI Agent…", systemImage: "sparkles", shortcut: .recordWithAgent) {
-                    showAgentRecording()
-                    dismiss()
-                }
-            }
 
             MenuBarDivider()
 
@@ -128,7 +120,7 @@ struct MenuBarView: View {
             }
             .padding(.bottom, 8)
         }
-        .frame(width: 320)
+        .frame(width: 288)
         .background(.ultraThinMaterial)
     }
 }
@@ -253,7 +245,6 @@ struct PermissionRow: View {
         editLastRecording: {},
         showLibrary: {},
         showWebRecording: {},
-        showAgentRecording: {},
         agentRecording: AgentRecordingViewModel(
             tools: AgentTools(settings: SettingsStore()) { _ in },
             reportFailure: { _ in },
