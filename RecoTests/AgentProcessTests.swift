@@ -40,7 +40,8 @@ struct AgentProcessTests {
         let result = await run("/bin/sleep", ["30"], timeout: .seconds(1))
 
         #expect(result.end == .timedOut)
-        #expect(start.duration(to: .now) < .seconds(4))
+        // Well under the 30 s sleep: a busy CI runner took 6.5 s once
+        #expect(start.duration(to: .now) < .seconds(15))
     }
 
     @Test func cancellingTheTaskStopsTheProcess() async throws {
@@ -52,7 +53,8 @@ struct AgentProcessTests {
         let result = await task.value
 
         #expect(result.end == .cancelled)
-        #expect(start.duration(to: .now) < .seconds(4))
+        // Well under the 30 s sleep: a busy CI runner took 6.5 s once
+        #expect(start.duration(to: .now) < .seconds(15))
     }
 
     @Test func aMissingExecutableIsALaunchFailure() async {
@@ -68,12 +70,12 @@ struct AgentProcessTests {
     @Test func aProcessLeftRunningDoesntHoldTheResultBack() async {
         let start = ContinuousClock.now
 
-        // The background sleep keeps the output pipe open for 3 s
-        let result = await run("/bin/sh", ["-c", "sleep 3 & echo hi"])
+        // The background sleep keeps the output pipe open for 10 s; the bound leaves room for a busy CI runner
+        let result = await run("/bin/sh", ["-c", "sleep 10 & echo hi"])
 
         #expect(result.end == .exited(0))
         #expect(result.stdout == "hi\n")
-        #expect(start.duration(to: .now) < .seconds(2))
+        #expect(start.duration(to: .now) < .seconds(5))
     }
 
     @Test func onlyTheEndOfALongOutputIsKept() async {

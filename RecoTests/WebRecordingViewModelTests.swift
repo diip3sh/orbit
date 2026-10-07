@@ -202,7 +202,8 @@ struct WebRecordingViewModelTests {
         let started = ContinuousClock.now
         viewModel.togglePlayback()
         // Playing from the start may load the page first, which takes as long as WebKit and the machine do
-        let deadline = started + .seconds(10)
+        // (on the 3-core CI runner, with every other suite running, it took over 10 s once)
+        let deadline = started + .seconds(30)
         while viewModel.playhead < 0.2, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(50))
         }

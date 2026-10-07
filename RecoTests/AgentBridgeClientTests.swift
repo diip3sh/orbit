@@ -68,8 +68,10 @@ struct AgentBridgeClientTests {
             }
             return []
         }
+        // The host's server runs on its main actor, which other suites keep busy: on the 3-core CI runner, with
+        // the whole suite running, the listing took over 20 s in two of three runs
         let watchdog = Task {
-            try await Task.sleep(for: .seconds(20))
+            try await Task.sleep(for: .seconds(60))
             process.terminate()
         }
         let names = try await listing.value
