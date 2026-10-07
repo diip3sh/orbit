@@ -51,7 +51,10 @@ enum UILiftScript {
     /// No ancestor is hidden: under `body * { visibility: hidden }` WebKit left out supabase.com's
     /// code card's own background though it computed as visible, so the elements beside the path
     /// from the root are hidden instead, and the path's own paint made transparent. A
-    /// `backdrop-filter` is turned off: with the page hidden it has nothing to blur.
+    /// `backdrop-filter` is turned off: with the page hidden it has nothing to blur. Inside the
+    /// element, a layer with one and nothing of its own to show is hidden: linear.app fades its
+    /// issue list out with a stack of them (a progressive blur), and turned off, their tints drew
+    /// as stepped bands across the list's right and bottom.
     static let isolate = #"""
     let style = document.getElementById('__reco_lift');
     if (!style) {
@@ -59,21 +62,30 @@ enum UILiftScript {
       style.id = '__reco_lift';
       document.documentElement.appendChild(style);
     }
-    document.querySelectorAll('[data-reco-lift], [data-reco-lift-path]').forEach(node => {
+    document.querySelectorAll('[data-reco-lift], [data-reco-lift-path], [data-reco-lift-veil]').forEach(node => {
       node.removeAttribute('data-reco-lift');
       node.removeAttribute('data-reco-lift-path');
+      node.removeAttribute('data-reco-lift-veil');
     });
     style.textContent = '';
     const element = on ? document.querySelector(selector) : null;
     if (element) {
       element.setAttribute('data-reco-lift', '');
+      for (const node of element.querySelectorAll('*')) {
+        const computed = getComputedStyle(node);
+        const filter = computed.backdropFilter || computed.webkitBackdropFilter || 'none';
+        if (filter !== 'none' && !node.innerText?.trim() && !node.querySelector('img, svg, video, canvas, picture')) {
+          node.setAttribute('data-reco-lift-veil', '');
+        }
+      }
       for (let node = element.parentElement; node; node = node.parentElement) node.setAttribute('data-reco-lift-path', '');
       style.textContent = `[data-reco-lift-path] { background: transparent !important; border-color: transparent !important;
           box-shadow: none !important; outline: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
         [data-reco-lift-path] > :not([data-reco-lift-path], [data-reco-lift]), [data-reco-lift-path]::before, [data-reco-lift-path]::after {
           visibility: hidden !important; }
         ${fill ? `[data-reco-lift] { background-color: ${fill} !important; }` : ''}
-        [data-reco-lift], [data-reco-lift] * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }`;
+        [data-reco-lift], [data-reco-lift] * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+        [data-reco-lift-veil] { visibility: hidden !important; }`;
     }
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     return true;

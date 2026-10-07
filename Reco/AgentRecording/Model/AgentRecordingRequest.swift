@@ -6,11 +6,20 @@
 import Foundation
 
 /// What the user asked a coding agent to record: from the Record with AI Agent panel (spec 0007),
-/// or from the agent chat of a web take in the editor, to record it again with changes (spec 0008).
+/// or from the agent chat of a web take in the editor, to record it again with changes (spec 0008),
+/// or of a motion video's window, to change it (spec 0011).
 nonisolated struct AgentRecordingRequest: Equatable, Sendable {
     var url: URL
     var instructions: String
     var agent: AgentKind
+
+    /// What the panel makes: a launch video (a motion video of the product's real UI) or a walkthrough.
+    var mode = Mode.walkthrough
+
+    nonisolated enum Mode: String, CaseIterable, Sendable {
+        case launch
+        case walkthrough
+    }
 
     /// The model to use, or `nil` for the agent's own default.
     var model: String?
@@ -18,8 +27,28 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
     /// The take the chat asks to change, or `nil` for a new one.
     var take: Take?
 
+    /// The motion video the chat asks to change, or `nil`.
+    var motion: MotionVideo?
+
     /// The conversation before these instructions, oldest first.
     var conversation: [AgentChatMessage] = []
+
+    /// A motion video to change, and what the user has selected in its window: what "this" means.
+    nonisolated struct MotionVideo: Equatable, Sendable {
+        var bundle: URL
+        var scene: String?
+        var layer: String?
+    }
+
+    /// The file a chat's run is about: the take or the motion video.
+    var subject: URL? {
+        motion?.bundle ?? take?.movie
+    }
+
+    /// How long a run may take: a launch video's captures and checks come on top of the agent's turns.
+    var timeLimit: Duration {
+        mode == .launch && take == nil && motion == nil ? .seconds(20 * 60) : AgentRunOutcome.timeLimit
+    }
 
     /// A take to record again: its movie, and the `record_page` arguments that record it as it is.
     nonisolated struct Take: Equatable, Sendable {
@@ -54,14 +83,61 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         the navigation.
         """
 
+    /// What a launch video shows when the user said nothing.
+    static let defaultLaunchInstructions = "No instructions: a 20 to 40 s launch video of the product."
+
+    /// What the video shows when the user said nothing, for this request's mode.
+    var defaultInstructions: String {
+        mode == .launch && take == nil ? Self.defaultLaunchInstructions : Self.defaultInstructions
+    }
+
+    /// How a launch video is made (spec 0011, *Agent*): doctrine, not quotas. It says what good looks
+    /// like and forbids the tells; it never asks for a number of elements.
+    static let launchPlaybook = """
+        How to make it:
+        1. Research. Call inspect_page on the page and on the two to four pages its product or features navigation links to; if \
+        you have web search or fetch, read what the product says about itself. Write the pitch in one sentence: what it is, for \
+        whom, and what's new (the user's line first, if they gave one).
+        2. Script. A hook over the product in the first 3 s, six words at most, never a logo intro. Then four to six beats from the \
+        shot catalogue, each one idea: the product itself early (uiHero), its two or three strongest features shown on their real \
+        UI (uiFocus with a region, featureSequence, uiCascade), and an endCard with the name or logo and the address or call to \
+        action. At least half the time shows the product. 20 to 40 s in all. Copy is the product's own words, a few words a line: \
+        no hype words (revolutionary, seamless, unlock, supercharge), no exclamation marks, no questions to the viewer.
+        3. Style from inspect_page's brand: canvas background, style text, dim and accent, face. Pacing driftAndCut for calm, \
+        precise products; beats for playful, fast ones. Seams: cut most of the time, zoomThrough or cutOnMotion where the motion \
+        carries on, fade at most once.
+        4. UI. Assets from inspect_page's liftable on the pages you inspected: product screenshots, app mockups and feature \
+        cards, the largest that show the product; never a block of marketing text. Hide the page's overlays that cover them. \
+        Write the video with edit_motion (a name, the style, the assets, the scenes), then capture_ui; fix an asset it can't \
+        capture with set_asset, or drop it.
+        5. Check. Call preview_motion and look at the picture: cut-off or overlapping text, an empty or wrong element, a frame \
+        that says nothing. Fix it and the findings with edit_motion, then preview again; stop after three previews.
+        6. Export with export_recording: the bundle, format h264, resolution 2160 (sharp 4K: the video is drawn, not scaled).
+        """
+
+    /// How a motion video is changed from its window's chat.
+    static let motionChangePlaybook = """
+        First call edit_motion on this bundle with no operations: it describes the video, its scenes, layer ids and moves. Then \
+        change only what the user asks and keep everything else; set_moves replaces a layer's moves, so copy the ones you keep \
+        from the reply. "Slower" \
+        means about 1.5 times as long, "faster" about two thirds; frames are 1/frame_rate s. Then call preview_motion once to \
+        check it. Don't export.
+        """
+
     /// How a video is recorded again with a change (spec 0008).
     static let changePlaybook = """
         Record the whole video again with record_page, changing only what the user asks and keeping the other steps; reuse \
         their selectors, and call inspect_page first only for elements they don't cover.
         """
 
-    /// The task for the agent. It starts with "Record" so a command line can't read it as a flag.
+    /// The task for the agent. It starts with a word so a command line can't read it as a flag.
     var prompt: String {
+        if let motion {
+            return motionPrompt(motion)
+        }
+        if mode == .launch, take == nil {
+            return launchPrompt
+        }
         let wanted = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
         var parts = ["Record a video of this web page with Reco: \(url.absoluteString)"]
         if let take {
@@ -77,6 +153,39 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
             decide yourself. If the result has warnings, fix those steps and record once more, but only once: then stop and report, \
             whatever the second result says. When it's done, reply in one or two short sentences saying what the video \
             shows\(take == nil ? "" : " and what changed"), without paths or selectors. If it fails, reply with the error.
+            """)
+        return parts.joined(separator: "\n\n")
+    }
+
+    private var launchPrompt: String {
+        let wanted = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        return [
+            "Make a launch video of this product with Reco: \(url.absoluteString)",
+            "What the user said:\n" + (wanted.isEmpty ? Self.defaultLaunchInstructions : wanted),
+            Self.launchPlaybook,
+            """
+            Use only the reco MCP tools (web search and fetch are for research). Don't ask questions; decide yourself. When it's \
+            exported, reply in one or two short sentences with the pitch and what the video shows, without paths or selectors. \
+            If it fails, reply with the error.
+            """
+        ].joined(separator: "\n\n")
+    }
+
+    private func motionPrompt(_ motion: MotionVideo) -> String {
+        let wanted = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        var parts = ["Change this motion video with Reco's edit_motion tool: \(motion.bundle.path(percentEncoded: false))"]
+        if let scene = motion.scene {
+            let layer = motion.layer.map { ", layer \"\($0)\"" } ?? ""
+            parts.append("The user has scene \"\(scene)\"\(layer) selected: \"this\" or \"it\" means that.")
+        }
+        if !conversation.isEmpty {
+            parts.append("The conversation so far:\n" + conversation.map(Self.line).joined(separator: "\n"))
+        }
+        parts.append("What the user asks now:\n" + wanted)
+        parts.append(Self.motionChangePlaybook)
+        parts.append("""
+            Use only the reco MCP tools. Don't ask questions; decide yourself. When it's done, reply in one or two short sentences \
+            saying what changed, without paths. If it fails, reply with the error.
             """)
         return parts.joined(separator: "\n\n")
     }

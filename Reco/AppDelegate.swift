@@ -54,6 +54,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.notificationService.retryAgentRecording = { [agentRecording] in agentRecording.retry() }
         agentRecording.onRecorded = { [editorWindows] in editorWindows.open($0) }
         agentRecording.onSignIn = { [editorWindows] in editorWindows.showWebRecording(at: $0) }
+        // An agent's edits go through an open window; a video an agent the user runs edits opens
+        // right away, one of a run of Reco's own when the run ends
+        agentBridge.tools.motionEditor = { [editorWindows] in editorWindows.motionViewModel(for: $0) }
+        agentBridge.tools.onMotionEdited = { [weak self] url in
+            guard let self, !agentRecording.isRunning else { return }
+            editorWindows.openMotion(url)
+        }
         viewModel.notificationService.showAgentRecording = { [weak self] in self?.showAgentRecording() }
 
         // Hidden first so the last card never lands in the next shot, even with Show Reco on;
@@ -179,15 +186,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// `reco://record-agent?url=<page>&prompt=<what the video should show>`: opens the Record with AI
-    /// Agent panel with both filled in and starts the run with the remembered agent, once the agents
-    /// have been looked for. Without a `url`, it only opens the panel. The prompt is percent-encoded;
-    /// a `+` in it is a space.
+    /// `reco://record-agent?url=<page>&prompt=<what the video should show>&mode=launch|walkthrough`:
+    /// opens the Record with AI Agent panel with them filled in and starts the run with the remembered
+    /// agent, once the agents have been looked for. Without a `url`, it only opens the panel; without a
+    /// `mode`, the remembered one. The prompt is percent-encoded; a `+` in it is a space.
     private func recordWithAgent(_ url: URL) {
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         agentRecording.address = items.first { $0.name == "url" }?.value ?? ""
         // Form encoding writes spaces as pluses, which URLComponents leaves in
         agentRecording.instructions = (items.first { $0.name == "prompt" }?.value ?? "").replacing("+", with: " ")
+        if let mode = items.first(where: { $0.name == "mode" })?.value.flatMap(AgentRecordingRequest.Mode.init(rawValue:)) {
+            agentRecording.mode = mode
+        }
         showAgentRecording()
         guard !agentRecording.address.isEmpty else { return }
         Task {

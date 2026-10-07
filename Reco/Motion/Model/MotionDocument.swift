@@ -30,7 +30,7 @@ nonisolated struct MotionDocument: Equatable, Sendable {
         guard !scenes.isEmpty else { throw .noScenes }
         let assetIDs = try validatedAssetIDs()
         var sceneIDs = Set<String>()
-        for scene in scenes {
+        for (index, scene) in scenes.enumerated() {
             guard sceneIDs.insert(scene.id).inserted else { throw .duplicateID(scene.id) }
             // At least a frame, so every scene shows
             guard scene.duration >= 1 / Double(canvas.frameRate) else { throw .invalidDuration(scene.id) }
@@ -43,6 +43,28 @@ nonisolated struct MotionDocument: Equatable, Sendable {
             }
             var layerIDs = Set<String>()
             try validate(scene.layers, ids: &layerIDs, assets: assetIDs)
+            try validateShotMoves(of: index)
+        }
+    }
+
+    /// Each of a scene's ``MotionScene/shotMoves`` names its shot's camera or one of its layers,
+    /// and suits it.
+    private func validateShotMoves(of index: Int) throws(MotionDocumentError) {
+        let scene = scenes[index]
+        guard !scene.shotMoves.isEmpty else { return }
+        let layers = DocumentExpansion.laidOut(self, scene: index, sizes: [:]).layers
+        for (id, moves) in scene.shotMoves {
+            let content: LayerContent?
+            if id == MotionScene.cameraID, scene.shot != nil {
+                content = nil
+            } else if let layer = layers.first(where: { $0.id == id }) {
+                content = layer.content
+            } else {
+                throw .invalidMove(id, "scene \"\(scene.id)\"'s shot has no layer \"\(id)\".")
+            }
+            if let reason = moves.lazy.compactMap({ $0.problem(on: content) }).first {
+                throw .invalidMove(id, reason)
+            }
         }
     }
 

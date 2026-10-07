@@ -18,6 +18,9 @@ struct AgentRecordingView: View {
         VStack(spacing: 0) {
             // Cancel, in the footer, stays live while a run goes
             VStack(spacing: 0) {
+                EditorSegmentedPicker(selection: $model.mode, options: [(.launch, "Launch Video"), (.walkthrough, "Walkthrough")])
+                    .padding([.horizontal, .top], EditorTheme.spacing)
+
                 HStack(spacing: EditorTheme.mediumSpacing) {
                     Image(systemName: "globe")
                         .foregroundStyle(EditorTheme.dim)
@@ -40,7 +43,9 @@ struct AgentRecordingView: View {
                 Hairline()
 
                 TextField(
-                    "Describe the video: hover Pricing, click Start free trial, scroll to the FAQ…",
+                    model.mode == .launch
+                        ? "Optional: what's new, who it's for, a line to say…"
+                        : "Describe the video: hover Pricing, click Start free trial, scroll to the FAQ…",
                     text: $model.instructions,
                     axis: .vertical
                 )

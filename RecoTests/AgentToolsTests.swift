@@ -15,7 +15,7 @@ struct AgentToolsTests {
         AgentTools(settings: SettingsStore(), onRendered: onRendered)
     }
 
-    private func status(_ reply: (text: String, isError: Bool)) throws -> RenderStatus {
+    private func status(_ reply: AgentTools.Reply) throws -> RenderStatus {
         try JSONDecoder().decode(RenderStatus.self, from: Data(reply.text.utf8))
     }
 

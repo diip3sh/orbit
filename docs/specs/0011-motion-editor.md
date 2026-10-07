@@ -418,7 +418,7 @@ end of every phase and its scores recorded here.
 | 1 - Document, core, compositor | L | Done; the window not yet seen in the app |
 | 2 - Real UI layers | L | Done; the window not yet seen in the app |
 | 3 - Grammar v1 | L | Done but the side-by-side and the three-site judgement |
-| 4 - Agent | L | Todo |
+| 4 - Agent | L | Done but the side-by-side; cost recorded for one run of three |
 | 5 - Music and beats | M | Todo |
 | 6 - Editing | L | Todo |
 | 7 - Formats and polish | M | Todo |
@@ -687,6 +687,62 @@ focus took the Linear focus shot to 9.4 ms p95; drawn once per plan (as shadows 
   `reco://record-agent` with clean lint and design check; rubric scores, minutes and cost per run
   are recorded; three chat edits ("slower", "word by word", "8 frames earlier") change only their
   targets.
+
+#### Phase 4 results (2026-10-07, M5, Debug, Claude Code with Opus 5.5)
+
+What was built, and where it differs from the model above:
+
+- **Tools.** `edit_motion` (a batch of operations, all or none, then validated; no operations only
+  describes the video: each scene's start, layers with their ids, a shot's own too, every move's start
+  and end, and the lint's findings), `capture_ui`, `preview_motion` (a contact sheet as JPEG image
+  content: one moment per scene once its entrances are in, at most 12, 3 columns at 270 px; 0.4–0.6 s
+  for the grammar fixture, 89 KB) with the **design check** (a flat frame: luma deviation under 0.02;
+  the accent over 5% of the pixels), `export_recording` taking a bundle (up to twice the canvas: 4K
+  from 1080p, drawn at that size). `inspect_page` adds `liftable`: painted rounded boxes and pictures
+  of at least 120×60, narrower than the page, largest first, at most 30. Long tools follow the
+  45 s long-poll; a motion job is keyed by tool and bundle.
+- **Operations:** `set_canvas`, `set_style` (hex colors), `set_asset`, `add_scene`, `set_scene`,
+  `set_layer`, `set_moves` (a layer or the camera; a shot's layer keeps its layout: its moves go in
+  the scene's `shotMoves`), `move_scene`, `remove`. Text on a shot that doesn't show it (`uiFocus`,
+  `uiHero`) is refused instead of dropped.
+- **Launch Video mode** in the agent bar (`reco://record-agent?mode=launch`), with a 20 min limit and
+  the launch playbook (research, script, style from the brand, UI from `liftable`, at most three
+  previews, export h264 at 2160). A run that edited a motion video is a success (`.edited`).
+- **Chat** in the motion window (Style | Agent): the selected scene and layer go with the message
+  ("this" means them); the change playbook describes first, slows by about 1.5×, previews once and
+  doesn't export. The conversation is the bundle's `chat.json`.
+- **Grammar additions from the runs:** `wordByWord` and `slideIn` moves, a sideways `exit`; drift
+  capped at 4% of the width with its zoom slowed to match (a 10 s scene drifted captions off frame);
+  `featureSequence` redesigned (an index, its line word by word, the UI turned towards it, sliding in
+  and out, exits 0.1 s apart so no more than two leave at once); display type tracked −1.2%; a lift
+  hides decorative `backdrop-filter` layers (linear.app's progressive blur drew streaks); a focus's
+  edge is feathered; a rolled title's prefix stays where the centred line puts it (it sat at the
+  box's left edge, leaving a gap before the rolling word on supabase.com).
+- `AgentProcess` reads its pipes with `read(2)`: `availableData` raised an exception after a drain had
+  left the pipe non-blocking, and that crashed the app.
+
+Runs from the address alone (no instructions), 1080p60 documents exported as 4K h264:
+
+| Site | Minutes | Cost (API-equivalent) | Video | Lint, design check | Pacing | Color (mean luma) |
+|---|---|---|---|---|---|---|
+| supabase.com | 2.7 | not recorded | 29.5 s, 6 scenes | Clean | Pass | 23 |
+| cardboard.ai | 3.4 | not recorded | 29.1 s, 6 scenes | Clean | Pass | 32 (bright sky in its UI) |
+| linear.app | 2.7 | $1.07, 13 turns | 34 s, 8 scenes | Clean | Hero 7.5 s (> 5.3) | 16 |
+
+Lint and design check are of the finished bundles on the final build: supabase.com's run was made
+before the rolled-title fix and cardboard.ai's before the staggered exits (both agents reported the
+flaw and left it, as the playbook says). Agent runs don't keep a session (`--no-session-persistence`)
+and print text, so cost is only known for the linear.app run, made by hand with the app's exact
+arguments and `--output-format json`. The cost is Claude Code's `total_cost_usd`, tokens at API prices: a run uses the user's own agent and login, so on a subscription it counts against their plan's limits and nothing is billed to Reco or to them. The side-by-side verdict is the user's.
+
+Chat edits on linear.app's video (`Linear 2.motion`), each through the window's message box with a
+selection, each diffed against the document before it:
+
+| Message | Selection | Seconds | What changed |
+|---|---|---|---|
+| slower | scene `features` | 75 | That scene's duration 10 → 15 s; nothing else |
+| word by word | `hook.text` | ~30 | `shotMoves["hook.text"]` = `wordByWord` at 0.2 s; nothing else |
+| 8 frames earlier | `agentTitle.detail` | ~40 | Its `fadeUp` 1.1 → 0.967 s (8 frames at 60 fps); nothing else |
 
 ### Phase 5 - Music and beats (M)
 

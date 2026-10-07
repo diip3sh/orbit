@@ -269,8 +269,7 @@ extension MotionPlan {
                 measured[asset.id] = UILiftCache.info(asset, in: bundle)
             }
         }
-        // Each asset's element in CSS pixels, once captured or measured
-        let sizes = lifts.mapValues(\.size).merging(measured.mapValues(\.crop.size)) { $1 }
+        let sizes = UILiftCache.sizes(of: document, in: bundle)
         let outputScale = shorterSide.map { $0 / min(canvas.width, canvas.height) } ?? 1
         // Shots laid out, rolls and cascades split: what's drawn from here on
         let expanded = DocumentExpansion.expanded(document, sizes: sizes)
@@ -312,11 +311,10 @@ extension MotionPlan {
             let size: CGSize
             if case .text(let text) = layer.content {
                 let measured = TextImage(text, scale: 0)
-                (size, context.characters, context.lines) = (measured.size, measured.characters.count, measured.lines.count)
-                parts = measured.characters
-                if layer.moves.contains(where: { $0.kind == .lineMask }) {
-                    parts = measured.lines
-                }
+                size = measured.size
+                context.measure(measured)
+                parts = layer.moves.contains { $0.kind == .lineMask } ? measured.lines
+                    : layer.moves.contains { $0.kind == .wordByWord } ? measured.words : measured.characters
             } else {
                 size = Self.size(of: layer.content, sizes: sizes)
             }

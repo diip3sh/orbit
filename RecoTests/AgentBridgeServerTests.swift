@@ -59,7 +59,7 @@ struct AgentBridgeServerTests {
         #expect(path.utf8.count < 104)
     }
 
-    @Test func anAgentWithTheTokenListsTheThreeTools() async throws {
+    @Test func anAgentWithTheTokenListsTheTools() async throws {
         let client = try await connectedClient()
         defer { client.close() }
 
@@ -68,7 +68,7 @@ struct AgentBridgeServerTests {
         let result = try #require(message["result"] as? [String: Any])
 
         let tools = try #require(result["tools"] as? [[String: Any]])
-        #expect(tools.compactMap { $0["name"] as? String } == ["inspect_page", "record_page", "render_status", "export_recording"])
+        #expect(tools.compactMap { $0["name"] as? String } == AgentToolCatalog.tools.map(\.name))
         #expect(tools.allSatisfy { ($0["inputSchema"] as? [String: Any])?["type"] as? String == "object" })
     }
 

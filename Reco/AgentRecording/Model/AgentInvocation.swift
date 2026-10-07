@@ -59,11 +59,11 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
 
         """
 
-    /// The workspace permissions Cursor reads: the three Reco tools, no shell, writes or fetches.
-    private static let cursorPermissions = """
-        {"permissions":{"allow":["Mcp(reco:inspect_page)","Mcp(reco:record_page)","Mcp(reco:render_status)"],\
-        "deny":["Shell(*)","Write(**)","WebFetch(*)"]}}
-        """
+    /// The workspace permissions Cursor reads: Reco's tools, no shell, writes or fetches.
+    private static let cursorPermissions: String = {
+        let allowed = AgentToolCatalog.tools.map { "\"Mcp(reco:\($0.name))\"" }.joined(separator: ",")
+        return #"{"permissions":{"allow":["# + allowed + #"],"deny":["Shell(*)","Write(**)","WebFetch(*)"]}}"#
+    }()
 
     /// OpenCode's permissions, merged over the user's: the last matching rule wins, and an MCP
     /// tool is `<server>_<tool>`.

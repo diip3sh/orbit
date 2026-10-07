@@ -146,12 +146,16 @@ nonisolated enum AgentProcess {
     // MARK: - Pipes
 
     private static func collect(_ handle: FileHandle, from child: Child, toErrors: Bool) {
+        // read(2), not `availableData`: once `drain` has made the pipe non-blocking, a handler
+        // already on its way reads EAGAIN, which `availableData` raises as an exception that
+        // ended the app (seen in the test host)
         handle.readabilityHandler = { handle in
-            let data = handle.availableData
-            if data.isEmpty {
+            var buffer = [UInt8](repeating: 0, count: 65_536)
+            let count = read(handle.fileDescriptor, &buffer, buffer.count)
+            if count > 0 {
+                child.append(Data(buffer[..<count]), toErrors: toErrors)
+            } else if count == 0 || errno != EAGAIN {
                 handle.readabilityHandler = nil
-            } else {
-                child.append(data, toErrors: toErrors)
             }
         }
     }

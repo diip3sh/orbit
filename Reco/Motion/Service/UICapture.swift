@@ -15,11 +15,22 @@ enum UICapture {
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "UICapture")
 
+    /// Whether a capture is running: one at a time, since two 8× WebKit snapshots at once made the
+    /// GPU process quit (phase 2), and a window's preview and an agent's tool can both ask.
+    private static var isCapturing = false
+
     /// Builds the plan for `document`, lifting and baking what it needs first. Only a capture tells
     /// the plan an element's size, so a plan that captured asks again once: at most two rounds.
     static func plan(for document: MotionDocument, bundle: URL, shorterSide: CGFloat? = nil, frameRate: Int? = nil) async throws -> MotionPlan {
         var plan = await MotionPlan.build(document, bundle: bundle, shorterSide: shorterSide, frameRate: frameRate)
         for _ in 0..<2 where !plan.liftsNeeded.isEmpty || !plan.bakesNeeded.isEmpty {
+            while isCapturing {
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            isCapturing = true
+            defer { isCapturing = false }
+            // What another capture took meanwhile isn't taken again
+            plan = await MotionPlan.build(document, bundle: bundle, shorterSide: shorterSide, frameRate: frameRate)
             for asset in document.assets {
                 if let scale = plan.bakesNeeded[asset.id] {
                     try await bake(asset, at: scale, into: bundle)

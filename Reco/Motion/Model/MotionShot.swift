@@ -71,6 +71,13 @@ nonisolated extension MotionShot {
             return "\"\(unknown)\" isn't one of the document's assets."
         }
         let hasText = !(text ?? "").isEmpty
+        // Said rather than dropped: an agent's captions on a uiFocus never showed, and it only found out from the preview
+        if hasText, !kind.showsText {
+            return "\(kind.rawValue) shows no text: put the line in a title or hook before it, or use featureSequence's items."
+        }
+        if !(detail ?? "").isEmpty, !kind.showsDetail {
+            return "\(kind.rawValue) shows no detail."
+        }
         switch kind {
         case .hook, .title:
             return hasText ? nil : "\(kind.rawValue) needs text."

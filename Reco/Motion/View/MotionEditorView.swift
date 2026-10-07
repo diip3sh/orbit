@@ -6,9 +6,10 @@
 import SwiftUI
 
 /// A motion bundle's window: the preview in the canvas's shape on the stage, the transport and the
-/// scenes under it, the inspector beside it and Export in the toolbar.
+/// scenes under it, the inspector and the agent chat beside it and Export in the toolbar.
 struct MotionEditorView: View {
     let viewModel: MotionEditorViewModel
+    let chat: AgentChatViewModel
 
     private static let cornerRadius: CGFloat = 8
 
@@ -34,7 +35,7 @@ struct MotionEditorView: View {
                     .background {
                         StageDotGrid()
                     }
-                    MotionInspector(viewModel: viewModel)
+                    MotionSidePanel(viewModel: viewModel, chat: chat)
                 }
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {

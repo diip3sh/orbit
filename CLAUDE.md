@@ -35,7 +35,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 721 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 742 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
   reads alpha 254 instead of 255 with Xcode 26.0.1 on macOS 26.5.2, also without this fork's later changes.
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
@@ -893,6 +893,38 @@ Key facts:
 - Costs (M5, Debug): plans 0.09–0.26 s; 1080p frames 0.6–6.6 ms p95, cardboard.ai's zooming shots in
   beats 8.3–8.7; a focus is drawn once per plan (9.4 → 4.6 ms p95).
 
+### S6 — Motion editor, phase 4: agent (`remotion`, spec 0011)
+
+**Launch Video | Walkthrough** in the agent bar (`reco://record-agent?mode=launch`): from an address
+alone the agent researches, writes a motion video with `edit_motion`, lifts its UI (`capture_ui`),
+looks at a contact sheet (`preview_motion`) and exports 4K (`export_recording` takes bundles). The
+motion window's side panel has **Style | Agent**: a chat whose messages carry the selected scene and
+layer, kept in the bundle's `chat.json`.
+
+| File | Role |
+|---|---|
+| `Motion/Model/MotionEdit.swift`, `AgentBridge/Model/EditMotionRequest.swift` | The nine operations and their application; a batch all or none, then validated; new bundles' names |
+| `AgentBridge/Model/AgentToolCatalog+Motion.swift` | `edit_motion`'s description: all an agent knows of the grammar |
+| `Motion/Grammar/MotionSummary.swift` | What `edit_motion` replies: scenes, layers (a shot's too), moves with their times, findings |
+| `Motion/Service/ContactSheet.swift`, `DesignCheck.swift` | `preview_motion`'s moments and sheet; flat frames and too much accent |
+| `AgentBridge/Service/AgentTools+Motion.swift` | The motion tools; edits go through the open window (one undo step) or the store |
+| `Motion/Model/MotionScene.swift` | `shotMoves`: moves set on a shot's layers or camera, kept apart from the shot |
+| `AgentRecording/Model/AgentRecordingRequest.swift` | `mode`, `motion` (bundle, selection), the launch and motion-change playbooks, 20 min limit |
+| `Motion/View/MotionSidePanel.swift` | Style and Agent; `AgentChatViewModel` works on bundles too |
+| `WebRecording/Service/WebInspectScript.swift` | `liftable` |
+
+Key facts:
+- An agent's run from the address took 2.7–3.4 min; the linear.app run used $1.07 at API prices (13 turns, Opus 5.5); runs use the user's own agent and login, so on a subscription that is plan usage, not a charge.
+  Runs keep no session and print text, so the app doesn't know a run's cost.
+- Chat edits took 30–75 s and changed only their targets ("slower" one scene's duration, "word by
+  word" one layer's moves, "8 frames earlier" one move's start by 0.133 s).
+- A lift hides descendants that have a `backdrop-filter` and no text or picture (`data-reco-lift-veil`):
+  WebKit drew linear.app's progressive blur as streaks. Lifts are keyed with `liftVersion` 2.
+- Drift is capped at 4% of the width per scene, its zoom slowed with it: a 10 s scene had drifted
+  captions off frame. `featureSequence` doesn't drift; its parts leave 0.1 s apart.
+- One capture at a time (`UICapture.isCapturing`): two at once made the WebKit GPU process quit.
+- `AgentProcess` reads pipes with `read(2)`; `availableData` threw on a non-blocking pipe and crashed the app.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -964,7 +996,7 @@ should hold but need re-measuring.
 | S5 agent chat and reliable web takes (spec 0008) | Done and tested: real Claude Code runs from the prompt and from the chat in the app (sent through accessibility), 60 s apple.com takes checked frame by frame. Not yet tried: Retry and Cancel by hand, VoiceOver, Reduce Motion, other agents |
 
 | Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps, shown elements, playbook | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop); linear.app walkthroughs run from the app through `reco://record-agent`. Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
-| S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 done: moves, seams, shots, lint, scenes lane and inspector; the benchmark rebuilt in 10 lines and three sites rendered, awaiting the user's side-by-side. Phase 4 (agent) next. The window seen in a window capture; editing by hand not yet tried |
+| S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 done: moves, seams, shots, lint, scenes lane and inspector; the benchmark rebuilt in 10 lines and three sites rendered, awaiting the user's side-by-side. Phase 4 done: agent tools, Launch Video mode, chat with selection; three sites run from their address with clean lint and design check, three chat edits change only their targets; cost recorded for one run. The window seen in a window capture; editing by hand not yet tried |
 
 What to build next: `docs/specs/0011-motion-editor.md` (October 2026), phase by phase. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

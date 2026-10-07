@@ -3,6 +3,7 @@
 //  RecoTests
 //
 
+import Foundation
 import Testing
 @testable import Reco
 
@@ -34,6 +35,18 @@ struct AgentRunOutcomeTests {
 
     @Test func aTimeoutSaysSo() {
         #expect(classify(.timedOut, job: nil, output: "x") == .failed(reason: "The agent didn't finish within 15 minutes."))
+    }
+
+    @Test func anEditedMotionVideoIsASuccessOnceTheAgentFinishesWell() {
+        let bundle = URL(filePath: "/v/Linear.motion")
+        let edited = { (end: AgentProcessEnd) in
+            AgentRunOutcome.classify(
+                end: end, agent: .claudeCode, job: before, startingRenderID: before.renderID, outputReason: "", editedMotion: bundle, limit: .seconds(1200)
+            )
+        }
+        #expect(edited(.exited(0)) == .edited(bundle: "/v/Linear.motion"))
+        #expect(edited(.exited(1)) == .failed(reason: "Claude Code exited with status 1"))
+        #expect(edited(.timedOut) == .failed(reason: "The agent didn't finish within 20 minutes."))
     }
 
     @Test func aLaunchFailureIsItsOwnMessage() {

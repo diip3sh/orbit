@@ -71,6 +71,14 @@ nonisolated enum UILiftCache {
         bundle.appending(path: "assets/live/\(key(of: asset))-matte.png")
     }
 
+    /// Each of `document`'s assets' element in CSS pixels, once lifted or measured: what shots are
+    /// laid out by.
+    static func sizes(of document: MotionDocument, in bundle: URL) -> [String: CGSize] {
+        document.assets.reduce(into: [:]) { sizes, asset in
+            sizes[asset.id] = asset.steps == nil ? best(asset, in: bundle)?.size : info(asset, in: bundle)?.crop.size
+        }
+    }
+
     /// What a live take of `asset` shows, once it was measured.
     static func info(_ asset: MotionAsset, in bundle: URL) -> TakeInfo? {
         try? JSONDecoder().decode(TakeInfo.self, from: Data(contentsOf: infoURL(of: asset, in: bundle)))
@@ -87,8 +95,15 @@ nonisolated enum UILiftCache {
         return Take(movie: movie, telemetry: telemetry, info: info, matte: FileManager.default.fileExists(atPath: matte.path(percentEncoded: false)) ? matte : nil)
     }
 
+    /// Changes when a still is lifted differently, so bundles lift theirs again: 2 hides the
+    /// layers a progressive blur is made of (``UILiftScript/isolate``).
+    static let liftVersion = 2
+
     private static func key(of asset: MotionAsset) -> String {
         var source = "\(asset.url.absoluteString)\n\(asset.selector)\n\(Int(asset.viewport.width))x\(Int(asset.viewport.height))"
+        if asset.steps == nil {
+            source += "\nlift \(liftVersion)"
+        }
         if let hide = asset.hide {
             source += "\n\(hide.joined(separator: "\n"))"
         }

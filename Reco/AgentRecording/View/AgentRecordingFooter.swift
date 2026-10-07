@@ -19,12 +19,8 @@ struct AgentRecordingFooter: View {
             if case .running(let agent) = model.phase {
                 ProgressView()
                     .controlSize(.small)
-                Text("\(agent.displayName) is recording…")
-                if let progress = model.progress {
-                    Text(progress, format: .percent.precision(.fractionLength(0)))
-                        .monospacedDigit()
-                        .foregroundStyle(EditorTheme.dim)
-                }
+                Text(model.activity ?? "\(agent.displayName) is \(model.lastRequest?.mode == .launch ? "making the video" : "recording")…")
+                    .monospacedDigit()
                 Spacer()
                 Button("Cancel", action: model.cancel)
                     .buttonStyle(.editorGhost)

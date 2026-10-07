@@ -45,8 +45,9 @@ nonisolated enum ShotLayout {
         case .featureSequence: featureSequence(shot, in: context)
         case .endCard: endCard(shot, in: context)
         }
-        // Drift and cut: every shot but the end card drifts, the cuts hiding its start and stop
-        if context.canvas.pacing == .driftAndCut, shot.kind != .endCard {
+        // Drift and cut: every shot drifts, the cuts hiding its start and stop; but the end card,
+        // and a feature sequence, whose captions hold still while its UI moves
+        if context.canvas.pacing == .driftAndCut, shot.kind != .endCard, shot.kind != .featureSequence {
             var drift = MotionMove(.drift)
             drift.direction = context.index.isMultiple(of: 2) ? .right : .left
             layout.camera.moves.insert(drift, at: 0)
@@ -230,7 +231,9 @@ nonisolated enum ShotLayout {
         return Layout(layers: [group])
     }
 
-    /// Each item its own slice of the scene: its text rising in, its UI beside it, leaving before the next.
+    /// Each item its own slice of the scene, one after another like pages turning: a small index
+    /// and its line on the left, word by word, and its UI larger on the right, leaning into the
+    /// frame, sliding in sharpening and out blurred to the left as the next comes in.
     private static func featureSequence(_ shot: MotionShot, in context: Context) -> Layout {
         let size = context.size
         let items = shot.items ?? []
@@ -238,26 +241,59 @@ nonisolated enum ShotLayout {
         var layout = Layout()
         for (index, item) in items.enumerated() {
             let start = Double(index) * slice + (index == 0 ? MoveExpansion.entranceStart : 0.1)
-            let isLast = index == items.count - 1
-            let leaving = isLast ? [] : [MotionMove(.exit, start: Double(index + 1) * slice - 0.25)]
-            let textWidth = item.asset == nil ? textWidth(in: context) : size.width * 0.36
-            if let string = item.text {
-                let content = text(string, size: LayoutRules.featureSize(of: size), color: context.style.text, width: textWidth, style: context.style,
-                                   alignment: item.asset == nil ? nil : .leading)
-                layout.layers.append(textLayer("\(context.scene.id).text\(index)", content, middle: size.height / 2, in: context,
-                                               moves: [MotionMove(.lineMask, start: start)] + leaving))
+            // Out 0.1 s apart in the order they came (index, line, the UI to the left), the UI 0.3 s
+            // before the next comes in, so no more than two leave at once; the last stays
+            let leaving = { (order: Int) -> [MotionMove] in
+                guard index < items.count - 1 else { return [] }
+                var exit = MotionMove(.exit, start: Double(index + 1) * slice - 0.3 - 0.1 * Double(2 - order), duration: 0.3)
+                exit.direction = order == 2 ? .left : nil
+                return [exit]
+            }
+            if item.text != nil {
+                layout.layers += featureText(item, index: index, start: start, leaving: leaving, in: context)
             }
             if let asset = item.asset {
-                let box = item.text == nil ? CGSize(width: size.width * 0.8, height: size.height * 0.75) : CGSize(width: size.width * 0.46, height: size.height * 0.7)
+                let alone = item.text == nil
+                let box = alone ? CGSize(width: size.width * 0.8, height: size.height * 0.75) : CGSize(width: size.width * 0.56, height: size.height * 0.7)
                 let width = LayoutRules.fittedWidth(of: context.sizes[asset], in: box)
-                let center = item.text == nil ? size.width / 2 : size.width * 0.71
-                var element = uiLayer("\(context.scene.id).ui\(index)", asset: asset, width: width, at: [center, size.height / 2, 0],
-                                      moves: [MotionMove(.rise, start: start + (item.text == nil ? 0 : 0.1))] + leaving)
-                element.shadow = LayerShadow(opacity: 0.4, radius: 24 * size.height / 1080, offset: 16 * size.height / 1080)
+                var slide = MotionMove(.slideIn, start: start + (alone ? 0 : 0.15))
+                slide.direction = .left
+                var element = uiLayer(
+                    "\(context.scene.id).ui\(index)", asset: asset, width: width, at: [alone ? size.width / 2 : size.width * 0.665, size.height / 2, 0],
+                    moves: [slide] + leaving(2)
+                )
+                // Turned towards the caption, so the frame has depth (spike C's composer: 12°, −10°, −4°)
+                element.transform.rotation = alone ? [0, 0, 0] : [6, -12, 0]
+                element.shadow = LayerShadow(opacity: 0.5, radius: 40 * size.height / 1080, offset: 28 * size.height / 1080)
                 layout.layers.append(element)
             }
         }
         return layout
+    }
+
+    /// A feature's index ("01") over its line, at the margin beside its UI or centred alone.
+    private static func featureText(_ item: ShotItem, index: Int, start: Double, leaving: (Int) -> [MotionMove], in context: Context) -> [MotionLayer] {
+        let size = context.size
+        let (string, hasUI) = (item.text ?? "", item.asset != nil)
+        let width = hasUI ? size.width * 0.3 : textWidth(in: context)
+        let alignment: TextContent.Alignment? = hasUI ? .leading : nil
+        let line = text(string, size: LayoutRules.featureSize(of: size), color: context.style.text, width: width, style: context.style, alignment: alignment)
+        var number = text(
+            (index + 1).formatted(.number.precision(.integerLength(2))), size: LayoutRules.detailSize(of: size), color: context.style.accent ?? context.style.dim,
+            width: nil, style: context.style, alignment: alignment
+        )
+        number.face = .mono
+        number.weight = .medium
+        let lineHeight = TextImage(line, scale: 0).size.height
+        let numberHeight = TextImage(number, scale: 0).size.height
+        let gap = size.height * 0.02
+        let top = (size.height - numberHeight - gap - lineHeight) / 2
+        return [
+            textLayer("\(context.scene.id).index\(index)", number, middle: top + numberHeight / 2, in: context,
+                      moves: [MotionMove(.fadeUp, start: start)] + leaving(0)),
+            textLayer("\(context.scene.id).text\(index)", line, middle: top + numberHeight + gap + lineHeight / 2, in: context,
+                      moves: [MotionMove(.wordByWord, start: start + 0.1)] + leaving(1))
+        ]
     }
 
     /// The logo, a headline and the address or call to action, coming in once and then still (the

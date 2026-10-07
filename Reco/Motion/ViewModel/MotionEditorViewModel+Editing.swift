@@ -32,6 +32,13 @@ extension MotionEditorViewModel {
         documentChanged()
     }
 
+    /// Puts an agent's edit in as one undo step and saves it at once, so its next call reads it.
+    func apply(_ edited: MotionDocument, actionName: String) async throws {
+        edit(actionName) { $0 = edited }
+        save?.cancel()
+        try await MotionStore.write(edited, to: bundleURL)
+    }
+
     /// The selected scene, laid out with its shot: the layers the inspector lists.
     var laidOutScene: MotionScene? {
         guard let document, document.scenes.indices.contains(selectedScene) else { return nil }
@@ -48,20 +55,25 @@ extension MotionEditorViewModel {
         }
     }
 
-    /// The selected layer as the scene shows it, for the inspector's controls. Changing one a shot
-    /// laid out puts a copy in the scene's own layers, which replaces the shot's by its id.
+    /// The selected layer as the scene shows it, for the inspector's controls. Changing only the
+    /// moves of one a shot laid out sets them in the scene's ``MotionScene/shotMoves``, so it stays
+    /// where the shot puts it; any other change puts a copy in the scene's own layers, which
+    /// replaces the shot's by its id.
     var layer: MotionLayer? {
         get { laidOutScene?.layers.first { $0.id == selectedLayer } }
         set {
-            guard let newValue else { return }
+            guard let newValue, var shown = layer else { return }
+            shown.moves = newValue.moves
             edit("Layer", coalescing: true) { document in
-                var layers = document.scenes[selectedScene].layers
-                if let index = layers.firstIndex(where: { $0.id == newValue.id }) {
-                    layers[index] = newValue
+                var scene = document.scenes[selectedScene]
+                if let index = scene.layers.firstIndex(where: { $0.id == newValue.id }) {
+                    scene.layers[index] = newValue
+                } else if shown == newValue {
+                    scene.shotMoves[newValue.id] = newValue.moves
                 } else {
-                    layers.append(newValue)
+                    scene.layers.append(newValue)
                 }
-                document.scenes[selectedScene].layers = layers
+                document.scenes[selectedScene] = scene
             }
         }
     }
@@ -69,12 +81,7 @@ extension MotionEditorViewModel {
     /// When `move` on `layer` starts and how long it takes, its defaults resolved as the plan
     /// resolves them.
     func timing(of move: MotionMove, on layer: MotionLayer) -> (start: Double, duration: Double) {
-        var context = MoveContext(sceneDuration: scene?.duration ?? 0, canvas: document?.canvas.size ?? .zero)
-        if case .text(let text) = layer.content {
-            let measured = TextImage(text, scale: 0)
-            (context.characters, context.lines) = (measured.characters.count, measured.lines.count)
-        }
-        return MoveExpansion.timing(of: move, in: context)
+        MoveExpansion.timing(of: move, in: MoveContext(sceneDuration: scene?.duration ?? 0, canvas: document?.canvas.size ?? .zero, layer: layer))
     }
 
     /// What the grammar's rules find in the document.

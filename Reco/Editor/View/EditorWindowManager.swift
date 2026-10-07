@@ -38,6 +38,7 @@ final class EditorWindowManager: NSObject {
     private struct MotionEditor {
         let window: NSWindow
         let viewModel: MotionEditorViewModel
+        let chat: AgentChatViewModel
         let accessesOutputDirectory: Bool
     }
 
@@ -84,6 +85,10 @@ final class EditorWindowManager: NSObject {
     /// one has loaded.
     func open(_ take: AgentRecordedTake) {
         let movie = take.movie.standardizedFileURL
+        if movie.pathExtension == MotionStore.bundleExtension {
+            openMotion(movie, conversation: take.conversation)
+            return
+        }
         guard let replaced = take.replacing?.standardizedFileURL, let editor = editors[replaced], editors[movie] == nil else {
             open(movie, conversation: take.conversation)
             return
@@ -158,24 +163,38 @@ final class EditorWindowManager: NSObject {
     }
 
     /// Opens a motion bundle (spec 0011) in its own window, or brings its window forward.
-    func openMotion(_ bundleURL: URL) {
+    /// - Parameter conversation: The agent chat a run just ended with on it.
+    func openMotion(_ bundleURL: URL, conversation: [AgentChatMessage] = []) {
         let bundleURL = bundleURL.standardizedFileURL
-        if let window = motionEditors[bundleURL]?.window {
-            activate(window)
+        if let editor = motionEditors[bundleURL] {
+            if !conversation.isEmpty {
+                editor.chat.update(conversation)
+            }
+            activate(editor.window)
             return
         }
 
         let accessesOutputDirectory = settings.startAccessingOutputDirectory()
         let viewModel = MotionEditorViewModel(bundleURL: bundleURL)
-        let hostingController = NSHostingController(rootView: MotionEditorView(viewModel: viewModel))
+        let chat = AgentChatViewModel(movie: bundleURL, runner: agentRecording, conversation: conversation)
+        chat.selection = { [weak viewModel] in
+            guard let viewModel, let scene = viewModel.scene else { return (nil, nil) }
+            return (scene.id, viewModel.selectedLayer)
+        }
+        let hostingController = NSHostingController(rootView: MotionEditorView(viewModel: viewModel, chat: chat))
         hostingController.sizingOptions = []
         hostingController.sceneBridgingOptions = [.toolbars]
         let window = makeWindow(contained(hostingController), title: bundleURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1280, height: 800))
         window.representedURL = bundleURL
-        motionEditors[bundleURL] = MotionEditor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
+        motionEditors[bundleURL] = MotionEditor(window: window, viewModel: viewModel, chat: chat, accessesOutputDirectory: accessesOutputDirectory)
 
         NSApp.setActivationPolicy(.regular)
         activate(window)
+    }
+
+    /// The open window's view model of a motion bundle, which an agent's edits go through.
+    func motionViewModel(for bundleURL: URL) -> MotionEditorViewModel? {
+        motionEditors[bundleURL.standardizedFileURL]?.viewModel
     }
 
     private func editorController(_ viewModel: EditorViewModel, _ chat: AgentChatViewModel) -> NSHostingController<EditorView> {

@@ -354,3 +354,49 @@ struct AgentRecordingViewModelTests {
         #expect(model.menuBarText == nil)
     }
 }
+
+// MARK: - Launch videos and motion chats
+
+extension AgentRecordingViewModelTests {
+
+    @Test func aLaunchRunThatEditedAMotionVideoSucceedsWithIt() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let calls = Calls()
+        let tools = AgentTools(settings: SettingsStore(defaults: defaults.make())) { _ in }
+        let model = try makeModel(tools: tools) { _, arguments, _, _, _ in
+            calls.record(arguments)
+            await MainActor.run {
+                tools.motionEdits += 1
+                tools.lastMotionBundle = URL(filePath: "/tmp/Linear.motion")
+            }
+            return AgentProcess.Result(end: .exited(0), stdout: "A 30 s launch video of Linear.", stderr: "")
+        }
+        var recorded: AgentRecordedTake?
+        model.onRecorded = { recorded = $0 }
+        await model.refreshAgents()
+        model.mode = .launch
+        model.address = "linear.app"
+
+        #expect(model.submit() == nil)
+        await finish(model)
+
+        let prompt = try #require(calls.arguments.first?[1])
+        #expect(prompt.hasPrefix("Make a launch video of this product with Reco: https://linear.app"))
+        #expect(prompt.contains(AgentRecordingRequest.launchPlaybook))
+        #expect(model.phase == .idle)
+        #expect(recorded?.movie.path() == "/tmp/Linear.motion")
+        #expect(recorded?.conversation.map(\.text) == [AgentRecordingRequest.defaultLaunchInstructions, "A 30 s launch video of Linear."])
+        #expect(model.lastRequest?.timeLimit == .seconds(20 * 60))
+    }
+
+    @Test func aMotionChatSendsTheBundleAndWhatIsSelected() throws {
+        var asked = try request()
+        asked.instructions = "Make this word by word."
+        asked.motion = .init(bundle: URL(filePath: "/m/Linear.motion"), scene: "title", layer: "title.headline")
+        #expect(asked.prompt.hasPrefix("Change this motion video with Reco's edit_motion tool: /m/Linear.motion"))
+        #expect(asked.prompt.contains(#"scene "title", layer "title.headline" selected"#))
+        #expect(asked.prompt.contains(AgentRecordingRequest.motionChangePlaybook))
+        #expect(asked.subject == URL(filePath: "/m/Linear.motion"))
+        #expect(asked.timeLimit == AgentRunOutcome.timeLimit)
+    }
+}

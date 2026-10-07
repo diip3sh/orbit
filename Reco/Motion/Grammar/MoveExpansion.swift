@@ -27,13 +27,30 @@ nonisolated struct MoveContext: Sendable {
     /// Where the camera looks before its moves; only pans use it.
     var lookAt = CGPoint.zero
 
-    /// A text layer's characters and lines; 0 for any other layer.
+    /// A text layer's characters, words and lines; 0 for any other layer.
     var characters = 0
+    var words = 0
     var lines = 0
+
+    /// Counts `text`'s parts, for the reveals that time themselves by them.
+    mutating func measure(_ text: TextImage) {
+        (characters, words, lines) = (text.characters.count, text.words.count, text.lines.count)
+    }
 
     /// Canvas pixels per pixel of a 1080p canvas: the grammar's distances are measured at 1080p.
     var unit: Double {
         canvas.height / 1080
+    }
+}
+
+nonisolated extension MoveContext {
+
+    /// The context of `layer`'s moves, its text counted.
+    init(sceneDuration: Double, canvas: CGSize, layer: MotionLayer) {
+        self.init(sceneDuration: sceneDuration, canvas: canvas)
+        if case .text(let text) = layer.content {
+            measure(TextImage(text, scale: 0))
+        }
     }
 }
 
@@ -50,6 +67,14 @@ nonisolated enum MoveExpansion {
     /// Linear's camera drifts ~2% of the width a second (0.4–3.5) and pushes in slowly.
     static let driftSpeed = 0.02
     static let driftZoom = 0.01
+
+    /// The farthest a drift pans over its scene, as a share of the width; its zoom slows with it.
+    /// At 2% and 1% a second, a 10 s scene slid its captions at the margin (8% of the width) off the
+    /// frame, the zoom (12% by its end) more than the pan.
+    static let longestDrift = 0.04
+
+    /// How far a slide in or a sideways exit travels, in pixels at 1080p.
+    static let slideDistance = 72.0
 
     /// Typing: 15 characters a second (7.5–25 measured).
     static let typingRate = 15.0
@@ -82,19 +107,19 @@ nonisolated enum MoveExpansion {
             // At most 10 px on text (HyperFrames' cut catalogue)
             add(.blur, 10 * unit * amount, 0, easing: .enter)
         case .exit:
-            add(.opacity, 1, 0, easing: .exit)
-            add(.positionY, 0, -8 * unit * amount, easing: .exit)
-            add(.blur, 0, 6 * unit * amount, easing: .exit)
+            effect.tracks = exitTracks(of: move, start: start, duration: duration, in: context)
         case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan:
             // A roll and a cascade become other layers' moves (``DocumentExpansion``)
             break
-        case .blurWipe, .lineMask, .type:
+        case .blurWipe, .lineMask, .wordByWord, .type:
             effect.reveal = reveal(move, start: start, duration: duration, in: context)
         case .rise:
             add(.opacity, 0, 1, easing: .cascade)
             // From 0.9–0.97 and at most 16 px (agentic-product-demo)
             add(.scale, 1 - 0.04 * amount, 1, easing: .cascade)
             add(.positionY, 16 * unit * amount, 0, easing: .cascade)
+        case .slideIn:
+            effect.tracks = slideTracks(of: move, start: start, duration: duration, in: context)
         case .tilt:
             add(.rotationX, 0, 18 * amount, easing: .move)
         case .focus:
@@ -111,6 +136,34 @@ nonisolated enum MoveExpansion {
         return effect
     }
 
+    /// An exit: it fades, rising a little and blurring; or with a direction, it goes that way, blurred
+    /// as fast motion is, as the next one comes in.
+    private static func exitTracks(of move: MotionMove, start: Double, duration: Double, in context: MoveContext) -> [MotionProperty: [PropertyTrack]] {
+        let amount = (move.intensity ?? 1) * context.unit
+        let way = move.direction.map { slideDirection($0) * slideDistance } ?? [0, -8]
+        let ramps: [MotionProperty: (begin: Double, end: Double)] = [
+            .opacity: (1, 0), .positionX: (0, way.x * amount), .positionY: (0, way.y * amount), .blur: (0, (move.direction == nil ? 6 : 10) * amount)
+        ]
+        return ramps.reduce(into: [:]) { tracks, entry in
+            tracks[entry.key] = [ramp(entry.key, entry.value, start: start, duration: duration, easing: .exit)]
+        }
+    }
+
+    /// A slide in from the side it moves away from, sharpening and turning a little towards its rest:
+    /// fast, then a long settle, so it keeps moving for as long as it's shown.
+    private static func slideTracks(of move: MotionMove, start: Double, duration: Double, in context: MoveContext) -> [MotionProperty: [PropertyTrack]] {
+        let amount = move.intensity ?? 1
+        let way = slideDirection(move.direction ?? .left) * slideDistance * context.unit * amount
+        let turn = way.x == 0 ? 0 : 8 * amount * (way.x > 0 ? -1 : 1)
+        return [
+            .positionX: [ramp(.positionX, (-way.x, 0), start: start, duration: duration, easing: .longSettle)],
+            .positionY: [ramp(.positionY, (-way.y, 0), start: start, duration: duration, easing: .longSettle)],
+            .rotationY: [ramp(.rotationY, (turn, 0), start: start, duration: duration, easing: .longSettle)],
+            .opacity: [ramp(.opacity, (0, 1), start: start, duration: min(0.5, duration), easing: .enter)],
+            .blur: [ramp(.blur, (14 * context.unit * amount, 0), start: start, duration: min(0.6, duration), easing: .enter)]
+        ]
+    }
+
     /// A camera move's tracks; a hold has none.
     private static func cameraTracks(of move: MotionMove, start: Double, duration: Double, in context: MoveContext) -> [MotionProperty: [PropertyTrack]] {
         let amount = move.intensity ?? 1
@@ -120,12 +173,13 @@ nonisolated enum MoveExpansion {
         case .pullBack:
             return [.scale: [ramp(.scale, (1 + 0.3 * amount, 1), start: start, duration: duration, easing: .longSettle)]]
         case .drift:
-            // Constant speed: a steady pan and a slow push, in log space
-            let travel = driftDirection(move.direction) * driftSpeed * amount * context.canvas.width * duration
+            // Constant speed: a steady pan and a slow push, in log space; slower in a long scene
+            let slowing = min(1, longestDrift / (driftSpeed * max(context.sceneDuration, 1)))
+            let travel = slideDirection(move.direction ?? .right) * driftSpeed * slowing * amount * context.canvas.width * duration
             return [
                 .positionX: [ramp(.positionX, (0, travel.x), start: start, duration: duration, easing: .linear)],
                 .positionY: [ramp(.positionY, (0, travel.y), start: start, duration: duration, easing: .linear)],
-                .scale: [ramp(.scale, (1, pow(1 + driftZoom * amount, duration)), start: start, duration: duration, easing: .linear)]
+                .scale: [ramp(.scale, (1, pow(1 + driftZoom * slowing * amount, duration)), start: start, duration: duration, easing: .linear)]
             ]
         case .pan:
             return pan(to: move.target ?? context.lookAt, zoom: amount, start: start, duration: duration, in: context)
@@ -158,10 +212,14 @@ nonisolated enum MoveExpansion {
         // ~44 ms a character (Linear), each sharpening over 0.3 s
         case .blurWipe: return 0.044 * Double(max(context.characters - 1, 0)) + 0.3
         case .lineMask: return 0.12 * Double(max(context.lines - 1, 0)) + 0.6
+        // Words 0.12 s apart, each rising over 0.45 s like a fadeUp
+        case .wordByWord: return 0.12 * Double(max(context.words - 1, 0)) + 0.45
         case .type: return Double(context.characters) / typingRate
         // A roll every ~0.5 s
         case .roll: return 0.5 * Double(move.words?.count ?? 1)
         case .rise: return 0.6
+        // Half way in 0.6 s and four fifths in 1.2 s (the long settle), easing in for the rest
+        case .slideIn: return 2.4
         case .tilt: return 1.2
         case .focus, .detach: return 0.6
         case .stateChange: return 0.2
@@ -182,14 +240,17 @@ nonisolated enum MoveExpansion {
         case .lineMask:
             let part = min(0.6, duration)
             return TextReveal(style: .rise, start: start, stagger: (duration - part) / Double(max(context.lines - 1, 1)), partDuration: part)
+        case .wordByWord:
+            let part = min(0.45, duration)
+            return TextReveal(style: .word, start: start, stagger: (duration - part) / Double(max(context.words - 1, 1)), partDuration: part)
         default:
             let part = min(0.3, duration)
             return TextReveal(style: .wipe, start: start, stagger: (duration - part) / max(characters - 1, 1), partDuration: part)
         }
     }
 
-    private static func driftDirection(_ direction: MotionMove.Direction?) -> SIMD2<Double> {
-        switch direction ?? .right {
+    private static func slideDirection(_ direction: MotionMove.Direction) -> SIMD2<Double> {
+        switch direction {
         case .left: [-1, 0]
         case .right: [1, 0]
         case .upward: [0, -1]

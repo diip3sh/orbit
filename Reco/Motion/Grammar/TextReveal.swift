@@ -5,7 +5,8 @@
 
 import Foundation
 
-/// A text layer shown part by part: characters typed or wiped in, lines rising out of their mask.
+/// A text layer shown part by part: characters typed or wiped in, words fading up, lines rising out
+/// of their mask.
 /// Each part takes `partDuration` from `start + index × stagger`.
 nonisolated struct TextReveal: Equatable, Sendable {
 
@@ -16,17 +17,14 @@ nonisolated struct TextReveal: Equatable, Sendable {
         case wipe
         /// Lines rise into place, cut off below their own box.
         case rise
+        /// Words fade up into place, one after another.
+        case word
     }
 
     let style: Style
     let start: Double
     let stagger: Double
     let partDuration: Double
-
-    /// Lines for ``Style/rise``, characters otherwise.
-    var revealsLines: Bool {
-        style == .rise
-    }
 
     /// How far part `index` is shown at `time`, 0 to 1, eased.
     func progress(ofPart index: Int, at time: Double) -> Double {

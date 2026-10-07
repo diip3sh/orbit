@@ -25,8 +25,8 @@ nonisolated struct AgentRecordedTake: Equatable, Sendable {
         let instructions = request.instructions.trimmingCharacters(in: .whitespacesAndNewlines)
         let reply = OutputTail.plain(output).trimmingCharacters(in: .whitespacesAndNewlines)
         conversation = request.conversation + [
-            AgentChatMessage(role: .user, text: instructions.isEmpty ? AgentRecordingRequest.defaultInstructions : instructions),
-            AgentChatMessage(role: .agent, text: reply.isEmpty ? "Recorded." : String(reply.prefix(Self.maximumReply)))
+            AgentChatMessage(role: .user, text: instructions.isEmpty ? request.defaultInstructions : instructions),
+            AgentChatMessage(role: .agent, text: reply.isEmpty ? (request.motion == nil ? "Recorded." : "Done.") : String(reply.prefix(Self.maximumReply)))
         ]
     }
 }

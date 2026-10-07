@@ -31,6 +31,11 @@ final class AgentRecordingViewModel {
     var address = ""
     var instructions = ""
 
+    /// What Record makes: a launch video or a walkthrough.
+    var mode: AgentRecordingRequest.Mode {
+        didSet { defaults.set(mode.rawValue, forKey: Self.modeKey) }
+    }
+
     /// The agent the panel runs.
     var agent: AgentKind? {
         didSet {
@@ -87,8 +92,12 @@ final class AgentRecordingViewModel {
     /// The render that was the bridge's latest when the run started, which isn't the run's.
     private var startingRenderID: String?
 
+    /// How many motion videos had been edited when the run started.
+    private var startingMotionEdits = 0
+
     static let agentKey = "agentRecordingAgent"
     static let modelKey = "agentRecordingModel"
+    static let modeKey = "agentRecordingMode"
     private static let pollInterval = Duration.milliseconds(250)
 
     /// - Parameters:
@@ -119,6 +128,7 @@ final class AgentRecordingViewModel {
         self.runProcess = runProcess
         agent = defaults.string(forKey: Self.agentKey).flatMap(AgentKind.init(rawValue:))
         model = defaults.string(forKey: Self.modelKey)
+        mode = defaults.string(forKey: Self.modeKey).flatMap(AgentRecordingRequest.Mode.init(rawValue:)) ?? .walkthrough
     }
 
     // MARK: - State
@@ -143,9 +153,22 @@ final class AgentRecordingViewModel {
         return job.progress
     }
 
+    /// What the run's agent is doing in Reco, while it runs: rendering, looking at a page, or working
+    /// on a motion video.
+    var activity: String? {
+        guard isRunning else { return nil }
+        if let progress {
+            return "Recording… \(progress.formatted(.percent.precision(.fractionLength(0))))"
+        }
+        if let page = tools.inspecting {
+            return "Looking at \(page.host(percentEncoded: false) ?? page.absoluteString)…"
+        }
+        return tools.motionActivity
+    }
+
     /// Why the panel's last run failed; a chat's failure shows in its chat.
     var panelFailure: String? {
-        guard lastRequest?.take == nil, case .failed(let reason) = phase else { return nil }
+        guard lastRequest?.subject == nil, case .failed(let reason) = phase else { return nil }
         return reason
     }
 
@@ -206,7 +229,7 @@ final class AgentRecordingViewModel {
         guard !isRunning else { return nil }
         guard let url = WebScript.url(from: address) else { return .address }
         guard let agent else { return nil }
-        run(AgentRecordingRequest(url: url, instructions: instructions, agent: agent, model: model))
+        run(AgentRecordingRequest(url: url, instructions: instructions, agent: agent, mode: mode, model: model))
         return nil
     }
 
@@ -223,6 +246,7 @@ final class AgentRecordingViewModel {
         guard !isRunning else { return }
         lastRequest = request
         startingRenderID = tools.job?.renderID
+        startingMotionEdits = tools.motionEdits
         phase = .running(request.agent)
         task = Task { await execute(request) }
     }
@@ -243,7 +267,7 @@ final class AgentRecordingViewModel {
     }
 
     private func execute(_ request: AgentRecordingRequest) async {
-        let deadline = ContinuousClock.now + AgentRunOutcome.timeLimit
+        let deadline = ContinuousClock.now + request.timeLimit
         var outcome: AgentRunOutcome
         var output = ""
         do {
@@ -253,17 +277,17 @@ final class AgentRecordingViewModel {
         }
         guard !Task.isCancelled else { return }
         switch outcome {
-        case .succeeded(let movie):
+        case .succeeded(let path), .edited(let path):
             phase = .idle
             let reply = token.isEmpty ? output : output.replacing(token, with: "…")
-            onRecorded?(AgentRecordedTake(movie: URL(filePath: movie), request: request, output: reply))
+            onRecorded?(AgentRecordedTake(movie: URL(filePath: path), request: request, output: reply))
             onSucceeded?()
         case .cancelled:
             phase = .idle
         case .failed(let reason):
             phase = .failed(reason)
             // A chat shows its failure where the user asked
-            if request.take == nil {
+            if request.subject == nil {
                 reportFailure(reason)
             }
         }
@@ -298,7 +322,8 @@ final class AgentRecordingViewModel {
         }
         let outcome = AgentRunOutcome.classify(
             end: end, agent: request.agent, job: tools.job, startingRenderID: startingRenderID,
-            outputReason: OutputTail.reason(stdout: result.stdout, stderr: result.stderr, redacting: [token])
+            outputReason: OutputTail.reason(stdout: result.stdout, stderr: result.stderr, redacting: [token]),
+            editedMotion: tools.motionEdits > startingMotionEdits ? tools.lastMotionBundle : nil, limit: request.timeLimit
         )
         return (outcome, result.stdout)
     }

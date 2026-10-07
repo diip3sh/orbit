@@ -82,11 +82,19 @@ struct MotionGrammarTests {
     }
 
     @Test func driftIsSteadyAndOutlastsItsScene() {
-        let effect = MoveExpansion.effect(of: MotionMove(.drift), in: context(duration: 4))
+        let effect = MoveExpansion.effect(of: MotionMove(.drift), in: context(duration: 2))
         let pan = effect.tracks[.positionX]?.first
         // 2% of the width a second, at constant speed
-        #expect(abs((pan?.value(at: 2) ?? 0) - 0.02 * 1920 * 2) < 1e-6)
-        #expect((pan?.keyframes.last?.time ?? 0) == 4 + MoveExpansion.driftOverrun)
+        #expect(abs((pan?.value(at: 1) ?? 0) - 0.02 * 1920) < 1e-6)
+        #expect((pan?.keyframes.last?.time ?? 0) == 2 + MoveExpansion.driftOverrun)
+    }
+
+    @Test func aLongScenesDriftSlowsSoItsCaptionsStayInFrame() {
+        let effect = MoveExpansion.effect(of: MotionMove(.drift), in: context(duration: 10))
+        let pan = effect.tracks[.positionX]?.first
+        let zoom = effect.tracks[.scale]?.first
+        #expect(abs((pan?.value(at: 10) ?? 0) - MoveExpansion.longestDrift * 1920) < 1e-6)
+        #expect((zoom?.value(at: 10) ?? 2) < 1.025)
     }
 
     @Test func aPanEndsOnItsTargetAtItsZoom() {
@@ -186,6 +194,13 @@ struct MotionGrammarTests {
             return
         }
         #expect(parts.map(\.id) == ["agents.prefix", "agents.roll0", "agents.roll1", "agents.roll2"])
+        // The centred line's prefix ends a space before the rolling word, not at the box's left edge
+        guard case .text(let prefix) = parts[0].content, let prefixEnd = TextImage(prefix, scale: 0).words.last?.maxX else {
+            Issue.record("No prefix text")
+            return
+        }
+        let gap = parts[1].transform.position[0] - (parts[0].transform.position[0] + prefixEnd)
+        #expect(gap > 0 && gap < 0.4 * prefix.size)
     }
 
     @Test func theBrandsFaceChoosesTheHeadlinesReveal() {
@@ -224,6 +239,22 @@ struct MotionGrammarTests {
         }
         """#.utf8))
         #expect(MotionLint.findings(in: document).isEmpty)
+    }
+
+    @Test func aFeatureSequencesItemsLeaveInTurn() throws {
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(#"""
+        {
+          "version": 1,
+          "assets": [{ "id": "card", "url": "https://example.com", "selector": "#card" }],
+          "scenes": [
+            { "id": "features", "duration": 9, "shot": { "shot": "featureSequence", "items": [
+              { "text": "Plan the launch", "ui": "card" }, { "text": "Ship it on time", "ui": "card" }, { "text": "Measure it", "ui": "card" }
+            ] } }
+          ]
+        }
+        """#.utf8))
+        let findings = MotionLint.findings(in: document, sizes: ["card": CGSize(width: 800, height: 500)])
+        #expect(!findings.contains { $0.rule == .simultaneousMoves })
     }
 
     @Test func lintFindsWhatTheRulesForbid() throws {

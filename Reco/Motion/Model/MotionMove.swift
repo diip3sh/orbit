@@ -15,9 +15,9 @@ nonisolated struct MotionMove: Equatable, Sendable {
         // Text and any layer
         case fadeUp, blurIn, exit
         // Text only
-        case blurWipe, lineMask, type, roll
+        case blurWipe, lineMask, wordByWord, type, roll
         // UI and any layer
-        case rise, tilt, focus, detach, stateChange
+        case rise, slideIn, tilt, focus, detach, stateChange
         // Groups: their layers one after another
         case cascade
         // Cameras
@@ -28,7 +28,7 @@ nonisolated struct MotionMove: Equatable, Sendable {
         }
 
         var needsText: Bool {
-            [.blurWipe, .lineMask, .type, .roll].contains(self)
+            [.blurWipe, .lineMask, .wordByWord, .type, .roll].contains(self)
         }
     }
 
@@ -47,7 +47,7 @@ nonisolated struct MotionMove: Equatable, Sendable {
     /// How far or how much, 1 for the grammar's own amount; for a pan, how much closer it ends.
     var intensity: Double?
 
-    /// Where a drift goes.
+    /// Where a drift, a slide in or an exit goes.
     var direction: Direction?
 
     /// A roll's words, in turn after the text's last word.

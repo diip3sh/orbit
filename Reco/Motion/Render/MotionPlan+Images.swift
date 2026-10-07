@@ -77,6 +77,10 @@ extension MotionPlan {
         ))
     }
 
+    /// How far the lit region fades into the dimmed rest: a share of the layer's height (the blur's
+    /// sigma). Cut hard, the edge drew a line across the UI.
+    nonisolated static let focusFeather = 0.03
+
     /// The layer darkened by `dim` outside `region` (canvas pixels from the top-left corner of a
     /// layer `height` tall), and out of focus: 10 px of blur at full dim, as the reference's far
     /// planes. A take's frame has the movie's pixels, so the scale is the image's.
@@ -92,7 +96,8 @@ extension MotionPlan {
                 "inputGVector": CIVector(x: 0, y: kept, z: 0, w: 0),
                 "inputBVector": CIVector(x: 0, y: 0, z: kept, w: 0)
             ])
-        return image.cropped(to: lit).composited(over: darkened)
+        let mask = CIImage(color: .white).cropped(to: lit).applyingGaussianBlur(sigma: focusFeather * height * scale).cropped(to: image.extent)
+        return image.applyingFilter("CIBlendWithMask", parameters: [kCIInputBackgroundImageKey: darkened, kCIInputMaskImageKey: mask])
     }
 
     /// A layer's image as its focus leaves it, drawn into a bitmap; `nil` without a focus.

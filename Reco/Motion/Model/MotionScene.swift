@@ -20,7 +20,14 @@ nonisolated struct MotionScene: Equatable, Sendable, Identifiable {
     /// Drawn farthest first; layers at the same depth in this order.
     var layers: [MotionLayer] = []
 
+    /// Moves replacing those the shot gives its layers, by layer id, and its camera's under
+    /// ``cameraID``. The layer stays where the shot lays it out, which a copy in ``layers`` wouldn't.
+    var shotMoves: [String: [MotionMove]] = [:]
+
     var camera = MotionCamera()
+
+    /// The key of ``shotMoves`` naming the shot's camera.
+    static let cameraID = "camera"
 }
 
 // MARK: - Codable
@@ -34,6 +41,7 @@ nonisolated extension MotionScene: Codable {
         shot = try container.decodeIfPresent(MotionShot.self, forKey: .shot)
         seam = try container.decodeIfPresent(MotionSeam.self, forKey: .seam) ?? .cut
         layers = try container.decodeIfPresent([MotionLayer].self, forKey: .layers) ?? []
+        shotMoves = try container.decodeIfPresent([String: [MotionMove]].self, forKey: .shotMoves) ?? [:]
         camera = try container.decodeIfPresent(MotionCamera.self, forKey: .camera) ?? MotionCamera()
     }
 }

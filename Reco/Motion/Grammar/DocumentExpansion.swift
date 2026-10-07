@@ -38,9 +38,14 @@ nonisolated enum DocumentExpansion {
         guard let shot = scene.shot else { return scene }
         var result = scene
         let layout = ShotLayout.layout(shot, in: ShotLayout.Context(scene: scene, index: index, canvas: document.canvas, style: document.style, sizes: sizes))
-        result.layers = merged(layout.layers, with: scene.layers)
+        let shotLayers = layout.layers.map { layer in
+            var layer = layer
+            layer.moves = scene.shotMoves[layer.id] ?? layer.moves
+            return layer
+        }
+        result.layers = merged(shotLayers, with: scene.layers)
         result.camera.position = scene.camera.position ?? layout.camera.position
-        result.camera.moves = layout.camera.moves + scene.camera.moves
+        result.camera.moves = (scene.shotMoves[MotionScene.cameraID] ?? layout.camera.moves) + scene.camera.moves
         result.camera.keyframes = layout.camera.keyframes.merging(scene.camera.keyframes) { $1 }
         return result
     }
@@ -97,8 +102,7 @@ nonisolated enum DocumentExpansion {
 
         // The layer's reveal over the whole text, split at the last word
         var context = scene
-        context.characters = text.text.count
-        context.lines = image.lines.count
+        context.measure(image)
         let reveal = layer.moves.first { $0.kind.needsText }
         let perCharacter = reveal.map { characterTime(of: $0, characters: text.text.count, in: context) } ?? 0
         let revealStart = reveal.map { MoveExpansion.timing(of: $0, in: context).start } ?? 0
@@ -106,31 +110,34 @@ nonisolated enum DocumentExpansion {
         let start = roll.start ?? (reveal == nil ? 1 : revealEnd + 0.5)
         let interval = (roll.duration ?? 0.5 * Double(words.count - 1)) / Double(max(words.count - 1, 1))
 
-        func part(_ id: String, _ string: String, at point: CGPoint, revealFrom offset: Int) -> MotionLayer {
+        // A word-by-word reveal goes by words: the part's first word starts at its turn
+        let perWord = reveal.map { wordTime(of: $0, words: image.words.count, in: context) } ?? 0
+
+        func part(_ id: String, _ string: String, at point: CGPoint, revealFrom offset: Int, word: Int) -> MotionLayer {
             var content = text
             content.text = string
             content.width = nil
             content.alignment = .leading
             var transform = Transform3D(position: [point.x, point.y, 0])
             transform.anchor = .zero
-            let moves = layer.moves.map { move -> MotionMove in
-                guard move.kind.needsText else { return move }
-                var shifted = move
-                shifted.start = revealStart + Double(offset) * perCharacter
-                shifted.duration = move.kind == .lineMask ? move.duration : Double(string.count) * perCharacter + (move.kind == .type ? 0 : 0.3)
-                return shifted
+            let line = LineReveal(start: revealStart, perCharacter: perCharacter, perWord: perWord, context: context)
+            let moves = layer.moves.map { move in
+                move.kind.needsText ? partReveal(move, of: content, character: offset, word: word, line: line) : move
             }
             return MotionLayer(id: id, content: .text(content), transform: transform, moves: moves)
         }
 
         var parts: [MotionLayer] = []
         if !prefix.isEmpty {
-            parts.append(part("\(layer.id).prefix", prefix, at: origin, revealFrom: 0))
+            parts.append(part("\(layer.id).prefix", prefix, at: prefixOrigin(prefix, of: text, in: image, at: origin), revealFrom: 0, word: 0))
         }
         let offset = text.text.distance(from: text.text.startIndex, to: lastWord.lowerBound)
         let top = origin.y + box.minY
         for (index, word) in words.enumerated() {
-            let wordLayer = part("\(layer.id).word\(index)", word, at: .zero, revealFrom: index == 0 ? offset : text.text.count)
+            let wordLayer = part(
+                "\(layer.id).word\(index)", word, at: .zero, revealFrom: index == 0 ? offset : text.text.count,
+                word: index == 0 ? image.words.count - 1 : image.words.count
+            )
             // In a group of its own, so the roll's keyframes don't override the moves the word carries
             parts.append(MotionLayer(
                 id: "\(layer.id).roll\(index)", content: .group([wordLayer]), transform: Transform3D(position: [origin.x + box.minX, top, 0]),
@@ -143,11 +150,52 @@ nonisolated enum DocumentExpansion {
         return group
     }
 
+    /// Where a rolled text's prefix, drawn alone and leading, goes so it starts where its first word
+    /// was in the whole line: a centred line in a wider box would leave a gap before the rolling word.
+    private static func prefixOrigin(_ prefix: String, of text: TextContent, in image: TextImage, at origin: CGPoint) -> CGPoint {
+        var alone = text
+        alone.text = prefix
+        alone.width = nil
+        alone.alignment = .leading
+        guard let first = image.words.first, let own = TextImage(alone, scale: 0).words.first else { return origin }
+        return CGPoint(x: origin.x + first.minX - own.minX, y: origin.y + first.minY - own.minY)
+    }
+
     /// How long a reveal takes per character of a text `characters` long.
     private static func characterTime(of reveal: MotionMove, characters: Int, in context: MoveContext) -> Double {
         let duration = MoveExpansion.timing(of: reveal, in: context).duration
         let count = Double(characters)
         return reveal.kind == .type ? duration / max(count, 1) : (duration - min(0.3, duration)) / max(count - 1, 1)
+    }
+
+    /// A reveal over a whole rolled line: when it starts, how far apart its characters and words
+    /// start, and where it runs.
+    nonisolated private struct LineReveal {
+        let start: Double
+        let perCharacter: Double
+        let perWord: Double
+        let context: MoveContext
+    }
+
+    /// A reveal on part of a rolled text, starting where the whole line's reaches it: at character
+    /// `offset`, or at word `word` for a word-by-word reveal.
+    private static func partReveal(_ move: MotionMove, of content: TextContent, character offset: Int, word: Int, line: LineReveal) -> MotionMove {
+        var shifted = move
+        if move.kind == .wordByWord {
+            let words = TextImage(content, scale: 0).words.count
+            shifted.start = line.start + Double(word) * line.perWord
+            shifted.duration = Double(max(words - 1, 0)) * line.perWord + min(0.45, MoveExpansion.timing(of: move, in: line.context).duration)
+            return shifted
+        }
+        shifted.start = line.start + Double(offset) * line.perCharacter
+        shifted.duration = move.kind == .lineMask ? move.duration : Double(content.text.count) * line.perCharacter + (move.kind == .type ? 0 : 0.3)
+        return shifted
+    }
+
+    /// How far apart a word-by-word reveal's words start, over a text of `words` words.
+    private static func wordTime(of reveal: MotionMove, words: Int, in context: MoveContext) -> Double {
+        let duration = MoveExpansion.timing(of: reveal, in: context).duration
+        return (duration - min(0.45, duration)) / Double(max(words - 1, 1))
     }
 
     /// Word `index` of a roll's `count` coming in from below at its turn and leaving upwards at the

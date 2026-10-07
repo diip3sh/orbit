@@ -11,10 +11,10 @@ import Testing
 @MainActor
 struct AgentToolCatalogTests {
 
-    @Test func theCatalogHasTheFourToolsWithUniqueNames() {
+    @Test func theCatalogHasItsToolsWithUniqueNames() {
         let names = AgentToolCatalog.tools.map(\.name)
 
-        #expect(names == ["inspect_page", "record_page", "render_status", "export_recording"])
+        #expect(names == ["inspect_page", "record_page", "render_status", "export_recording", "edit_motion", "capture_ui", "preview_motion"])
         #expect(Set(names).count == names.count)
     }
 

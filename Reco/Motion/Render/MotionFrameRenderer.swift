@@ -194,6 +194,11 @@ nonisolated enum MotionFrameRenderer {
             case .rise:
                 shown = piece.transformed(by: CGAffineTransform(translationX: 0, y: -(1 - progress) * part.height * scale))
                     .cropped(to: pixels(part)).composited(over: shown)
+            case .word:
+                // Up a quarter of its line, sharpening from 4% of it, as it fades in
+                shown = piece.applyingGaussianBlur(sigma: (1 - progress) * part.height * 0.04 * scale)
+                    .transformed(by: CGAffineTransform(translationX: 0, y: -(1 - progress) * part.height * 0.25 * scale))
+                    .fading(to: progress).composited(over: shown)
             }
         }
         if let run = whole {

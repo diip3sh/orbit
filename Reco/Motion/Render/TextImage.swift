@@ -25,11 +25,18 @@ nonisolated struct TextImage: @unchecked Sendable {
     /// The height of a capital, in canvas pixels: what headline sizes are measured by.
     let capHeight: Double
 
+    /// Letter spacing in canvas pixels: display type set 1.2% of its size tight, which read as set
+    /// rather than typed next to the reference films' titles; monospace as drawn.
+    static func tracking(of content: TextContent) -> Double {
+        content.face == .mono ? 0 : -0.012 * content.size
+    }
+
     init(_ content: TextContent, scale: Double) {
         let font = Self.font(for: content)
         capHeight = font.capHeight
         let attributed = NSAttributedString(string: content.text, attributes: [
             .font: font,
+            .kern: Self.tracking(of: content),
             .foregroundColor: NSColor(cgColor: content.color.cgColor) ?? .white,
             .paragraphStyle: Self.paragraphStyle(for: content.alignment)
         ])

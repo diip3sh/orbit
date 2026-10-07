@@ -82,8 +82,7 @@ nonisolated enum MotionLint {
         layers.flatMap { layer -> [TimedLayer] in
             var context = context
             if case .text(let text) = layer.content {
-                let image = TextImage(text, scale: 0)
-                (context.characters, context.lines) = (image.characters.count, image.lines.count)
+                context.measure(TextImage(text, scale: 0))
             }
             let moves = layer.moves.map { move in
                 let timing = MoveExpansion.timing(of: move, in: context)

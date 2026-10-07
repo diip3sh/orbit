@@ -28,6 +28,9 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
     /// The page's look, for a launch video's style (spec 0010, step 3).
     var brand: Brand?
 
+    /// What a motion video can lift off the page alone (spec 0011, *Agent*), largest first.
+    var liftable: [Liftable]?
+
     /// The box of the first element each requested selector matches; `nil` when none were requested.
     var boxes: [String: Box]?
 
@@ -36,7 +39,7 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
     var renderCost: [String: Double]?
 
     private enum CodingKeys: String, CodingKey {
-        case title, url, description, viewport, elements, truncated, overlays, brand, boxes
+        case title, url, description, viewport, elements, truncated, overlays, brand, liftable, boxes
         case pageHeight = "page_height"
         case renderCost = "render_cost"
     }
@@ -74,6 +77,20 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
         var box: Box
     }
 
+    nonisolated struct Liftable: Codable, Equatable, Sendable {
+        var selector: String
+
+        /// `panel` for a painted box, else the picture's tag: `img`, `video`, `canvas`, `picture`.
+        var kind: String
+        var text: String
+
+        /// With its corner radius.
+        var box: Box
+
+        /// `#rrggbb`; `nil` when it's transparent.
+        var background: String?
+    }
+
     nonisolated struct Overlay: Codable, Equatable, Sendable {
         var selector: String
 
@@ -89,7 +106,7 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
         var width: Double
         var height: Double
 
-        /// The element's top-left corner radius, for the boxes of requested selectors only.
+        /// The element's top-left corner radius, for requested selectors and liftable elements only.
         var radius: Double?
 
         var rect: CGRect {

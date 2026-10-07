@@ -121,7 +121,7 @@ struct AgentInvocationTests {
         #expect(chosen.arguments == expectedWithModel)
         let file = try #require(plain.files[".cursor/cli.json"])
         let object = try #require(JSONSerialization.jsonObject(with: Data(file.utf8)) as? [String: [String: [String]]])
-        #expect(object["permissions"]?["allow"] == ["Mcp(reco:inspect_page)", "Mcp(reco:record_page)", "Mcp(reco:render_status)"])
+        #expect(object["permissions"]?["allow"] == AgentToolCatalog.tools.map { "Mcp(reco:\($0.name))" })
         #expect(object["permissions"]?["deny"] == ["Shell(*)", "Write(**)", "WebFetch(*)"])
     }
 

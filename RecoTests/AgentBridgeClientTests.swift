@@ -48,7 +48,7 @@ struct AgentBridgeClientTests {
         return process.terminationStatus
     }
 
-    @Test func anAgentsProcessListsTheThreeToolsAndEndsWithItsInput() async throws {
+    @Test func anAgentsProcessListsTheToolsAndEndsWithItsInput() async throws {
         let client = Client(environment: [AgentServerCommand.tokenVariable: AgentBridgeServer.token()])
         let process = client.process
         let input = client.input
@@ -74,7 +74,7 @@ struct AgentBridgeClientTests {
         }
         let names = try await listing.value
         watchdog.cancel()
-        #expect(names == ["inspect_page", "record_page", "render_status", "export_recording"])
+        #expect(names == AgentToolCatalog.tools.map(\.name))
 
         try input.fileHandleForWriting.close()
         let status = await exitStatus(of: process, within: .seconds(5))

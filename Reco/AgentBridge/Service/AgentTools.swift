@@ -21,12 +21,36 @@ final class AgentTools {
     /// The page an `inspect_page` call is looking at now, if one is.
     private(set) var inspecting: URL?
 
+    /// What a motion tool is doing now ("Capturing the UI…"), if one is.
+    var motionActivity: String?
+
+    /// How many motion videos `edit_motion` has changed since launch, and the last: a run that
+    /// edited one succeeded without rendering (spec 0011, *Agent*).
+    var motionEdits = 0
+    var lastMotionBundle: URL?
+
+    /// The open window's view model of a motion bundle, which edits go through: the file is never
+    /// changed behind an open window.
+    @ObservationIgnored var motionEditor: (URL) -> MotionEditorViewModel? = { _ in nil }
+
+    /// Called with each motion video `edit_motion` changes.
+    @ObservationIgnored var onMotionEdited: (URL) -> Void = { _ in }
+
+    /// The capture or preview going on or last finished, by its arguments.
+    @ObservationIgnored var motionJob: MotionJob?
+
+    struct MotionJob {
+        let key: String
+        let task: Task<Reply, Never>
+        var isDone = false
+    }
+
     @ObservationIgnored private var renderTask: Task<Void, Never>?
 
     /// The latest export and what asked for it, or `nil` before the first.
     @ObservationIgnored private var export: (request: ExportRecordingRequest, status: ExportStatus)?
     @ObservationIgnored private var exportTask: Task<Void, Never>?
-    @ObservationIgnored private let settings: SettingsStore
+    @ObservationIgnored let settings: SettingsStore
     @ObservationIgnored private let onRendered: (URL) -> Void
 
     /// How long `record_page` and `render_status` wait for a render. Under the 60 s default tool
@@ -36,7 +60,20 @@ final class AgentTools {
     /// How long `inspect_page` waits for a page, under the same timeout.
     static let inspectLimit = Duration.seconds(40)
 
-    private static let pollInterval = Duration.milliseconds(250)
+    static let pollInterval = Duration.milliseconds(250)
+
+    /// A tool's answer: JSON text for the agent, and a picture for `preview_motion`.
+    nonisolated struct Reply: Sendable {
+        var text: String
+        var image: Data?
+        var isError: Bool
+
+        init(text: String, image: Data? = nil, isError: Bool) {
+            self.text = text
+            self.image = image
+            self.isError = isError
+        }
+    }
 
     /// - Parameter onRendered: Called with each rendered movie, to open it in the editor.
     init(settings: SettingsStore, onRendered: @escaping (URL) -> Void) {
@@ -46,25 +83,31 @@ final class AgentTools {
 
     /// Runs tool `name` with its JSON `arguments`. The text is JSON for the agent; a failure is
     /// reported as an error text, not thrown.
-    func call(_ name: String, arguments: Data) async -> (text: String, isError: Bool) {
+    func call(_ name: String, arguments: Data) async -> Reply {
         do {
             switch name {
             case AgentToolCatalog.inspectPage:
-                return (try Self.encode(try await inspect(arguments)), false)
+                return Reply(text: try Self.encode(try await inspect(arguments)), isError: false)
             case AgentToolCatalog.recordPage:
                 let status = try await record(arguments)
-                return (try Self.encode(status), status.status == .failed)
+                return Reply(text: try Self.encode(status), isError: status.status == .failed)
             case AgentToolCatalog.renderStatus:
                 let status = try await status(arguments)
-                return (try Self.encode(status), status.status == .failed)
+                return Reply(text: try Self.encode(status), isError: status.status == .failed)
             case AgentToolCatalog.exportRecording:
                 let status = try await export(arguments)
-                return (try Self.encode(status), status.status == .failed)
+                return Reply(text: try Self.encode(status), isError: status.status == .failed)
+            case AgentToolCatalog.editMotion:
+                return Reply(text: try Self.encode(try await editMotion(arguments)), isError: false)
+            case AgentToolCatalog.captureUI:
+                return try await captureUI(arguments)
+            case AgentToolCatalog.previewMotion:
+                return try await previewMotion(arguments)
             default:
                 throw AgentToolError.unknownTool(name)
             }
         } catch {
-            return (error.localizedDescription, true)
+            return Reply(text: error.localizedDescription, isError: true)
         }
     }
 
@@ -105,10 +148,15 @@ final class AgentTools {
             exportTask = Task {
                 do {
                     // Progress comes from its own task, which can still report after the export has returned
-                    let file = try await ExportService.export(recordingAt: movie, settings: settings) { [weak self] progress in
+                    let progress = { [weak self] (progress: Double) in
                         if self?.export?.status.status == .exporting {
                             self?.export?.status.progress = progress
                         }
+                    }
+                    let file = if movie.pathExtension == MotionStore.bundleExtension {
+                        try await MotionExporter.export(try await motionDocument(at: movie), bundle: movie, settings: settings, progress: progress)
+                    } else {
+                        try await ExportService.export(recordingAt: movie, settings: settings, progress: progress)
                     }
                     export?.status = ExportStatus(status: .done, progress: 1, file: file.path(percentEncoded: false))
                 } catch {
@@ -160,13 +208,13 @@ final class AgentTools {
 
     // MARK: - JSON
 
-    private static func encode(_ value: some Encodable) throws -> String {
+    static func encode(_ value: some Encodable) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return String(data: try encoder.encode(value), encoding: .utf8) ?? ""
     }
 
-    private static func decode<Request: Decodable>(_ type: Request.Type, from data: Data) throws(AgentToolError) -> Request {
+    static func decode<Request: Decodable>(_ type: Request.Type, from data: Data) throws(AgentToolError) -> Request {
         do {
             return try JSONDecoder().decode(type, from: data)
         } catch let error as DecodingError {

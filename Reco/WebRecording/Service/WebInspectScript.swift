@@ -20,6 +20,9 @@ enum WebInspectScript {
     /// The most overlays listed.
     static let maximumOverlays = 20
 
+    /// The most liftable elements listed, largest first.
+    static let maximumLiftable = 30
+
     /// How far the page is scrolled at a time while it loads what's further down, as a share of the
     /// viewport's height, and how long each step waits.
     static let preloadStep = 0.8
@@ -101,6 +104,35 @@ enum WebInspectScript {
         logo: mark ? { selector: selectorFor(mark), box: pageBox(mark) } : undefined
       };
     };
+    // What a motion video can lift alone: a painted, rounded box (a card, a panel, an app mockup) or a
+    // picture, at least 120×60 CSS px, narrower than the page (a full-bleed section isn't one), largest
+    // first, one of each box
+    const liftableOf = () => {
+      const found = [];
+      for (const element of document.querySelectorAll('body *')) {
+        const box = element.getBoundingClientRect();
+        if (box.width < 120 || box.height < 60 || box.width > innerWidth * 0.96 || !isVisible(element)) continue;
+        const style = getComputedStyle(element);
+        const radius = parseFloat(style.borderTopLeftRadius) || 0;
+        const background = hex(style.backgroundColor);
+        const picture = ['img', 'video', 'canvas', 'picture'].includes(element.localName) && box.width >= 200 && box.height >= 120;
+        const painted = radius > 0 && (background || style.boxShadow !== 'none' || parseFloat(style.borderTopWidth) > 0);
+        if (!picture && !painted) continue;
+        found.push({ element, area: box.width * box.height, entry: {
+          selector: selectorFor(element), kind: picture ? element.localName : 'panel', text: textOf(element),
+          box: { ...pageBox(element), radius }, background: background ?? undefined
+        } });
+      }
+      const listed = [];
+      for (const candidate of found.sort((first, second) => second.area - first.area)) {
+        const box = candidate.entry.box;
+        const same = listed.some((entry) => Math.abs(entry.box.x - box.x) < 2 && Math.abs(entry.box.y - box.y) < 2 &&
+          Math.abs(entry.box.width - box.width) < 2 && Math.abs(entry.box.height - box.height) < 2);
+        if (!same) listed.push(candidate.entry);
+        if (listed.length === \#(maximumLiftable)) break;
+      }
+      return listed;
+    };
     const description = (document.querySelector('meta[name="description" i], meta[property="og:description"]')?.content || '').trim();
     const result = {
       title: document.title,
@@ -127,7 +159,8 @@ enum WebInspectScript {
         selector: selectorFor(element), position: getComputedStyle(element).position, text: textOf(element), box: pageBox(element)
       })),
       // A page this can't read is still listed
-      brand: (() => { try { return brandOf(); } catch { return undefined; } })()
+      brand: (() => { try { return brandOf(); } catch { return undefined; } })(),
+      liftable: (() => { try { return liftableOf(); } catch { return undefined; } })()
     };
     if (selectors.length) {
       result.boxes = {};

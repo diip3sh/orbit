@@ -65,6 +65,27 @@ struct WebCleanPageTests {
         #expect(brand.font == "Tiempos Headline")
     }
 
+    @Test func inspectingListsWhatAMotionVideoCanLift() async throws {
+        let page = """
+            <!doctype html><html><body style="margin: 0; background: #fff">
+            <section style="height: 300px; background: #eee"><div id="card" style="width: 300px; height: 160px; border-radius: 12px; \
+            background: rgb(20, 20, 30)"><div id="inner" style="width: 300px; height: 160px; border-radius: 12px; background: #222">Plans</div></div></section>
+            <div id="flat" style="width: 300px; height: 160px; background: #333"></div>
+            <div id="small" style="width: 100px; height: 40px; border-radius: 8px; background: #333"></div>
+            </body></html>
+            """
+        var script = script()
+        script.url = URL(string: "data:text/html;charset=utf-8," + (page.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""))
+
+        let liftable = try #require(try await WebPageRenderer(script: script).inspect(selectors: []).liftable)
+
+        // The rounded card once (its child has the same box); not the full-width section, the square box or the small one
+        #expect(liftable.map(\.selector) == ["#card"])
+        #expect(liftable.first?.box.radius == 12)
+        #expect(liftable.first?.background == "#14141e")
+        #expect(liftable.first?.kind == "panel")
+    }
+
     @Test func aTakeOfLocalhostRenders() async throws {
         let pages = try await LocalPages.serving(["/": "<!doctype html><html><body style=\"background: rgb(0, 255, 0)\"></body></html>"])
         var script = script()
