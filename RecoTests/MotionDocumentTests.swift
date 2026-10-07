@@ -111,6 +111,38 @@ struct MotionDocumentTests {
         #expect(throws: MotionDocumentError.invalidSize("ui")) { try document.validate() }
     }
 
+    /// Glass, typing and steps before a lift are for stills; before takes clicks and typing with text.
+    @Test func checksAStillsGlassTypingAndSteps() throws {
+        let url = try #require(URL(string: "https://supabase.com/docs"))
+        let layer = MotionLayer(id: "ui", content: .lifted(UIContent(asset: "search")))
+        var document = MotionDocument(scenes: [MotionScene(id: "one", duration: 1, layers: [layer])])
+        var search = MotionAsset(id: "search", url: url, selector: "[role=dialog]")
+        (search.glass, search.typing) = (true, MotionAsset.Typing(field: "input", text: "row level security"))
+        search.before = [RecordPageRequest.Step(action: "click", selector: "button[aria-haspopup=dialog]")]
+        document.assets = [search]
+        try document.validate()
+
+        var hovered = search
+        hovered.before = [RecordPageRequest.Step(action: "hover", selector: "nav")]
+        document.assets = [hovered]
+        #expect(throws: MotionDocumentError.self) { try document.validate() }
+
+        var live = search
+        live.steps = [RecordPageRequest.Step(action: "click", selector: "#open")]
+        document.assets = [live]
+        #expect(throws: MotionDocumentError.self) { try document.validate() }
+
+        var waiting = search
+        waiting.typing?.text = ""
+        document.assets = [waiting]
+        try document.validate()
+
+        var fieldless = search
+        fieldless.typing?.field = ""
+        document.assets = [fieldless]
+        #expect(throws: MotionDocumentError.self) { try document.validate() }
+    }
+
     @Test func storeWritesAndReadsABundle() async throws {
         let (url, document) = try MotionTestBundle.make()
         defer { try? FileManager.default.removeItem(at: url) }

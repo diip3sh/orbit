@@ -41,7 +41,7 @@ nonisolated enum MotionLint {
             let context = MoveContext(sceneDuration: scene.duration, canvas: document.canvas.size)
             let layers = timed(scene.layers, in: context, group: nil)
             findings += textFindings(layers, scene: scene, canvas: document.canvas)
-            findings += timingFindings(layers, scene: scene, isEndCard: source.shot?.kind == .endCard, live: live)
+            findings += timingFindings(layers, scene: scene, isEndCard: source.shot?.kind.isEnding == true, live: live)
             if source.shot?.kind == .hook, let text = source.shot?.text, ReadingTime.words(in: text) > 6 {
                 findings.append(Finding(rule: .hookLength, scene: scene.id, message: "A hook is six words at most; this one has \(ReadingTime.words(in: text))."))
             }

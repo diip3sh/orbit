@@ -125,14 +125,28 @@ struct MotionPlanTests {
     @Test func drawsImagesAtTheLargestScaleTheyAreShown() async {
         var grows = MotionLayer(id: "grows", content: .text(TextContent(text: "Big")), transform: Transform3D(position: [960, 540, 0]))
         grows.keyframes[.scale] = [Keyframe(time: 0, value: 1), Keyframe(time: 1, value: 3)]
-        var huge = grows
-        huge.id = "huge"
-        huge.keyframes[.scale] = [Keyframe(time: 0, value: 1), Keyframe(time: 1, value: 10)]
+        var macro = grows
+        macro.id = "macro"
+        macro.keyframes[.scale] = [Keyframe(time: 0, value: 1), Keyframe(time: 1, value: 10)]
+        var page = MotionLayer(id: "page", content: .shape(ShapeContent(size: CGSize(width: 6000, height: 3000), color: RGBAColor(red: 1, green: 1, blue: 1, alpha: 1))))
+        page.keyframes[.scale] = macro.keyframes[.scale] ?? []
 
-        let plan = await MotionPlan.build(document([grows, huge]), bundle: bundle, shorterSide: 540)
+        let plan = await MotionPlan.build(document([grows, macro, page]), bundle: bundle, shorterSide: 540)
 
         #expect(abs(plan.scenes[0].layers[0].rasterScale - 1.5) < 1e-9)
-        // Capped at 4×, times the output's half scale
-        #expect(plan.scenes[0].layers[1].rasterScale == 2)
+        // Small, so sharp at 10×, times the output's half scale
+        #expect(abs(plan.scenes[0].layers[1].rasterScale - 5) < 1e-9)
+        // Large: capped at 4×, as 8,192 px would be softer still
+        #expect(plan.scenes[0].layers[2].rasterScale == 2)
+    }
+
+    /// A small still is lifted past 8× while its lift fits 8,192 px; a large one stops at 8×.
+    @Test func liftsSmallElementsSharperForMacro() {
+        let bar = UILiftCache.Lift(url: URL(filePath: "/bar.png"), scale: 2, size: CGSize(width: 576, height: 48))
+        let page = UILiftCache.Lift(url: URL(filePath: "/page.png"), scale: 2, size: CGSize(width: 1440, height: 900))
+
+        #expect(MotionPlan.liftScale(for: bar, width: 576, rasterScale: 14) == 14)
+        #expect(MotionPlan.liftScale(for: bar, width: 576, rasterScale: 40) == 14)
+        #expect(MotionPlan.liftScale(for: page, width: 1440, rasterScale: 14) == 8)
     }
 }

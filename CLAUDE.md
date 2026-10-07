@@ -963,21 +963,101 @@ outside the repo). L1 rebuilds Raycast's grammar on real UI: a macro live shot o
 
 | File | Role |
 |---|---|
-| `Motion/Render/FieldKernels.metal.txt` (`satinField`), `FieldPalette`, `FieldRenderer` | `satin`: black satin out of focus under one broad light, a lit plane's edge across a corner; monochrome whatever the brand |
-| `Motion/Render/MotionFrameRenderer.swift` | `fieldParallax` (a field follows the camera at 15 %); motion blur from a 180° shutter (`FrameRenderer.blurOffsets`, `average`) |
+| `Motion/Render/MotionFrameRenderer.swift` | Motion blur from a 180° shutter (`FrameRenderer.blurOffsets`, `average`) |
 | `Motion/Service/MatteFill.swift` | A live take's matte as coverage: alpha scaled to the element's median paint, holes its outline encloses filled |
 | `Editor/Render/CursorPath.swift` | The cursor hides from a typed key (no ⌘ or ⌃) until it moves or clicks, as macOS does |
 | `WebRecording/Model/WebScript.swift`, `Service/WebPageRenderer.swift` | A clip rests from its first key; the renderer measures typed-into fields itself |
 
 Key facts:
-- The satin was tuned in numpy against Raycast's frames (median 11–25 of 255 there, 5–39 here over 30 s)
-  and ported line for line; `keepsSatinLowKey` holds the levels.
 - Supabase's partner search is a translucent field (alpha 0.13) in a faint border: its painted matte was
   its placeholder's letters, so typed text showed only through them. Coverage fixes it; a filter that
   empties card slots still shows them as dark boxes, since the matte is the page as loaded.
 - Typing grew the field a clear button and moved its centre 12 pt; the pointer followed it, which showed
   the I-beam during typing. A take's keys can't be typed into a field whose box wasn't measured.
 - Motion blur costs nothing on still frames; a whip at 1080p averages up to 16 frames in an export.
+
+### S7 — The approved film in the engine (`remotion`, spec 0012)
+
+The user approved a 24 s Supabase docs film in New Raycast's look, rendered by a Python look-dev pass
+(spec 0012, L0). It is ported into the engine phase by phase, each checked against the film's frames. Phase 1
+is its ground: `satin` is now the film's cloth, lit afresh for each shot, and the film's grain. Phase 2 is
+lifted UI on glass (`"glass": true` on a still asset) and small elements drawn sharp in macro. Phase 3 is
+typing: a still asset's `typing` (a field and text) shown typed into from a `ui` layer's `typingStart`. Phase 4
+captures UI that only exists after a click (`before` steps) and a typing asset's states, from the live page. Phase 5
+moves a typed field's selection (`typing.select`, a layer's `presses`) with the camera following, and samples a whip's
+motion blur as the film did. Phase 6 is the `closing` shot, New Raycast's ending. With them the whole film is one
+document the app captures from supabase.com and exports in 90 s (`~/Movies/Reco/quality/port/`).
+
+| File | Role |
+|---|---|
+| `Motion/Render/SatinSetup.swift` | The film's four shots' lighting: folds, pools, key, exposure, defocus, drift, and the wide shot's slab of matte glass |
+| `Motion/Render/FieldKernels.metal.txt` | `satinGround` (folds lit in linear light on a coarse grid), `satinFinish` (exposed, encoded, the chamfered slab), `filmGrainNoise`, `filmGrain` |
+| `Motion/Render/FieldRenderer.swift` | `Shot` (the scene's place among those over its field, its start, the camera's move since); satin in stages; `grained` |
+| `Motion/Render/MotionPlan.swift`, `MotionFrameRenderer.swift` | `Scene.fieldShot`; `camera(of:at:)`; a field follows the camera from where the scene opened; grain over satin frames |
+| `Motion/Render/GlassRenderer.swift`, `FieldKernels.metal.txt` (`glassPanel`) | A glass layer's panel in frame space through the inverse of its projection: the field seen through it, pool, sheen, rim, shadow; the content clipped to it |
+| `Motion/Render/SatinSetup.swift` (`Glass`) | How each shot's light falls on glass (L0's stills, after Raycast's pill) |
+| `Motion/Model/MotionAsset.swift`, `Motion/Service/UILiftScript.swift`, `UICapture.swift`, `UILiftCache.swift` | `glass`; `bare` (content alone, no fill: a page's text on satin); `region` (part of a long element); lifted bare (`isolate`'s `bare`); every still's corner radius kept beside its lift (`Shape`) |
+| `Motion/Model/HumanTyping.swift` | Pure: key times at a person's pace, when results settle (a word's end), the caret's blink, the field's growth |
+| `Motion/Render/TypedField.swift`, `MotionPlan+Dressing.swift` | A layer's typing: its lifts at their own scale, keys, settled states; glass and typing put on a still's layer |
+| `Motion/Render/MotionFrameRenderer.swift` (`typed`) | The field at a moment: the last settled results, the row as typed, the caret; its glass as tall as the field is then |
+| `UILiftCache.Typing` | Where a typing asset's lifts are (`-typed-<n>`, `-settled-<n>`) and what they show: the row, where the text ends at each length, its line and size, the settled lengths and heights |
+| `Motion/Service/UICapture+Typing.swift`, `UILiftScript` (`click`, `settle`, `field`) | `before` steps run once a still's page loads; a typing asset typed a character at a time at the video's pace, its row lifted each time, the whole element once a word's results settle |
+
+Key facts:
+- The k-th scene over satin takes setup k mod 4 on its own clock, so each shot opens as the film's did
+  wherever it starts. Paper's looks keep the video's clock.
+- Fields follow the camera's move since the scene began (the cloth 15 %, the slab 35 %), not its absolute
+  look: before, a zoomed camera magnified a field from the first frame.
+- Against the film's ground at 1080p: 50–64 dB, mean difference 0.02–0.17 levels; the largest differences
+  are the film's own (one-sided gradients and its cubic resize at the frame's edges, and pixel centres on
+  whole numbers, half a pixel off Core Image's, along the slab's groove).
+- The cloth is lit on a 540-row grid (the film's 270), blurred and scaled up: 2.2–2.5 ms for a 1080p frame
+  with readback (M5, Debug).
+- Grain is the film's exactly: Gaussian noise through OpenCV's 0.6 px kernel, 2.32 levels in the mid-tones
+  (2.339 measured after rounding, as the film's), neighbours correlated 0.44, none in black; on a grid of at
+  most 1080 rows, scaled up past it. Core Image's own 0.6 px blur correlated 0.54 and needed a guessed scale.
+- Glass against the film's four shots (the film's own lifts in a bundle, its cameras keyed): 47.5–54 dB with
+  pixel centres matched (the film's glass, like its slab, was half a pixel off); 41 dB on the page's code,
+  where the film shrank its 8× lift bilinearly. Supabase's code block captured live with `glass` is pixel for
+  pixel the film's lift. The rim is 0.87 CSS px, so it scales with the element.
+- Layer images may be sharper than 4× while they fit 8,192 px (a search bar at 14× on 1080p); stills lift past
+  8× while they fit 8,192 px. Big layers keep the old caps, so memory is never worse.
+- `CIPerspectiveTransform` maps an image's extent out to whole pixels: a lift stretched to 5800.3 px drew 0.6 px
+  off. Lifts and images are drawn at whole pixels.
+- Typing follows the film: 0.118 s between keys ±, 0.11 s more at a space and 0.04 s before one ("row level
+  security" in 2.4 s), jitter from FNV-1a of the text so it never changes; results 0.22 s after a word's last key;
+  the caret solid 0.5 s after a key, then 0.53 s on and off with 0.08 s fades, 0.072 em wide and 1.19 em tall, 250 of
+  255; the field grows to its results on a 16 rad/s spring (95 % in 0.3 s).
+- A typed field is drawn at its lifts' own whole scale, so rows and results line up on whole pixels and the projection
+  is the one resampling; at the shown scale with rounding the rows sat 0.16 px off (44 dB). Against the film's shots 1
+  and 2 (16 frames, its lifts, the engine's key times): 53.3–55.1 dB, no shift.
+- A typing asset whose states aren't lifted (or not at the scale shown) asks the plan for a lift: all of it is lifted
+  again. Supabase's search ("row level security", 22 lifts at 8×) captured in 27.8 s.
+- The row is the field's first ancestor across nine tenths of the element's width: right whether or not results have
+  come yet. Where the text ends is measured after each key (canvas `measureText` with the field's font).
+- Captured live, Supabase's dialog matched the film's lab lifts pixel for pixel where the page was the same: the empty
+  field, rows 3, 4, 9, 10 and 18, the results at "row" and at the end. The rest differed by the input's own endless
+  shine (where in its cycle the snapshot fell) and, at "row level", which result cmdk had selected; the typing frames
+  drawn from it matched the film at 53–54 dB, 33 dB while that selection showed.
+- A press moves the selection one result (never above the first); the camera follows each move 0.06 s late over 0.3 s
+  eased out, one additive track per press, so presses closer than the move (the film's last two, 0.14 s apart) blend.
+  Against the film's shot 3 with the same follow and blur: 50.5–50.9 dB on all nine frames, mid-follow too.
+- Motion exports take a blur sample every 3 px a point travels, up to 96 (the film's; 16 left its whip in ghosts 20 px
+  apart); the preview keeps the editor's 8. The whip against the film's: 49.8–57.7 dB, each 96-sample frame drawn in
+  0.2–0.4 s (M5, Debug).
+- The whole film as one document (five scenes, six assets captured live, the film's cameras): exported frames against the
+  approved film's, read through AVFoundation as QuickTime shows them, match where the page is the same (the bar, the
+  typing, the page and its code, 32–45 dB); what differs is the site's state (cmdk's selection, the input's shine), the
+  key times (the engine's own jitter), the closing's type, and the results shot's camera by a few pixels. ffmpeg reads
+  AVFoundation's BT.709 HEVC 1.7–2.4 levels darker than AVFoundation does (x265's not), so compare through AVFoundation.
+- `closing` lays out as the film: mono caps 2.5 % of the frame tall, the name's left edge at 0.32 of the width, each word's
+  right edge at 0.68, cut every 0.42 s; the last held 0.74 s, sliding together over 1.4 s, the dimmed line 0.3 s later,
+  the logo alone 1.55 s after. Against the film, every line's box within 1–3 px and the same word at every moment; the
+  type is SF Mono, 8 % narrower than the docs' Source Code Pro the film lifted (a brand's own font is Q1).
+- Three capture fixes on the way: isolation hides everything inside what it hides (a child's own `visibility: visible`
+  beat the inherited hidden, and Supabase's docs heading showed through the dialog; `liftVersion` 3); bare stripping is
+  inline `!important` (a stylesheet rule lost to the site's own and kept the dialog's border); a word's results wait at
+  least 1.2 s and typing goes at the video's pace (faster, the results kept an older selection).
 
 ### Telemetry JSON (version 3)
 
@@ -1051,7 +1131,7 @@ should hold but need re-measuring.
 
 | Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps, shown elements, playbook | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop); linear.app walkthroughs run from the app through `reco://record-agent`. Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
 | S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 done: moves, seams, shots, lint, scenes lane and inspector; the benchmark rebuilt in 10 lines and three sites rendered, awaiting the user's side-by-side. Phase 4 done: agent tools, Launch Video mode, chat with selection; three sites run from their address with clean lint and design check, three chat edits change only their targets; cost recorded for one run. The window seen in a window capture; editing by hand not yet tried |
-| S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields ported, then rejected by the user as pasted behind the old video; directions picked from launch films (Raycast, Nothing OS 5.0, 3D layers). L1a–c built (satin, coverage mattes, typing cursor rules, parallax, motion blur), but the user found the test shot "really bad" next to Raycast. L0: still frames matched to Raycast's (glass for lifted UI, hero scale, a better ground), then a 24 s Supabase docs film in that look rendered as a look-dev pass outside the engine. The user approved the film; next is the port into the engine, checked against its frames |
+| S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields ported, then rejected by the user as pasted behind the old video; directions picked from launch films (Raycast, Nothing OS 5.0, 3D layers). L1a–c built (satin, coverage mattes, typing cursor rules, parallax, motion blur), but the user found the test shot "really bad" next to Raycast. L0: still frames matched to Raycast's (glass for lifted UI, hero scale, a better ground), then a 24 s Supabase docs film in that look rendered as a look-dev pass outside the engine. The user approved the film; its port into the engine has begun: phases 1 (satin, grain), 2 (glass, sharp macro) and 3 (typing, caret, results) done, matching the film at 47–64 dB; phase 4 captures UI behind a click and typing states live (Supabase's search, matching the film's lifts); phase 5 the selection, the camera following it, the whip's blur; phase 6 the `closing` shot; the whole film now made by the app from one document, matching the approved one where the site is the same. Next: the user's look at it, then the agent writing such documents (grammar names, playbook) |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

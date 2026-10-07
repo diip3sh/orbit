@@ -76,11 +76,11 @@ nonisolated enum FrameRenderer {
     }
 
     /// When a frame whose content moves `distance` pixels while the shutter is open is sampled, as
-    /// shares of the shutter from the frame's time: one sample per ``blurSampleSpacing`` pixels, at
-    /// most `most`, or just the frame's time when it moves less than half a pixel.
-    static func blurOffsets(distance: Double, most: Int) -> [Double] {
+    /// shares of the shutter from the frame's time: one sample per `spacing` pixels, at most `most`, or
+    /// just the frame's time when it moves less than half a pixel.
+    static func blurOffsets(distance: Double, most: Int, spacing: Double = blurSampleSpacing) -> [Double] {
         guard distance >= 0.5 else { return [0] }
-        let count = min(max(Int((distance / blurSampleSpacing).rounded(.up)), 2), most)
+        let count = min(max(Int((distance / spacing).rounded(.up)), 2), most)
         return (0..<count).map { (Double($0) + 0.5) / Double(count) - 0.5 }
     }
 

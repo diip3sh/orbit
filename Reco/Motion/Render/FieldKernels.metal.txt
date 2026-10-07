@@ -4,8 +4,8 @@
 //
 //  The fields of spec 0012, Q2: Paper Shaders 0.0.81's grain gradient (ember, sunlit), dithering
 //  (matrix) and smoke ring (halo), Copyright 2026 Paper, Apache-2.0, ported from their GLSL
-//  (docs/references/paper-shaders) to Core Image stitchable kernels; and Reco's own satin, after
-//  New Raycast's ground.
+//  (docs/references/paper-shaders) to Core Image stitchable kernels; and Reco's own satin and its
+//  grain, after New Raycast's film.
 //
 //  Each draws its frame as the 1280×720 gallery tile the look was picked from would, at a pixel
 //  ratio of 2: `frame` is (reference pixels per output pixel, the reference width and height, the
@@ -270,63 +270,245 @@ inline float smokeNoise(coreimage::sampler noise, float2 uv, float2 polar, float
 
 // MARK: - Reco's own
 
-#ifdef satinField_ONLY
+// Satin is New Raycast's ground as the film the user approved drew it (spec 0012, L0, SatinSetup):
+// cloth folds lit in linear light on a coarse grid (satinGround), blurred out of focus and scaled to
+// the frame, then exposed, encoded and, in a wide shot, covered by a slab of matte glass
+// (satinFinish). The film's grain goes over the whole frame last (filmGrainNoise, filmGrain). Lifted UI
+// on glass sits on a panel lit as its shot is (glassPanel).
+
+#ifdef satinGround_ONLY
 namespace satin {
-
-/// The cloth's height at `q` (the shorter side 1, the origin in the middle, y down) at time `t`: long
-/// folds about 30° off level, bent by a slow warp, crossed by a broader fold so they bunch instead of
-/// striping.
-inline float height(float2 q, float t) {
-    float u = 0.8660254 * q.x + 0.5 * q.y;
-    float v = -0.5 * q.x + 0.8660254 * q.y;
-    float bent = v + 0.22 * sin(1.4 * u + 0.17 * t + 0.4);
-    return 0.60 * sin(3.0 * bent + 0.8 * sin(u + 0.09 * t) + 0.15 * t)
-         + 0.22 * sin(5.3 * bent + 1.4 * u + 2.0 - 0.08 * t)
-         + 0.55 * sin(2.2 * (0.55 * u + 0.83 * v) + 1.1 * sin(0.8 * v - 0.06 * t) + 0.1 * t + 3.0);
-}
-
-inline float hash(float2 p) {
-    return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453123);
-}
 
 inline float squared(float x) { return x * x; }
 
+/// One fold's height at `q`: `shape` is its crest's centre, angle (radians, y down) and bend, `size`
+/// its length, its width on the light's side and away from it, and its height.
+inline float fold(float2 q, float4 shape, float4 size) {
+    float2 d = q - shape.xy;
+    float along = d.x * cos(shape.z) + d.y * sin(shape.z);
+    float across = -d.x * sin(shape.z) + d.y * cos(shape.z) - shape.w * along * along;
+    float width = across < 0.0 ? size.y : size.z;
+    return size.w * exp(-0.5 * squared(along / size.x) - 0.5 * squared(across / width));
 }
 
-/// Black satin out of focus under one broad key light from the upper left, with a lit plane's edge
-/// across the upper-left corner, as New Raycast's ground (docs/references/style-guide.md). `back` is
-/// the shadow, `lit` the light's colour; lightness is shaped to the film's levels (a median of 11–25
-/// of 255): 5–39 over 30 s, crests rolling off at ~53 %.
-[[stitchable]] float4 satinField(float4 frame, float4 back, float4 lit, coreimage::destination dest) {
+/// The cloth's height at `q`, its folds' lines wandering a little as cloth's do; `phase` moves them.
+inline float height(float2 q, float phase, thread const float4 *shapes, thread const float4 *sizes) {
+    float2 wander = float2(sin(3.1 * q.y + 1.3 * q.x + 0.7 + phase) + 0.6 * sin(5.3 * q.x - 2.2 * q.y + 2.1 - 0.7 * phase),
+                           sin(2.7 * q.x - 1.1 * q.y + 1.9 - phase) + 0.6 * sin(4.9 * q.y + 2.6 * q.x + 0.3 + 0.8 * phase));
+    float2 w = q + 0.03 * wander;
+    float h = 0.0;
+    for (int i = 0; i < 5; i++) {
+        h += fold(w, shapes[i], sizes[i]);
+    }
+    return h;
+}
+
+}
+
+/// The cloth's light, linear, at each pixel of a coarse grid. `frame`: the frame's pixels per grid
+/// pixel, its width and height in pixels, and the shot's time. `view`: how the camera moved the cloth
+/// (its zoom, and its shift in frame pixels, y down). `motion`: the folds' drift in shorter sides a
+/// second, how fast their lines wander, how much the pools breathe. `light`: towards the key (y down),
+/// and the height a crest is lit fully at; below it light falls off as the power `occlusion`. Then
+/// five folds (shape, size) and four pools (centre, radius, strength).
+[[stitchable]] float4 satinGround(
+    float4 frame, float4 view, float4 motion, float4 light, float occlusion,
+    float4 shape0, float4 size0, float4 shape1, float4 size1, float4 shape2, float4 size2, float4 shape3, float4 size3,
+    float4 shape4, float4 size4, float4 pool0, float4 pool1, float4 pool2, float4 pool3, coreimage::destination dest
+) {
     float2 size = frame.yz;
-    float2 p = dest.coord() * frame.x - 0.5 * size;
-    float2 q = float2(p.x, -p.y) / min(size.x, size.y);
     float t = frame.w;
-    // The normal from finite differences a 540th of the shorter side apart, as the prototype took them
-    float e = 1.0 / 540.0;
-    float h = satin::height(q, t);
-    float3 normal = normalize(float3(-0.34 * (satin::height(q + float2(e, 0.0), t) - h) / e,
-                                     -0.34 * (satin::height(q + float2(0.0, e), t) - h) / e, 1.0));
-    float3 light = normalize(float3(-0.5, -0.6, 0.5));
-    float sheen = pow(saturate(dot(normal, normalize(light + float3(0.0, 0.0, 1.0)))), 3.5);
-    float diffuse = satin::squared(saturate(dot(normal, light)));
-    // Its light pools up and to the right, leaving the middle, where UI sits, darker
-    float2 fromPool = q - float2(0.45, -0.2);
-    float cloth = (0.08 * diffuse + 0.7 * sheen) * (0.12 + 0.88 * exp(-dot(fromPool, fromPool) / 0.9));
-    // The plane: its edge rises to the right at 44.5°, a bright line on it and a dark one just
-    // inside (the glass's thickness); its face falls off away from the corner
-    float d = dot(q, float2(-0.70, -0.71)) - (0.566 + 0.004 * sin(0.2 * t));
-    float plane = saturate(d * 60.0 + 0.5);
-    float2 fromCorner = q - float2(-1.0, -0.6);
-    float face = 0.62 * exp(-dot(fromCorner, fromCorner) / 0.35) + 0.08;
-    float rim = 0.75 * exp(-satin::squared(d / 0.0025));
-    float inside = 1.0 - 0.8 * exp(-satin::squared((d - 0.007) / 0.003));
-    float lightness = pow(max(mix(cloth, face, plane) * inside, 0.0), 1.9);
-    // A soft shoulder, so crests roll off instead of clipping
-    lightness = 1.053 * lightness / (lightness + 0.35) + 0.9 * rim;
-    // Grain of ~1.5 levels, new each frame: it reads as photographed and dithers the long gradients
-    float2 g = dest.coord() + 113.0 * fract(7.31 * t);
-    lightness += 3.67 / 255.0 * (satin::hash(g) + satin::hash(g + 37.0) - 1.0);
-    return float4(mix(back.rgb, lit.rgb, saturate(lightness)), 1.0);
+    float2 pixel = dest.coord() * frame.x;
+    pixel.y = size.y - pixel.y;
+    // The point of the cloth the camera shows at this pixel, in shorter sides
+    float2 q = (0.5 * size + (pixel - 0.5 * size - view.yz) / view.x) / min(size.x, size.y);
+    float4 shapes[5] = { shape0, shape1, shape2, shape3, shape4 };
+    float4 sizes[5] = { size0, size1, size2, size3, size4 };
+    float2 drifted = q - motion.xy * t;
+    float phase = motion.z * t;
+    // The slope across 4 pixels at 1080p, as the stills took it
+    float e = 1.0 / 270.0;
+    float h = satin::height(drifted, phase, shapes, sizes);
+    float slopeX = satin::height(drifted + float2(e, 0.0), phase, shapes, sizes) - satin::height(drifted - float2(e, 0.0), phase, shapes, sizes);
+    float slopeY = satin::height(drifted + float2(0.0, e), phase, shapes, sizes) - satin::height(drifted - float2(0.0, e), phase, shapes, sizes);
+    float3 normal = normalize(float3(-slopeX / (2.0 * e), -slopeY / (2.0 * e), 1.0));
+    float3 key = normalize(light.xyz);
+    // Satin's sheen is a broad highlight; the diffuse light under it is faint
+    float sheen = pow(saturate(dot(normal, normalize(key + float3(0.0, 0.0, 1.0)))), 8.0);
+    float diffuse = 0.1 * satin::squared(saturate(dot(normal, key)));
+    float4 pools[4] = { pool0, pool1, pool2, pool3 };
+    float breathe = 1.0 + motion.w * sin(0.9 * t);
+    float pooled = 0.0;
+    for (int i = 0; i < 4; i++) {
+        float2 d = q - pools[i].xy;
+        pooled += pools[i].w * exp(-dot(d, d) / satin::squared(pools[i].z * breathe));
+    }
+    // Valleys stay darker than crests
+    float lit = (diffuse + sheen) * pooled * pow(saturate(h / light.w), occlusion);
+    return float4(lit, lit, lit, 1.0);
+}
+#endif
+
+#ifdef satinFinish_ONLY
+namespace satin {
+
+inline float squared(float x) { return x * x; }
+
+inline float encoded(float linear) {
+    return linear <= 0.0031308 ? 12.92 * linear : 1.055 * pow(linear, 1.0 / 2.4) - 0.055;
+}
+
+}
+
+/// The cloth's blurred light (`ground`, scaled to the frame) exposed by `tone.x` less a black of
+/// `tone.y`, encoded as sRGB, under a slab of matte glass if `face.x` (its level of 255) isn't 0.
+/// `frame`: pixels at 1080p per frame pixel, and the frame's width and height. `view`: how the camera
+/// moved the slab (zoom, shift in frame pixels, y down). `edge`: a point on the slab's edge (fractions
+/// of the frame), its angle (radians, y down) and the groove's distance in. `face`: its level, the
+/// groove's and the bevel's depth, its falloff. `shade`: its shadow's depth and reach, its tilt.
+[[stitchable]] float4 satinFinish(
+    coreimage::sampler ground, float4 frame, float4 tone, float4 view, float4 edge, float4 face, float4 shade,
+    float4 back, float4 lit, coreimage::destination dest
+) {
+    float level = 255.0 * satin::encoded(saturate(ground.sample(ground.transform(dest.coord())).r * tone.x - tone.y));
+    if (face.x > 0.0) {
+        float2 size = frame.yz;
+        float2 pixel = float2(dest.coord().x, size.y - dest.coord().y);
+        float2 g = 0.5 * size + (pixel - 0.5 * size - view.yz) / view.x;
+        // Signed distance from the edge in pixels at 1080p, negative on the slab
+        float d = (-(g.x - edge.x * size.x) * sin(edge.z) + (g.y - edge.y * size.y) * cos(edge.z)) * view.x * frame.x;
+        float slab = face.x + shade.z * clamp(d, -2000.0, 0.0) / 400.0;
+        float profile = 1.0 - face.y * exp(-satin::squared((d + edge.w) / 1.1)) + face.z * exp(-satin::squared((d + edge.w - 3.0) / 1.5))
+            - 0.32 * smoothstep(-face.w, 0.0, d);
+        float cover = 1.0 - smoothstep(-0.6, 0.6, d);
+        float shadow = 1.0 - shade.x * exp(-max(d, 0.0) / shade.y);
+        level = level * shadow * (1.0 - cover) + slab * profile * cover;
+    }
+    return float4(mix(back.rgb, lit.rgb, saturate(level / 255.0)), 1.0);
+}
+#endif
+
+#ifdef filmGrainNoise_ONLY
+namespace grain {
+
+/// Three independent 32-bit hashes of three integers (pcg3d: Jarzynski and Olano, "Hash Functions for
+/// GPU Rendering", 2020).
+inline uint3 pcg3d(uint3 v) {
+    v = v * 1664525u + 1013904223u;
+    v.x += v.y * v.z;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v ^= v >> 16u;
+    v.x += v.y * v.z;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    return v;
+}
+
+/// Gaussian noise of unit deviation at pixel `p`, new for each `seed`.
+inline float gaussian(int2 p, int seed) {
+    uint3 hashed = pcg3d(uint3(int3(p, seed)));
+    float2 u = (float2(hashed.xy >> 8u) + 0.5) / 16777216.0;
+    return sqrt(-2.0 * log(u.x)) * cos(6.28318530718 * u.y);
+}
+
+}
+
+/// The film's grain, of unit deviation, new for each `seed` (the frame's number): white noise blurred
+/// as OpenCV's 0.6 px Gaussian does (its 5 taps less the outer two, 0.3 % each), so neighbouring
+/// pixels correlate by 0.44.
+[[stitchable]] float4 filmGrainNoise(float seed, coreimage::destination dest) {
+    const float taps[3] = { 0.16638, 0.66724, 0.16638 };
+    int2 p = int2(floor(dest.coord()));
+    float n = 0.0;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            n += taps[x + 1] * taps[y + 1] * grain::gaussian(p + int2(x, y), int(seed));
+        }
+    }
+    // The blur's own deviation, divided out
+    n /= 0.5006;
+    return float4(n, n, n, 1.0);
+}
+#endif
+
+#ifdef filmGrain_ONLY
+/// `frame` with `noise` added as grain of `amount` levels of 255 in the mid-tones, fading as the square
+/// root of the level below 60, so black stays black.
+[[stitchable]] float4 filmGrain(coreimage::sampler frame, coreimage::sampler noise, float amount, coreimage::destination dest) {
+    float4 color = frame.sample(frame.transform(dest.coord()));
+    float n = noise.sample(noise.transform(dest.coord())).r;
+    float level = 255.0 * (color.r + color.g + color.b) / 3.0;
+    return float4(color.rgb + n * amount * sqrt(saturate(level / 60.0)) / 255.0, color.a);
+}
+#endif
+
+#ifdef glassPanel_ONLY
+namespace glass {
+
+inline float squared(float x) { return x * x; }
+
+/// How far `point` is from a rounded rectangle `size` large with corners `radius` round, in its own
+/// units from its top-left corner, negative inside.
+inline float distance(float2 point, float2 size, float radius) {
+    float2 q = abs(point - 0.5 * size) - (0.5 * size - radius);
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+}
+
+/// The panel's point under frame pixel `pixel` (y down), through the inverse of its projection.
+inline float2 onPanel(float2 pixel, float3 rowX, float3 rowY, float3 rowW) {
+    float3 p = float3(pixel, 1.0);
+    return float2(dot(rowX, p), dot(rowY, p)) / dot(rowW, p);
+}
+
+}
+
+/// A panel of dark glass in a rounded rectangle's shape, premultiplied by its coverage, as the film's
+/// stills drew it after Raycast's search pill (spec 0012, L0): the ground seen through it (`seen`,
+/// already blurred and encoded) over a dark base, a pool of light, the key's sheen, and a rim of light
+/// round its outline over `ground`. `frame`: the frame's width and height, and pixels at 1080p per
+/// frame pixel. `shape`: the panel's width, height, corner radius and rim width in its own units;
+/// `rowX`, `rowY`, `rowW` map a frame pixel (y down) onto it. `rim`: level, lit facing left, share of
+/// the ground, inner highlight. `glint`: level, depth, source. `pool`: centre, radius, level. `sheen`:
+/// a point on it, its angle (radians), width. `body`: base, the sheen's level and fall, the glint's
+/// fall. Levels are of 255, lengths pixels at 1080p, points fractions of the frame.
+[[stitchable]] float4 glassPanel(
+    coreimage::sampler seen, coreimage::sampler ground, float4 frame, float4 shape, float3 rowX, float3 rowY, float3 rowW,
+    float4 rim, float4 glint, float4 pool, float4 sheen, float4 body, coreimage::destination dest
+) {
+    float2 size = frame.xy;
+    float2 pixel = float2(dest.coord().x, size.y - dest.coord().y);
+    float2 p = glass::onPanel(pixel, rowX, rowY, rowW);
+    // Its change across a frame pixel each way: the distance in frame pixels, and the outward normal
+    float2 slope = 0.5 * float2(
+        glass::distance(glass::onPanel(pixel + float2(1.0, 0.0), rowX, rowY, rowW), shape.xy, shape.z)
+            - glass::distance(glass::onPanel(pixel - float2(1.0, 0.0), rowX, rowY, rowW), shape.xy, shape.z),
+        glass::distance(glass::onPanel(pixel + float2(0.0, 1.0), rowX, rowY, rowW), shape.xy, shape.z)
+            - glass::distance(glass::onPanel(pixel - float2(0.0, 1.0), rowX, rowY, rowW), shape.xy, shape.z));
+    float perPixel = max(length(slope), 1e-6);
+    float d = glass::distance(p, shape.xy, shape.z) / perPixel;
+    float2 normal = slope / perPixel;
+    float cover = 1.0 - smoothstep(-0.7, 0.7, d);
+    if (cover <= 0.0) {
+        return float4(0.0);
+    }
+    float level = max(255.0 * seen.sample(seen.transform(dest.coord())).r, body.x);
+    float2 fromPool = (pixel - pool.xy * size) / size.y;
+    level += pool.w * exp(-dot(fromPool, fromPool) / glass::squared(pool.z));
+    float across = (-(pixel.x - sheen.x * size.x) * sin(sheen.z) + (pixel.y - sheen.y * size.y) * cos(sheen.z)) * frame.z;
+    float below = max(p.y, 0.0) / perPixel * frame.z;
+    level += body.y * exp(-glass::squared(across / sheen.w)) * exp(-below / body.z);
+    // The rim: lit facing the key, a glint along its outer edge facing up, a highlight inside facing left
+    float width = shape.w / perPixel;
+    float band = smoothstep(-width - 0.7, -width + 0.7, d) * (1.0 - smoothstep(-0.7, 0.7, d));
+    float left = saturate(-normal.x);
+    float up = saturate(-normal.y);
+    float depth = max(-d, 0.0) * frame.z;
+    float fall = exp(-length(pixel - glint.zw * size) / size.x / body.w);
+    float lit = rim.x + rim.y * pow(left, 1.5) + rim.z * 255.0 * ground.sample(ground.transform(dest.coord())).r
+        + glint.x * pow(up, 0.7) * fall * exp(-glass::squared(depth / glint.y))
+        + rim.w * left * left * exp(-glass::squared((width * frame.z - depth) / 1.2));
+    level = mix(level, lit, band) / 255.0;
+    return float4(level * cover, level * cover, level * cover, cover);
 }
 #endif

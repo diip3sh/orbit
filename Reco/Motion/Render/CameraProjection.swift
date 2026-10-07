@@ -30,6 +30,11 @@ nonisolated struct CameraProjection: Equatable, Sendable {
         MotionCamera.focalLength * canvas.height * (1 - 1 / zoom)
     }
 
+    /// How many times larger than from rest a point at z 0 shows.
+    var magnification: Double {
+        focalLength * zoom / (focalLength - dolly)
+    }
+
     /// Points closer than this to the camera, or behind it, aren't drawn: their planes would flip.
     var nearDepth: Double {
         focalLength * 0.05

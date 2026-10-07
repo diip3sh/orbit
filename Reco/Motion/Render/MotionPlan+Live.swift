@@ -86,15 +86,17 @@ nonisolated extension MotionPlan {
     static func takeScale(for info: UILiftCache.TakeInfo, width: Double, rasterScale: Double) -> Int {
         let scale = Int((rasterScale * width / info.crop.width - 0.01).rounded(.up))
         let fits = Int(UILiftCache.maximumMovieSide / max(info.crop.width, info.crop.height))
-        return max(min(scale, UILiftCache.scales.upperBound, fits), 1)
+        return max(min(scale, UILiftCache.maximumScale, fits), 1)
     }
 
     /// Image pixels per CSS pixel for a `ui` layer `width` canvas pixels wide drawn at
-    /// `rasterScale`; 2× before the first lift, when the element's size isn't known yet.
+    /// `rasterScale`, past 8× only while the lift fits ``UILiftCache/maximumLiftSide``; 2× before the
+    /// first lift, when the element's size isn't known yet.
     static func liftScale(for lift: UILiftCache.Lift?, width: Double, rasterScale: Double) -> Int {
         guard let lift else { return 2 }
         // Not a scale up for a rounding error
         let scale = Int((rasterScale * width / lift.size.width - 0.01).rounded(.up))
-        return min(max(scale, UILiftCache.scales.lowerBound), UILiftCache.scales.upperBound)
+        let fits = Int(UILiftCache.maximumLiftSide / max(lift.size.width, lift.size.height, 1))
+        return min(max(scale, UILiftCache.scales.lowerBound), max(UILiftCache.maximumScale, fits), UILiftCache.scales.upperBound)
     }
 }

@@ -22,13 +22,22 @@ nonisolated extension AgentToolCatalog {
         camera moves (Raycast). Field, what scenes are drawn over, moving slowly and coloured from the accent: ember (grain \
         pooling in two corners, type in the dark between: bold brands), matrix (a lit sphere in ordered dither: technical \
         brands), halo (a ring of smoke: behind an end card's logo), sunlit (a soft grain wave: calm or playful titles), \
-        satin (black satin out of focus under one light, monochrome: dark UI in macro), plain (the background colour, the \
+        satin (black satin out of focus, lit afresh for each scene, a slab of matte glass across a wide one's corner, \
+        monochrome: dark UI in macro), plain (the background colour, the \
         default).
 
-        Asset: {id, url, selector, viewport [w,h] (default [1440,900]), hide [selectors]}: an element of a real page, lifted \
-        alone with its rounded corners: a product screenshot, an app mockup, a card, a logo; never a whole section. With \
-        steps (record_page's hover, click, type, scroll; selectors on that page) and duration it is live: a take of the \
-        element playing from its scene's start.
+        Asset: {id, url, selector, viewport [w,h] (default [1440,900]), hide [selectors], glass}: an element of a real page, \
+        lifted alone with its rounded corners: a product screenshot, an app mockup, a card, a logo; never a whole section. \
+        With steps (record_page's hover, click, type, scroll; selectors on that page) and duration it is live: a take of the \
+        element playing from its scene's start. glass true (stills): lifted without its own fill, border and shadow, on a \
+        panel of dark glass with a rim of light, lit as its shot is: a control in macro over satin. bare true (stills): its \
+        content alone, nothing behind it, set on the ground (a docs page's text). region [[x,y],[w,h]] (stills): only that \
+        part of the element, CSS pixels from its top-left. typing {field (a \
+        selector inside the element), text, select (how many results under the first to lift selected)} (stills): the \
+        field typed into as a person types, results showing as each word \
+        settles, a blinking caret; a ui layer's typingStart (seconds into its scene) starts it, else the field waits empty. \
+        before [{action click|type, selector, text}] (stills): done on the page first, for what only exists after a click \
+        (a search dialog: before clicks its button, selector names the dialog).
 
         Scene: {id, duration, seam, shot, field (else the canvas's), layers, camera}. Shots and their slots (ui is an asset id):
         - hook: text (6 words at most) over ui, the product dimmed.
@@ -40,6 +49,9 @@ nonisolated extension AgentToolCatalog {
         - featureSequence: items [{text, ui}], one feature at a time, each its slice of the scene.
         - endCard: text (the name; at a headline's size without a logo) or ui (the logo), detail (the address or a call to \
         action, in the accent). Still: give it about 3.5 s.
+        - closing: text (the name), items [{text}] (the product's words, the last joining the name), detail (a line under \
+        them), ui (the logo, shown alone last): New Raycast's ending in small mono caps, a word cut in every 0.42 s. Give it \
+        field plain and 0.42 s a word plus about 5.5 s.
         Seams, how a scene begins: cut (most), cutOnMotion (carries the camera's speed on), zoomThrough, blurCut, push, fade \
         (rare).
         Moves {move, start, duration, intensity, direction, words, region, to}: text fadeUp, blurIn, blurWipe (letters sharpen \
@@ -50,8 +62,9 @@ nonisolated extension AgentToolCatalog {
 
         Operations: set_canvas {canvas}; set_style {style}; set_asset {asset} (adds, or replaces the same id); add_scene \
         {scene, index}; set_scene {id, duration, seam, shot, field} (shot replaces the shot); set_layer {id, layer} (a layer of the \
-        scene's own: {id, content: {"text": {text, size, face, weight, color}} or {"ui": {asset, width}}, transform \
-        {position [x,y,z]}, moves}); set_moves {id, target, moves} (target a layer id from the reply, or camera: replaces \
+        scene's own: {id, content: {"text": {text, size, face, weight, color}} or {"ui": {asset, width, typingStart, presses \
+        [{key down|up, time}]: the selection moving through the results, the camera following}}, transform {position \
+        [x,y,z]}, moves}); set_moves {id, target, moves} (target a layer id from the reply, or camera: replaces \
         all its moves, a shot's layer keeping its place; copy the moves you keep from the reply); move_scene {id, index}; \
         remove {id, target} (a scene, an asset, or a scene's layer; a shot's layer goes back to the shot's moves). Times are \
         seconds: 8 frames at 60 fps are 0.133 s.
@@ -68,7 +81,7 @@ nonisolated extension AgentToolCatalog {
         "index":{"type":"integer","description":"add_scene, move_scene: position from 0"},
         "canvas":{"type":"object"},"style":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
         "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","cutOnMotion","zoomThrough","blurCut","push","fade"]},
-        "shot":{"type":"object","description":"{shot: hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard, text, detail, ui, items, region}"},
+        "shot":{"type":"object","description":"{shot: hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard|closing, text, detail, ui, items, region}"},
         "field":{"type":"string","enum":["ember","matrix","halo","sunlit","satin","plain"]},
         "moves":{"type":"array","items":{"type":"object"}}},
         "required":["op"],"additionalProperties":false}}},

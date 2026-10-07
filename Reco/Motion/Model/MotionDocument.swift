@@ -81,6 +81,9 @@ nonisolated struct MotionDocument: Equatable, Sendable {
             } catch {
                 throw .invalidSteps(asset.id, error.localizedDescription)
             }
+            if let reason = asset.stillProblem {
+                throw .invalidSteps(asset.id, reason)
+            }
         }
         return ids
     }

@@ -44,10 +44,11 @@ nonisolated enum ShotLayout {
         case .uiCascade: uiCascade(shot, in: context)
         case .featureSequence: featureSequence(shot, in: context)
         case .endCard: endCard(shot, in: context)
+        case .closing: closing(shot, in: context)
         }
-        // Drift and cut: every shot drifts, the cuts hiding its start and stop; but the end card,
-        // and a feature sequence, whose captions hold still while its UI moves
-        if context.canvas.pacing == .driftAndCut, shot.kind != .endCard, shot.kind != .featureSequence {
+        // Drift and cut: every shot drifts, the cuts hiding its start and stop; but the ending, and a
+        // feature sequence, whose captions hold still while its UI moves
+        if context.canvas.pacing == .driftAndCut, !shot.kind.isEnding, shot.kind != .featureSequence {
             var drift = MotionMove(.drift)
             drift.direction = context.index.isMultiple(of: 2) ? .right : .left
             layout.camera.moves.insert(drift, at: 0)

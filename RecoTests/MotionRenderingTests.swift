@@ -45,14 +45,39 @@ struct MotionRenderingTests {
     }
 
     /// The fields at one moment, drawn at 480 px. The four ported kernels match Paper Shaders'
-    /// WebGL at 50–72 dB (spec 0012, Q2). A speckle, a dither cell on its threshold or a grain may
-    /// flip on another GPU, so only the mean difference is held.
+    /// WebGL at 50–72 dB (spec 0012, Q2); satin matches the approved film's ground at 50–64 dB. A
+    /// speckle, a dither cell on its threshold or a grain may flip on another GPU, so only the mean
+    /// difference is held.
     @Test func fieldGoldenFrames() throws {
         for field in [MotionField.ember, .matrix, .halo, .sunlit, .satin] {
             let palette = FieldPalette(field, accent: RGBAColor(hex: "#3ecf8e"), background: MotionCanvas().background)
             let image = FieldRenderer.image(field, palette: palette, at: 10, size: CGSize(width: 480, height: 270))
             try Self.expectGolden("motion-field-\(field.rawValue)", image, most: 255)
         }
+        // The wide shot's satin, with its slab
+        let palette = FieldPalette(.satin, accent: nil, background: MotionCanvas().background)
+        let wide = FieldRenderer.image(.satin, palette: palette, at: 2, size: CGSize(width: 480, height: 270), shot: FieldRenderer.Shot(index: 1))
+        try Self.expectGolden("motion-field-satin-wide", wide, most: 255)
+    }
+
+    /// A search bar on glass over satin at 2.5×, drawn at 480 px (spec 0012, the film's port, phase 2).
+    @Test func glassGoldenFrame() async throws {
+        let (url, document) = try MotionTestBundle.makeGlass()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let plan = await MotionPlan.build(document, bundle: url, shorterSide: 270)
+
+        try Self.expectGolden("motion-glass", MotionFrameRenderer.image(at: 1, plan: plan), most: 255)
+    }
+
+    /// A field typed into on glass, its results growing it, drawn at 480 px (spec 0012, the film's port,
+    /// phase 3).
+    @Test func typingGoldenFrame() async throws {
+        let (url, document) = try MotionTestBundle.makeTyping()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let plan = await MotionPlan.build(document, bundle: url, shorterSide: 270)
+        let typing = try #require(plan.scenes[0].layers[0].typing)
+
+        try Self.expectGolden("motion-typing", MotionFrameRenderer.image(at: typing.keys[1] + 0.3, plan: plan), most: 255)
     }
 
     /// Compares `image` with the golden frame `name`; a missing one is written to the temporary folder.

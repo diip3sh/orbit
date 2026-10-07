@@ -363,6 +363,85 @@ re-run from their address and the frames compared with the previous round's (kep
 - 2026-10-07: the user's verdict on the film: "this one was good" (a copy is on their Desktop).
   The look and grammar are approved. Next: the port into the engine, phase by phase, each checked
   against this film's frames.
+- 2026-10-07: the port, phase 1 (the ground) done. `satin` is the film's cloth: its four shots' setups
+  (`SatinSetup`), lit in linear light on a grid, blurred out of focus, encoded, the slab over the wide
+  one, each scene over satin taking the next setup on its own clock; fields follow the camera's move
+  since their scene began (15 %, the slab 35 %); the film's grain over satin frames. Checked against
+  the film's ground (16 frames: four setups, three times, a moved camera): 50–64 dB, mean difference
+  0.02–0.17 levels; with the film's half-pixel convention matched on the slab, 57–60 dB. Grain on
+  grey: 2.339 levels and a neighbour correlation of 0.437 against the film's 2.339 and 0.439. Tests:
+  each setup's levels, a shot's own clock, parallax, grain, setups in turn, the frame renderer's
+  wiring; goldens for the macro and wide setups. Next: phase 2, glass for lifted UI.
+- 2026-10-07: the port, phase 2 (glass and macro) done. A still asset with `"glass": true` is lifted
+  bare (its fill, border and shadow stripped, its corner radius kept) and drawn on a panel of dark
+  glass in its shape, in frame space through the inverse of the layer's projection: the field seen
+  through it blurred, pool, sheen, the measured rim (0.87 CSS px) and shadow, each shot's light from
+  its setup; the content is clipped to the panel. Small layers are drawn sharper than 4× and lifted
+  past 8× while they fit 8,192 px. Checked against the film's four shots (its lifts seeded, its
+  cameras keyed and held so neither has motion blur): 54.0 (macro), 47.5 (wide), 53.9 (results),
+  41.0 dB (page, where the film shrank its lift bilinearly), with the film's half-pixel convention
+  matched. Found on the way: `CIPerspectiveTransform` maps an image's extent out to whole pixels, so a
+  lift stretched to 5800.3 px drew 0.6 px off; lifts are drawn at whole pixels (existing goldens
+  moved by sub-pixel edges, two got sharper). Supabase's code block captured from the live page with
+  `glass` is identical to the film's lift (largest difference 0). Next: phase 3, the caret and human
+  typing.
+- 2026-10-07: the port, phase 3 (typing) done, as the film did it rather than as a live take (which
+  would need video with alpha for glass, would show results on the network's timing, and has no
+  caret): a still asset's `typing` (field, text) and a `ui` layer's `typingStart`; the engine owns
+  the rules (`HumanTyping`): a person's pace, results 0.22 s after each word, the caret's blink, the
+  field growing to its results on a spring. The layer composes the last settled element, the row as
+  typed and the caret each frame, at its lifts' own scale; its glass grows with it. Checked against
+  the film's shots 1 and 2 with the engine's key times (16 frames, still cameras): 53.3–55.1 dB, no
+  shift (44 dB until the typed field was drawn at its lifts' whole scale). Tests: pace, settles,
+  blink, growth, the plan's typing, results once settled, a golden mid-growth. Next: phase 4,
+  capturing UI that exists only after a click (the search dialog) and the typing states.
+- 2026-10-07: the port, phase 4 (capture) done. A still's `before` steps (click, type) run once its
+  page loads; a typing asset is typed a character at a time at the video's pace, its row lifted each
+  time, the whole element once each word's results settle (DOM quiet and finite animations ended,
+  after at least 1.2 s), where the text ends measured each time. Supabase's search from its docs
+  page (`before` clicking `button[aria-haspopup="dialog"]`, `[role=dialog]`, typing into `input`)
+  captured in 27.8 s; against the film's lab lifts: identical (largest difference 0) for the empty
+  field, rows 3, 4, 9, 10, 18 and the results at "row" and at the end; the rest differ by the
+  input's endless shine and cmdk's selection at "row level", both the site's own state. Frames drawn
+  from the live capture: 53–54 dB against the film, 33 dB where that selection shows. Fixed on the
+  way: isolation now hides everything inside hidden siblings (the docs heading showed through), bare
+  stripping is inline `!important` (a stylesheet rule kept the dialog's border); `liftVersion` 3.
+  Tests: a local dialog opened by a click and typed into, with a self-showing heading and a forced
+  border under it; still-only validation. Next: phase 5, selection (arrow keys) and the camera's
+  grammar (cut-ins, holds and whips, following the UI a beat late).
+- 2026-10-07: the port, phase 5 (selection, follow, whip) done. A typing asset's `select` lifts its
+  results with the selection moved down once, twice… (the down arrow on the field, the selected
+  result found by `aria-selected` or cmdk's `data-selected`); a `ui` layer's `presses` move it, and
+  the scene's camera follows each move 0.06 s late over 0.3 s, one additive track per press. Motion
+  exports sample blur every 3 px up to 96, as the film. Checked against the film's shot 3 (its 10×
+  selection lifts, the same follow and blur): 50.5–50.9 dB on nine frames, three of them mid-follow;
+  and its whip (the engine's camera keyed on the film's at 120 Hz): 49.8–57.7 dB through the
+  96-sample frames, 42–44 dB after it on the code's text (the lift shrunk 8× to 7× by ImageIO, not
+  bilinearly). Cut-ins (an opacity `hold` keyframe), holds and whips are already keyframes; naming
+  them for the agent is phase 8. Tests: selection and follow, the selected lift drawn, blur spacing,
+  a local list selected by the down arrow. Next: phase 6, the closing.
+- 2026-10-07: the port, phase 6 (the closing) done: a `closing` shot (text the name, items the
+  words, detail a second line, ui the logo) laid out by the film's rules (`ShotLayout+Closing`).
+  Against the film's last 9 s, by where each line of type is: the name's left edge (616) and the
+  words' right edge (1302) exact, caps 525–554 against 524–554, the same word at all ten moments, the
+  slide, lockup, second line and logo within 1–3 px. The type is SF Mono, 8 % narrower than the
+  Source Code Pro the film lifted from the docs; the brand's own font waits for Q1. Next: the whole
+  film from one engine document, checked against the approved film's frames.
+- 2026-10-07: the whole film from one engine document (`scratchpad/port/film_document.py`): five
+  scenes with the film's cameras, six assets the app captured live from supabase.com (the dialog
+  waiting, typed, and selectable; the docs article down to its code, `bare` with a `region`; the code
+  on glass; the wordmark), exported at 1080p 30 fps in 89–95 s, 12 s once captured. Added for it:
+  `bare` stills (no fill: the article's text straight on satin; filled, it showed as a dark box),
+  `region` (part of a long element; the article is 19,916 px tall), empty `typing` text (a field
+  waiting with its caret), and the film's follow share (the camera keeps 95 % of the selection's
+  move). Against the approved film, read through AVFoundation: the bar, the typing, the page and
+  its code at 32–45 dB; the differences are the site's state (cmdk's selection, the input's shine),
+  the engine's own key times, the closing's type, and the results shot's camera by a few pixels.
+  ffmpeg decodes AVFoundation's BT.709 export 1.7–2.4 levels darker than AVFoundation itself does;
+  a browser may show it so (open: phase 7, the finish, with 10-bit export). Files:
+  `~/Movies/Reco/quality/port/supabase-docs-film-engine.mp4` and `engine-over-film.mp4`. Next: the
+  user's verdict on the engine's film; then the agent writing such documents (the grammar's names
+  for these shots, the playbook) and the finish (10-bit, levels).
 
 ### Direction (picked 2026-10-07)
 

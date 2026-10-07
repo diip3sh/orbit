@@ -224,6 +224,44 @@ struct MotionGrammarTests {
         #expect(MotionShot(.uiHero, asset: "card").problem(assets: []) != nil)
         #expect(MotionShot(.uiHero, asset: "card").problem(assets: ["card"]) == nil)
         #expect(MotionShot(.endCard, text: "Reco").problem(assets: []) == nil)
+        var closing = MotionShot(.closing, text: "Supabase")
+        #expect(closing.problem(assets: []) != nil)
+        closing.items = [ShotItem(text: "Auth")]
+        #expect(closing.problem(assets: []) == nil)
+    }
+
+    /// The film's closing: the name at 0.32 of the width, each word right-aligned at 0.68 for 0.42 s,
+    /// cut in and out; the last held 0.74 s, then both sliding together over 1.4 s into a centred line;
+    /// the line under it 0.3 s later, the logo alone 1.55 s after that. Caps 2.5 % of the frame tall.
+    @Test func closesAsRaycastsFilmDoes() throws {
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(#"""
+        {
+          "version": 1, "style": { "text": "#ededed" },
+          "assets": [{ "id": "logo", "url": "https://supabase.com", "selector": "img" }],
+          "scenes": [{ "id": "end", "duration": 9, "shot": { "shot": "closing", "text": "Supabase", "detail": "Build in a weekend", "ui": "logo",
+                       "items": [{ "text": "Auth" }, { "text": "Storage" }, { "text": "Docs" }] } }]
+        }
+        """#.utf8))
+        let layers = DocumentExpansion.expanded(document, sizes: ["logo": CGSize(width: 96, height: 18.66)]).scenes[0].layers
+        let opacity = { (id: String, time: Double) in
+            PropertyTrack(.opacity, keyframes: layers.first { $0.id == id }?.keyframes[.opacity] ?? [])?.value(at: time) ?? -1
+        }
+        let left = { (id: String, time: Double) in
+            PropertyTrack(.positionX, keyframes: layers.first { $0.id == id }?.keyframes[.positionX] ?? [])?.value(at: time) ?? -1
+        }
+
+        #expect(layers.map(\.id) == ["end.name", "end.word0", "end.word1", "end.word2", "end.detail", "end.logo"])
+        guard case .text(let name) = layers[0].content else {
+            Issue.record("No name")
+            return
+        }
+        #expect(name.text == "SUPABASE" && name.face == .mono && abs(name.size * 0.7 - 27) < 0.01)
+        #expect(opacity("end.name", 0.2) == 0 && opacity("end.word0", 0.3) == 1 && opacity("end.word0", 0.7) == 0 && opacity("end.word1", 0.7) == 1)
+        // The last word from 1.09 s, held till 1.83, then sliding till 3.23; the line at 3.53, the logo at 5.08
+        #expect(opacity("end.word2", 1.1) == 1 && left("end.word2", 1.8) == 0.68 * 1920 && left("end.name", 1.8) == 0.32 * 1920)
+        #expect(abs(left("end.name", 3.3) + left("end.word2", 3.3) - 1920) < 1e-9)
+        #expect(opacity("end.detail", 3.5) == 0 && opacity("end.detail", 3.6) == 1)
+        #expect(opacity("end.name", 5.1) == 0 && opacity("end.logo", 5.0) == 0 && opacity("end.logo", 5.1) == 1)
     }
 
     // MARK: - Lint

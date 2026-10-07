@@ -95,16 +95,57 @@ struct FieldTests {
         #expect(try Self.pixels(field, at: 6) != first)
     }
 
-    /// Satin keeps New Raycast's low key over time: its median 11–25 of 255 in the film, 5–39 in
-    /// the prototype it was tuned on, its crests rolling off well below white.
-    @Test func keepsSatinLowKey() throws {
-        for time in stride(from: 0.0, through: 30, by: 6) {
-            let green = try Self.pixels(.satin, at: time).enumerated().filter { $0.offset % 4 == 1 }.map(\.element).sorted()
+    // MARK: - Satin
+
+    /// Satin stays as low key as the film the user approved: over a shot each setup's median is 0–6 of
+    /// 255 there and its brightest folds under 75; only the wide shot's slab, a grey of 160, is brighter.
+    @Test(arguments: SatinSetup.film.indices)
+    func keepsSatinAsLowKeyAsTheFilm(setup: Int) throws {
+        for time in stride(from: 0.0, through: 10, by: 2) {
+            let green = try Self.pixels(.satin, at: time, shot: FieldRenderer.Shot(index: setup)).enumerated()
+                .filter { $0.offset % 4 == 1 }.map(\.element).sorted()
             let median = green[green.count / 2]
             let top = green[green.count * 99 / 100]
-            #expect((2...45).contains(median), "satin at \(time) s: median \(median)")
-            #expect(top < 200, "satin at \(time) s: 99th percentile \(top)")
+            #expect(median <= 8, "setup \(setup) at \(time) s: median \(median)")
+            #expect(top < (SatinSetup.film[setup].slab == nil ? 80 : 170), "setup \(setup) at \(time) s: 99th percentile \(top)")
         }
+    }
+
+    /// Each scene over satin takes the next of the film's setups on its own clock, so a shot opens as
+    /// its setup does wherever it starts, and the fifth is lit as the first.
+    @Test func lightsEachSatinShotAfresh() throws {
+        let first = try Self.pixels(.satin, at: 1, shot: FieldRenderer.Shot(index: 0))
+
+        #expect(try Self.pixels(.satin, at: 13, shot: FieldRenderer.Shot(index: 4, start: 12)) == first)
+        #expect(try Self.pixels(.satin, at: 1, shot: FieldRenderer.Shot(index: 1)) != first)
+    }
+
+    /// The ground follows the camera at 15 % of its move: panned 100 px, it shows 15 px over.
+    @Test func followsTheCameraAtAShareOfItsMove() throws {
+        let still = try Self.pixels(.satin, at: 1)
+        let panned = try Self.pixels(.satin, at: 1, shot: FieldRenderer.Shot(shift: CGVector(dx: 100, dy: 0)))
+
+        var most = 0
+        for row in 10..<125 {
+            for column in 10..<200 {
+                most = max(most, abs(Int(still[(row * 240 + column) * 4 + 1]) - Int(panned[(row * 240 + column + 15) * 4 + 1])))
+            }
+        }
+        #expect(most <= 1)
+    }
+
+    /// The film's grain: 2.32 levels deep in the mid-tones (2.34 once rounded to 8 bits, as the film's
+    /// frames measured), none in black, new each frame.
+    @Test func grainsLikeTheFilm() throws {
+        let extent = CGRect(x: 0, y: 0, width: 240, height: 135)
+        let grey = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5)).cropped(to: extent)
+        let grained = try Self.bytes(of: FieldRenderer.grained(grey, index: 7, size: extent.size))
+
+        #expect(abs(Self.spread(of: grained) - 2.34) < 0.15)
+        #expect(try Self.bytes(of: FieldRenderer.grained(grey, index: 7, size: extent.size)) == grained)
+        #expect(try Self.bytes(of: FieldRenderer.grained(grey, index: 8, size: extent.size)) != grained)
+        let black = CIImage(color: .black).cropped(to: extent)
+        #expect(try Self.bytes(of: FieldRenderer.grained(black, index: 7, size: extent.size)).enumerated().allSatisfy { $0.offset % 4 == 3 || $0.element == 0 })
     }
 
     // MARK: - Documents
@@ -119,6 +160,34 @@ struct FieldTests {
 
         #expect(plan.scenes.map(\.field) == [.ember, .halo])
         #expect(plan.scenes[0].palette == FieldPalette(.ember, accent: document.style.accent, background: document.canvas.background))
+    }
+
+    @Test func satinScenesTakeTheSetupsInTurn() async throws {
+        let json = #"""
+            {"version": 1, "canvas": {"field": "satin"},
+             "scenes": [{"id": "one", "duration": 1}, {"id": "two", "duration": 1, "field": "halo"}, {"id": "three", "duration": 1},
+                        {"id": "four", "duration": 1}]}
+            """#
+        let plan = await MotionPlan.build(try JSONDecoder().decode(MotionDocument.self, from: Data(json.utf8)), bundle: URL.temporaryDirectory)
+
+        #expect(plan.scenes.map(\.fieldShot) == [0, 0, 1, 2])
+    }
+
+    /// A frame over satin is its shot's ground, moved as the camera moved since the scene began, with
+    /// the film's grain over it.
+    @Test func drawsSatinWhereTheCameraMovedIt() async throws {
+        var scene = MotionScene(id: "pan", duration: 2)
+        scene.camera.keyframes[.positionX] = [Keyframe(time: 0, value: 960), Keyframe(time: 1, value: 1060)]
+        var document = MotionDocument(scenes: [scene])
+        document.canvas.field = .satin
+        let plan = await MotionPlan.build(document, bundle: URL.temporaryDirectory, shorterSide: 135)
+        // The point the camera opened on is 100 canvas pixels left of the middle, 12.5 output pixels
+        let ground = FieldRenderer.image(
+            .satin, palette: plan.scenes[0].palette, at: 1, size: plan.outputSize, shot: FieldRenderer.Shot(shift: CGVector(dx: -12.5, dy: 0))
+        )
+        let expected = FieldRenderer.grained(ground, index: plan.frameRate, size: plan.outputSize)
+
+        #expect(try Self.bytes(of: MotionFrameRenderer.image(at: 1, plan: plan)) == Self.bytes(of: expected))
     }
 
     @Test func editsSetTheCanvassAndASceneField() throws {
@@ -148,13 +217,18 @@ struct FieldTests {
     }
 
     /// A field drawn at 240×135, as 8-bit RGBA.
-    private static func pixels(_ field: MotionField, at time: Double) throws -> [UInt8] {
-        let extent = CGRect(x: 0, y: 0, width: 240, height: 135)
+    private static func pixels(_ field: MotionField, at time: Double, shot: FieldRenderer.Shot = FieldRenderer.Shot()) throws -> [UInt8] {
         let image = FieldRenderer.image(
-            field, palette: FieldPalette(field, accent: RGBAColor(hex: "#3ecf8e"), background: background), at: time, size: extent.size
+            field, palette: FieldPalette(field, accent: RGBAColor(hex: "#3ecf8e"), background: background), at: time,
+            size: CGSize(width: 240, height: 135), shot: shot
         )
+        return try bytes(of: image)
+    }
+
+    /// The image's 240×135 pixels from the origin, as 8-bit RGBA.
+    private static func bytes(of image: CIImage) throws -> [UInt8] {
         var bytes = [UInt8](repeating: 0, count: 240 * 135 * 4)
-        context.render(image, toBitmap: &bytes, rowBytes: 240 * 4, bounds: extent, format: .RGBA8, colorSpace: nil)
+        context.render(image, toBitmap: &bytes, rowBytes: 240 * 4, bounds: CGRect(x: 0, y: 0, width: 240, height: 135), format: .RGBA8, colorSpace: nil)
         return bytes
     }
 

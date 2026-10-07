@@ -72,6 +72,93 @@ struct UICaptureTests {
         #expect(try Pixels(tall.url).color(column: 200, row: 2990).red > 200)
     }
 
+    /// A search dialog that only exists once its button is clicked, typed into: results come 0.3 s after
+    /// the field changes. Under it, a heading that shows itself (`visibility: visible` inside a hidden
+    /// header) and a border a stylesheet forces, as Supabase's docs have.
+    private static let search = """
+    <!doctype html>
+    <html><head><style>body #dialog { border: 1px solid rgb(255, 0, 0) !important; }</style></head>
+    <body style="margin: 0; background: #fff">
+      <header style="position: absolute; left: 100px; top: 100px"><h1 style="visibility: visible; color: rgb(255, 0, 0); margin: 0; font: 40px sans-serif">Docs</h1></header>
+      <button id="open" onclick="document.getElementById('dialog').hidden = false">Search</button>
+      <div id="dialog" hidden style="position: fixed; left: 100px; top: 100px; width: 400px; border-radius: 12px; background: rgb(34, 34, 34)">
+        <div style="height: 48px; display: flex; align-items: center">
+          <input style="flex: 1; margin-left: 40px; border: 0; background: transparent; color: #fff; font: 16px sans-serif; outline: none">
+        </div>
+        <div id="results"></div>
+      </div>
+      <script>
+        document.querySelector('#dialog input').addEventListener('input', event => {
+          clearTimeout(window.pending);
+          window.pending = setTimeout(() => {
+            document.getElementById('results').innerHTML = event.target.value.length > 1
+              ? [0, 1, 2].map(index => `<div aria-selected="${index === 0}" style="height: 30px; margin-top: 4px; background: rgb(0, 0, 255)"></div>`).join('') : '';
+          }, 300);
+        });
+        document.querySelector('#dialog input').addEventListener('keydown', event => {
+          if (event.key !== 'ArrowDown') return;
+          const items = [...document.querySelectorAll('#results [aria-selected]')];
+          const index = items.findIndex(item => item.getAttribute('aria-selected') === 'true');
+          items.forEach((item, other) => item.setAttribute('aria-selected', String(other === Math.min(index + 1, items.length - 1))));
+        });
+      </script>
+    </body></html>
+    """
+
+    /// Clicked open, typed into and lifted bare: its empty field, each letter's row, and the whole dialog
+    /// once its results came, where the text ends each time; nothing of the page or of its own surface.
+    @Test func typesIntoADialogOpenedByAClick() async throws {
+        let pages = try await LocalPages.serving(["/": Self.search])
+        let bundle = URL.temporaryDirectory.appending(path: "\(UUID().uuidString).motion")
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        var asset = MotionAsset(id: "search", url: pages.url("/"), selector: "#dialog", viewport: CGSize(width: 800, height: 600))
+        (asset.glass, asset.before) = (true, [RecordPageRequest.Step(action: "click", selector: "#open")])
+        asset.typing = MotionAsset.Typing(field: "input", text: "ab", select: 1)
+        var document = MotionDocument()
+        document.assets = [asset]
+
+        try await UICapture.lift(["search": 2], of: document, into: bundle)
+
+        let typing = try #require(UILiftCache.typing(asset, in: bundle))
+        // Under the dialog's border, as wide as the dialog
+        #expect(typing.row == CGRect(x: 0, y: 1, width: 402, height: 48))
+        #expect(typing.ends.count == 3 && typing.ends[0] < typing.ends[1] && typing.ends[1] < typing.ends[2])
+        // Three results of 30 px, 4 px apart, under the row and the border; the first selected, then the second
+        #expect(typing.settled == [2] && typing.heights == [152])
+        #expect(typing.selections == [68, 102])
+        #expect(FileManager.default.fileExists(atPath: UILiftCache.selectedURL(of: asset, presses: 1, scale: 2, in: bundle).path(percentEncoded: false)))
+        #expect(typing.fontSize == 16)
+        for length in [1, 2] {
+            #expect(FileManager.default.fileExists(atPath: UILiftCache.typedURL(of: asset, length: length, scale: 2, in: bundle).path(percentEncoded: false)))
+        }
+        let settled = try Pixels(UILiftCache.settledURL(of: asset, length: 2, scale: 2, in: bundle))
+        #expect(settled.height == 304)
+        let empty = try Pixels(try #require(UILiftCache.best(asset, in: bundle)).url)
+        // Bare: its border, the stylesheet's own, and its fill are gone; the heading under it never shows
+        #expect(empty.color(column: 1, row: 48).alpha == 0)
+        #expect(empty.color(column: 300, row: 48).alpha == 0)
+        let red = { (column: Int, row: Int) in empty.color(column: column, row: row).red > 200 && empty.color(column: column, row: row).green < 100 }
+        #expect(!(0..<empty.height).contains { row in (0..<empty.width).contains { red($0, row) } })
+    }
+
+    /// A region lifts only that part of the element: the top of a long article.
+    @Test func liftsARegionOfALongElement() async throws {
+        let pages = try await LocalPages.serving(["/": Self.page])
+        let bundle = URL.temporaryDirectory.appending(path: "\(UUID().uuidString).motion")
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        var asset = MotionAsset(id: "tall", url: pages.url("/"), selector: "#tall", viewport: CGSize(width: 800, height: 600))
+        asset.region = CGRect(x: 0, y: 0, width: 200, height: 300)
+        var document = MotionDocument()
+        document.assets = [asset]
+
+        try await UICapture.lift(["tall": 2], of: document, into: bundle)
+
+        let lift = try #require(UILiftCache.best(asset, in: bundle))
+        #expect(lift.size == CGSize(width: 200, height: 300))
+        let middle = try Pixels(lift.url).color(column: 200, row: 300)
+        #expect(middle.red == 255 && middle.green == 0 && middle.alpha == 255)
+    }
+
     @Test func aMissingElementFailsTheLift() async throws {
         await #expect(throws: UICaptureError.notFound("gone", "#gone")) {
             _ = try await lift(["gone": "#gone"])

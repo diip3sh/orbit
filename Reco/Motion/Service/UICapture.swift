@@ -78,7 +78,7 @@ enum UICapture {
         (still.url, still.viewport, still.hide) = (asset.url, asset.viewport, asset.hide)
         let painted = try await WebPageRenderer(script: still).withLoadedPage { webView in
             webView.setValue(false, forKey: "drawsBackground")
-            return try await lift(asset, at: script.scale, from: webView, filled: false)
+            return try await lift(asset, at: script.scale, from: webView, filled: false).image
         }
         // With what its outline encloses: typing into a transparent field paints where nothing was
         let matte = MatteFill.filled(painted) ?? painted
@@ -94,11 +94,13 @@ enum UICapture {
         logger.info("Baked \(asset.id, privacy: .public): \(script.duration) s of \(Int(crop.width))x\(Int(crop.height)) CSS px at \(scale)x in \(ContinuousClock.now - start)")
     }
 
-    /// Lifts each still in `scales` (image pixels per CSS pixel, by asset id), loading each page once.
+    /// Lifts each still in `scales` (image pixels per CSS pixel, by asset id), loading each page once;
+    /// a still that clicks or types on its page first gets a page of its own.
     static func lift(_ scales: [String: Int], of document: MotionDocument, into bundle: URL) async throws {
         let assets = document.assets.filter { scales[$0.id] != nil }
-        let pages = Dictionary(grouping: assets) {
-            "\($0.url.absoluteString) \(Int($0.viewport.width))x\(Int($0.viewport.height)) \(($0.hide ?? []).joined(separator: ","))"
+        let pages = Dictionary(grouping: assets) { asset in
+            let changes = asset.before == nil && asset.typing == nil ? "" : " \(asset.id)"
+            return "\(asset.url.absoluteString) \(Int(asset.viewport.width))x\(Int(asset.viewport.height)) \((asset.hide ?? []).joined(separator: ","))\(changes)"
         }
         try FileManager.default.createDirectory(at: bundle.appending(path: "assets/lifts"), withIntermediateDirectories: true)
         for key in pages.keys.sorted() {
@@ -110,10 +112,17 @@ enum UICapture {
             try await WebPageRenderer(script: script).withLoadedPage { webView in
                 // The page draws no background of its own, so what the isolating style hides is transparent
                 webView.setValue(false, forKey: "drawsBackground")
+                try await prepare(first, in: webView)
                 for asset in page {
                     let scale = scales[asset.id] ?? 2
                     let start = ContinuousClock.now
-                    let image = try await lift(asset, at: scale, from: webView)
+                    if asset.typing != nil {
+                        try await liftTyping(asset, at: scale, from: webView, into: bundle)
+                        logger.info("Lifted \(asset.id, privacy: .public) typed at \(scale)x in \(ContinuousClock.now - start)")
+                        continue
+                    }
+                    let (image, radius) = try await lift(asset, at: scale, from: webView)
+                    try JSONEncoder().encode(UILiftCache.Shape(radius: radius)).write(to: UILiftCache.shapeURL(of: asset, in: bundle), options: .atomic)
                     let url = UILiftCache.url(of: asset, scale: scale, in: bundle)
                     let partial = url.appendingPathExtension("partial")
                     try await ScreenshotService.writePNG(image, to: partial)
@@ -126,9 +135,10 @@ enum UICapture {
         }
     }
 
-    /// The element `asset` names, alone on a transparent page, `scale` image pixels per CSS pixel;
-    /// unless `filled`, without the background behind a transparent element.
-    private static func lift(_ asset: MotionAsset, at scale: Int, from webView: WKWebView, filled: Bool = true) async throws -> CGImage {
+    /// The element `asset` names, alone on a transparent page, `scale` image pixels per CSS pixel, and
+    /// its corner radius in CSS pixels; unless `filled`, without the background behind a transparent
+    /// element, and on glass without its own.
+    private static func lift(_ asset: MotionAsset, at scale: Int, from webView: WKWebView, filled: Bool = true) async throws -> (image: CGImage, radius: Double) {
         var placed = try await place(asset, in: webView)
         // Taller than the view: the view grows to hold it (a page laid out in viewport heights grows with it)
         if placed.box.height > asset.viewport.height, let window = webView.window {
@@ -141,30 +151,55 @@ enum UICapture {
             throw UICaptureError.outOfView(asset.id, asset.selector)
         }
 
-        let arguments: [String: Any] = ["selector": asset.selector, "fill": filled ? placed.fill : NSNull()]
+        let arguments = isolation(of: asset, placed: placed, filled: filled)
         _ = try await webView.callAsyncJavaScript(UILiftScript.isolate, arguments: arguments.merging(["on": true]) { $1 }, contentWorld: .defaultClient)
-        let configuration = WKSnapshotConfiguration()
-        configuration.rect = placed.box.intersection(bounds)
-        configuration.snapshotWidth = NSNumber(value: configuration.rect.width * CGFloat(scale) / (webView.window?.backingScaleFactor ?? 1))
-        let snapshot: Result<NSImage, any Error>
+        let image: Result<CGImage, any Error>
         do {
-            snapshot = .success(try await webView.takeSnapshot(configuration: configuration))
+            image = .success(try await snapshot(placed.box, at: scale, from: webView))
         } catch {
-            snapshot = .failure(error)
+            image = .failure(error)
         }
         // The page as it was, for the next asset
         _ = try await webView.callAsyncJavaScript(UILiftScript.isolate, arguments: arguments.merging(["on": false]) { $1 }, contentWorld: .defaultClient)
-        guard let image = try snapshot.get().cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+        return (try image.get(), placed.radius)
+    }
+
+    /// `isolate`'s arguments for lifting `asset`: unless `filled`, without the background behind a
+    /// transparent element, and bare (on glass too) without that or its own.
+    static func isolation(of asset: MotionAsset, placed: Placed, filled: Bool = true) -> [String: Any] {
+        ["selector": asset.selector, "fill": filled && !asset.isBare ? placed.fill : NSNull(), "bare": asset.isBare]
+    }
+
+    /// The page's `rect` (viewport CSS pixels) at `scale` image pixels per CSS pixel.
+    static func snapshot(_ rect: CGRect, at scale: Int, from webView: WKWebView) async throws -> CGImage {
+        let configuration = WKSnapshotConfiguration()
+        configuration.rect = rect.intersection(CGRect(origin: .zero, size: webView.bounds.size))
+        configuration.snapshotWidth = NSNumber(value: configuration.rect.width * CGFloat(scale) / (webView.window?.backingScaleFactor ?? 1))
+        guard let image = try await webView.takeSnapshot(configuration: configuration).cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             throw WebRenderError.snapshotFailed
         }
         return image
     }
 
-    private static func place(_ asset: MotionAsset, in webView: WKWebView) async throws -> (box: CGRect, fill: String) {
+    /// Where ``UILiftScript/place`` found an element: its box, the fill behind it, its corner radius.
+    struct Placed {
+        var box: CGRect
+        var fill: String
+        var radius: Double
+    }
+
+    static func place(_ asset: MotionAsset, in webView: WKWebView) async throws -> Placed {
         let result = try await webView.callAsyncJavaScript(UILiftScript.place, arguments: ["selector": asset.selector], contentWorld: .defaultClient)
         guard let result = result as? [String: Any], let box = result["box"] as? [Double], box.count == 4 else {
             throw UICaptureError.notFound(asset.id, asset.selector)
         }
-        return (CGRect(x: box[0], y: box[1], width: box[2], height: box[3]), result["fill"] as? String ?? "transparent")
+        var placed = Placed(
+            box: CGRect(x: box[0], y: box[1], width: box[2], height: box[3]), fill: result["fill"] as? String ?? "transparent", radius: result["radius"] as? Double ?? 0
+        )
+        // Only the part of it the asset lifts
+        if let region = asset.region {
+            placed.box = region.offsetBy(dx: placed.box.minX, dy: placed.box.minY).intersection(placed.box)
+        }
+        return placed
     }
 }

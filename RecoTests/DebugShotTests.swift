@@ -6,6 +6,8 @@
 //
 
 import AppKit
+import AVFoundation
+import CoreImage
 import Foundation
 import Testing
 import WebKit
@@ -96,7 +98,7 @@ struct DebugShotTests {
                 return
             }
             let fill: Any = step.fill == false ? NSNull() : (placed["fill"] as? String ?? "transparent")
-            let arguments: [String: Any] = ["selector": selector, "fill": fill]
+            let arguments: [String: Any] = ["selector": selector, "fill": fill, "bare": false]
             _ = try await webView.callAsyncJavaScript(UILiftScript.isolate, arguments: arguments.merging(["on": true]) { $1 }, contentWorld: .defaultClient)
             let configuration = WKSnapshotConfiguration()
             configuration.rect = CGRect(x: box[0], y: box[1], width: box[2], height: box[3]).intersection(webView.bounds)
@@ -120,6 +122,186 @@ struct DebugShotTests {
         default:
             print("LAB unknown step \(step.kind)")
         }
+    }
+
+    /// Satin frames for the film comparison: `lab/satin.json` lists frames (setup, time in the shot,
+    /// the camera's shift and zoom, a grain frame or none); each is written as `satin/<name>.png`.
+    struct SatinFrame: Decodable {
+        let name: String
+        let setup: Int
+        let time: Double
+        let shift: [Double]?
+        let zoom: Double?
+        let grain: Int?
+        let size: [Double]?
+        let flat: Double?
+    }
+
+    @Test func satin() async throws {
+        let root = URL(filePath: Self.scratch + "/lab")
+        let frames = try JSONDecoder().decode([SatinFrame].self, from: Data(contentsOf: root.appending(path: "satin.json")))
+        try FileManager.default.createDirectory(at: root.appending(path: "satin"), withIntermediateDirectories: true)
+        let context = CIContext(options: [.workingColorSpace: NSNull()])
+        let source = try String(contentsOf: try #require(Bundle.main.url(forResource: "FieldKernels.metal", withExtension: "txt")), encoding: .utf8)
+        for name in ["satinGround", "satinFinish", "filmGrainNoise", "filmGrain"] {
+            do {
+                print("LAB KERNEL \(name): \(try CIKernel.kernels(withMetalString: "#define \(name)_ONLY\n" + source).map { type(of: $0) })")
+            } catch {
+                print("LAB KERNEL \(name) FAILED: \(error)")
+            }
+        }
+        for frame in frames {
+            let size = CGSize(width: frame.size?[0] ?? 1920, height: frame.size?[1] ?? 1080)
+            let shot = FieldRenderer.Shot(
+                index: frame.setup, start: 0, shift: CGVector(dx: frame.shift?[0] ?? 0, dy: frame.shift?[1] ?? 0), zoom: frame.zoom ?? 1
+            )
+            var image = FieldRenderer.image(.satin, palette: FieldPalette(.satin, accent: nil, background: MotionCanvas().background), at: frame.time, size: size, shot: shot)
+            if let flat = frame.flat {
+                image = CIImage(color: CIColor(red: flat, green: flat, blue: flat)).cropped(to: CGRect(origin: .zero, size: size))
+            }
+            if let grain = frame.grain {
+                image = FieldRenderer.grained(image, index: grain, size: size)
+            }
+            let clock = ContinuousClock.now
+            let cgImage = try #require(context.createCGImage(image, from: CGRect(origin: .zero, size: size), format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)))
+            let elapsed = ContinuousClock.now - clock
+            try await ScreenshotService.writePNG(cgImage, to: root.appending(path: "satin/\(frame.name).png"))
+            print("LAB SATIN \(frame.name) \(elapsed)")
+        }
+        print("LAB DONE")
+    }
+
+    /// The glass check (spec 0012, phase 2): `lab/glass/document.json` drawn by the engine, its lifts
+    /// seeded from the film's captures, each frame beside the film's (with the engine's grain).
+    struct GlassJob: Decodable {
+        struct Lift: Decodable {
+            let asset: String
+            let file: String
+            let scale: Int
+            let radius: Double
+            /// `typed` or `settled` with the text's length; the asset's own lift without.
+            let kind: String?
+            let length: Int?
+        }
+        struct Frame: Decodable {
+            let name: String
+            let time: Double
+        }
+        let lifts: [Lift]
+        let frames: [Frame]
+        let typing: [String: UILiftCache.Typing]?
+    }
+
+    @Test func glass() async throws {
+        let root = URL(filePath: Self.scratch + "/lab/" + (ProcessInfo.processInfo.environment["LAB_CHECK"] ?? "glass"))
+        let job = try JSONDecoder().decode(GlassJob.self, from: Data(contentsOf: root.appending(path: "job.json")))
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(contentsOf: root.appending(path: "document.json")))
+        try document.validate()
+        let bundle = root.appending(path: "Check.motion")
+        try? FileManager.default.removeItem(at: bundle)
+        try FileManager.default.createDirectory(at: bundle.appending(path: "assets/lifts"), withIntermediateDirectories: true)
+        for lift in job.lifts {
+            let asset = try #require(document.assets.first { $0.id == lift.asset })
+            let target = switch lift.kind {
+            case "typed": UILiftCache.typedURL(of: asset, length: lift.length ?? 0, scale: lift.scale, in: bundle)
+            case "settled": UILiftCache.settledURL(of: asset, length: lift.length ?? 0, scale: lift.scale, in: bundle)
+            case "selected": UILiftCache.selectedURL(of: asset, presses: lift.length ?? 0, scale: lift.scale, in: bundle)
+            default: UILiftCache.url(of: asset, scale: lift.scale, in: bundle)
+            }
+            try FileManager.default.copyItem(at: URL(filePath: lift.file), to: target)
+            try JSONEncoder().encode(UILiftCache.Shape(radius: lift.radius)).write(to: UILiftCache.shapeURL(of: asset, in: bundle))
+        }
+        for (id, typing) in job.typing ?? [:] {
+            let asset = try #require(document.assets.first { $0.id == id })
+            try JSONEncoder().encode(typing).write(to: UILiftCache.typingURL(of: asset, in: bundle))
+        }
+        let plan = await MotionPlan.build(document, bundle: bundle, shorterSide: 1080)
+        print("LAB GLASS lifts needed \(plan.liftsNeeded)")
+        try FileManager.default.createDirectory(at: root.appending(path: "out"), withIntermediateDirectories: true)
+        let context = CIContext(options: [.workingColorSpace: NSNull()])
+        let extent = CGRect(origin: .zero, size: plan.outputSize)
+        let srgb = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        for frame in job.frames {
+            let clock = ContinuousClock.now
+            let image = try #require(context.createCGImage(MotionFrameRenderer.image(at: frame.time, plan: plan), from: extent, format: .RGBA8, colorSpace: srgb))
+            print("LAB GLASS \(frame.name) drawn in \(ContinuousClock.now - clock)")
+            try await ScreenshotService.writePNG(image, to: root.appending(path: "out/\(frame.name).png"))
+            let reference = try #require(CIImage(contentsOf: root.appending(path: "ref/\(frame.name).png")))
+            let grained = FieldRenderer.grained(reference, index: Int((frame.time * Double(plan.frameRate)).rounded()), size: plan.outputSize)
+            let referenceImage = try #require(context.createCGImage(grained, from: extent, format: .RGBA8, colorSpace: srgb))
+            try await ScreenshotService.writePNG(referenceImage, to: root.appending(path: "out/\(frame.name)-ref.png"))
+        }
+        print("LAB DONE")
+    }
+
+    /// The capture check: `lab/capture/document.json` captured from the web as the app does, then drawn.
+    @Test func capture() async throws {
+        let root = URL(filePath: Self.scratch + "/lab/capture")
+        let job = try JSONDecoder().decode(GlassJob.self, from: Data(contentsOf: root.appending(path: "job.json")))
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(contentsOf: root.appending(path: "document.json")))
+        let bundle = root.appending(path: "Check.motion")
+        try? FileManager.default.removeItem(at: bundle)
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        let clock = ContinuousClock.now
+        let plan = try await UICapture.plan(for: document, bundle: bundle, shorterSide: 1080)
+        print("LAB CAPTURE took \(ContinuousClock.now - clock), still needed \(plan.liftsNeeded)")
+        for asset in document.assets {
+            print("LAB CAPTURE \(asset.id): \(String(describing: UILiftCache.best(asset, in: bundle)))")
+        }
+        let context = CIContext(options: [.workingColorSpace: NSNull()])
+        let srgb = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        try FileManager.default.createDirectory(at: root.appending(path: "out"), withIntermediateDirectories: true)
+        for frame in job.frames {
+            let image = try #require(context.createCGImage(
+                MotionFrameRenderer.image(at: frame.time, plan: plan), from: CGRect(origin: .zero, size: plan.outputSize), format: .RGBA8, colorSpace: srgb
+            ))
+            try await ScreenshotService.writePNG(image, to: root.appending(path: "out/\(frame.name).png"))
+        }
+        print("LAB DONE")
+    }
+
+    /// The whole film from `lab/film-engine/document.json`: captured from the web and exported as the app does.
+    @Test func film() async throws {
+        let root = URL(filePath: Self.scratch + "/lab/film-engine")
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(contentsOf: root.appending(path: "document.json")))
+        try document.validate()
+        let bundle = root.appending(path: "Film.motion")
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        try Data(contentsOf: root.appending(path: "document.json")).write(to: MotionStore.documentURL(in: bundle))
+        var settings = ExportSettings()
+        settings.resolution = 1080
+        settings.frameRate = 30
+        if ProcessInfo.processInfo.environment["LAB_STILLS"] != nil {
+            // Frames as the renderer draws them, before the encoder
+            let plan = try await UICapture.plan(for: document, bundle: bundle, shorterSide: 1080, frameRate: 30)
+            let context = CIContext(options: [.workingColorSpace: NSNull()])
+            let srgb = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+            for time in [0.5, 2.0, 4.5, 5.5, 10.6, 13.6] {
+                let image = try #require(context.createCGImage(MotionFrameRenderer.image(at: time, plan: plan), from: CGRect(origin: .zero, size: plan.outputSize), format: .RGBA8, colorSpace: srgb))
+                try await ScreenshotService.writePNG(image, to: root.appending(path: "still-\(time).png"))
+            }
+            print("LAB FILM stills")
+            return
+        }
+        let clock = ContinuousClock.now
+        let url = try await MotionExporter.export(document, bundle: bundle, settings: settings) { _ in }
+        print("LAB FILM exported \(url.path()) in \(ContinuousClock.now - clock)")
+    }
+
+    /// Frames of two movies as AVFoundation decodes them (what QuickTime shows), for level checks.
+    @Test func decode() async throws {
+        let root = URL(filePath: Self.scratch + "/port/filmcmp")
+        let movies = ["engine": URL(filePath: Self.scratch + "/lab/film-engine/Film-edited.mp4"),
+                      "film": URL(filePath: NSHomeDirectory() + "/Movies/Reco/quality/L1/supabase-docs-film.mp4")]
+        for (name, url) in movies {
+            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+            (generator.requestedTimeToleranceBefore, generator.requestedTimeToleranceAfter) = (.zero, .zero)
+            for time in [0.5, 2.0, 4.5, 10.6] {
+                let (image, _) = try await generator.image(at: CMTime(seconds: time, preferredTimescale: 600))
+                try await ScreenshotService.writePNG(image, to: root.appending(path: "av-\(name)-\(time).png"))
+            }
+        }
+        print("LAB DONE")
     }
 
     private static func write(_ image: NSImage, to url: URL) async throws {

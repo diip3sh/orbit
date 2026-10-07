@@ -13,10 +13,12 @@ import CoreVideo
 /// camera with `CIPerspectiveTransform`, blurred, faded and shadowed, farthest first.
 nonisolated enum MotionFrameRenderer {
 
-    /// The most samples a frame blurred by motion is averaged from, as the editor's: what plays in
-    /// real time for the preview; an export takes twice as many.
+    /// The most samples a frame blurred by motion is averaged from: what plays in real time for the
+    /// preview, as the editor's; an export takes as many as the film's whip needed (16 left it in ghosts
+    /// 20 px apart), one every 3 px a point travels.
     static let previewBlurSamples = 8
-    static let exportBlurSamples = 16
+    static let exportBlurSamples = 96
+    static let exportBlurSpacing = 3.0
 
     /// The frame at `time` seconds into the video, in output pixels from Core Image's bottom-left
     /// origin. `frames` are the live layers' takes at that time; a live layer without one isn't drawn.
@@ -27,12 +29,16 @@ nonisolated enum MotionFrameRenderer {
     static func image(at time: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage] = [:]) -> CIImage {
         let shutter = 0.5 / Double(plan.frameRate)
         let offsets = FrameRenderer.blurOffsets(
-            distance: travel(at: time, across: shutter, plan: plan), most: plan.isPreview ? previewBlurSamples : exportBlurSamples
+            distance: travel(at: time, across: shutter, plan: plan), most: plan.isPreview ? previewBlurSamples : exportBlurSamples,
+            spacing: plan.isPreview ? FrameRenderer.blurSampleSpacing : exportBlurSpacing
         )
         let scene = plan.scenes[plan.sceneIndex(at: time)]
         // Inside the scene: a shutter open across a cut would blend the two shots
         let times = offsets.map { min(max(time + $0 * shutter, scene.start), scene.start + scene.duration - 1e-6) }
-        return FrameRenderer.average(times.map { still(at: $0, plan: plan, frames: frames) })
+        let frame = FrameRenderer.average(times.map { still(at: $0, plan: plan, frames: frames) })
+        // Satin's grain goes over the whole frame, its UI too, once a frame
+        guard scene.field == .satin else { return frame }
+        return FieldRenderer.grained(frame, index: Int((time * Double(plan.frameRate)).rounded()), size: plan.outputSize)
     }
 
     /// How far the planes on screen at `time` move while a shutter `shutter` seconds long is open, in
@@ -81,13 +87,22 @@ nonisolated enum MotionFrameRenderer {
     /// A scene's layers at `time` in it, blurred as its camera is, over its field.
     private static func sceneImage(_ index: Int, at time: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage]) -> CIImage {
         let scene = plan.scenes[index]
+        // On the video's clock, so a field runs on across a cut to a scene with the same one
+        let field = FieldRenderer.image(
+            scene.field, palette: scene.palette, at: scene.start + time, size: plan.outputSize, preview: plan.isPreview,
+            shot: shot(of: scene, at: time, plan: plan)
+        )
         var image = CIImage.empty()
         for placement in plan.placements(of: scene, at: time) {
-            let layer = scene.layers[placement.layer]
+            var layer = scene.layers[placement.layer]
             var content: CIImage
             if let live = layer.live {
                 guard let take = frames[MotionPlan.LayerKey(scene: index, layer: placement.layer)] else { continue }
                 content = liveImage(take, live: live, at: time)
+            } else if let typing = layer.typing {
+                content = typed(typing, at: time, layer: layer)
+                // Its glass as tall as the field is now, growing with its results
+                layer.glass?.height = typing.height(at: time)
             } else {
                 guard let layerImage = layer.image else { continue }
                 content = layerImage
@@ -103,36 +118,71 @@ nonisolated enum MotionFrameRenderer {
                     content = MotionPlan.focused(content, on: region, dim: dim, height: layer.size.height)
                 }
             }
-            image = drawn(content, layer: layer, at: placement, time: time, plan: plan).composited(over: image)
+            var layerImage = drawn(content, layer: layer, at: placement, time: time, plan: plan)
+            // On glass: over its panel, clipped to it, and the panel's shadow under both
+            if let panel = GlassRenderer.panel(under: layer, at: placement, lit: SatinSetup.forShot(scene.fieldShot).glass, over: field, plan: plan) {
+                let faded = { (image: CIImage) in placement.opacity < 1 ? image.fading(to: placement.opacity) : image }
+                layerImage = layerImage.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: panel.body])
+                    .composited(over: faded(panel.body)).composited(over: faded(panel.shadow))
+            }
+            image = layerImage.composited(over: image)
         }
         let bounds = CGRect(origin: .zero, size: plan.outputSize)
-        // On the video's clock, so a field runs on across a cut to a scene with the same one
-        let field = FieldRenderer.image(
-            scene.field, palette: scene.palette, at: scene.start + time, size: plan.outputSize, preview: plan.isPreview,
-            view: fieldView(of: scene, at: time, plan: plan)
-        )
         let blur = scene.cameraValue(.blur, at: time) * plan.outputScale
         guard blur >= 0.3 else { return image.composited(over: field) }
         return image.clampedToExtent().applyingGaussianBlur(sigma: blur).cropped(to: bounds).composited(over: field)
     }
 
-    /// How far a field moves with the camera: this share of what the planes do, as ground far behind
-    /// them would. Pinned to the frame, it read as a wallpaper behind a whip (spec 0012, L1b).
-    static let fieldParallax = 0.15
-
-    /// Where a scene's camera puts its field at `time`: shifted by a share of the camera's look away
-    /// from the canvas's middle, as the planes are at its zoom, and zoomed by that share in log space.
-    private static func fieldView(of scene: MotionPlan.Scene, at time: Double, plan: MotionPlan) -> CGAffineTransform {
-        let zoom = max(scene.cameraValue(.scale, at: time), 0.01)
-        let pixels = fieldParallax * zoom * plan.outputScale
-        let shift = CGVector(
-            dx: (scene.cameraValue(.positionX, at: time) - plan.canvas.width / 2) * pixels,
-            dy: (scene.cameraValue(.positionY, at: time) - plan.canvas.height / 2) * pixels
+    /// `scene` as its field sees it at `time` in it: how its camera has moved since the scene began,
+    /// so each shot opens on its field as set up, whatever the camera's zoom.
+    private static func shot(of scene: MotionPlan.Scene, at time: Double, plan: MotionPlan) -> FieldRenderer.Shot {
+        let opening = plan.camera(of: scene, at: 0)
+        let camera = plan.camera(of: scene, at: time)
+        let middle = CGPoint(x: plan.canvas.width / 2, y: plan.canvas.height / 2)
+        // Where the point the camera opened on (in the frame's middle then) is now
+        let landed = camera.project([opening.lookAt.x, opening.lookAt.y, 0])?.point ?? middle
+        let zoom = camera.magnification / opening.magnification
+        return FieldRenderer.Shot(
+            index: scene.fieldShot, start: scene.start,
+            shift: CGVector(dx: (landed.x - middle.x) * plan.outputScale, dy: (landed.y - middle.y) * plan.outputScale),
+            zoom: zoom.isFinite && zoom > 0 ? zoom : 1
         )
-        let middle = CGPoint(x: plan.outputSize.width / 2, y: plan.outputSize.height / 2)
-        let scale = pow(zoom, fieldParallax)
-        // Core Image's y is up: looking further down the canvas moves the field up the frame
-        return CGAffineTransform(translationX: middle.x - shift.dx, y: middle.y + shift.dy).scaledBy(x: scale, y: scale).translatedBy(x: -middle.x, y: -middle.y)
+    }
+
+    /// A field being typed into at `time`, as the layer's image: the element as its last settled results
+    /// left it, its row as typed so far, and the caret, at its lifts' scale over its whole box in whole
+    /// pixels (as every layer image is: `CIPerspectiveTransform` maps an extent out to them).
+    private static func typed(_ typing: TypedField, at time: Double, layer: MotionPlan.Layer) -> CIImage {
+        let box = CGRect(x: 0, y: 0, width: (layer.size.width * typing.scale).rounded(), height: (layer.size.height * typing.scale).rounded())
+        let (across, down) = (box.width / layer.size.width, box.height / layer.size.height)
+        // Canvas pixels from the top-left corner to image pixels from the bottom-left one
+        let pixels = { (rect: CGRect) in
+            CGRect(x: rect.minX * across, y: box.height - rect.maxY * down, width: rect.width * across, height: rect.height * down)
+        }
+        // Each lift's top on its place's top, in whole pixels
+        let placed = { (image: CIImage, top: Double, left: Double) in
+            image.transformed(by: CGAffineTransform(
+                translationX: (left * across).rounded() - image.extent.minX, y: box.height - (top * down).rounded() - image.extent.maxY
+            ))
+        }
+        let row = pixels(typing.row)
+        // The results below the row, with the selection where the presses have moved it
+        let selection = typing.selection(at: time)
+        let state = selection > 0 ? typing.selected[selection - 1] : typing.states[typing.state(at: time)].image
+        var image = placed(state, 0, 0).cropped(to: CGRect(x: 0, y: 0, width: box.width, height: row.minY.rounded()))
+        image = placed(typing.rows[typing.length(at: time)], typing.row.minY, typing.row.minX).composited(over: image)
+        let caret = typing.caret(at: time)
+        if caret.opacity > 0 {
+            let frame = pixels(caret.frame)
+            // Pure white is kept for the one thing being typed: Raycast's caret is 250 of 255
+            let level = 250.0 / 255
+            let bar = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                "inputExtent": CIVector(cgRect: frame), "inputRadius": frame.width / 2, "inputColor": CIColor(red: level, green: level, blue: level)
+            ])?.outputImage
+            image = (caret.opacity < 1 ? bar?.fading(to: caret.opacity) : bar)?.composited(over: image) ?? image
+        }
+        // Over its whole box, which the layer's quad is mapped from
+        return image.composited(over: CIImage(color: .clear).cropped(to: box)).cropped(to: box)
     }
 
     /// A take's frame with its cursor at `time` in the take, inside the element's painted shape. The

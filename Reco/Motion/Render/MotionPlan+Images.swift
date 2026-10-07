@@ -63,9 +63,11 @@ extension MotionPlan {
         ])?.outputImage ?? CIImage.empty()
     }
 
-    /// The image file at `url` read at most `pixels` large, stretched to exactly that, as an
-    /// `<img>` with both dimensions set.
-    nonisolated private static func picture(at url: URL, pixels: CGSize) -> CIImage? {
+    /// The image file at `url` read at most `pixels` large, stretched to that rounded to whole pixels,
+    /// as an `<img>` with both dimensions set. Whole: `CIPerspectiveTransform` maps an image's extent
+    /// out to whole pixels, so a 5800.3 px wide lift drew 0.6 px off the film's (spec 0012, phase 2).
+    nonisolated static func picture(at url: URL, pixels: CGSize) -> CIImage? {
+        let pixels = CGSize(width: max(pixels.width.rounded(), 1), height: max(pixels.height.rounded(), 1))
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,

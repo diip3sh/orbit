@@ -27,14 +27,22 @@ nonisolated struct MotionShot: Equatable, Sendable {
         case featureSequence
         /// The logo, a headline and the address; still.
         case endCard
+        /// New Raycast's closing on black: the name in small mono caps and the items' words swapped beside
+        /// it, the last sliding in next to it, a line under them, then the logo alone.
+        case closing
 
         /// Whether it shows ``MotionShot/text`` and ``MotionShot/detail``.
         var showsText: Bool {
-            [.hook, .title, .endCard].contains(self)
+            [.hook, .title, .endCard, .closing].contains(self)
         }
 
         var showsDetail: Bool {
-            self == .title || self == .endCard
+            [.title, .endCard, .closing].contains(self)
+        }
+
+        /// Whether it holds still to the end, without the pacing's drift: a video's last word.
+        var isEnding: Bool {
+            self == .endCard || self == .closing
         }
     }
 
@@ -91,6 +99,9 @@ nonisolated extension MotionShot {
             return items.isEmpty || items.contains { $0.text == nil && $0.asset == nil } ? "featureSequence needs items, each with text or ui." : nil
         case .endCard:
             return hasText || asset != nil ? nil : "endCard needs text or ui (the logo)."
+        case .closing:
+            let words = (items ?? []).compactMap(\.text).filter { !$0.isEmpty }
+            return hasText && !words.isEmpty ? nil : "closing needs text (the name) and items, each with text (the words swapped beside it)."
         }
     }
 }
