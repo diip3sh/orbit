@@ -33,9 +33,12 @@ nonisolated struct PointerTrack: Sendable {
     }
 
     /// Where the cursor is at `time`, in viewport CSS pixels, given the frames of the elements the
-    /// targets' selectors matched now. `nil` when the Cursor lane is empty.
+    /// targets' selectors matched now. `nil` when the Cursor lane is empty. Like a mouse on a
+    /// screen, it stays inside the viewport, even when its element is out of view.
     mutating func location(at time: Double, elementFrames: [String: CGRect]) -> CGPoint? {
-        let locate = { (target: WebTarget) in target.location(elementFrame: target.selector.flatMap { elementFrames[$0] }) }
+        let viewport = CGRect(origin: .zero, size: script.viewport)
+        let inView = { (point: CGPoint) in CGPoint(x: min(max(point.x, 0), viewport.maxX - 1), y: min(max(point.y, 0), viewport.maxY - 1)) }
+        let locate = { (target: WebTarget) in inView(target.location(elementFrame: target.selector.flatMap { elementFrames[$0] })) }
         switch script.pointerPosition(at: time) {
         case .following(let target):
             let location = locate(target)
@@ -44,7 +47,8 @@ nonisolated struct PointerTrack: Sendable {
         case .resting(let target):
             return rest ?? locate(target)
         case .travelling(let start, let end, let progress):
-            return WebScript.travelPoint(from: rest ?? locate(start), to: locate(end), progress: progress)
+            // The arc may bow past an edge the targets are near
+            return inView(WebScript.travelPoint(from: rest ?? locate(start), to: locate(end), progress: progress))
         case nil:
             return nil
         }

@@ -67,7 +67,7 @@ struct AgentRecordingFooter: View {
     }
 
     /// Opens Settings on its Agents tab.
-    private static func openAgentSettings() {
+    static func openAgentSettings() {
         UserDefaults.standard.set(AgentsSettingsView.tag, forKey: AgentsSettingsView.tabStorageKey)
         NSApp.activate(ignoringOtherApps: true)
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)

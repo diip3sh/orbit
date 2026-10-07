@@ -3,6 +3,7 @@
 //  RecoTests
 //
 
+import CoreGraphics
 import Foundation
 import Testing
 @testable import Reco
@@ -42,10 +43,13 @@ struct RecordPageRequestTests {
     @Test func stepsAreSpacedAutomatically() throws {
         let plan = try request(steps: [hover("#a"), click("#b"), scroll(y: 500)]).plan()
 
+        let first = RecordPlan.leadIn..<RecordPlan.leadIn + RecordPlan.pointerDuration
+        let second = first.upperBound + RecordPlan.gap..<first.upperBound + RecordPlan.gap + RecordPlan.pointerDuration
+        let third = second.upperBound + RecordPlan.gap..<second.upperBound + RecordPlan.gap + RecordPlan.scrollDuration
         let ranges: [Range<Double>] = plan.steps.map(\.range)
-        #expect(ranges == [0.5..<1.5, 2.0..<3.0, 3.5..<5.0])
-        // The last step's end and a second to finish
-        #expect(plan.duration == 6.0)
+        #expect(ranges == [first, second, third])
+        // The last step's end and a moment to finish
+        #expect(plan.duration == third.upperBound + RecordPlan.tail)
     }
 
     @Test func defaultsAreTheDesktopAtTwiceTheSize() throws {
@@ -60,7 +64,8 @@ struct RecordPageRequestTests {
         let plan = try request(viewport: "phone", scale: 1, duration: 10, steps: [click("#a", start: 2, duration: 0.5), scroll(y: 100, duration: 3)]).plan()
 
         let ranges: [Range<Double>] = plan.steps.map(\.range)
-        #expect(ranges == [2.0..<2.5, 3.0..<6.0])
+        let scroll = 2.5 + RecordPlan.gap..<2.5 + RecordPlan.gap + 3
+        #expect(ranges == [2.0..<2.5, scroll])
         #expect(plan.duration == 10)
         #expect(plan.scale == 1)
         #expect(plan.viewport == WebScript.Viewport.phone.size)
@@ -70,7 +75,7 @@ struct RecordPageRequestTests {
         let plan = try request(steps: [click("#a", start: 5), hover("#b")]).plan()
 
         let starts: [Double] = plan.steps.map(\.range.lowerBound)
-        #expect(starts == [5.0, 6.5])
+        #expect(starts == [5.0, 5 + RecordPlan.pointerDuration + RecordPlan.gap])
     }
 
     @Test func overlapsOnTheSameLaneNameBothSteps() {
@@ -90,7 +95,7 @@ struct RecordPageRequestTests {
     @Test func aStepMayStartWhereAnotherEnds() throws {
         let plan = try request(steps: [hover("#a", start: 1, duration: 1), hover("#b", start: 2)]).plan()
 
-        #expect(plan.steps[1].range == 2.0..<3.0)
+        #expect(plan.steps[1].range == 2.0..<2 + RecordPlan.pointerDuration)
     }
 
     @Test func badStepsAreExplained() {
@@ -121,16 +126,53 @@ struct RecordPageRequestTests {
     }
 
     @Test func theDurationHasToHoldTheStepsAndStayUnderTheMaximum() {
-        #expect(problem(request(duration: 1, steps: [hover()]))?.contains("at least 1.5") == true)
+        #expect(problem(request(duration: 1, steps: [hover()]))?.contains("at least 2.5") == true)
         #expect(problem(request(duration: 130))?.contains("120") == true)
         #expect(problem(request(steps: [scroll(y: 1, start: 119, duration: 1.5)]))?.contains("120") == true)
         #expect(problem(request(duration: 120, steps: [hover()])) == nil)
     }
 
-    @Test func noStepsMakeTheShortestTake() throws {
+    @Test func noStepsMakeAShortTake() throws {
         let plan = try request().plan()
 
         #expect(plan.steps.isEmpty)
-        #expect(plan.duration == WebScript.minimumDuration)
+        #expect(plan.duration == max(RecordPlan.tail, WebScript.minimumDuration))
+    }
+
+    // MARK: - From a take
+
+    @Test func aTakesScriptBecomesTheArgumentsThatRecordItAgain() throws {
+        var script = WebScript()
+        script.url = URL(string: "https://example.com/pricing")
+        script.viewport = WebScript.Viewport.phone.size
+        script.scale = 1
+        script.duration = 12
+        script.pointer = [
+            PointerClip(range: 1..<2.5, action: .hover, target: WebTarget(selector: "#plans", point: .zero)),
+            PointerClip(range: 6..<7.5, action: .click, target: WebTarget(selector: "#buy", point: .zero)),
+            PointerClip(range: 8..<9, action: .hover, target: WebTarget(point: .zero))
+        ]
+        script.scrolls = [
+            ScrollClip(range: 3..<5, offset: CGPoint(x: 0, y: 1200), target: .init(selector: "#faq", placement: .top)),
+            ScrollClip(range: 5.5..<6, offset: CGPoint(x: 0, y: 1300), target: .init(selector: "#buy", placement: .intoView)),
+            ScrollClip(range: 9..<11, offset: CGPoint(x: 0, y: 0.30000000000000004))
+        ]
+
+        let request = RecordPageRequest(script: script)
+
+        #expect(request.url == "https://example.com/pricing")
+        #expect(request.viewport == "phone")
+        #expect(request.scale == 1)
+        #expect(request.duration == 12)
+        // Reco's own scroll into view and the clip without a selector are left out
+        #expect(request.steps == [
+            Step(action: "hover", selector: "#plans", start: 1, duration: 1.5),
+            Step(action: "scroll", selector: "#faq", start: 3, duration: 2),
+            Step(action: "click", selector: "#buy", start: 6, duration: 1.5),
+            Step(action: "scroll", offset: 0.3, start: 9, duration: 2)
+        ])
+        // Which records the same steps again
+        let plan = try request.plan()
+        #expect(plan.steps.map(\.range) == [1..<2.5, 3..<5, 6..<7.5, 9..<11])
     }
 }

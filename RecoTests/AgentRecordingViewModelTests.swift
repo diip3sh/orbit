@@ -89,7 +89,7 @@ struct AgentRecordingViewModelTests {
         #expect(model.unavailableReason == nil)
     }
 
-    @Test func withNoConnectedAgentTheReasonSaysWhichToConnect() async throws {
+    @Test func claudeCodeNeedsOnlyItsCommandLineSinceEachRunBringsRecosServer() async throws {
         defer { try? FileManager.default.removeItem(at: home) }
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         let store = AgentConfigStore(home: home, command: AgentServerCommand(executable: "/x", token: token), bundlePath: "/Applications/Reco.app")
@@ -97,20 +97,38 @@ struct AgentRecordingViewModelTests {
 
         await model.refreshAgents()
 
-        #expect(model.available.isEmpty)
-        #expect(model.unavailableReason?.hasPrefix("Connect an agent with a command-line tool first") == true)
+        #expect(model.available == [.claudeCode])
+        #expect(model.unavailableReason == nil)
     }
 
-    @Test func anOutdatedConnectionAsksToReconnect() async throws {
+    @Test func withNoAgentToRunTheReasonSaysWhatToInstallOrConnect() async throws {
         defer { try? FileManager.default.removeItem(at: home) }
-        _ = try connectedStore()
-        let moved = AgentConfigStore(home: home, command: AgentServerCommand(executable: "/Elsewhere/Reco", token: token), bundlePath: "/Applications/Reco.app")
-        let model = try makeModel(store: moved)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let store = AgentConfigStore(home: home, command: AgentServerCommand(executable: "/x", token: token), bundlePath: "/Applications/Reco.app")
+        let model = try makeModel(store: store, environment: .success(["PATH": "/usr/bin"]))
 
         await model.refreshAgents()
 
         #expect(model.available.isEmpty)
-        #expect(model.unavailableReason == "Reconnect Claude Code in Settings → Agents.")
+        #expect(model.unavailableReason?.hasPrefix("Install Claude Code or Cursor's command line") == true)
+    }
+
+    @Test func anOutdatedConnectionAsksToReconnectAnAgentThatNeedsIt() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home.appending(path: ".codex"), withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: home.appending(path: ".claude.json"))
+        let installed = AgentServerCommand(executable: "/Applications/Reco.app/Contents/MacOS/Reco", token: token)
+        let old = AgentConfigStore(home: home, command: installed, bundlePath: "/Applications/Reco.app")
+        try old.connect(.codex)
+        try old.connect(.claudeCode)
+        let moved = AgentConfigStore(home: home, command: AgentServerCommand(executable: "/Elsewhere/Reco", token: token), bundlePath: "/Applications/Reco.app")
+        let model = try makeModel(store: moved, environment: .success(["PATH": "/usr/bin"]))
+
+        await model.refreshAgents()
+
+        // Not Claude Code, whose runs bring Reco's server
+        #expect(model.available.isEmpty)
+        #expect(model.unavailableReason == "Reconnect Codex in Settings → Agents.")
     }
 
     @Test func aCommandMissingFromTheLoginShellIsSaidSo() async throws {
@@ -180,7 +198,9 @@ struct AgentRecordingViewModelTests {
             return AgentProcess.Result(end: .exited(0), stdout: "/tmp/new.mov", stderr: "")
         }
         var succeeded = false
+        var recorded: AgentRecordedTake?
         model.onSucceeded = { succeeded = true }
+        model.onRecorded = { recorded = $0 }
         await model.refreshAgents()
         model.address = "example.com"
         model.instructions = "Scroll down."
@@ -196,12 +216,33 @@ struct AgentRecordingViewModelTests {
         #expect(environments.withLock { $0 } == loginEnvironment)
         #expect(model.phase == .idle)
         #expect(succeeded)
+        #expect(recorded?.movie.path() == "/tmp/new.mov")
+        #expect(recorded?.replacing == nil)
+        #expect(recorded?.conversation.map(\.text) == ["Scroll down.", "/tmp/new.mov"])
+    }
+
+    @Test func aChatsFailureStaysInItsChatWithoutANotification() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let failures = Calls()
+        let model = try makeModel(failures: failures) { _, _, _, _, _ in
+            AgentProcess.Result(end: .exited(1), stdout: "", stderr: "Overloaded")
+        }
+        await model.refreshAgents()
+        var asked = try request()
+        asked.take = .init(movie: URL(filePath: "/m/a.mov"), steps: RecordPageRequest(url: "https://example.com", steps: []))
+
+        model.run(asked)
+        await finish(model)
+
+        #expect(model.phase == .failed("Claude Code exited with status 1: Overloaded"))
+        #expect(model.panelFailure == nil)
+        #expect(failures.arguments.isEmpty)
     }
 
     @Test func theWorkingFolderExistsWhenAnAgentNeedsNoFilesInIt() async throws {
         defer { try? FileManager.default.removeItem(at: home) }
         let existed = Mutex(false)
-        // Claude Code gets no support files, so nothing else creates the folder
+        // The command runs in it, whether or not the agent needs files there
         let model = try makeModel { _, _, _, directory, _ in
             existed.withLock { $0 = FileManager.default.fileExists(atPath: directory.path(percentEncoded: false)) }
             return AgentProcess.Result(end: .exited(0), stdout: "", stderr: "")

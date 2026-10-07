@@ -79,6 +79,17 @@ struct CursorPathTests {
         }
     }
 
+    @Test func aWebTakesScriptedPathIsDrawnAsItWasWithoutTrailing() throws {
+        var web = telemetry(cursor: sweep(speed: 600, until: 2))
+        web.capture.kind = .web
+
+        let path = try path(web)
+
+        // Where the page's pointer was, give or take the 60 Hz sample it holds
+        let behind = 100 + 600 * 1.5 - path.position(at: 1.5).x
+        #expect(behind >= 0 && behind <= 600 / 60)
+    }
+
     @Test func dropsTinyMovesBackButNotRealOnes() {
         let samples = [(0, 0), (1, 10), (2, 9), (3, 12), (4, 5)].map {
             InputTelemetry.CursorSample(time: Double($0.0), location: CGPoint(x: $0.1, y: 0))

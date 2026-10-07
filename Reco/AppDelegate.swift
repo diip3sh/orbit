@@ -25,14 +25,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shares the recorder's settings and notifications
     lazy var screenshots = ScreenshotController(settings: viewModel.settings, notificationService: viewModel.notificationService)
 
-    private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
+    private lazy var editorWindows: EditorWindowManager = EditorWindowManager(settings: viewModel.settings, agentRecording: agentRecording)
     private lazy var quickAccess = QuickAccessController { [screenshots] screenshot in await screenshots.save(screenshot) }
 
-    /// Serves the tools coding agents record web pages with; a movie it renders opens in the editor.
-    lazy var agentBridge = AgentBridgeServer(tools: AgentTools(settings: viewModel.settings) { [editorWindows] url in editorWindows.open(url) })
+    /// Serves the tools coding agents record web pages with. A movie it renders for an agent the user
+    /// runs opens in the editor right away; one for a run of Reco's own opens when the run ends, with
+    /// its conversation.
+    lazy var agentBridge: AgentBridgeServer = AgentBridgeServer(tools: AgentTools(settings: viewModel.settings) { [weak self] url in
+        guard let self, !agentRecording.isRunning else { return }
+        editorWindows.open(url)
+    })
 
     /// Runs coding agents on a request typed into the Record with AI Agent panel.
-    lazy var agentRecording = AgentRecordingViewModel(
+    lazy var agentRecording: AgentRecordingViewModel = AgentRecordingViewModel(
         tools: agentBridge.tools,
         reportFailure: { [notifications = viewModel.notificationService] in notifications.sendAgentRecordingFailedNotification(reason: $0) },
         token: AgentBridgeServer.token()
@@ -45,8 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerKeyboardShortcuts()
         agentBridge.start()
-        viewModel.notificationService.editRecording = editorWindows.open
+        viewModel.notificationService.editRecording = { [editorWindows] (url: URL) in editorWindows.open(url) }
         viewModel.notificationService.retryAgentRecording = { [agentRecording] in agentRecording.retry() }
+        agentRecording.onRecorded = { [editorWindows] in editorWindows.open($0) }
         viewModel.notificationService.showAgentRecording = { [weak self] in self?.showAgentRecording() }
 
         // Hidden first so the last card never lands in the next shot, even with Show Reco on;

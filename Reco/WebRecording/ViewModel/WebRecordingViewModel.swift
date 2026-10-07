@@ -371,10 +371,10 @@ extension WebRecordingViewModel {
                 renderTask = nil
             }
             do {
-                let movie = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
+                let take = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
                     self?.renderProgress = progress
                 }
-                onRendered(movie)
+                onRendered(take.movie)
             } catch {
                 if !(error is CancellationError) {
                     logger.error("Couldn't render the web script: \(error.localizedDescription)")

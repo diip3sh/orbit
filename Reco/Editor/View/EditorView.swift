@@ -8,12 +8,31 @@
 import SwiftUI
 
 /// An editor window's content: the preview and transport on a dark stage, the timeline under them,
-/// and the inspector.
+/// and the inspector, which for a web take can show the agent chat instead.
 struct EditorView: View {
     let viewModel: EditorViewModel
+    let chat: AgentChatViewModel
 
     @State private var showsInspector = true
     @State private var showsExport = false
+
+    /// The panel the user picked, if they did.
+    @State private var pickedPanel: Panel?
+
+    /// What the inspector's column shows.
+    private enum Panel {
+        case style
+        case agent
+    }
+
+    /// The picked panel, else the chat when an agent made the take.
+    private var panel: Binding<Panel> {
+        Binding {
+            pickedPanel ?? (chat.conversation.isEmpty ? .style : .agent)
+        } set: {
+            pickedPanel = $0
+        }
+    }
 
     var body: some View {
         Group {
@@ -31,9 +50,27 @@ struct EditorView: View {
                                 .frame(height: 1)
                         }
                 }
+                // A take the agent recorded again replaces this one in the window: its views start over
+                .id(viewModel.videoURL)
                 .inspector(isPresented: $showsInspector) {
-                    EditorInspector(viewModel: viewModel)
-                        .inspectorColumnWidth(min: 260, ideal: 300, max: 380)
+                    VStack(spacing: 0) {
+                        if chat.isAvailable {
+                            Picker("Panel", selection: panel) {
+                                Text("Style").tag(Panel.style)
+                                Text("Agent").tag(Panel.agent)
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .padding([.horizontal, .top])
+                        }
+                        if chat.isAvailable, panel.wrappedValue == .agent {
+                            AgentChatView(chat: chat)
+                        } else {
+                            EditorInspector(viewModel: viewModel)
+                        }
+                    }
+                    .id(viewModel.videoURL)
+                    .inspectorColumnWidth(min: 260, ideal: 300, max: 380)
                 }
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
@@ -73,8 +110,11 @@ struct EditorView: View {
         .frame(minWidth: 560, minHeight: 440)
         .editorWindowBackground()
         .editorMotion(.smooth, value: viewModel.source == nil)
-        .task {
+        .task(id: viewModel.videoURL) {
             await viewModel.load()
+        }
+        .task(id: chat.movie) {
+            await chat.load()
         }
     }
 }

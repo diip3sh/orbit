@@ -35,7 +35,8 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 581 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 615 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
+  reads alpha 254 instead of 255 with Xcode 26.0.1 on macOS 26.5.2, also without this fork's later changes.
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
   `RecorderViewModel.swift` (file_length, type_body_length). Don't make them worse; SwiftLint skips
@@ -651,6 +652,9 @@ Key facts:
 - Only Reco's tools run: Claude `--tools "" --allowedTools mcp__reco__*`, Codex `approve` mode and a
   read-only sandbox, OpenCode inline permission config, Gemini policy file, Grok `dontAsk` (its read-only
   built-ins remain), Cursor workspace `cli.json`. Codex wasn't run (not installed).
+- Claude Code gets Reco's server from `AgentRun/reco-mcp.json` with `--strict-mcp-config` (spec 0008), so it
+  needs no connecting and works with `CLAUDE_CONFIG_DIR` set; Cursor gets its workspace `mcp.json`. Both are
+  offered once their command line is on `PATH`; the others must be connected.
 - The run's limit is **15 minutes** (a 30 s apple.com take at 2x is 1–2 minutes; linear.app needs 18 for 60 s).
   After the agent exits its render is waited for.
 - Outcome rules (in order): cancelled; a new render `done` is a success even after a bad exit; time-out;
@@ -660,6 +664,46 @@ Key facts:
   Agents tab to the `settingsTab` default.
 - The panel's motion follows the apple-design skill: one `isPresented` flag drives a bounce-free spring,
   so closing and reopening mid-animation retargets; Reduce Motion cross-fades, Reduce Transparency is solid.
+
+### S5 — Agent chat and reliable web takes (`feat/ui-polish`, spec 0008)
+
+A web take's editor has **Style | Agent** at the top of the inspector. Agent is a chat: the conversation that
+made the take, the run's state ("Looking at apple.com…", "Recording… 42%", Cancel) and a message box (↩
+records, ⌥↩ new line) with the agent and model. Sending has the agent record the take again with the change;
+the window swaps to the new take in the same look, the conversation carried over. Takes are checked as they
+render and the problems go back to the agent as `warnings`.
+
+| File | Role |
+|---|---|
+| `AgentRecording/Model/AgentChatMessage.swift`, `AgentRecordedTake.swift` | A message (user, agent, failure); a run's take with its conversation and the take it replaces |
+| `AgentRecording/Model/AgentRecordingRequest.swift` | `take` (`RecordPageRequest(script:)`) and `conversation` in the prompt; replies of a sentence or two |
+| `AgentRecording/ViewModel/AgentChatViewModel.swift` | Per editor window: reads `<name>.web.json`, sends through the one runner, failure folding, saving |
+| `AgentRecording/View/AgentChatView.swift`, `AgentChatMessageRow.swift`, `AgentChatComposer.swift` | The chat |
+| `WebRecording/Model/WebTake.swift` | `<name>.web.json` v1: the take's script and conversation, written by `renderTake` |
+| `WebRecording/Model/WebTakeIssues.swift` | A cursor target missing, outside the view or covered at its clip's start; skipped clicks; unfound scrolls |
+| `WebRecording/Model/ScrollClip.swift` | `Target` (`top` or `intoView`), aimed again on the clip's first frame |
+| `AgentBridge/Model/RecordPlan.swift` | An `intoView` scroll before each cursor clip where there's room; blind clicks refused |
+| `Editor/View/EditorWindowManager.swift` | `open(_ take: AgentRecordedTake)`: loads the new take, then swaps it into the replaced take's window (same hosting controller), in its look (`EditorProject.styled(like:)`) |
+
+Key facts:
+- A 60 s apple.com take at 2× renders in 81–91 s on an M5. Claude Code made one from "a 1 minute demo of
+  apple.com…" in 207 s and 6 turns ($0.72): it got a "menu covers your target" warning, added a hover to
+  close the menu and recorded again with none.
+- In-view means wholly inside the viewport; an `intoView` scroll moves as little as it takes, ending 15%
+  from the edge, up to 1 s long, after the previous cursor clip and scroll, and only with 0.2 s of room.
+- The cursor stays inside the viewport and glides in from its middle before the first clip (≤ 1 s).
+- Web takes: zooms hold for each whole stop (`AutoZoomGenerator.Configuration(for:)`), every stop counts,
+  a scroll ends one 0.3 s in and splits groups; the cursor isn't smoothed (Movement disabled). Web
+  telemetry records scrolls; a scroll starts after 0.25 s without events.
+- While a run of Reco's own goes, a finished render doesn't open by itself; the run's end opens its take.
+- The swap loads the new take before showing it: a window whose hosting view shows the loading placeholder
+  shrinks to its minimum, and a new controller resizes the window to itself. Per-take views are `.id`'d
+  inside `.inspector`, not around it: an `.id` around it laid the split out 160 pt wider than the window.
+- Chat turns measured from the editor (Claude Code, default model): 48 s, 86 s, 30 s and 21 s, each a new take.
+- On macOS 26.5 a refused connection commits `about:blank` and finishes; `didFinish` on `about:` fails the load.
+- `inspect_page` scrolls the page down and back first (0.8 viewport steps, 100 ms), leaves out elements off
+  to the sides and gives links an `href`. Step defaults: first at 1 s, 0.8 s apart, 1.5 s per hover or
+  click, 2 s per scroll, 1.5 s after the last.
 
 ### Telemetry JSON (version 3)
 
@@ -727,6 +771,7 @@ should hold but need re-measuring.
 | S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |
 | S3 agent bridge (spec 0006): MCP server for coding agents | Done; tested over the real socket (token, `initialize`, `tools/list`, error calls), the `--mcp` process (`AgentBridgeClientTests`), config editors and plans. Not yet tried: real agents connected by hand, a real `record_page` render, Gatekeeper on another Mac |
 | S4 agent recording (spec 0007): Record with AI Agent bar, no App Sandbox | Done and tested with fakes and real `/bin/sh` processes; the login-shell environment was read on this Mac (0.86 s). Not yet tried: any real agent run, the panel in the app (focus, Esc, picker menus, Reduce Motion/Transparency), the update from the sandboxed release (migration), Codex |
+| S5 agent chat and reliable web takes (spec 0008) | Done and tested: real Claude Code runs from the prompt and from the chat in the app (sent through accessibility), 60 s apple.com takes checked frame by frame. Not yet tried: Retry and Cancel by hand, VoiceOver, Reduce Motion, other agents |
 
 What to build next, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
 `docs/specs/0004-next-features.md`.
@@ -736,6 +781,9 @@ Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorde
 `lihaoyun6/QuickRecorder` (AGPL) are **ideas only — never copy code**.
 
 ## Known open items
+
+- New editor windows open at their 560×492 minimum instead of 1280×800 (seen on `feat/ui-polish` before
+  spec 0008 too): the window takes the loading placeholder's size.
 
 - Not yet verified on real recordings: area capture mapping, a window moved/resized mid-recording.
 - `RecorderViewModel` is over SwiftLint's type size limit (pre-existing); split it before adding more.

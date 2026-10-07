@@ -47,7 +47,7 @@ struct AgentRecordingView: View {
 
             Hairline()
 
-            if case .failed(let reason) = model.phase {
+            if let reason = model.panelFailure {
                 AgentRecordingFailure(reason: reason, retry: model.retry)
                 Hairline()
             }

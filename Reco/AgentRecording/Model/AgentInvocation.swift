@@ -32,6 +32,14 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
         }
     }
 
+    /// Whether the run gives the agent Reco's server itself, so it works without Settings → Agents
+    /// connecting it, whatever the agent's own settings say (e.g. Claude Code with `CLAUDE_CONFIG_DIR`
+    /// set reads another file than the one Reco connects).
+    static func bringsOwnServer(_ kind: AgentKind) -> Bool {
+        kind == .claudeCode || kind == .cursor
+    }
+
+    private static let serversFile = "reco-mcp.json"
     private static let policyFile = "reco-policy.toml"
     private static let cursorFile = ".cursor/cli.json"
     private static let cursorServersFile = ".cursor/mcp.json"
@@ -60,11 +68,12 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
     /// tool is `<server>_<tool>`.
     private static let openCodePermissions = #"{"permission":{"*":"deny","reco_*":"allow"}}"#
 
-    /// Reco's server for Cursor's workspace. Cursor's CLI drops its whole `~/.cursor/mcp.json` when one
-    /// entry has a type it doesn't know (e.g. `"streamableHttp"`, which the editor accepts), but still
-    /// reads the workspace's `.cursor/mcp.json`. Measured with cursor-agent 2026.09.26.
-    private static func cursorServers(_ server: AgentServerCommand) -> String {
-        let servers = [AgentServerCommand.serverName: AgentKind.cursor.jsonEntry(for: server)]
+    /// Reco's server as `kind` lists it in an `mcpServers` file. Cursor's CLI drops its whole
+    /// `~/.cursor/mcp.json` when one entry has a type it doesn't know (e.g. `"streamableHttp"`, which
+    /// the editor accepts), but still reads the workspace's `.cursor/mcp.json`. Measured with
+    /// cursor-agent 2026.09.26.
+    private static func servers(_ server: AgentServerCommand, for kind: AgentKind) -> String {
+        let servers = [AgentServerCommand.serverName: kind.jsonEntry(for: server)]
         let data = (try? JSONSerialization.data(withJSONObject: ["mcpServers": servers], options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
         return String(data: data, encoding: .utf8) ?? ""
     }
@@ -83,9 +92,12 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
         let arguments: [String]
         switch request.agent {
         case .claudeCode:
-            // --tools and --allowedTools take any number of values, so the prompt goes right after -p
+            // --tools and --allowedTools take any number of values, so the prompt goes right after -p.
+            // Reco's server from a file in the run's folder, not the command line, which other users see
+            files[serversFile] = servers(server, for: .claudeCode)
             arguments = ["-p", prompt, "--tools", "", "--allowedTools", "mcp__reco__*", "--permission-mode", "dontAsk",
-                         "--no-session-persistence"] + option("--model") + ["--output-format", "text"]
+                         "--no-session-persistence", "--mcp-config", directory.appending(path: serversFile).path(percentEncoded: false),
+                         "--strict-mcp-config"] + option("--model") + ["--output-format", "text"]
         case .codex:
             arguments = ["exec", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only",
                          "-c", #"mcp_servers.reco.default_tools_approval_mode="approve""#] + option("-m") + [prompt]
@@ -102,7 +114,7 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
                          "--no-subagents", "--output-format", "plain"] + option("-m")
         case .cursor:
             files[cursorFile] = cursorPermissions
-            files[cursorServersFile] = cursorServers(server)
+            files[cursorServersFile] = servers(server, for: .cursor)
             arguments = ["-p", "--trust", "--approve-mcps", "--output-format", "text"] + option("--model") + [prompt]
         case .claudeDesktop:
             return nil

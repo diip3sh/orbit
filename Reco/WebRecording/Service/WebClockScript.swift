@@ -21,9 +21,10 @@ import Foundation
 /// - A frame waits up to 5 s for the images in view and the fonts to load; what misses that isn't
 ///   waited for again.
 /// - `window.__reco` holds what the renderer calls: `frame(time, x, y, selectors)` freezes
-///   the clock at the take's `time` on its first call, then steps it; it returns `null` while a new
-///   page is still loading. `hold(x, y)` seeks animations the pointer just started and names the
-///   cursor there.
+///   the clock at the take's `time` on its first call, then steps it, and returns the selectors'
+///   boxes and the page's height; it returns `null` while a new page is still loading.
+///   `hold(x, y, selector)` seeks animations the pointer just started, names the cursor there and,
+///   given the selector the cursor aims at, what covers its element at that point.
 enum WebClockScript {
 
     static let source = #"""
@@ -176,6 +177,13 @@ enum WebClockScript {
         return 'default';
       }
 
+      const find = (selector) => { try { return document.querySelector(selector); } catch { return null; } };
+      const describe = (element) => {
+        const name = element.localName + (element.id ? '#' + element.id : '') + [...element.classList].slice(0, 2).map((name) => '.' + name).join('');
+        const text = (element.getAttribute('aria-label') || element.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+        return text ? `${name} ("${text}")` : name;
+      };
+
       Object.defineProperty(window, '__reco', { value: {
         freeze(time) { if (base === null) base = now - time * 1000; },
         async frame(time, scrollX, scrollY, selectors) {
@@ -187,17 +195,21 @@ enum WebClockScript {
           await loadInView();
           const boxes = {};
           for (const selector of selectors) {
-            let element = null;
-            try { element = document.querySelector(selector); } catch {}
+            const element = find(selector);
             // One that isn't rendered, e.g. display: none, has no box, so the cursor goes to the target's point
             const box = element?.getClientRects().length ? element.getBoundingClientRect() : null;
             boxes[selector] = box ? [box.x, box.y, box.width, box.height] : null;
           }
-          return boxes;
+          return { boxes, height: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0) };
         },
-        hold(x, y) {
+        hold(x, y, selector) {
           syncAnimations();
-          return x === null ? 'default' : cursorAt(x, y);
+          if (x === null) return { cursor: 'default', cover: null };
+          // What gets the pointer instead of the target, like a menu an earlier hover left open
+          const element = selector ? find(selector) : null;
+          const hit = element ? document.elementFromPoint(x, y) : null;
+          const cover = hit && !element.contains(hit) && !hit.contains(element) ? describe(hit) : null;
+          return { cursor: cursorAt(x, y), cover };
         }
       } });
     })();

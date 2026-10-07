@@ -22,8 +22,9 @@ struct AgentRecordingRequestTests {
         \(wanted)
 
         Use only the reco MCP tools: call inspect_page, then record_page, then call render_status with its render_id until \
-        the status is done or failed. Don't ask questions; choose sensible steps yourself. When it's done, reply with the \
-        movie's path only. If it fails, reply with the error.
+        the status is done or failed. If the result has warnings, fix those steps and record once more. Don't ask \
+        questions; choose sensible steps yourself. When it's done, reply in one or two short sentences saying what the video \
+        shows, without paths or selectors. If it fails, reply with the error.
         """
     }
 
@@ -47,5 +48,28 @@ struct AgentRecordingRequestTests {
 
     @Test func thePromptStartsWithAWordSoNoCommandLineReadsItAsAFlag() throws {
         #expect(try request(instructions: "--help").prompt.hasPrefix("Record"))
+    }
+
+    @Test func aChatRequestCarriesTheTakesStepsAndTheConversation() throws {
+        var request = try request(instructions: "Slower, and click Buy at the end.")
+        let steps = RecordPageRequest(url: "https://apple.com/macbook-pro", steps: [.init(action: "hover", selector: "#buy", start: 1, duration: 1.5)])
+        request.take = .init(movie: URL(filePath: "/m/take.mov"), steps: steps)
+        request.conversation = [
+            AgentChatMessage(role: .user, text: "Hover Buy."),
+            AgentChatMessage(role: .agent, text: "The video hovers Buy."),
+            AgentChatMessage(role: .failure, text: "The page crashed.")
+        ]
+
+        let prompt = request.prompt
+
+        #expect(prompt.hasPrefix("Record a video of this web page with Reco: https://apple.com/macbook-pro\n\n"))
+        #expect(prompt.contains("""
+            The current video was recorded with these record_page arguments:
+            {"steps":[{"action":"hover","duration":1.5,"selector":"#buy","start":1}],"url":"https://apple.com/macbook-pro"}
+            """))
+        #expect(prompt.contains("The conversation so far:\nUser: Hover Buy.\nAgent: The video hovers Buy.\nRecording failed: The page crashed.\n\n"))
+        #expect(prompt.contains("What the user asks now:\nSlower, and click Buy at the end.\n\n"))
+        #expect(prompt.contains("Record the whole video again with record_page, changing only what the user asks"))
+        #expect(prompt.contains("saying what the video shows and what changed"))
     }
 }

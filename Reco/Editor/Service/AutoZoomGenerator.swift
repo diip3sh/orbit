@@ -57,19 +57,40 @@ nonisolated enum AutoZoomGenerator {
         /// than a curve; real circling drifts a little each turn. At 0.75 and above, the curve
         /// leading into real circling joined it and moved its centre; 0.25 finds the same circles.
         var circleClosure = 0.5
+
+        /// Whether a zoom on a rest lasts as long as the cursor stays, rather than from its arrival,
+        /// and ends ``scrollHold`` after the page starts to scroll under it.
+        var holdsRests = false
+
+        /// How long a held rest's zoom lasts once the page scrolls: about how long the spring takes
+        /// to start moving out, so the scroll shows the page at full size.
+        var scrollHold = 0.3
     }
 
     /// The automatic zooms for a recording, sorted and apart.
     /// - Parameter duration: The recording's length in seconds.
-    static func segments(for telemetry: InputTelemetry, duration: Double, configuration: Configuration = Configuration()) -> [ZoomSegment] {
+    /// - Parameter configuration: By default, ``Configuration/init(for:)``.
+    static func segments(for telemetry: InputTelemetry, duration: Double, configuration: Configuration? = nil) -> [ZoomSegment] {
+        let configuration = configuration ?? Configuration(for: telemetry)
         let reach = configuration.usableFraction / configuration.scale
         let fits = { (group: Group) in group.bounds.width <= reach && group.bounds.height <= reach }
+        let scrolls = scrollStarts(in: telemetry)
 
         var groups: [Group] = []
-        let events = (activity(in: telemetry) + rests(in: telemetry, duration: duration, configuration: configuration)).map(Group.init)
-            + circles(in: telemetry, configuration: configuration).map(Group.init)
+        let stops = rests(in: telemetry, duration: duration, configuration: configuration).map { rest in
+            var group = Group((rest.time, rest.point))
+            if configuration.holdsRests {
+                group.end = min(rest.end, firstScroll(in: scrolls, after: rest.time) ?? rest.end)
+            }
+            return group
+        }
+        let events = activity(in: telemetry).map(Group.init) + stops + circles(in: telemetry, configuration: configuration).map(Group.init)
+        // Held rests aren't zoomed on across a scroll: the page moved between them
+        let scrolledBetween = { (group: Group, event: Group) in
+            configuration.holdsRests && firstScroll(in: scrolls, after: group.start).map { $0 <= event.start } == true
+        }
         for event in events.sorted(by: { $0.start < $1.start }) {
-            if let last = groups.last, event.start - last.end < configuration.maximumGap, fits(last.merging(event)) {
+            if let last = groups.last, event.start - last.end < configuration.maximumGap, fits(last.merging(event)), !scrolledBetween(last, event) {
                 groups[groups.count - 1] = last.merging(event)
             } else {
                 groups.append(event)
@@ -78,7 +99,11 @@ nonisolated enum AutoZoomGenerator {
 
         var zooms: [(group: Group, range: Range<Double>)] = []
         for group in groups {
-            guard let range = range(of: group, duration: duration, configuration: configuration) else { continue }
+            guard var range = range(of: group, duration: duration, configuration: configuration) else { continue }
+            if configuration.holdsRests, let scroll = firstScroll(in: scrolls, after: group.start) {
+                // Not shorter than half the minimum, for a scroll that starts as the cursor arrives
+                range = range.lowerBound..<min(range.upperBound, max(scroll + configuration.scrollHold, range.lowerBound + configuration.minimumDuration / 2))
+            }
             guard let previous = zooms.last, range.lowerBound - previous.range.upperBound < configuration.mergeGap else {
                 zooms.append((group, range))
                 continue
@@ -124,14 +149,21 @@ nonisolated enum AutoZoomGenerator {
         return activity
     }
 
+    /// A place the cursor stopped at: from when it arrived to when it left, as a fraction of the video.
+    nonisolated struct Rest: Equatable, Sendable {
+        var time: Double
+        var point: CGPoint
+        var end: Double
+    }
+
     /// Where the cursor came to rest inside the video after moving there: the user is about to
-    /// click or is pointing something out. Timed when it arrived.
-    static func rests(in telemetry: InputTelemetry, duration: Double, configuration: Configuration = Configuration()) -> [(time: Double, point: CGPoint)] {
+    /// click or is pointing something out. Timed when it arrived, with when it left.
+    static func rests(in telemetry: InputTelemetry, duration: Double, configuration: Configuration = Configuration()) -> [Rest] {
         let samples = telemetry.cursor.compactMap { sample in
             telemetry.normalizedVideoPoint(for: sample.location, at: sample.time).map { (time: sample.time, point: $0) }
         }
 
-        var rests: [(time: Double, point: CGPoint)] = []
+        var rests: [Rest] = []
         var lastRest = samples.first?.point
         var index = samples.startIndex
         while index < samples.endIndex {
@@ -145,7 +177,7 @@ nonisolated enum AutoZoomGenerator {
             }
             if let lastRest, distance(arrival.point, lastRest) >= configuration.restTravel,
                (0...1).contains(arrival.point.x), (0...1).contains(arrival.point.y) {
-                rests.append(arrival)
+                rests.append(Rest(time: arrival.time, point: arrival.point, end: leaves))
             }
             lastRest = arrival.point
             index = departure
@@ -207,6 +239,23 @@ nonisolated enum AutoZoomGenerator {
     }
 
     // MARK: - Private
+
+    /// When each scroll started: its first event after a pause longer than ``scrollPause``.
+    private static func scrollStarts(in telemetry: InputTelemetry) -> [Double] {
+        zip([-Double.infinity] + telemetry.scrolls.map(\.time), telemetry.scrolls.map(\.time)).compactMap { previous, time in
+            time - previous > scrollPause ? time : nil
+        }
+    }
+
+    /// The longest pause between a scroll's events: web takes have one every frame, wheels a few
+    /// times a second.
+    private static let scrollPause = 0.25
+
+    /// The first of the sorted scroll `starts` after `time`; one at `time` brought the cursor there.
+    private static func firstScroll(in starts: [Double], after time: Double) -> Double? {
+        let index = starts.partitioningIndex { $0 > time }
+        return index < starts.count ? starts[index] : nil
+    }
 
     private static func distance(_ start: CGPoint, _ end: CGPoint) -> Double {
         hypot(start.x - end.x, start.y - end.y)
@@ -272,6 +321,19 @@ nonisolated enum AutoZoomGenerator {
             group.total = CGPoint(x: total.x + other.total.x, y: total.y + other.total.y)
             group.count += other.count
             return group
+        }
+    }
+}
+
+nonisolated extension AutoZoomGenerator.Configuration {
+
+    /// The defaults for `telemetry`'s kind of recording. A web take's cursor stops only where its
+    /// script points at something (spec 0005), so each stop counts and is zoomed on while it lasts.
+    init(for telemetry: InputTelemetry) {
+        self.init()
+        if telemetry.capture.kind == .web {
+            holdsRests = true
+            restTravel = restRadius
         }
     }
 }

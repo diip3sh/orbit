@@ -30,7 +30,7 @@ struct RecordPlanTests {
     }
 
     @Test func aScrollToAnElementLeavesAMarginAboveIt() throws {
-        let expected = CGFloat(1200 - RecordPlan.scrollMargin * 900)
+        let expected = CGFloat(1200 - ScrollClip.Target.topMargin * 900)
 
         #expect(try scrollTop(of: "#pricing", at: 1200) == expected)
     }
@@ -58,7 +58,7 @@ struct RecordPlanTests {
     @Test func aClickAimsAtTheElementsCentreWhereThePageIsScrolledToThen() throws {
         let boxes = ["#buy": PageInspection.Box(left: 100, top: 700, width: 200, height: 60)]
         // The scroll ends at 2 s; the click follows half a second later
-        let steps = [Step(action: "scroll", offset: 500, start: 0.5, duration: 1.5), Step(action: "click", selector: "#buy")]
+        let steps = [Step(action: "scroll", offset: 500, start: 0.5, duration: 1.5), Step(action: "click", selector: "#buy", start: 2.5, duration: 1)]
 
         let result = try plan(steps).script(page: page(boxes: boxes))
 
@@ -83,7 +83,7 @@ struct RecordPlanTests {
     }
 
     @Test func anElementThePageDoesntHaveIsAimedAtTheMiddleAndReported() throws {
-        let steps = [Step(action: "hover", selector: "#gone"), Step(action: "click", selector: "#gone"), Step(action: "hover", selector: "#also")]
+        let steps = [Step(action: "hover", selector: "#gone"), Step(action: "hover", selector: "#gone"), Step(action: "hover", selector: "#also")]
 
         let result = try plan(steps).script(page: page())
 
@@ -91,6 +91,58 @@ struct RecordPlanTests {
         #expect(result.unmatched == ["#gone", "#also"])
         // The selector stays: the page may have it by the time of the take
         #expect(result.script.pointer.first?.target.selector == "#gone")
+    }
+
+    @Test func aClickOnAnElementThePageDoesntHaveFailsRatherThanLandOnWhateverIsThere() throws {
+        let missing = try plan([Step(action: "hover", selector: "#a"), Step(action: "click", selector: "#gone")])
+
+        #expect(throws: AgentToolError.self) { try missing.script(page: page(boxes: ["#a": .init(left: 0, top: 0, width: 10, height: 10)])) }
+    }
+
+    @Test func stepsAfterAClickMayAimAtThePageItOpens() throws {
+        let boxes = ["#buy": PageInspection.Box(left: 100, top: 100, width: 200, height: 60)]
+        let steps = [
+            Step(action: "click", selector: "#buy", start: 1), Step(action: "scroll", selector: "#specs", start: 3),
+            Step(action: "click", selector: "#checkout", start: 6)
+        ]
+
+        let result = try plan(steps).script(page: page(boxes: boxes))
+
+        #expect(result.unmatched == ["#checkout"])
+        // Found when the scroll starts in the take; planned not to move
+        let scroll = try #require(result.script.scrolls.first { $0.target?.placement == .top })
+        #expect(scroll.target?.selector == "#specs")
+        #expect(scroll.offset == .zero)
+    }
+
+    @Test func aCursorTargetOutOfViewIsScrolledIntoViewFirstAsLittleAsItTakes() throws {
+        let boxes = ["#faq": PageInspection.Box(left: 100, top: 2000, width: 200, height: 50)]
+
+        let script = try plan([Step(action: "hover", selector: "#faq", start: 3)]).script(page: page(boxes: boxes)).script
+
+        let scroll = try #require(script.scrolls.first)
+        #expect(scroll.range == 2..<3)
+        #expect(scroll.target == ScrollClip.Target(selector: "#faq", placement: .intoView))
+        // Its bottom clear of the viewport's by the margin
+        let top = CGFloat(2050 - 900 + ScrollClip.Target.topMargin * 900)
+        #expect(scroll.offset.y == top)
+        #expect(script.pointer.first?.target.point == CGPoint(x: 200, y: 2025 - top))
+    }
+
+    @Test func theScrollIntoViewWaitsForThePreviousCursorClipAndScrollAndNeedsRoom() throws {
+        let steps = [
+            Step(action: "hover", selector: "#a", start: 1, duration: 1.5), Step(action: "hover", selector: "#b", start: 2.8),
+            Step(action: "scroll", offset: 500, start: 5, duration: 2), Step(action: "hover", selector: "#c", start: 6),
+            Step(action: "hover", selector: "#d", start: 7.6, duration: 0.5), Step(action: "hover", selector: "#e", start: 8.1)
+        ]
+
+        let script = try plan(steps).script(page: page()).script
+
+        let added = script.scrolls.filter { $0.target?.placement == .intoView }
+        // None for #c, which the page scrolls under, #d, which follows the scroll by less than the
+        // shortest clip, and #e, which follows #d at once
+        #expect(added.map(\.range) == [0..<1, 2.5..<2.8])
+        #expect(added.map(\.target?.selector) == ["#a", "#b"])
     }
 
     @Test func theScriptCarriesThePlansSettings() throws {

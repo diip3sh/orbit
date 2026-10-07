@@ -30,6 +30,9 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
         var role: String
         var text: String
         var box: Box
+
+        /// Where a link goes.
+        var href: String?
     }
 
     nonisolated struct Box: Codable, Equatable, Sendable {

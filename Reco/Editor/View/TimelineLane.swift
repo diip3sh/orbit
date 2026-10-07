@@ -44,7 +44,7 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                     let dragged = drag.flatMap { $0.id == clip.id ? $0.offset : nil } ?? 0
 
                     // Where the block may go: its edges stay in the lane
-                    let limits = -start...max(width - end, -start)
+                    let limits: ClosedRange<Double> = -start...max(width - end, -start)
 
                     block(clip, drag?.id == clip.id)
                         .frame(width: end - start)
@@ -52,7 +52,7 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in
-                                    drag = (clip.id, GesturePhysics.rubberbanded(value.translation.width, in: limits, dimension: width))
+                                    drag = (clip.id, CGFloat(GesturePhysics.rubberbanded(value.translation.width, in: limits, dimension: width)))
                                 }
                                 .onEnded { value in
                                     let shown = drag?.offset ?? value.translation.width

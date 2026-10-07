@@ -49,6 +49,24 @@ struct EditorProjectTests {
         }
     }
 
+    @Test func aNewTakeKeepsTheLookButNotWhatBelongsToOneRecording() {
+        var old = EditorProject(cuts: [0..<1], splits: [3])
+        old.zooms = [ZoomSegment(range: 2..<4, focus: .followCursor)]
+        old.canvas.aspect = .portrait
+        old.cursor.size = 2
+        old.clickHighlights.size = 80
+        old.keystrokes.showsAllKeys = true
+        old.audio[track: 0].isMuted = true
+        let new = EditorProject(zooms: [ZoomSegment(range: 5..<7, focus: .followCursor)])
+
+        let styled = new.styled(like: old)
+
+        #expect(styled.canvas == old.canvas && styled.cursor == old.cursor)
+        #expect(styled.clickHighlights == old.clickHighlights && styled.keystrokes == old.keystrokes)
+        #expect(styled.cuts.isEmpty && styled.splits.isEmpty)
+        #expect(styled.zooms == new.zooms && styled.audio == new.audio)
+    }
+
     @Test func fileSitsNextToTheVideoWithTheSameBaseName() {
         let video = URL(filePath: "/Users/me/Movies/Reco_2026-09-26-10.00.00.mov")
         #expect(EditorProject.fileURL(for: video).path() == "/Users/me/Movies/Reco_2026-09-26-10.00.00.edit.json")

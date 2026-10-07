@@ -63,7 +63,7 @@ struct WebPageRendererTests {
         let movie = folder.appending(path: "take.mov")
         var progress: [Double] = []
 
-        let telemetry = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { progress.append($0) }
+        let (telemetry, issues) = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { progress.append($0) }
 
         #expect(progress.count == 60)
         #expect(progress.last == 1)
@@ -90,6 +90,10 @@ struct WebPageRendererTests {
         #expect(telemetry.cursor.map(\.location) == [CGPoint(x: 200, y: 130)])
         #expect(telemetry.cursorSprites.map(\.kind) == [.pointingHand, .arrow])
         #expect(telemetry.cursorShapes.map(\.sprite) == [0, 1])
+        // Scrolling down the page, as a wheel reports it
+        #expect(telemetry.scrolls.first?.time == 49.0 / 60)
+        #expect(telemetry.scrolls.allSatisfy { $0.delta.dy < 0 })
+        #expect(issues.isEmpty)
     }
 
     @Test func holdsTheAnimationsThePagePauses() async throws {
@@ -117,6 +121,51 @@ struct WebPageRendererTests {
         let telemetry = try await render(script).telemetry
 
         #expect(telemetry.cursor.map(\.location) == [CGPoint(x: 40, y: 60)])
+    }
+
+    @Test func aScrollToAnElementAimsAtWhereThePageHasItWhenTheScrollStarts() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // A banner the page adds after loading moves the band 300 px further down than planned
+        var script = Self.script(for: """
+            <!doctype html><html><body style="margin: 0"><div style="height: 1000px"></div>
+            <div id="band" style="height: 100px; background: rgb(0, 0, 255)"></div><div style="height: 2000px"></div><script>
+            setTimeout(() => document.body.insertAdjacentHTML('afterbegin', '<div style="height: 300px"></div>'), 50);
+            </script></body></html>
+            """)
+        script.scrolls = [ScrollClip(range: 0.2..<0.8, offset: CGPoint(x: 0, y: 1000 - 60), target: .init(selector: "#band", placement: .top))]
+
+        let movie = try await render(script).movie
+
+        // Its top 15% of the 400 px viewport down, at 60 px
+        #expect(try await pixel(at: CGPoint(x: 20, y: 70), frame: 59, of: movie).isClose(to: [0, 0, 255]))
+        #expect(try await !pixel(at: CGPoint(x: 20, y: 50), frame: 59, of: movie).isClose(to: [0, 0, 255]))
+    }
+
+    @Test func aCoveredOrMissingTargetIsReportedAndAMissingOnesClickLeftOut() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // A click anywhere turns the page green; the button is under a menu that covers the page
+        var script = Self.script(for: """
+            <!doctype html><html><body><button id="buy">Buy</button>
+            <div id="menu" style="position: fixed; inset: 0; background: rgb(255, 255, 255)">Menu</div><script>
+            addEventListener('click', () => { document.body.style.background = 'rgb(0, 255, 0)'; });
+            </script></body></html>
+            """)
+        script.pointer = [
+            PointerClip(range: 0..<0.3, action: .hover, target: WebTarget(selector: "#buy", point: .zero)),
+            PointerClip(range: 0.5..<0.8, action: .click, target: WebTarget(selector: "#gone", point: CGPoint(x: 320, y: 200)))
+        ]
+        // Reco's own scroll before the click, which finds nothing either: the click's check says so
+        script.scrolls = [ScrollClip(range: 0.3..<0.5, offset: .zero, target: .init(selector: "#gone", placement: .intoView))]
+
+        let rendered = try await render(script)
+        let (movie, issues) = (rendered.movie, rendered.issues)
+
+        #expect(issues.count == 3)
+        #expect(issues.first?.contains(##"div#menu ("Menu") covered "#buy""##) == true)
+        #expect(issues.dropFirst().allSatisfy { $0.contains("#gone") })
+        // Once for its press and release
+        #expect(issues.filter { $0.contains("its click was left out") }.count == 1)
+        #expect(try await !pixel(at: CGPoint(x: 600, y: 380), frame: 59, of: movie).isClose(to: [0, 255, 0]))
     }
 
     @Test func mutesThePagesMedia() async throws {
@@ -219,11 +268,17 @@ struct WebPageRendererTests {
     }
 
     /// Renders `script` into the test's folder.
-    private func render(_ script: WebScript) async throws -> (telemetry: InputTelemetry, movie: AVURLAsset) {
+    private func render(_ script: WebScript) async throws -> Rendered {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let movie = folder.appending(path: "take.mov")
-        let telemetry = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { _ in }
-        return (telemetry, AVURLAsset(url: movie))
+        let (telemetry, issues) = try await WebPageRenderer(script: script).render(to: movie, bitsPerPixel: 0.4) { _ in }
+        return Rendered(telemetry: telemetry, movie: AVURLAsset(url: movie), issues: issues)
+    }
+
+    private struct Rendered {
+        let telemetry: InputTelemetry
+        let movie: AVURLAsset
+        let issues: [String]
     }
 
     @concurrent nonisolated private func frameCount(of asset: AVAsset) async throws -> Int {

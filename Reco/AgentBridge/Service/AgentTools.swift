@@ -17,6 +17,9 @@ final class AgentTools {
     /// The latest render, or `nil` before the first. Only this type sets it, except in tests.
     var job: RenderStatus?
 
+    /// The page an `inspect_page` call is looking at now, if one is.
+    private(set) var inspecting: URL?
+
     @ObservationIgnored private var renderTask: Task<Void, Never>?
     @ObservationIgnored private let settings: SettingsStore
     @ObservationIgnored private let onRendered: (URL) -> Void
@@ -61,6 +64,8 @@ final class AgentTools {
 
     private func inspect(_ arguments: Data) async throws -> PageInspection {
         let script = try Self.decode(InspectPageRequest.self, from: arguments).validated()
+        inspecting = script.url
+        defer { inspecting = nil }
         return try await Self.withDeadline(Self.inspectLimit) {
             try await WebPageRenderer(script: script).inspect(selectors: [])
         }
@@ -89,14 +94,15 @@ final class AgentTools {
             let page = try await WebPageRenderer(script: plan.inspectionScript).inspect(selectors: plan.selectors)
             let (script, unmatched) = try plan.script(page: page)
             job?.unmatchedSelectors = unmatched.isEmpty ? nil : unmatched
-            let movie = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
+            let take = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
                 self?.job?.progress = progress
             }
             job?.status = .done
             job?.progress = 1
-            job?.movie = movie.path(percentEncoded: false)
-            job?.telemetry = InputTelemetry.sidecarURL(for: movie).path(percentEncoded: false)
-            onRendered(movie)
+            job?.movie = take.movie.path(percentEncoded: false)
+            job?.telemetry = InputTelemetry.sidecarURL(for: take.movie).path(percentEncoded: false)
+            job?.warnings = take.issues.isEmpty ? nil : take.issues
+            onRendered(take.movie)
         } catch {
             job?.status = .failed
             job?.error = error.localizedDescription

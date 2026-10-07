@@ -158,6 +158,23 @@ struct AutoZoomGeneratorTests {
         #expect(zooms(telemetry).map(\.range) == [0.5..<3.5])
     }
 
+    @Test func aWebTakeZoomsOnEachStopForAsLongAsItLastsUntilThePageScrolls() throws {
+        // Stops at 1 s and at 3.5 s, 5% of the video away, which a screen recording wouldn't count;
+        // then the page scrolls from 7 s under the resting cursor
+        var web = telemetry(cursor: [(0, CGPoint(x: 0.5, y: 0.5)), (1, CGPoint(x: 0.2, y: 0.3)), (3.5, CGPoint(x: 0.25, y: 0.3))])
+        web.capture.kind = .web
+        web.scrolls = (420...540).map { .init(time: Double($0) / 60, location: CGPoint(x: 250, y: 150), delta: CGVector(dx: 0, dy: -5)) }
+
+        let zooms = zooms(web)
+
+        // From the first stop's lead to just after the scroll starts, both stops in one view
+        let zoom = try #require(zooms.first)
+        #expect(zooms.count == 1)
+        #expect(zoom.range == 0.5..<7.3)
+        // A screen recording's zoom from the first arrival only
+        #expect(AutoZoomGenerator.segments(for: web, duration: 20, configuration: AutoZoomGenerator.Configuration()).map(\.range) == [0.5..<2.5])
+    }
+
     @Test func isDeterministicWithZoomsSortedApartAndInsideTheRecording() {
         // Bursts of clicks around the screen, with pauses of varied length
         var seed: UInt64 = 42

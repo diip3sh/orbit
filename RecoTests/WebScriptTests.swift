@@ -60,7 +60,10 @@ struct WebScriptTests {
             PointerClip(range: 4..<5, action: .click, target: link)
         ]
 
-        #expect(script.pointerPosition(at: 0) == .following(button))
+        // Waiting in the middle of the view, then travelling in to arrive as the first clip starts
+        let entry = WebTarget(point: CGPoint(x: 720, y: 450))
+        #expect(script.pointerPosition(at: 0) == .resting(entry))
+        #expect(script.pointerPosition(at: 0.5) == .travelling(start: entry, end: button, progress: Easing.easeInOut(0.5)))
         #expect(script.pointerPosition(at: 1.5) == .following(button))
         // The 2 s gap is spent resting for 1 s, then travelling for the longest travel
         #expect(script.pointerPosition(at: 2.5) == .resting(button))
@@ -163,10 +166,53 @@ struct WebScriptTests {
         var script = WebScript()
         script.url = URL(string: "https://example.com")
         script.pointer = [PointerClip(range: 1..<2, action: .click, target: button)]
-        script.scrolls = [ScrollClip(range: 0..<1, offset: CGPoint(x: 0, y: 900), easing: .easeOut)]
+        script.scrolls = [
+            ScrollClip(range: 0..<1, offset: CGPoint(x: 0, y: 900), easing: .easeOut),
+            ScrollClip(range: 1..<2, offset: CGPoint(x: 0, y: 1500), target: .init(selector: "#faq", placement: .intoView))
+        ]
 
         let decoded = try JSONDecoder().decode(WebScript.self, from: JSONEncoder().encode(script))
 
         #expect(decoded == script)
+    }
+
+    @Test func theCursorStaysInTheViewWhenItsElementLeavesIt() {
+        var script = WebScript()
+        script.pointer = [
+            PointerClip(range: 0..<1, action: .hover, target: button),
+            PointerClip(range: 2..<3, action: .hover, target: link)
+        ]
+        var track = PointerTrack(script: script)
+
+        // Scrolled off the top, as a page scrolling under a hover can take it
+        #expect(track.location(at: 0.5, elementFrames: ["#buy": CGRect(x: 90, y: -300, width: 20, height: 20)]) == CGPoint(x: 100, y: 0))
+        // The travel's arc, which bows up between two targets at the top, stays in too
+        let travelling = track.location(at: 1.5, elementFrames: ["a.nav": CGRect(x: 1390, y: 0, width: 20, height: 20)])
+        #expect(travelling?.y == 0)
+    }
+
+    @Test func aScrollToAnElementAimsAtWhereItIsWhenTheScrollStarts() {
+        let viewport = CGSize(width: 1440, height: 900)
+        let margin = CGFloat(ScrollClip.Target.topMargin * 900)
+        let current = CGPoint(x: 0, y: 500)
+        let top = ScrollClip.Target(selector: "h2", placement: .top)
+        let intoView = ScrollClip.Target(selector: "a", placement: .intoView)
+        func offset(_ target: ScrollClip.Target, _ box: CGRect, pageHeight: Double = 5000) -> CGFloat {
+            target.offset(showing: box, from: current, viewport: viewport, pageHeight: pageHeight).y
+        }
+
+        // Near the top, wherever it is
+        #expect(offset(top, CGRect(x: 0, y: 1000, width: 10, height: 40)) == 500 + 1000 - margin)
+        #expect(offset(top, CGRect(x: 0, y: 300, width: 10, height: 40)) == 500 + 300 - margin)
+        // Into view only when it isn't, and only as far as it takes
+        #expect(offset(intoView, CGRect(x: 0, y: 300, width: 10, height: 40)) == 500)
+        #expect(offset(intoView, CGRect(x: 0, y: 1000, width: 10, height: 40)) == 500 + 1040 - 900 + margin)
+        #expect(offset(intoView, CGRect(x: 0, y: -100, width: 10, height: 40)) == 500 - 100 - margin)
+        // Too tall for the view: its middle in the middle, unless it's in view already
+        #expect(offset(intoView, CGRect(x: 0, y: -200, width: 10, height: 1200)) == 500)
+        #expect(offset(intoView, CGRect(x: 0, y: 600, width: 10, height: 1200)) == CGFloat(500 + 1200 - 450))
+        // Inside the page
+        #expect(offset(top, CGRect(x: 0, y: 4000, width: 10, height: 40), pageHeight: 3000) == 2100)
+        #expect(offset(intoView, CGRect(x: 0, y: -1000, width: 10, height: 40)) == 0)
     }
 }

@@ -87,10 +87,11 @@ nonisolated extension WebScript {
     /// Where the cursor is at a moment.
     enum PointerPosition: Equatable, Sendable {
 
-        /// On the target, following it: during a clip, and before the first.
+        /// On the target, following it, during a clip.
         case following(WebTarget)
 
-        /// Still, where it was when the clip on this target ended, while the page may scroll under it.
+        /// Still, where it was when the clip on this target ended, while the page may scroll under it,
+        /// or in the middle of the view before the first clip.
         case resting(WebTarget)
 
         /// On its way from where it rested to the next target. `progress` is eased, from 0 to 1.
@@ -132,9 +133,19 @@ nonisolated extension WebScript {
 
     /// Where the cursor is at `time`, or `nil` when the Cursor lane is empty. ``PointerTrack`` turns
     /// it into a location.
+    ///
+    /// Before the first clip the cursor waits in the middle of the view, then travels to the first
+    /// target, so a take opens on the whole page and its first stop is an arrival, which the editor
+    /// zooms on.
     func pointerPosition(at time: Double) -> PointerPosition? {
         guard let first = pointer.first else { return nil }
-        guard let index = pointer.lastIndex(where: { $0.range.lowerBound <= time }) else { return .following(first.target) }
+        guard let index = pointer.lastIndex(where: { $0.range.lowerBound <= time }) else {
+            let entry = WebTarget(point: CGPoint(x: viewport.width / 2, y: viewport.height / 2))
+            let travel = min(first.range.lowerBound, Self.maximumTravel)
+            let departure = first.range.lowerBound - travel
+            guard time > departure, travel > 0 else { return .resting(entry) }
+            return .travelling(start: entry, end: first.target, progress: Easing.easeInOut((time - departure) / travel))
+        }
         let clip = pointer[index]
         guard time >= clip.range.upperBound else { return .following(clip.target) }
         guard index + 1 < pointer.count else { return .resting(clip.target) }

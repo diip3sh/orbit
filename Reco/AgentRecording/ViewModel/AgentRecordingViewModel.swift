@@ -6,11 +6,12 @@
 import Foundation
 
 /// State and intents of the Record with AI Agent panel (spec 0007): the address and instructions the
-/// user types, which agent and model run them, and how the run is going.
+/// user types, which agent and model run them, and how the run is going. It also runs what the
+/// editor's agent chat asks (spec 0008): one run at a time, from either.
 ///
 /// A run starts the agent's command line with only Reco's MCP tools allowed. The agent inspects the
-/// page and records it through ``AgentTools``; the finished movie opens in the editor by itself. This
-/// type only watches that render, to show it and to tell success from failure.
+/// page and records it through ``AgentTools``. This type only watches that render, to show it and to
+/// tell success from failure, and hands the take to ``onRecorded`` when the run ends.
 @MainActor
 @Observable
 final class AgentRecordingViewModel {
@@ -59,8 +60,11 @@ final class AgentRecordingViewModel {
     /// Whether the panel is on screen, for its entrance and exit.
     var isPresented = false
 
-    /// Called when a run ends with a movie, which the editor has opened.
+    /// Called when a run ends with a movie, after ``onRecorded``.
     @ObservationIgnored var onSucceeded: (() -> Void)?
+
+    /// Called with the take a run recorded, to open it in the editor.
+    @ObservationIgnored var onRecorded: ((AgentRecordedTake) -> Void)?
 
     /// How a command line is run: executable, arguments, environment, working folder, time limit.
     typealias RunProcess = @Sendable (URL, [String], [String: String], URL, Duration) async -> AgentProcess.Result
@@ -136,6 +140,12 @@ final class AgentRecordingViewModel {
         return job.progress
     }
 
+    /// Why the panel's last run failed; a chat's failure shows in its chat.
+    var panelFailure: String? {
+        guard lastRequest?.take == nil, case .failed(let reason) = phase else { return nil }
+        return reason
+    }
+
     /// What the menu bar shows while a run is going: the render's percent once it has started, "AI"
     /// before, and nothing otherwise.
     var menuBarText: String? {
@@ -145,16 +155,14 @@ final class AgentRecordingViewModel {
 
     // MARK: - Agents
 
-    /// Looks for connected agents again, e.g. when the panel opens; the last answer stays meanwhile.
+    /// Looks for agents again, e.g. when the panel opens; the last answer stays meanwhile. Claude Code
+    /// and Cursor need only their command line, since each run gives them Reco's server; the others
+    /// need connecting in Settings → Agents.
     func refreshAgents() async {
         isLookingForAgents = true
         defer { isLookingForAgents = false }
-        let connected = AgentKind.allCases.filter { AgentInvocation.executableName(for: $0) != nil && store.state(of: $0) == .connected }
-        guard !connected.isEmpty else {
-            let outdated = AgentKind.allCases.first { AgentInvocation.executableName(for: $0) != nil && store.state(of: $0) == .outdated }
-            return setAvailable([], reason: outdated.map { "Reconnect \($0.displayName) in Settings → Agents." }
-                ?? "Connect an agent with a command-line tool first: Claude Code, Codex, OpenCode, Gemini CLI, Grok Build or Cursor.")
-        }
+        let headless = AgentKind.allCases.filter { AgentInvocation.executableName(for: $0) != nil }
+        let connected = headless.filter { store.state(of: $0) == .connected }
         do {
             environment = try await loadEnvironment()
         } catch {
@@ -163,11 +171,17 @@ final class AgentRecordingViewModel {
             }
         }
         let environment = environment ?? [:]
-        let found = connected.filter { executable(for: $0, in: environment) != nil }
-        if found.isEmpty, let first = connected.first, let command = AgentInvocation.executableName(for: first) {
+        let found = headless.filter { kind in
+            (AgentInvocation.bringsOwnServer(kind) || connected.contains(kind)) && executable(for: kind, in: environment) != nil
+        }
+        guard found.isEmpty else { return setAvailable(found, reason: nil) }
+        if let first = connected.first, let command = AgentInvocation.executableName(for: first) {
             setAvailable([], reason: "\(first.displayName) is connected, but Reco couldn't find `\(command)` in your login shell.")
+        } else if let outdated = headless.first(where: { !AgentInvocation.bringsOwnServer($0) && store.state(of: $0) == .outdated }) {
+            setAvailable([], reason: "Reconnect \(outdated.displayName) in Settings → Agents.")
         } else {
-            setAvailable(found, reason: nil)
+            setAvailable([], reason: "Install Claude Code or Cursor's command line, or connect Codex, OpenCode, Gemini CLI or Grok Build "
+                + "in Settings → Agents.")
         }
     }
 
@@ -220,25 +234,32 @@ final class AgentRecordingViewModel {
     private func execute(_ request: AgentRecordingRequest) async {
         let deadline = ContinuousClock.now + AgentRunOutcome.timeLimit
         var outcome: AgentRunOutcome
+        var output = ""
         do {
-            outcome = try await perform(request, deadline: deadline)
+            (outcome, output) = try await perform(request, deadline: deadline)
         } catch {
             outcome = Task.isCancelled ? .cancelled : .failed(reason: error.localizedDescription)
         }
         guard !Task.isCancelled else { return }
         switch outcome {
-        case .succeeded:
+        case .succeeded(let movie):
             phase = .idle
+            let reply = token.isEmpty ? output : output.replacing(token, with: "…")
+            onRecorded?(AgentRecordedTake(movie: URL(filePath: movie), request: request, output: reply))
             onSucceeded?()
         case .cancelled:
             phase = .idle
         case .failed(let reason):
             phase = .failed(reason)
-            reportFailure(reason)
+            // A chat shows its failure where the user asked
+            if request.take == nil {
+                reportFailure(reason)
+            }
         }
     }
 
-    private func perform(_ request: AgentRecordingRequest, deadline: ContinuousClock.Instant) async throws -> AgentRunOutcome {
+    /// Runs `request`'s command line and waits for its render: how it ended and what it printed.
+    private func perform(_ request: AgentRecordingRequest, deadline: ContinuousClock.Instant) async throws -> (AgentRunOutcome, String) {
         let environment: [String: String]
         if let cached = self.environment {
             environment = cached
@@ -247,7 +268,7 @@ final class AgentRecordingViewModel {
         }
         guard let invocation = AgentInvocation.make(for: request, in: directory, server: store.command),
               let executable = executable(for: request.agent, in: environment) else {
-            return .failed(reason: "Reco couldn't find \(request.agent.displayName)'s command in your login shell.")
+            return (.failed(reason: "Reco couldn't find \(request.agent.displayName)'s command in your login shell."), "")
         }
         // The command runs in it, so it must exist even when the agent needs no files there
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -264,10 +285,11 @@ final class AgentRecordingViewModel {
         if case .exited = end, !(await waitForRender(until: deadline)) {
             end = Task.isCancelled ? .cancelled : .timedOut
         }
-        return AgentRunOutcome.classify(
+        let outcome = AgentRunOutcome.classify(
             end: end, agent: request.agent, job: tools.job, startingRenderID: startingRenderID,
             outputReason: OutputTail.reason(stdout: result.stdout, stderr: result.stderr, redacting: [token])
         )
+        return (outcome, result.stdout)
     }
 
     /// Waits while this run's render goes on; `false` when `deadline` or a cancel came first.

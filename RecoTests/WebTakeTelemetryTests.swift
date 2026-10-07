@@ -75,4 +75,16 @@ struct WebTakeTelemetryTests {
         #expect(CursorKind(css: "auto") == nil)
         #expect(CursorKind(css: "ew-resize") == nil)
     }
+
+    @Test func recordsScrollingWhereTheCursorIsOrInTheMiddle() {
+        var take = WebTakeTelemetry(script: WebScript())
+
+        take.record(time: 0, cursor: nil, presses: [], shape: nil, scrolled: CGVector(dx: 0, dy: -20))
+        take.record(time: 1 / 60, cursor: CGPoint(x: 5, y: 6), presses: [], shape: nil, scrolled: .zero)
+        take.record(time: 2 / 60, cursor: CGPoint(x: 5, y: 6), presses: [], shape: nil, scrolled: CGVector(dx: 0, dy: 30))
+
+        let scrolls = take.telemetry.scrolls
+        #expect(scrolls.map(\.location) == [CGPoint(x: 720, y: 450), CGPoint(x: 5, y: 6)])
+        #expect(scrolls.map(\.delta.dy) == [-20, 30])
+    }
 }

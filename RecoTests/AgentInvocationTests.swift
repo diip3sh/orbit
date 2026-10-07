@@ -27,15 +27,27 @@ struct AgentInvocationTests {
         let plain = try invocation(.claudeCode)
         let chosen = try invocation(.claudeCode, model: "opus")
 
-        let expected: [String] = ["-p", prompt, "--tools", "", "--allowedTools", "mcp__reco__*", "--permission-mode", "dontAsk",
-                                  "--no-session-persistence", "--output-format", "text"]
-        let expectedWithModel: [String] = ["-p", prompt, "--tools", "", "--allowedTools", "mcp__reco__*", "--permission-mode", "dontAsk",
-                                           "--no-session-persistence", "--model", "opus", "--output-format", "text"]
+        let servers = "/Users/someone/Library/Application Support/com.diip3sh.Reco/AgentRun/reco-mcp.json"
+        let head: [String] = ["-p", prompt, "--tools", "", "--allowedTools", "mcp__reco__*", "--permission-mode", "dontAsk",
+                              "--no-session-persistence", "--mcp-config", servers, "--strict-mcp-config"]
+        let expected: [String] = head + ["--output-format", "text"]
+        let expectedWithModel: [String] = head + ["--model", "opus", "--output-format", "text"]
         #expect(plain.executableName == "claude")
         #expect(plain.arguments == expected)
         #expect(chosen.arguments == expectedWithModel)
         #expect(plain.arguments.prefix(2) == ["-p", prompt])
-        #expect(plain.environment.isEmpty && plain.files.isEmpty)
+        #expect(plain.environment.isEmpty)
+    }
+
+    @Test func claudeCodeGetsRecosServerFromTheRunWhateverItsOwnSettingsSay() throws {
+        let file = try #require(try invocation(.claudeCode).files["reco-mcp.json"])
+        let object = try #require(JSONSerialization.jsonObject(with: Data(file.utf8)) as? [String: [String: [String: Any]]])
+        let reco = try #require(object["mcpServers"]?["reco"])
+
+        #expect(NSDictionary(dictionary: reco).isEqual(to: AgentKind.claudeCode.jsonEntry(for: server)))
+        // The token is in the file, never on the command line
+        #expect(try !invocation(.claudeCode).arguments.contains { $0.contains(server.token) })
+        #expect(AgentKind.allCases.filter(AgentInvocation.bringsOwnServer) == [.claudeCode, .cursor])
     }
 
     @Test func codexRunsReadOnlyAndApprovesRecosToolsInOneArgument() throws {

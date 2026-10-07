@@ -39,6 +39,23 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - Look
+
+extension EditorProject {
+
+    /// This project with `other`'s look: canvas, cursor, click highlights and keystrokes, which a
+    /// new take of the same page keeps (spec 0008). Cuts, splits, zooms and audio belong to one
+    /// recording.
+    nonisolated func styled(like other: EditorProject) -> EditorProject {
+        var project = self
+        project.canvas = other.canvas
+        project.cursor = other.cursor
+        project.clickHighlights = other.clickHighlights
+        project.keystrokes = other.keystrokes
+        return project
+    }
+}
+
 // MARK: - Decoding
 
 extension EditorProject {

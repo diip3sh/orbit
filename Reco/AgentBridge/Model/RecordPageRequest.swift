@@ -77,7 +77,7 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
             guard step.offset == nil else { throw .invalidArgument("\(name): y is for scroll only.") }
             action = PointerClip.Action(rawValue: step.action)
             minimum = PointerClip.minimumDuration
-            fallback = PointerClip.defaultDuration
+            fallback = RecordPlan.pointerDuration
         case "scroll":
             guard hasSelector != (step.offset != nil) else { throw .invalidArgument("\(name): scroll needs either a selector or y, not both.") }
             if let offset = step.offset, offset < 0 {
@@ -85,7 +85,7 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
             }
             action = nil
             minimum = ScrollClip.minimumDuration
-            fallback = ScrollClip.defaultDuration
+            fallback = RecordPlan.scrollDuration
         default:
             throw .invalidArgument("\(name): action must be hover, click or scroll.")
         }
@@ -112,5 +112,42 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
             throw .invalidArgument("viewport must be one of: \(WebScript.Viewport.allCases.map(\.rawValue).joined(separator: ", ")).")
         }
         return viewport.size
+    }
+}
+
+// MARK: - From a take
+
+nonisolated extension RecordPageRequest {
+
+    /// The arguments that record `script` again, for an agent to change (spec 0008). Scrolls Reco
+    /// added to bring a cursor's target into view are left out, since it adds them again, and so
+    /// are cursor clips without a selector, which `record_page` can't aim.
+    init(script: WebScript) {
+        let pointer = script.pointer.compactMap { clip in
+            clip.target.selector.map { selector in
+                Step(
+                    action: clip.action.rawValue, selector: selector,
+                    start: Self.rounded(clip.range.lowerBound), duration: Self.rounded(clip.range.upperBound - clip.range.lowerBound)
+                )
+            }
+        }
+        let scrolls = script.scrolls.filter { $0.target?.placement != .intoView }.map { clip in
+            Step(
+                action: "scroll", selector: clip.target?.selector, offset: clip.target == nil ? Self.rounded(clip.offset.y) : nil,
+                start: Self.rounded(clip.range.lowerBound), duration: Self.rounded(clip.range.upperBound - clip.range.lowerBound)
+            )
+        }
+        self.init(
+            url: script.url?.absoluteString ?? "",
+            viewport: WebScript.Viewport.allCases.first { $0.size == script.viewport }?.rawValue,
+            scale: script.scale,
+            duration: Self.rounded(script.duration),
+            steps: (pointer + scrolls).sorted { ($0.start ?? 0) < ($1.start ?? 0) }
+        )
+    }
+
+    /// To the hundredth of a second or pixel, so the agent reads 2.5 rather than 2.4999999999999996.
+    private static func rounded(_ value: Double) -> Double {
+        (value * 100).rounded() / 100
     }
 }

@@ -19,6 +19,9 @@ nonisolated struct RenderStatus: Codable, Equatable, Sendable {
 
     /// Selectors the page had no match for, so their cursor clips aim at the middle of the viewport.
     var unmatchedSelectors: [String]?
+
+    /// What went wrong on the page during the take (``WebTakeIssues``), for the agent to fix.
+    var warnings: [String]?
     var error: String?
 
     nonisolated enum Status: String, Codable, Sendable {
@@ -30,6 +33,6 @@ nonisolated struct RenderStatus: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case renderID = "render_id"
         case unmatchedSelectors = "unmatched_selectors"
-        case status, progress, movie, telemetry, error
+        case status, progress, movie, telemetry, warnings, error
     }
 }

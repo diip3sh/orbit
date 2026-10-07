@@ -105,9 +105,13 @@ struct EditorInspector: View {
                         .pickerStyle(.segmented)
                         .labelsHidden()
                     }
+                    .disabled(isWebTake)
                     Toggle("Shrink on Click", isOn: $viewModel.cursor.animatesClicks)
                     Toggle("Hide When Idle", isOn: $viewModel.cursor.hidesWhenIdle)
                 } footer: {
+                    if isWebTake {
+                        Text("A web take's cursor moves as scripted, so it's drawn without smoothing, in step with the page.")
+                    }
                     if telemetry?.capture.cursorInVideo == true {
                         Text("""
                             This recording shows the system cursor, so it can't be changed. For new recordings, \

@@ -36,16 +36,21 @@ final class EditorWindowManager: NSObject {
     }
 
     private let settings: SettingsStore
+
+    /// Runs what a web take's agent chat asks.
+    private let agentRecording: AgentRecordingViewModel
     private var editors: [URL: Editor] = [:]
     private var recordings: Recordings?
     private var webRecording: WebRecording?
 
-    init(settings: SettingsStore) {
+    init(settings: SettingsStore, agentRecording: AgentRecordingViewModel) {
         self.settings = settings
+        self.agentRecording = agentRecording
     }
 
     /// Opens the editor for a recording in the output folder, or brings its window forward.
-    func open(_ videoURL: URL) {
+    /// - Parameter conversation: The agent chat that made it, when a run just recorded it.
+    func open(_ videoURL: URL, conversation: [AgentChatMessage] = []) {
         let videoURL = videoURL.standardizedFileURL
         if let window = editors[videoURL]?.window {
             activate(window)
@@ -56,18 +61,44 @@ final class EditorWindowManager: NSObject {
         let accessesOutputDirectory = settings.startAccessingOutputDirectory()
 
         let viewModel = EditorViewModel(videoURL: videoURL)
-        let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel))
-        // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
-        hostingController.sizingOptions = .minSize
-        // The export and inspector buttons are SwiftUI toolbar items
-        hostingController.sceneBridgingOptions = [.toolbars]
-        let window = makeWindow(hostingController, title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1280, height: 800))
+        let chat = AgentChatViewModel(movie: videoURL, runner: agentRecording, conversation: conversation)
+        let window = makeWindow(editorController(viewModel, chat), title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1280, height: 800))
         window.representedURL = videoURL
         editors[videoURL] = Editor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
 
         // A regular app gets a Dock icon, ⌘-Tab and the main menu with Undo and Redo
         NSApp.setActivationPolicy(.regular)
         activate(window)
+    }
+
+    /// Opens a take an agent recorded, with its conversation: in the window of the take it changes,
+    /// keeping that take's look, or in a new window. The window shows the take it has until the new
+    /// one has loaded.
+    func open(_ take: AgentRecordedTake) {
+        let movie = take.movie.standardizedFileURL
+        guard let replaced = take.replacing?.standardizedFileURL, let editor = editors[replaced], editors[movie] == nil else {
+            open(movie, conversation: take.conversation)
+            return
+        }
+        let viewModel = EditorViewModel(videoURL: movie, style: editor.viewModel.project)
+        let chat = AgentChatViewModel(movie: movie, runner: agentRecording, conversation: take.conversation)
+        Task {
+            // Loaded first: the window would size itself to the loading placeholder
+            await viewModel.load()
+            guard let current = editors[replaced], current.window === editor.window,
+                  let hostingController = editor.window.contentViewController as? NSHostingController<EditorView> else {
+                open(movie, conversation: take.conversation)
+                return
+            }
+            hostingController.rootView = EditorView(viewModel: viewModel, chat: chat)
+            editor.window.title = movie.deletingPathExtension().lastPathComponent
+            editor.window.representedURL = movie
+            editors[replaced] = nil
+            // The folder's scope moves with the window
+            editors[movie] = Editor(window: editor.window, viewModel: viewModel, accessesOutputDirectory: editor.accessesOutputDirectory)
+            await editor.viewModel.close()
+            activate(editor.window)
+        }
     }
 
     /// Shows the output folder's recordings, or brings their window forward.
@@ -109,6 +140,15 @@ final class EditorWindowManager: NSObject {
 
         NSApp.setActivationPolicy(.regular)
         activate(window)
+    }
+
+    private func editorController(_ viewModel: EditorViewModel, _ chat: AgentChatViewModel) -> NSHostingController<EditorView> {
+        let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel, chat: chat))
+        // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
+        hostingController.sizingOptions = .minSize
+        // The export and inspector buttons are SwiftUI toolbar items
+        hostingController.sceneBridgingOptions = [.toolbars]
+        return hostingController
     }
 
     /// A centred window in the editor's look: the content running under a transparent title bar and toolbar.

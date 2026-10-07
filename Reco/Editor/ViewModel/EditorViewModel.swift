@@ -64,8 +64,12 @@ final class EditorViewModel {
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "EditorViewModel")
 
-    init(videoURL: URL) {
+    /// The look a new project starts with, from the take this one replaces in its window.
+    @ObservationIgnored private let style: EditorProject?
+
+    init(videoURL: URL, style: EditorProject? = nil) {
         self.videoURL = videoURL
+        self.style = style
     }
 
     /// Loads the recording and its project; the window shows a placeholder meanwhile.
@@ -73,6 +77,7 @@ final class EditorViewModel {
         guard source == nil else { return }
         let source: EditorSource
         let project: EditorProject
+        let saved: EditorProject
         do {
             source = try await EditorSourceLoader.load(videoURL: videoURL)
         } catch {
@@ -80,9 +85,10 @@ final class EditorViewModel {
             return
         }
         do {
-            // A new project starts with the automatic zooms
-            project = try await ProjectStore.read(for: videoURL)
-                ?? EditorProject(zooms: source.telemetry.map { AutoZoomGenerator.segments(for: $0, duration: source.duration) } ?? [])
+            // A new project starts with the automatic zooms, and is saved only once edited or restyled
+            let stored = try await ProjectStore.read(for: videoURL)
+            saved = stored ?? EditorProject(zooms: source.telemetry.map { AutoZoomGenerator.segments(for: $0, duration: source.duration) } ?? [])
+            project = stored ?? style.map(saved.styled(like:)) ?? saved
         } catch {
             fail(.unreadableProject(error))
             return
@@ -108,7 +114,10 @@ final class EditorViewModel {
         self.project = project
         self.resources = resources
         backgroundBookmark = project.canvas.imageBookmark
-        savedProject = project
+        savedProject = saved
+        if project != saved {
+            scheduleAutosave()
+        }
         markers = source.telemetry.map(TimelineMarkers.init)
         updateTimeline()
         show(composition, plan: plan, atSource: 0)
