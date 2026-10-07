@@ -288,6 +288,31 @@ struct DebugShotTests {
         print("LAB FILM exported \(url.path()) in \(ContinuousClock.now - clock)")
     }
 
+    /// The editor's preview of the film bundle: every frame drawn as its compositor draws it, timed per scene.
+    @Test func preview() async throws {
+        let bundle = URL(filePath: NSHomeDirectory() + "/Movies/Reco/Supabase Docs Film.motion")
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(contentsOf: MotionStore.documentURL(in: bundle)))
+        var plan = try await UICapture.plan(for: document, bundle: bundle, shorterSide: 1080)
+        plan.isPreview = true
+        let context = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull()])
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(nil, 1920, 1080, kCVPixelFormatType_32BGRA, [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer)
+        let output = try #require(buffer)
+        var times: [String: [Double]] = [:]
+        for frame in 0..<Int(plan.duration * 30) {
+            let time = Double(frame) / 30
+            let clock = ContinuousClock.now
+            try MotionFrameRenderer.draw(at: time, plan: plan, into: output, context: context)
+            let elapsed = ContinuousClock.now - clock
+            let scene = plan.scenes[plan.sceneIndex(at: time)]
+            times[scene.field == .plain ? "closing" : "satin \(scene.fieldShot)", default: []].append(Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1000)
+        }
+        for (name, list) in times.sorted(by: { $0.key < $1.key }) {
+            let sorted = list.sorted()
+            print("LAB PREVIEW \(name): \(list.count) frames, p50 \(sorted[sorted.count / 2]) ms, p95 \(sorted[sorted.count * 95 / 100]) ms, max \(sorted.last ?? 0) ms")
+        }
+    }
+
     /// Frames of two movies as AVFoundation decodes them (what QuickTime shows), for level checks.
     @Test func decode() async throws {
         let root = URL(filePath: Self.scratch + "/port/filmcmp")
