@@ -140,7 +140,7 @@ nonisolated extension WebScript {
     ///
     /// Before the first clip the cursor waits in the middle of the view, then travels to the first
     /// target, so a take opens on the whole page and its first stop is an arrival, which the editor
-    /// zooms on.
+    /// zooms on. A clip that types rests from its first key.
     func pointerPosition(at time: Double) -> PointerPosition? {
         guard let first = pointer.first else { return nil }
         guard let index = pointer.lastIndex(where: { $0.range.lowerBound <= time }) else {
@@ -151,7 +151,11 @@ nonisolated extension WebScript {
             return .travelling(start: entry, end: first.target, progress: Easing.easeInOut((time - departure) / travel))
         }
         let clip = pointer[index]
-        guard time >= clip.range.upperBound else { return .following(clip.target) }
+        // Typing, the hand is on the keys: the cursor stays where it clicked though the field changes
+        // shape (Supabase's search grows a clear button and moved it 12 pt)
+        if time < clip.range.upperBound {
+            return clip.keystrokes.first.map { time >= $0.time } == true ? .resting(clip.target) : .following(clip.target)
+        }
         guard index + 1 < pointer.count else { return .resting(clip.target) }
 
         let next = pointer[index + 1]

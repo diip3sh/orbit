@@ -52,9 +52,10 @@ nonisolated struct CursorPath: Sendable {
     /// When a mouse button was held, sorted and apart. Empty when clicks aren't animated.
     private let presses: [Range<Double>]
 
-    /// When the cursor is idle, from ``idleDelay`` after it last moved or clicked. Empty when it's
-    /// never hidden.
-    private let idle: [Range<Double>]
+    /// When the cursor is hidden, sorted and apart: idle from ``idleDelay`` after it last moved or
+    /// clicked, when the style says so, and from a typed key until it next moves or clicks, as macOS
+    /// hides it while you type.
+    private let hidden: [Range<Double>]
 
     /// Video pixels per screen point times the style's size, whenever the capture geometry changed.
     private let scales: [(time: Double, scale: Double)]
@@ -92,7 +93,8 @@ nonisolated struct CursorPath: Sendable {
         self.samples = samples
         self.clickOffsets = clickOffsets
         presses = style.animatesClicks ? Self.presses(in: telemetry.clicks) : []
-        idle = style.hidesWhenIdle ? Self.idleSpans(moves: moves, clicks: telemetry.clicks) : []
+        hidden = Self.merged((style.hidesWhenIdle ? Self.idleSpans(moves: moves, clicks: telemetry.clicks) : [])
+            + Self.typingSpans(keys: telemetry.keys, moves: moves, clicks: telemetry.clicks))
         scales = telemetry.geometry.map { ($0.time, $0.contentScale * $0.scaleFactor * style.size) }
 
         let shown = shown ?? 0..<duration
@@ -157,10 +159,10 @@ nonisolated struct CursorPath: Sendable {
 
     /// How visible the cursor is at `time`, from 0 to 1.
     func opacity(at time: Double) -> Double {
-        let index = idle.partitioningIndex { $0.lowerBound > time } - 1
-        guard index >= 0, idle[index].contains(time) else { return 1 }
-        let fadingOut = 1 - (time - idle[index].lowerBound) / Self.fadeDuration
-        let fadingIn = 1 - (idle[index].upperBound - time) / Self.fadeDuration
+        let index = hidden.partitioningIndex { $0.lowerBound > time } - 1
+        guard index >= 0, hidden[index].contains(time) else { return 1 }
+        let fadingOut = 1 - (time - hidden[index].lowerBound) / Self.fadeDuration
+        let fadingIn = 1 - (hidden[index].upperBound - time) / Self.fadeDuration
         return min(max(fadingOut, fadingIn, 0), 1)
     }
 
@@ -286,6 +288,32 @@ nonisolated extension CursorPath {
             spans.append(last + idleDelay..<Double.infinity)
         }
         return spans
+    }
+
+    /// From each key typed without ⌘ or ⌃ to the cursor's next move away or click: a shortcut leaves
+    /// the cursor shown.
+    /// - Parameter moves: Not empty, sorted by time.
+    private static func typingSpans(keys: [InputTelemetry.Key], moves: [InputTelemetry.CursorSample], clicks: [InputTelemetry.Click]) -> [Range<Double>] {
+        keys.compactMap { key -> Range<Double>? in
+            guard !key.modifiers.contains("command"), !key.modifiers.contains("control") else { return nil }
+            let after = moves.partitioningIndex { $0.time > key.time }
+            let resting = moves[max(after - 1, 0)].location
+            let moved = moves[after...].first { hypot($0.location.x - resting.x, $0.location.y - resting.y) >= jitterDistance }?.time ?? .infinity
+            let clicked = clicks.first { $0.time > key.time }?.time ?? .infinity
+            let end = min(moved, clicked)
+            return end > key.time ? key.time..<end : nil
+        }
+    }
+
+    /// `spans` sorted, with those that overlap or touch joined.
+    private static func merged(_ spans: [Range<Double>]) -> [Range<Double>] {
+        spans.sorted { $0.lowerBound < $1.lowerBound }.reduce(into: []) { merged, span in
+            if let last = merged.last, span.lowerBound <= last.upperBound {
+                merged[merged.count - 1] = last.lowerBound..<max(last.upperBound, span.upperBound)
+            } else {
+                merged.append(span)
+            }
+        }
     }
 
     /// `samples` at `time`, clamped to them.

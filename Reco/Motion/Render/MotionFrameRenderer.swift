@@ -13,9 +13,43 @@ import CoreVideo
 /// camera with `CIPerspectiveTransform`, blurred, faded and shadowed, farthest first.
 nonisolated enum MotionFrameRenderer {
 
+    /// The most samples a frame blurred by motion is averaged from, as the editor's: what plays in
+    /// real time for the preview; an export takes twice as many.
+    static let previewBlurSamples = 8
+    static let exportBlurSamples = 16
+
     /// The frame at `time` seconds into the video, in output pixels from Core Image's bottom-left
     /// origin. `frames` are the live layers' takes at that time; a live layer without one isn't drawn.
+    ///
+    /// While the planes move, it's the frame a 180° shutter would see: samples across half a frame,
+    /// one per ``FrameRenderer/blurSampleSpacing`` pixels the planes travel. A whip without it read
+    /// as a jump (spec 0012, L1c); a still frame is drawn once.
     static func image(at time: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage] = [:]) -> CIImage {
+        let shutter = 0.5 / Double(plan.frameRate)
+        let offsets = FrameRenderer.blurOffsets(
+            distance: travel(at: time, across: shutter, plan: plan), most: plan.isPreview ? previewBlurSamples : exportBlurSamples
+        )
+        let scene = plan.scenes[plan.sceneIndex(at: time)]
+        // Inside the scene: a shutter open across a cut would blend the two shots
+        let times = offsets.map { min(max(time + $0 * shutter, scene.start), scene.start + scene.duration - 1e-6) }
+        return FrameRenderer.average(times.map { still(at: $0, plan: plan, frames: frames) })
+    }
+
+    /// How far the planes on screen at `time` move while a shutter `shutter` seconds long is open, in
+    /// output pixels: the most any of their corners travels.
+    private static func travel(at time: Double, across shutter: Double, plan: MotionPlan) -> Double {
+        let (scene, sceneTime) = plan.scene(at: time)
+        let closing = Dictionary(plan.placements(of: scene, at: sceneTime + shutter / 2).map { ($0.layer, $0.corners) }) { first, _ in first }
+        let travel = plan.placements(of: scene, at: sceneTime - shutter / 2).map { opening in
+            closing[opening.layer].map { corners in
+                zip(opening.corners, corners).map { hypot($0.x - $1.x, $0.y - $1.y) }.max() ?? 0
+            } ?? 0
+        }
+        return (travel.max() ?? 0) * plan.outputScale
+    }
+
+    /// The frame at `time` as a shutter open for an instant sees it.
+    private static func still(at time: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage]) -> CIImage {
         let bounds = CGRect(origin: .zero, size: plan.outputSize)
         let index = plan.sceneIndex(at: time)
         let sceneTime = time - plan.scenes[index].start
@@ -74,11 +108,31 @@ nonisolated enum MotionFrameRenderer {
         let bounds = CGRect(origin: .zero, size: plan.outputSize)
         // On the video's clock, so a field runs on across a cut to a scene with the same one
         let field = FieldRenderer.image(
-            scene.field, palette: scene.palette, at: scene.start + time, size: plan.outputSize, preview: plan.isPreview
+            scene.field, palette: scene.palette, at: scene.start + time, size: plan.outputSize, preview: plan.isPreview,
+            view: fieldView(of: scene, at: time, plan: plan)
         )
         let blur = scene.cameraValue(.blur, at: time) * plan.outputScale
         guard blur >= 0.3 else { return image.composited(over: field) }
         return image.clampedToExtent().applyingGaussianBlur(sigma: blur).cropped(to: bounds).composited(over: field)
+    }
+
+    /// How far a field moves with the camera: this share of what the planes do, as ground far behind
+    /// them would. Pinned to the frame, it read as a wallpaper behind a whip (spec 0012, L1b).
+    static let fieldParallax = 0.15
+
+    /// Where a scene's camera puts its field at `time`: shifted by a share of the camera's look away
+    /// from the canvas's middle, as the planes are at its zoom, and zoomed by that share in log space.
+    private static func fieldView(of scene: MotionPlan.Scene, at time: Double, plan: MotionPlan) -> CGAffineTransform {
+        let zoom = max(scene.cameraValue(.scale, at: time), 0.01)
+        let pixels = fieldParallax * zoom * plan.outputScale
+        let shift = CGVector(
+            dx: (scene.cameraValue(.positionX, at: time) - plan.canvas.width / 2) * pixels,
+            dy: (scene.cameraValue(.positionY, at: time) - plan.canvas.height / 2) * pixels
+        )
+        let middle = CGPoint(x: plan.outputSize.width / 2, y: plan.outputSize.height / 2)
+        let scale = pow(zoom, fieldParallax)
+        // Core Image's y is up: looking further down the canvas moves the field up the frame
+        return CGAffineTransform(translationX: middle.x - shift.dx, y: middle.y + shift.dy).scaledBy(x: scale, y: scale).translatedBy(x: -middle.x, y: -middle.y)
     }
 
     /// A take's frame with its cursor at `time` in the take, inside the element's painted shape. The

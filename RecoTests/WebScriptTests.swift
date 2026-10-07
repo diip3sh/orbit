@@ -73,6 +73,19 @@ struct WebScriptTests {
         #expect(script.pointerPosition(at: 9) == .resting(link))
     }
 
+    /// A hand typing isn't on the mouse: the cursor stops following its field from the first key.
+    @Test func restsOnceAClipTypes() throws {
+        var script = WebScript()
+        var typing = PointerClip(range: 1..<3, action: .click, target: button)
+        typing.text = "stripe"
+        script.pointer = [typing]
+        let firstKey = try #require(typing.keystrokes.first?.time)
+
+        #expect(script.pointerPosition(at: 1.1) == .following(button))
+        #expect(script.pointerPosition(at: firstKey + 0.01) == .resting(button))
+        #expect(script.pointerPosition(at: 2.9) == .resting(button))
+    }
+
     @Test func aShortGapIsAllTravel() {
         var script = WebScript()
         script.pointer = [

@@ -48,6 +48,16 @@ struct FieldTests {
         }
     }
 
+    /// Satin is monochrome, as New Raycast's ground is, whatever the brand.
+    @Test(arguments: ["#3ecf8e", "#ff3b2f", nil])
+    func keepsSatinMonochrome(accent: String?) throws {
+        let palette = FieldPalette(.satin, accent: accent.flatMap(RGBAColor.init(hex:)), background: Self.background)
+
+        try Self.expect(palette.back, isNear: "#000000")
+        #expect(palette.colors.count == 1)
+        try Self.expect(try #require(palette.colors.first), isNear: "#ffffff")
+    }
+
     @Test func aPlainFieldIsTheBackground() {
         let palette = FieldPalette(.plain, accent: RGBAColor(hex: "#ff3b2f"), background: Self.background)
 
@@ -75,7 +85,7 @@ struct FieldTests {
     // MARK: - Kernels
 
     /// Each look is drawn by its kernel, as a pure function of its time.
-    @Test(arguments: [MotionField.ember, .matrix, .halo, .sunlit])
+    @Test(arguments: [MotionField.ember, .matrix, .halo, .sunlit, .satin])
     func drawsTheFieldOnItsOwnClock(field: MotionField) throws {
         let first = try Self.pixels(field, at: 2)
 
@@ -83,6 +93,18 @@ struct FieldTests {
         #expect(Self.spread(of: first) > 2, "\(field) looks flat")
         #expect(try Self.pixels(field, at: 2) == first)
         #expect(try Self.pixels(field, at: 6) != first)
+    }
+
+    /// Satin keeps New Raycast's low key over time: its median 11–25 of 255 in the film, 5–39 in
+    /// the prototype it was tuned on, its crests rolling off well below white.
+    @Test func keepsSatinLowKey() throws {
+        for time in stride(from: 0.0, through: 30, by: 6) {
+            let green = try Self.pixels(.satin, at: time).enumerated().filter { $0.offset % 4 == 1 }.map(\.element).sorted()
+            let median = green[green.count / 2]
+            let top = green[green.count * 99 / 100]
+            #expect((2...45).contains(median), "satin at \(time) s: median \(median)")
+            #expect(top < 200, "satin at \(time) s: 99th percentile \(top)")
+        }
     }
 
     // MARK: - Documents

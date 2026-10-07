@@ -59,7 +59,8 @@ nonisolated struct FieldPalette: Equatable, Sendable {
     /// - ember #050405 under #ff3b2f, #8a1414, #2a0c12;
     /// - matrix #2f9e6c on #060907;
     /// - halo #ffffff, #3ecf8e on black;
-    /// - sunlit #c4730b, #bdad5f, #d8ccc7 on #140c04.
+    /// - sunlit #c4730b, #bdad5f, #d8ccc7 on #140c04;
+    /// - satin white light on black, never tinted: New Raycast's is monochrome.
     static let looks: [MotionField: Look] = [
         .ember: Look(
             leadChroma: 0.232, back: Stop(lightness: 0.110, chromaShare: 0.022, hueOffset: 0),
@@ -78,6 +79,7 @@ nonisolated struct FieldPalette: Equatable, Sendable {
             leadChroma: 0.141, back: Stop(lightness: 0.162, chromaShare: 0.163, hueOffset: 7.3),
             stops: [Stop(lightness: 0.631, chromaShare: 1, hueOffset: 0), Stop(lightness: 0.744, chromaShare: 0.716, hueOffset: 35.1),
                     Stop(lightness: 0.854, chromaShare: 0.106, hueOffset: -18.7)]
-        )
+        ),
+        .satin: Look(leadChroma: 0, back: Stop(lightness: 0, chromaShare: 0, hueOffset: 0), stops: [Stop(lightness: 1, chromaShare: 0, hueOffset: 0)])
     ]
 }

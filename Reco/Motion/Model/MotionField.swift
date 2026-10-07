@@ -17,6 +17,9 @@ nonisolated enum MotionField: String, Codable, CaseIterable, Sendable {
     case halo
     /// A soft grain wave rising from below: calm or playful title cards.
     case sunlit
+    /// Black satin out of focus under one broad light, a lit plane's edge across a corner: dark,
+    /// premium UI in macro (New Raycast's ground).
+    case satin
     /// The canvas's background colour.
     case plain
 }

@@ -271,6 +271,159 @@ re-run from their address and the frames compared with the previous round's (kep
   *Picks*.
 - 2026-10-07: Q2.1 (the four fields) done; see *Q2 - Look*, *Steps*. A real-content check
   showed the fields need placing around the type: next is Q2.1b, then Q2.2.
+- 2026-10-07: the user rejected the Q2.1 result (`~/Movies/Reco/quality/Q2.1/`): the fields were
+  ported and pasted behind the old video, "no progress at all". The four looks are a direction,
+  not assets: find more work in that line and build animation of that quality. Q2.1b and the rest
+  of Q2 are on hold. Next: links to the best launch films, grouped by direction, for the user to
+  pick one; then rebuild the look against the picked films.
+- 2026-10-07: 34 verified launch films in four directions given to the user:
+  `docs/references/launch-films.md`. Waiting for their pick.
+- 2026-10-07: the user picked **New Raycast**, **Nothing OS 5.0** and **3D UI layers**, and shared a
+  guide to the "Opus 5.5 motion studio" method (reference → style guide → shot list → render →
+  critique loop on its own frames), asking to use what helps but stay clear of the generated look.
+  The four films were downloaded to `~/Movies/Reco/references/` and measured:
+  `docs/references/style-guide.md` (cuts, camera speeds, levels, type, typing pace, and eleven tells
+  of a generated video). Plan: *Direction (picked 2026-10-07)* below. Next: L1a.
+- 2026-10-07: L1a–L1c built and checked against Raycast's frames; a 7.5 s Supabase shot (partner
+  search typed "stripe", whip to the filtered card) is in `~/Movies/Reco/quality/L1/`
+  (`raycast-vs-reco.mp4` side by side). What it took, beyond the satin field:
+  - live mattes are the element's coverage: the translucent field's paint was only its placeholder's
+    letters, so typed text showed through them alone (`MatteFill`);
+  - the cursor hides from a typed key until it moves (`CursorPath`), the pointer rests once a clip
+    types (`WebScript.pointerPosition`), and the renderer measures typed-into fields itself;
+  - fields follow the camera at 15 % (`MotionFrameRenderer.fieldParallax`): pinned, the ground read
+    as wallpaper behind the whip;
+  - motion blur from a 180° shutter, the editor's sample rule (8 preview, 16 export).
+  Critique against Raycast, worst first: the UI lacks its glass rim light and caret (WebKit's
+  snapshots draw no caret); the satin's upper band is a broad even glow where Raycast's ground has
+  distinct dark forms; the 3.7 s hold after the whip is dead; UI whites are full white (L1d);
+  the results take baked at 7× is a 5684×6860 movie; card slots the filter empties show as dark
+  boxes (the matte is the page as loaded). Next: L1d with the rim light, then L1e.
+- 2026-10-07: the user's verdict on `raycast-vs-reco.mp4`: "really really bad". L1d and L1e are
+  polish and wouldn't change that: no single frame of ours would pass next to a Raycast frame. The
+  plan is changed: *Direction*, *Why L1 failed* and step **L0** below. What L1 built (satin,
+  coverage mattes, the typing cursor rules, parallax, motion blur) stays; the shot itself is thrown
+  away. Next: L0, stills only, shown to the user before anything moves.
+- 2026-10-07: L0 for Raycast: two stills in `~/Movies/Reco/quality/L0/` (`ours-raycast-2.0s.png`,
+  `ours-raycast-5.0s.png`, each stacked under its Raycast frame in `*-vs-ours.png`), waiting for the
+  user's approval. Composited in numpy (`scratchpad/l0/still.py`, `specs.json`) from real lifts, every
+  part something Core Image can draw, to port once approved:
+  - **Content:** supabase.com/docs's ⌘K search, the same beat as Raycast's: empty (`Search docs...`,
+    Inter 15 px, lifted at 14×, cap height 14 % of the frame, as Raycast's) and typed `auth` with
+    its results, the first selected, green matches the only colour (8×, shown at 7.5×). Lifted
+    alone with the dialog's own fill, border and shadow removed (it sits in a portal, so the page
+    lab hid everything else itself: `UILiftScript.isolate` left the page behind it). Also surveyed:
+    cardboard.ai's prompt box ("Describe your video, or drop footage…", presets under it) is the
+    next candidate; linear.app's hero was still empty 1 s after load.
+  - **Glass** (Raycast's pill and panel, measured at 4K): a band 0.08 × the cap height wide (12 px
+    at 14×); ~41 where it faces down or right, ~82 facing left; a bright line on its outer edge where
+    it faces up (+120 near the key, fading over ~half the frame's width), ~3 px deep; a thin
+    highlight on its inner edge facing left. The body is dark (10–12) with the ground seen through it
+    (45 % in linear light, blurred 40 px), a soft sheen band from the key (+26–38 at its top, fading
+    over ~450 px) and a pool (+16). A soft shadow below.
+  - **Ground:** satin as finite folds (a crest, a length, a width on each side, a smooth warp so
+    no line is ruled), shaded by sheen, lit by pools, gaps to black, defocused 8–9 px; fitted block
+    by block to Raycast's light map. For 5.0 s, a matte slab in focus over it with a chamfered edge
+    as measured (a groove 11–13 px in at −30 %, the lit bevel, a 7 px falloff, a 1 px drop) and lit
+    cloth beside it. Grain ~2 levels at 1080p in the mid-tones, none in black.
+  - Raycast's typed text and caret are pure white (253–254); only its secondary text is grey.
+  Critique, worst first: the UI is the real one, so it has Supabase's 8 px corners, plain magnifier
+  and equal-sized title and description where Raycast's was designed for the film; the ground is
+  fitted to these two frames, so whether it still reads as cloth when it drifts is untested (the
+  footage-or-plate question stays open until then); B's satin is a little brighter than Raycast's.
+  Next: the user's verdict on the stills; then port (satin folds and slab kernels, the glass
+  compositor for lifted UI, a caret), then L1's motion again.
+- 2026-10-07: the user moved on from the stills ("okay so animate now and a longer video"). A 24 s
+  film in that look: `~/Movies/Reco/quality/L1/supabase-docs-film.mp4`, and
+  `supabase-docs-film-vs-raycast.mp4` (Raycast's first 24 s above ours). A look-dev render in Python
+  (`scratchpad/anim/film.py`, 720 frames in 51 s on 10 cores), not yet Reco's engine, from real
+  lifts of every UI state (the page lab in `RecoTests/DebugShotTests.swift`):
+  1. 0–3.2 s: satin alone, the empty search bar cut in at 1.0 s, the caret blinking, a slow drift.
+  2. 3.2–7.6 s, wider: "row level security" typed at 7.4 characters a second, slower into each
+     word; the results arrive after "row", "row level" and the end, a real result set each, the
+     green matches growing with the query.
+  3. 7.6–10.2 s, the results at 10×: down two, back up to the first (its page is the next shot),
+     the camera following each hop 0.06 s late with motion blur.
+  4. 10.2–15.0 s: that page, its H1 held at 5.4×, a 0.35 s whip (up to 96 blur samples) down to
+     its `create policy` block on glass, a slow pan along the code.
+  5. 15.0–24.0 s: Raycast's closing in the docs' own Source Code Pro caps: SUPABASE and a product
+     swapped every 0.42 s, SUPABASE DOCS sliding together, BUILD IN A WEEKEND, the wordmark.
+  Measured on Raycast's film for it: the bar cuts in at 1.0 s with no fade; its caret blinks ~0.53 s
+  on and off with soft edges; results come with the first key; the closing swaps a word every
+  0.33–0.5 s, slides the pair together over ~2 s, and ends on the logo alone. Captures: the typed
+  prefixes are the input row lifted alone, laid over the settled result sets, so results change only
+  where a search would have settled; selection is the real cmdk's ArrowDown; the dialog lives in a
+  portal, so the lab hides everything but `[role=dialog]`. Critique, worst first: shot 4's code
+  has no event (every Raycast shot has a UI state change; a copy turning into a check would, but the
+  first button found was word wrap); the results panel opens within two frames, a pop rather than
+  an expansion (Raycast's pops too); no sound; the encode keeps part of the grain (44–51 dB against
+  the frames). Next: the user's verdict, then the port into the engine (satin folds and slab, the
+  glass compositor, the caret and typing pace, lifting UI that only exists after a click, the
+  word-swap closing) so Reco makes this from an address.
+- 2026-10-07: the user's verdict on the film: "this one was good" (a copy is on their Desktop).
+  The look and grammar are approved. Next: the port into the engine, phase by phase, each checked
+  against this film's frames.
+
+### Direction (picked 2026-10-07)
+
+Today's Linear video against Linear Agent (`scratchpad/refs/today`): ours shows the whole app at
+0.6 % text height, unreadable, still, on flat black, under a centred caption. The films crop to one
+control (text 2.5–4 % of the height), something real happens in it (typing, a menu, a result
+streaming in), it's lit, and the camera holds then moves with intent. So the lever is the shot,
+not the background; the fields of Q2.1 stay as one ingredient.
+
+**Why L1 failed** (its frames against Raycast's at the same moments, worst first):
+1. **Animated before a still matched.** Motion was built on frames that were wrong at rest. The
+   article's own gate (stills → animatic → full pass) was skipped.
+2. **UI as a screenshot, not a material.** Raycast's pill is glass: the satin shows blurred through
+   its fill, a rim of light runs round its outline (brighter at the top left), a soft shadow under
+   it. Ours is the page's element as WebKit paints it: an opaque flat field with a grey hairline.
+3. **Too small.** Raycast's focal text is ~17 % of the frame's height, one control filling 60 % of
+   the width. Ours was ~7 %, so it reads as a page, not a hero object.
+4. **The ground reads as CG.** The satin is a smooth procedural gradient; Raycast's ground has real
+   fold forms, highlights with shape, and texture. A shader may not get there: footage or a
+   rendered plate may be needed (licensing is the user's call).
+5. **No choreography.** Raycast chains UI states in one take (typed → results → menu → hotkey →
+   saved) with the camera following; ours was two unrelated beats and a dead 3.7 s hold.
+6. **Content.** Supabase's partner page offers a plain search box and cards. Each product needs its
+   most cinematic real interaction found first (prompt boxes, command menus, toggles, dashboards).
+7. Small: no caret (WebKit snapshots draw none), machine-even typing, full-white UI type.
+
+Built and checked one at a time against the films' frames, side by side, with a scored critique
+(hook, readability at phone size, motion, composition, brand, the eleven tells) until each scores 8.
+0. **L0 Look-dev gate: stills before motion.** For each direction, two stills of ours at
+   1920×1080, each next to the reference frame it answers, until they could pass in the same film.
+   The user approves the stills before any animation is built for that direction. For Raycast, the
+   frames at 2.0 s (the search pill in macro over satin) and 5.0 s (typed, results below). What
+   the stills need, built only as far as a still shows it:
+   - **glass for lifted UI:** the element lifted without its fill, the ground under its coverage
+     blurred and tinted through it, a rim light along its outline from the matte's edge, a soft
+     shadow, so a real control reads as a lit object;
+   - **hero scale:** one control at 12–20 % text height, with shallow depth of field from a slight tilt;
+   - **a better ground:** first a richer satin (shaped highlights, fold detail); if it still reads as
+     CG, ask the user about footage or a rendered plate;
+   - **the right content:** for each of supabase.com, linear.app, cardboard.ai, the one or two real
+     interactions worth a macro shot, found with `inspect_page` before any shot is designed;
+   - a caret and the low-key grade (old L1d), once the rest passes.
+1. **L1 Raycast — dark satin.** The parts built so far are kept; the shot is redone after L0.
+   - **Done:** L1a `satin` field: black satin folds under one slow, broad key light, out of focus,
+     monochrome; levels as measured (median 11–25, crests to ~45 %).
+   - **Done:** L1b a macro live shot: a real input typed into, shown at 2.5–3× and cut off by the
+     frame edge; built by hand as a document, rendered through the plan, compared with Raycast's
+     1–5 s. Still to do: a human pace (8–15 characters a second with pauses; takes type an even
+     12.5) and depth of field (the plane was flat).
+   - **Done:** L1c hold and whip: the camera holds, then moves to the next element in 0.25–0.4 s
+     with motion blur from sub-frame samples (the editor's way).
+   - L1d low-key grade: UI whites at 70–75 %, blacks at 0, dither.
+   - L1e the closing: tiny mono caps on black, a word swapped every 0.5 s, a pair closing up, the logo.
+2. **L2 Nothing — dot screen and callouts:** a gradient under a fixed dot screen (pitch 0.83 % of the
+   width, dot 0.1 %); a dot-matrix title with a scramble reveal; callouts with a crosshair and a
+   leader line to a real element, named in mono caps; the inline-icon lockup.
+3. **L3 3D layers:** a UI exploded isometrically into its parts (each a lift), separating in depth
+   and settling; Linear's single plane in the dark, lit by a falling-off pool of light, text streaming
+   in line by line.
+4. **L4 into the grammar and the agent:** the shots and moves L1–L3 proved, named; the eleven tells as
+   lint and design checks; the critique loop in the agent's playbook.
 
 ### Q1 - Assets (M)
 

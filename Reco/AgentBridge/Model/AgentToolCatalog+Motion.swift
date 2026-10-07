@@ -22,7 +22,8 @@ nonisolated extension AgentToolCatalog {
         camera moves (Raycast). Field, what scenes are drawn over, moving slowly and coloured from the accent: ember (grain \
         pooling in two corners, type in the dark between: bold brands), matrix (a lit sphere in ordered dither: technical \
         brands), halo (a ring of smoke: behind an end card's logo), sunlit (a soft grain wave: calm or playful titles), \
-        plain (the background colour, the default).
+        satin (black satin out of focus under one light, monochrome: dark UI in macro), plain (the background colour, the \
+        default).
 
         Asset: {id, url, selector, viewport [w,h] (default [1440,900]), hide [selectors]}: an element of a real page, lifted \
         alone with its rounded corners: a product screenshot, an app mockup, a card, a logo; never a whole section. With \
@@ -68,7 +69,7 @@ nonisolated extension AgentToolCatalog {
         "canvas":{"type":"object"},"style":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
         "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","cutOnMotion","zoomThrough","blurCut","push","fade"]},
         "shot":{"type":"object","description":"{shot: hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard, text, detail, ui, items, region}"},
-        "field":{"type":"string","enum":["ember","matrix","halo","sunlit","plain"]},
+        "field":{"type":"string","enum":["ember","matrix","halo","sunlit","satin","plain"]},
         "moves":{"type":"array","items":{"type":"object"}}},
         "required":["op"],"additionalProperties":false}}},
         "required":["operations"],"additionalProperties":false}

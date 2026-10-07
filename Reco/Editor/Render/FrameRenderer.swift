@@ -84,8 +84,8 @@ nonisolated enum FrameRenderer {
         return (0..<count).map { (Double($0) + 0.5) / Double(count) - 0.5 }
     }
 
-    /// The mean of `images`; the one itself when alone.
-    private static func average(_ images: [CIImage]) -> CIImage {
+    /// The mean of `images`; the one itself when alone. Shared with motion videos' blur.
+    static func average(_ images: [CIImage]) -> CIImage {
         guard images.count > 1 else { return images[0] }
         let shares = images.map { $0.fading(to: 1 / Double(images.count)) }
         return shares.dropFirst().reduce(shares[0]) { $1.applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: $0]) }

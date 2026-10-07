@@ -4,7 +4,8 @@
 //
 //  The fields of spec 0012, Q2: Paper Shaders 0.0.81's grain gradient (ember, sunlit), dithering
 //  (matrix) and smoke ring (halo), Copyright 2026 Paper, Apache-2.0, ported from their GLSL
-//  (docs/references/paper-shaders) to Core Image stitchable kernels.
+//  (docs/references/paper-shaders) to Core Image stitchable kernels; and Reco's own satin, after
+//  New Raycast's ground.
 //
 //  Each draws its frame as the 1280×720 gallery tile the look was picked from would, at a pixel
 //  ratio of 2: `frame` is (reference pixels per output pixel, the reference width and height, the
@@ -264,5 +265,68 @@ inline float smokeNoise(coreimage::sampler noise, float2 uv, float2 polar, float
     // The shader's own dither against banding, in output pixels
     color += 1.0 / 256.0 * (fract(sin(dot(0.014 * dest.coord(), float2(12.9898, 78.233))) * 43758.5453123) - 0.5);
     return paper::vignetted(color, p, size, vignette);
+}
+#endif
+
+// MARK: - Reco's own
+
+#ifdef satinField_ONLY
+namespace satin {
+
+/// The cloth's height at `q` (the shorter side 1, the origin in the middle, y down) at time `t`: long
+/// folds about 30° off level, bent by a slow warp, crossed by a broader fold so they bunch instead of
+/// striping.
+inline float height(float2 q, float t) {
+    float u = 0.8660254 * q.x + 0.5 * q.y;
+    float v = -0.5 * q.x + 0.8660254 * q.y;
+    float bent = v + 0.22 * sin(1.4 * u + 0.17 * t + 0.4);
+    return 0.60 * sin(3.0 * bent + 0.8 * sin(u + 0.09 * t) + 0.15 * t)
+         + 0.22 * sin(5.3 * bent + 1.4 * u + 2.0 - 0.08 * t)
+         + 0.55 * sin(2.2 * (0.55 * u + 0.83 * v) + 1.1 * sin(0.8 * v - 0.06 * t) + 0.1 * t + 3.0);
+}
+
+inline float hash(float2 p) {
+    return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453123);
+}
+
+inline float squared(float x) { return x * x; }
+
+}
+
+/// Black satin out of focus under one broad key light from the upper left, with a lit plane's edge
+/// across the upper-left corner, as New Raycast's ground (docs/references/style-guide.md). `back` is
+/// the shadow, `lit` the light's colour; lightness is shaped to the film's levels (a median of 11–25
+/// of 255): 5–39 over 30 s, crests rolling off at ~53 %.
+[[stitchable]] float4 satinField(float4 frame, float4 back, float4 lit, coreimage::destination dest) {
+    float2 size = frame.yz;
+    float2 p = dest.coord() * frame.x - 0.5 * size;
+    float2 q = float2(p.x, -p.y) / min(size.x, size.y);
+    float t = frame.w;
+    // The normal from finite differences a 540th of the shorter side apart, as the prototype took them
+    float e = 1.0 / 540.0;
+    float h = satin::height(q, t);
+    float3 normal = normalize(float3(-0.34 * (satin::height(q + float2(e, 0.0), t) - h) / e,
+                                     -0.34 * (satin::height(q + float2(0.0, e), t) - h) / e, 1.0));
+    float3 light = normalize(float3(-0.5, -0.6, 0.5));
+    float sheen = pow(saturate(dot(normal, normalize(light + float3(0.0, 0.0, 1.0)))), 3.5);
+    float diffuse = satin::squared(saturate(dot(normal, light)));
+    // Its light pools up and to the right, leaving the middle, where UI sits, darker
+    float2 fromPool = q - float2(0.45, -0.2);
+    float cloth = (0.08 * diffuse + 0.7 * sheen) * (0.12 + 0.88 * exp(-dot(fromPool, fromPool) / 0.9));
+    // The plane: its edge rises to the right at 44.5°, a bright line on it and a dark one just
+    // inside (the glass's thickness); its face falls off away from the corner
+    float d = dot(q, float2(-0.70, -0.71)) - (0.566 + 0.004 * sin(0.2 * t));
+    float plane = saturate(d * 60.0 + 0.5);
+    float2 fromCorner = q - float2(-1.0, -0.6);
+    float face = 0.62 * exp(-dot(fromCorner, fromCorner) / 0.35) + 0.08;
+    float rim = 0.75 * exp(-satin::squared(d / 0.0025));
+    float inside = 1.0 - 0.8 * exp(-satin::squared((d - 0.007) / 0.003));
+    float lightness = pow(max(mix(cloth, face, plane) * inside, 0.0), 1.9);
+    // A soft shoulder, so crests roll off instead of clipping
+    lightness = 1.053 * lightness / (lightness + 0.35) + 0.9 * rim;
+    // Grain of ~1.5 levels, new each frame: it reads as photographed and dithers the long gradients
+    float2 g = dest.coord() + 113.0 * fract(7.31 * t);
+    lightness += 3.67 / 255.0 * (satin::hash(g) + satin::hash(g + 37.0) - 1.0);
+    return float4(mix(back.rgb, lit.rgb, saturate(lightness)), 1.0);
 }
 #endif

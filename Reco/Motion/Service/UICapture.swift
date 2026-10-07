@@ -76,10 +76,12 @@ enum UICapture {
         // in a square wrapper, or a panel with a row of chips under it
         var still = WebScript()
         (still.url, still.viewport, still.hide) = (asset.url, asset.viewport, asset.hide)
-        let matte = try await WebPageRenderer(script: still).withLoadedPage { webView in
+        let painted = try await WebPageRenderer(script: still).withLoadedPage { webView in
             webView.setValue(false, forKey: "drawsBackground")
             return try await lift(asset, at: script.scale, from: webView, filled: false)
         }
+        // With what its outline encloses: typing into a transparent field paints where nothing was
+        let matte = MatteFill.filled(painted) ?? painted
         try await ScreenshotService.writePNG(matte, to: UILiftCache.matteURL(of: asset, in: bundle))
         try? FileManager.default.removeItem(at: movie)
         try FileManager.default.moveItem(at: partial, to: movie)

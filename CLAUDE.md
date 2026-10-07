@@ -35,7 +35,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 742 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 760 tests). `ExportServiceTests.keepsATransparentBackgroundInProRes4444`
   reads alpha 254 instead of 255 with Xcode 26.0.1 on macOS 26.5.2, also without this fork's later changes.
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length) and
@@ -954,6 +954,31 @@ Key facts:
   draw them whole (4K: ~10 ms).
 - A push seam moves whole frames, each with its field.
 
+### S7 — Motion quality, direction L1: the Raycast look (`remotion`, spec 0012)
+
+After the user rejected the ported fields as pasted behind the old video, they picked three directions
+from verified launch films (`docs/references/launch-films.md`): New Raycast, Nothing OS 5.0, and 3D UI
+layers. The films are measured in `docs/references/style-guide.md` (copies in `~/Movies/Reco/references/`,
+outside the repo). L1 rebuilds Raycast's grammar on real UI: a macro live shot over satin, a whip.
+
+| File | Role |
+|---|---|
+| `Motion/Render/FieldKernels.metal.txt` (`satinField`), `FieldPalette`, `FieldRenderer` | `satin`: black satin out of focus under one broad light, a lit plane's edge across a corner; monochrome whatever the brand |
+| `Motion/Render/MotionFrameRenderer.swift` | `fieldParallax` (a field follows the camera at 15 %); motion blur from a 180° shutter (`FrameRenderer.blurOffsets`, `average`) |
+| `Motion/Service/MatteFill.swift` | A live take's matte as coverage: alpha scaled to the element's median paint, holes its outline encloses filled |
+| `Editor/Render/CursorPath.swift` | The cursor hides from a typed key (no ⌘ or ⌃) until it moves or clicks, as macOS does |
+| `WebRecording/Model/WebScript.swift`, `Service/WebPageRenderer.swift` | A clip rests from its first key; the renderer measures typed-into fields itself |
+
+Key facts:
+- The satin was tuned in numpy against Raycast's frames (median 11–25 of 255 there, 5–39 here over 30 s)
+  and ported line for line; `keepsSatinLowKey` holds the levels.
+- Supabase's partner search is a translucent field (alpha 0.13) in a faint border: its painted matte was
+  its placeholder's letters, so typed text showed only through them. Coverage fixes it; a filter that
+  empties card slots still shows them as dark boxes, since the matte is the page as loaded.
+- Typing grew the field a clear button and moved its centre 12 pt; the pointer followed it, which showed
+  the I-beam during typing. A take's keys can't be typed into a field whose box wasn't measured.
+- Motion blur costs nothing on still frames; a whip at 1080p averages up to 16 frames in an export.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -1026,7 +1051,7 @@ should hold but need re-measuring.
 
 | Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps, shown elements, playbook | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop); linear.app walkthroughs run from the app through `reco://record-agent`. Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
 | S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 done: moves, seams, shots, lint, scenes lane and inspector; the benchmark rebuilt in 10 lines and three sites rendered, awaiting the user's side-by-side. Phase 4 done: agent tools, Launch Video mode, chat with selection; three sites run from their address with clean lint and design check, three chat edits change only their targets; cost recorded for one run. The window seen in a window capture; editing by hand not yet tried |
-| S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields done: four looks ported and matched to WebGL, coloured from the brand, per scene, preview at 720p. Not yet seen in the app window or on a real run. Next: Q2.1b, placing fields around the type (a real check showed the sphere and the smoke under headlines), then Q2.2 grain |
+| S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields ported, then rejected by the user as pasted behind the old video; directions picked from launch films (Raycast, Nothing OS 5.0, 3D layers). L1a–c built (satin, coverage mattes, typing cursor rules, parallax, motion blur), but the user found the test shot "really bad" next to Raycast. L0: still frames matched to Raycast's (glass for lifted UI, hero scale, a better ground), then a 24 s Supabase docs film in that look rendered as a look-dev pass outside the engine. The user approved the film; next is the port into the engine, checked against its frames |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

@@ -7,9 +7,9 @@ import CoreGraphics
 
 /// The cursor's location through a take, asked frame by frame in time order.
 ///
-/// During a clip the cursor follows its target's element, so it stays on it if the page moves it.
-/// Between clips it rests where it was, as a real mouse does while the page scrolls under it, and
-/// travels from there to the next target.
+/// During a clip the cursor follows its target's element, so it stays on it if the page moves it,
+/// until the clip types. Between clips it rests where it was, as a real mouse does while the page
+/// scrolls under it, and travels from there to the next target.
 nonisolated struct PointerTrack: Sendable {
 
     let script: WebScript

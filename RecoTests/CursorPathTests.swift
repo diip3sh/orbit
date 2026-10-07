@@ -149,6 +149,22 @@ struct CursorPathTests {
         #expect(try self.path(telemetry).opacity(at: 4) == 1)
     }
 
+    /// As macOS does: hidden from a typed key until it moves away or clicks; a shortcut leaves it.
+    @Test func hidesWhileTypingUntilItMoves() throws {
+        var telemetry = telemetry(
+            cursor: [(0, CGPoint(x: 100, y: 100)), (1, CGPoint(x: 200, y: 100)), (2.5, CGPoint(x: 201, y: 100)), (4, CGPoint(x: 300, y: 100))]
+        )
+        let typed = { (time: Double, modifiers: [String]) in InputTelemetry.Key(time: time, keyCode: 0, modifiers: modifiers, isRepeat: false) }
+        telemetry.keys = [typed(1.5, []), typed(1.6, ["shift"]), typed(5, ["command"])]
+
+        let path = try path(telemetry)
+
+        // Hidden from 1.5 s, past the 1-point nudge at 2.5 s, until the move at 4 s; the ⌘ key at 5 s hides nothing
+        let opacities = [1.4, 1.65, 3, 3.85, 4, 6].map { path.opacity(at: $0) }
+        let expected = [1, 0.5, 0, 0.5, 1, 1]
+        #expect(zip(opacities, expected).allSatisfy { abs($0 - $1) < 1e-9 }, "\(opacities)")
+    }
+
     @Test func staysWhereItIsBeforeTheEnd() throws {
         var style = CursorStyle()
         style.stopsBeforeEnd = 2

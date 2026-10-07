@@ -44,11 +44,11 @@ struct MotionRenderingTests {
         }
     }
 
-    /// The four fields at one moment, drawn at 480 px. The kernels match Paper Shaders'
-    /// WebGL at 50–72 dB (spec 0012, Q2). A speckle or a dither cell on its threshold may flip on
-    /// another GPU, so only the mean difference is held.
+    /// The fields at one moment, drawn at 480 px. The four ported kernels match Paper Shaders'
+    /// WebGL at 50–72 dB (spec 0012, Q2). A speckle, a dither cell on its threshold or a grain may
+    /// flip on another GPU, so only the mean difference is held.
     @Test func fieldGoldenFrames() throws {
-        for field in [MotionField.ember, .matrix, .halo, .sunlit] {
+        for field in [MotionField.ember, .matrix, .halo, .sunlit, .satin] {
             let palette = FieldPalette(field, accent: RGBAColor(hex: "#3ecf8e"), background: MotionCanvas().background)
             let image = FieldRenderer.image(field, palette: palette, at: 10, size: CGSize(width: 480, height: 270))
             try Self.expectGolden("motion-field-\(field.rawValue)", image, most: 255)

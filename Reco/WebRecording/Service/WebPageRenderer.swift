@@ -136,7 +136,10 @@ final class WebPageRenderer: NSObject {
         let arriving = script.pointer.first {
             $0.range.lowerBound > take.time + WebScript.pressTolerance && $0.range.lowerBound <= time + WebScript.pressTolerance
         }
+        // The fields typed into this frame too: the cursor rests while it types, so it measures none
+        let keystrokes = script.keystrokes(after: take.time, through: time)
         let selectors = take.pointer.selectors(at: time) + aiming.compactMap(\.target?.selector) + [arriving?.show].compactMap { $0 }
+            + keystrokes.compactMap(\.target.selector)
         let page = try await advance(to: time, scroll: scroll, selectors: selectors)
         for clip in aiming {
             take.aimed.insert(clip.id)
@@ -170,7 +173,7 @@ final class WebPageRenderer: NSObject {
         }
         // After the press, which put the caret in the field. Not into a field the page doesn't have now
         var typed: [Character] = []
-        for key in script.keystrokes(after: take.time, through: time) {
+        for key in keystrokes {
             guard let selector = key.target.selector, page.boxes[selector] != nil, await type(key.character, into: selector) else { continue }
             typed.append(key.character)
         }
