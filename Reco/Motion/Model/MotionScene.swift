@@ -17,6 +17,9 @@ nonisolated struct MotionScene: Equatable, Sendable, Identifiable {
     /// How it begins after the scene before.
     var seam = MotionSeam.cut
 
+    /// What it's drawn over, when not the canvas's field: `halo` behind an end card.
+    var field: MotionField?
+
     /// Drawn farthest first; layers at the same depth in this order.
     var layers: [MotionLayer] = []
 
@@ -40,6 +43,7 @@ nonisolated extension MotionScene: Codable {
         duration = try container.decode(Double.self, forKey: .duration)
         shot = try container.decodeIfPresent(MotionShot.self, forKey: .shot)
         seam = try container.decodeIfPresent(MotionSeam.self, forKey: .seam) ?? .cut
+        field = try container.decodeIfPresent(MotionField.self, forKey: .field)
         layers = try container.decodeIfPresent([MotionLayer].self, forKey: .layers) ?? []
         shotMoves = try container.decodeIfPresent([String: [MotionMove]].self, forKey: .shotMoves) ?? [:]
         camera = try container.decodeIfPresent(MotionCamera.self, forKey: .camera) ?? MotionCamera()

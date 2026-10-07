@@ -20,7 +20,7 @@ nonisolated struct MotionEdit: Codable, Equatable, Sendable {
         case setAsset = "set_asset"
         /// `scene`, at `index` or last.
         case addScene = "add_scene"
-        /// Scene `id`'s `duration`, `seam` or `shot`.
+        /// Scene `id`'s `duration`, `seam`, `shot` or `field`.
         case setScene = "set_scene"
         /// `layer` in scene `id`: added, or replacing its own layer with that id; one with a shot
         /// layer's id replaces that layer whole.
@@ -45,11 +45,12 @@ nonisolated struct MotionEdit: Codable, Equatable, Sendable {
     var duration: Double?
     var seam: MotionSeam?
     var shot: MotionShot?
+    var field: MotionField?
     var moves: [MotionMove]?
 
     private enum CodingKeys: String, CodingKey {
         case operation = "op"
-        case id, target, index, canvas, style, asset, scene, layer, duration, seam, shot, moves
+        case id, target, index, canvas, style, asset, scene, layer, duration, seam, shot, field, moves
     }
 
     init(_ operation: Operation, id: String? = nil, target: String? = nil) {
@@ -62,6 +63,7 @@ nonisolated struct MotionEdit: Codable, Equatable, Sendable {
         var size: CGSize?
         var frameRate: Int?
         var background: RGBAColor?
+        var field: MotionField?
         var pacing: MotionCanvas.Pacing?
     }
 
@@ -102,6 +104,7 @@ nonisolated extension MotionEdit {
             document.canvas.size = change.size ?? document.canvas.size
             document.canvas.frameRate = change.frameRate ?? document.canvas.frameRate
             document.canvas.background = change.background ?? document.canvas.background
+            document.canvas.field = change.field ?? document.canvas.field
             document.canvas.pacing = change.pacing ?? document.canvas.pacing
         case .setStyle:
             let change = try required(style, "style")
@@ -143,10 +146,11 @@ nonisolated extension MotionEdit {
 
     private func setScene(in document: inout MotionDocument) throws(MotionEditError) {
         let index = try sceneIndex(in: document)
-        guard duration != nil || seam != nil || shot != nil else { throw .init("set_scene needs duration, seam or shot.") }
+        guard duration != nil || seam != nil || shot != nil || field != nil else { throw .init("set_scene needs duration, seam, shot or field.") }
         document.scenes[index].duration = duration ?? document.scenes[index].duration
         document.scenes[index].seam = seam ?? document.scenes[index].seam
         document.scenes[index].shot = shot ?? document.scenes[index].shot
+        document.scenes[index].field = field ?? document.scenes[index].field
     }
 
     private func setMoves(in document: inout MotionDocument) throws(MotionEditError) {

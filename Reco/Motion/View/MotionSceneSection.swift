@@ -5,7 +5,8 @@
 
 import SwiftUI
 
-/// The selected scene: its shot and the shot's text, how long it lasts and how it begins.
+/// The selected scene: its shot and the shot's text, how long it lasts, how it begins and what it's
+/// drawn over.
 struct MotionSceneSection: View {
     let viewModel: MotionEditorViewModel
 
@@ -36,6 +37,12 @@ struct MotionSceneSection: View {
                 Picker("Seam", selection: binding(\.seam)) {
                     ForEach(MotionSeam.allCases, id: \.self) { seam in
                         Text(seam.rawValue).tag(seam)
+                    }
+                }
+                Picker("Field", selection: binding(\.field)) {
+                    Text("Same as video").tag(MotionField?.none)
+                    ForEach(MotionField.allCases, id: \.self) { field in
+                        Text(field.rawValue).tag(Optional(field))
                     }
                 }
             } else {

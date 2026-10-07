@@ -1,0 +1,246 @@
+<title>Reco Background Reel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a screening-room reel. Dark committed look; 16:9 frames in a two-up grid, a sticky picks bar. */
+:root {
+  --ground: #0b0c0e;
+  --panel: #131418;
+  --ink: #ecebe8;
+  --dim: #9a9aa0;
+  --faint: #5c5d63;
+  --rule: #24252b;
+  --pick: #e8b04b;
+  --avoid: #e2614f;
+  --display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--ink); font: 15px/1.55 var(--display); padding-inline: clamp(16px, 4vw, 48px); padding-block: 40px 120px; }
+.wrap { max-width: 1320px; margin-inline: auto; display: grid; gap: 40px; }
+header { display: grid; gap: 14px; max-width: 70ch; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+h1 { font-size: clamp(30px, 4.4vw, 52px); line-height: 1.04; letter-spacing: -0.02em; font-weight: 600; margin: 0; text-wrap: balance; }
+header p { color: var(--dim); margin: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font: 12px/1.4 var(--mono); color: var(--dim); }
+.legend b { color: var(--ink); font-weight: 500; }
+
+.section { display: grid; gap: 18px; }
+.section h2 { font-size: 13px; font-family: var(--mono); font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin: 0; padding-bottom: 10px; border-bottom: 1px solid var(--rule); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 28px 24px; }
+
+figure { margin: 0; display: grid; gap: 12px; min-width: 0; }
+.frame { position: relative; aspect-ratio: 16 / 9; max-width: 100%; overflow: hidden; border-radius: 6px; background: #000; isolation: isolate; }
+.frame:fullscreen { border-radius: 0; }
+.bg { position: absolute; inset: 0; }
+.bg canvas { display: block; }
+.grain { position: absolute; inset: -50%; pointer-events: none; opacity: var(--grain, 0); mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation: grain 1s steps(12) infinite; }
+@keyframes grain { 0%{transform:translate(0,0)} 25%{transform:translate(-7%,4%)} 50%{transform:translate(5%,-6%)} 75%{transform:translate(-3%,-2%)} 100%{transform:translate(6%,5%)} }
+.vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(0,0,0,var(--vig, 0)) 100%); }
+
+/* The composited "shot": type and a UI card, as Reco would lay them over the field */
+.shot { position: absolute; inset: 0; display: grid; padding: 6.5% 7%; container-type: inline-size; pointer-events: none; }
+.headline { font-weight: 600; letter-spacing: -0.03em; line-height: 1.02; font-size: 6.4cqw; margin: 0; max-width: 13ch; text-wrap: balance; }
+.sub { font-size: 1.9cqw; margin-top: 1.4cqw; opacity: .7; max-width: 34ch; }
+.left { align-content: center; justify-items: start; }
+.center { align-content: center; justify-items: center; text-align: center; }
+.bottom { align-content: end; justify-items: start; }
+.card { position: absolute; right: 6%; top: 50%; width: 44%; transform: translateY(-50%) perspective(1400px) rotateX(10deg) rotateY(-14deg) rotateZ(2deg);
+  border-radius: 1.2cqw; background: rgba(16,17,22,.82); border: 1px solid rgba(255,255,255,.09);
+  box-shadow: 0 3cqw 6cqw rgba(0,0,0,.55); padding: 2cqw; display: grid; gap: 1.1cqw; overflow: hidden; }
+.card.light { background: rgba(255,255,255,.86); border-color: rgba(0,0,0,.06); box-shadow: 0 3cqw 6cqw rgba(30,40,70,.18); }
+.row { display: grid; grid-template-columns: 1.4cqw 1fr 5cqw; gap: 1.2cqw; align-items: center; }
+.dot { width: 1.1cqw; height: 1.1cqw; border-radius: 50%; background: var(--accent, #7c8cff); }
+.bar { height: .9cqw; border-radius: .45cqw; background: currentColor; opacity: .22; }
+.bar.short { width: 60%; }
+.tag { height: 1.5cqw; border-radius: .75cqw; background: var(--accent, #7c8cff); opacity: .28; }
+.sweep::after { content: ""; position: absolute; inset: -20% -60%; background: linear-gradient(105deg, transparent 42%, rgba(255,255,255,.16) 50%, transparent 58%);
+  animation: sweep 6s cubic-bezier(.4,.14,.3,1) infinite; mix-blend-mode: screen; }
+@keyframes sweep { 0%, 55% { transform: translateX(-60%); } 85%, 100% { transform: translateX(60%); } }
+.logo { width: 9cqw; height: 9cqw; border-radius: 2.2cqw; display: grid; place-items: center; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); }
+.logo svg { width: 55%; height: 55%; }
+.mark { position: absolute; left: 0; right: 0; bottom: 8%; font-weight: 600; font-size: 3.2cqw; letter-spacing: -0.02em; }
+
+figcaption { display: grid; gap: 6px; min-width: 0; }
+.top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.num { font: 500 12px/1 var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; }
+.name { font-weight: 600; font-size: 17px; letter-spacing: -0.01em; }
+.chip { font: 500 11px/1 var(--mono); padding: 5px 8px; border-radius: 99px; border: 1px solid var(--rule); color: var(--dim); }
+.chip.avoid { color: var(--avoid); border-color: color-mix(in oklab, var(--avoid) 45%, transparent); }
+.chip.now { color: var(--ink); }
+.spacer { flex: 1; }
+.why { color: var(--dim); margin: 0; max-width: 68ch; }
+.params { font: 12px/1.5 var(--mono); color: var(--faint); overflow-wrap: anywhere; }
+button { font: 500 13px/1 var(--display); color: var(--ink); background: transparent; border: 1px solid var(--rule); border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+button:hover { background: #1b1c21; }
+button:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--pick); border-color: var(--pick); color: #17130a; }
+
+.picks { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px clamp(16px, 4vw, 48px) calc(12px + env(safe-area-inset-bottom, 0px));
+  background: rgba(11,12,14,.92); backdrop-filter: blur(10px); border-top: 1px solid var(--rule); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; z-index: 5; }
+.picks span { color: var(--dim); font-size: 13px; min-width: 0; flex: 1; }
+.picks strong { color: var(--ink); font-weight: 500; }
+.note { color: var(--faint); font-size: 13px; max-width: 80ch; }
+.note a { color: var(--dim); }
+@media (prefers-reduced-motion: reduce) { .grain, .sweep::after { animation: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Spec 0012 · Q2 Look · live renders</div>
+    <h1>Backgrounds for Reco launch videos</h1>
+    <p>Each frame below renders live, at its real speed, with a headline and a UI card on top the way Reco would composite a shot. The first two show where we are and what to avoid. Pick the looks you want: Reco would port the chosen shaders to Metal, colour them from each brand automatically, and add grain and a vignette.</p>
+    <div class="legend"><span><b>Calm</b> premium, slow, long holds</span><span><b>Precise</b> technical, crisp</span><span><b>Bold</b> high contrast, energetic</span><span><b>Playful</b> warm, rounded</span></div>
+  </header>
+
+  <section class="section" aria-labelledby="h-base"><h2 id="h-base">Where we are, and the trap</h2><div class="grid" id="base"></div></section>
+  <section class="section" aria-labelledby="h-dark"><h2 id="h-dark">Dark fields for hero and feature shots</h2><div class="grid" id="dark"></div></section>
+  <section class="section" aria-labelledby="h-moment"><h2 id="h-moment">Moments: end cards and title cards</h2><div class="grid" id="moment"></div></section>
+
+  <p class="note">Shaders: <a href="https://shaders.paper.design" target="_blank" rel="noopener">Paper Shaders</a> 0.0.81 (Apache-2.0), rendered in WebGL here. Palettes are tinted toward example brands (an indigo tool, a green database, a warm browser) to show how one field changes per brand. Product names and copy are made up. Click a frame's “View large” to see it full screen.</p>
+</div>
+
+<div class="picks" role="region" aria-label="Your picks">
+  <span id="pickText">No picks yet. Press “Pick” under the looks you like.</span>
+  <button id="copyPicks" type="button">Copy picks</button>
+  <button id="clearPicks" type="button">Clear</button>
+</div>
+
+<script type="module">
+import {
+  ShaderMount, getShaderColorFromString as c, getShaderNoiseTexture, ShaderFitOptions,
+  defaultObjectSizing, defaultPatternSizing,
+  meshGradientFragmentShader, grainGradientFragmentShader, GrainGradientShapes,
+  godRaysFragmentShader, smokeRingFragmentShader, ditheringFragmentShader, DitheringShapes, DitheringTypes,
+  swirlFragmentShader, neuroNoiseFragmentShader, dotGridFragmentShader, DotGridShapes
+} from "https://cdn.jsdelivr.net/npm/@paper-design/shaders@0.0.81/+esm";
+
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const sizing = (base, o = {}) => { const s = { ...base, ...o }; return {
+  u_fit: ShaderFitOptions[s.fit], u_scale: s.scale, u_rotation: s.rotation, u_originX: s.originX, u_originY: s.originY,
+  u_offsetX: s.offsetX, u_offsetY: s.offsetY, u_worldWidth: s.worldWidth, u_worldHeight: s.worldHeight }; };
+const palette = list => ({ u_colors: list.map(c), u_colorsCount: list.length });
+const noise = getShaderNoiseTexture();
+await (noise.complete ? Promise.resolve() : new Promise(r => { noise.onload = r; }));
+
+const LOGO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17 12 4l8 13"/><path d="M8 17h8"/></svg>`;
+const card = (accent, light = false, sweep = false) => `<div class="card${light ? " light" : ""}${sweep ? " sweep" : ""}" style="--accent:${accent};color:${light ? "#1a1d26" : "#e9e9ee"}">
+  ${[1, 0, 1, 1, 0].map(s => `<div class="row"><span class="dot"></span><span class="bar${s ? "" : " short"}"></span><span class="tag"></span></div>`).join("")}</div>`;
+
+const looks = [
+  { id: "today", group: "base", name: "Reco today", chip: "Current", chipClass: "now", static: true, flat: "#08090a",
+    why: "A flat near-black ground. Clean, but nothing in it catches light, so every frame reads as a slide.",
+    shot: `<div class="shot left"><p class="headline">Issues that triage themselves.</p></div>${card("#7c8cff")}`, params: "solid #08090A, no grain, no vignette" },
+  { id: "template", group: "base", name: "The template look", chip: "Avoid", chipClass: "avoid",
+    why: "Four saturated hues, fast and evenly weighted, behind centred type. This is what reads as AI-made: the field fights the words.",
+    shader: meshGradientFragmentShader, speed: 1.6, sizing: defaultObjectSizing,
+    u: { ...palette(["#ff2fd2", "#3b2bff", "#00e1ff", "#ffb800"]), u_distortion: 1, u_swirl: 0.9, u_grainMixer: 0, u_grainOverlay: 0 },
+    shot: `<div class="shot center"><p class="headline" style="max-width:none">Supercharge your workflow</p></div>`, params: "mesh · 4 hues · speed 1.6 · swirl 0.9" },
+
+  { id: "ink", group: "dark", name: "Ink mesh", chip: "Calm",
+    why: "Two low-chroma brand hues drifting under a dark ground, with grain and a vignette. The UI stays the brightest thing on screen. The default for an indigo, Linear-like brand.",
+    shader: meshGradientFragmentShader, speed: 0.15, sizing: defaultObjectSizing, grain: 0.07, vig: 0.55,
+    u: { ...palette(["#07080f", "#1a1f4a", "#3b3f8c", "#0a0b16"]), u_distortion: 0.8, u_swirl: 0.1, u_grainMixer: 0, u_grainOverlay: 0 },
+    shot: `<div class="shot left"><p class="headline">Issues that triage themselves.</p><p class="sub">Assign, label and route without opening a ticket.</p></div>${card("#7c8cff", false, true)}`,
+    params: "mesh · #07080F #1A1F4A #3B3F8C · speed 0.15 · distortion 0.8 · swirl 0.1 · grain 7% · vignette 55% · light sweep on the card" },
+  { id: "rays", group: "dark", name: "Light from above", chip: "Calm · Precise",
+    why: "Soft rays falling from the top edge onto near-black, like a product under a studio light. The hero shot: the UI plane sits in the pool of light.",
+    shader: godRaysFragmentShader, speed: 0.5, sizing: defaultObjectSizing, sizingOver: { offsetX: 0.2, offsetY: -0.8 }, needsNoise: true, grain: 0.05, vig: 0.4,
+    u: { u_colorBack: c("#000000"), u_colorBloom: c("#dfe3ff"), ...palette(["#ffffff1f", "#c9d0ff3d", "#ffffff29"]), u_density: 0.41, u_spotty: 0.25, u_midSize: 0.1, u_midIntensity: 0.75, u_intensity: 0.79, u_bloom: 1 },
+    shot: `<div class="shot bottom"><p class="headline">The plan, written for you.</p></div>${card("#9aa6ff")}`,
+    params: "god rays · offset (0.2, −0.8) · density 0.41 · spotty 0.25 · intensity 0.79 · speed 0.5" },
+  { id: "ember", group: "dark", name: "Ember corners", chip: "Bold",
+    why: "One brand red glowing from the corners of a black frame, heavy grain. Type sits in the dark gap. Raycast's site works this way.",
+    shader: grainGradientFragmentShader, speed: 0.4, sizing: defaultObjectSizing, needsNoise: true, vig: 0.2,
+    u: { u_colorBack: c("#050405"), ...palette(["#ff3b2f", "#8a1414", "#2a0c12"]), u_softness: 0.6, u_intensity: 0.35, u_noise: 0.3, u_shape: GrainGradientShapes.corners },
+    shot: `<div class="shot center"><p class="headline">Everything, one keystroke away.</p></div>`,
+    params: "grain gradient · corners · #FF3B2F #8A1414 #2A0C12 on #050405 · softness 0.6 · intensity 0.35 · noise 0.3 · speed 0.4" },
+  { id: "matrix", group: "dark", name: "Ordered dither", chip: "Precise",
+    why: "A slowly turning sphere drawn in 4×4 ordered dither, in the brand green. Pixel-exact and technical: suits a database, an API, a dev tool.",
+    shader: ditheringFragmentShader, speed: 0.35, sizing: defaultPatternSizing, sizingOver: { scale: 0.6 }, vig: 0.5,
+    u: { u_colorBack: c("#060907"), u_colorFront: c("#2f9e6c"), u_shape: DitheringShapes.sphere, u_type: DitheringTypes["4x4"], u_pxSize: 2 },
+    shot: `<div class="shot left"><p class="headline">A Postgres database in two minutes.</p></div>`,
+    params: "dithering · sphere · 4×4 · px 2 · #2F9E6C on #060907 · speed 0.35" },
+  { id: "neuro", group: "dark", name: "Neural glow", chip: "Precise · Bold",
+    why: "Fine luminous filaments in one blue, mostly black. Reads as intelligence without a brain icon. Use for an agent or AI feature beat, briefly.",
+    shader: neuroNoiseFragmentShader, speed: 0.45, sizing: defaultPatternSizing, sizingOver: { scale: 1.4 }, grain: 0.05, vig: 0.6,
+    u: { u_colorFront: c("#ffffff"), u_colorMid: c("#3d7bff"), u_colorBack: c("#000000"), u_brightness: 0.03, u_contrast: 0.35 },
+    shot: `<div class="shot left"><p class="headline">Agents that finish the work.</p></div>${card("#6aa2ff")}`,
+    params: "neuro noise · #FFFFFF / #3D7BFF / #000 · brightness 0.03 · contrast 0.35 · scale 1.4 · speed 0.45" },
+  { id: "grid", group: "dark", name: "Hairline dot grid", chip: "Precise",
+    why: "A still grid of faint dots fading out toward the edges. It never moves by itself: the camera drifting over it gives the depth. The quietest option.",
+    shader: dotGridFragmentShader, speed: 0, sizing: defaultPatternSizing, vig: 0.85, drift: true,
+    u: { u_colorBack: c("#0a0b0d"), u_colorFill: c("#ffffff38"), u_colorStroke: c("#ffffff00"), u_dotSize: 1.6, u_gapX: 26, u_gapY: 26, u_strokeWidth: 0, u_sizeRange: 0, u_opacityRange: 0, u_shape: DotGridShapes.circle },
+    shot: `<div class="shot left"><p class="headline">Deploys you can read.</p></div>${card("#e9e9ee")}`,
+    params: "dot grid · 1.6 px dots every 26 px at 22% · vignette 85% · camera drift 4%" },
+
+  { id: "halo", group: "moment", name: "Smoke halo", chip: "Calm",
+    why: "A ring of slow smoke around the logo, in white and the brand green. The end card's hero moment, held for two seconds.",
+    shader: smokeRingFragmentShader, speed: 0.3, sizing: defaultObjectSizing, sizingOver: { scale: 0.8 }, needsNoise: true, grain: 0.05,
+    u: { u_colorBack: c("#000000"), ...palette(["#ffffff", "#3ecf8e"]), u_noiseScale: 3, u_noiseIterations: 8, u_radius: 0.3, u_thickness: 0.65, u_innerShape: 0.7 },
+    shot: `<div class="shot center"><div class="logo" style="color:#eafff4">${LOGO}</div><div class="mark">Northwind</div></div>`,
+    params: "smoke ring · #FFFFFF #3ECF8E · radius 0.3 · thickness 0.65 · noise 3 × 8 · speed 0.3" },
+  { id: "sunlit", group: "moment", name: "Sunlit wave", chip: "Calm · Playful",
+    why: "Warm bands with fine grain, like light through a window. For a consumer or browser brand; a title card between features.",
+    shader: grainGradientFragmentShader, speed: 0.35, sizing: defaultPatternSizing, needsNoise: true, vig: 0.3,
+    u: { u_colorBack: c("#140c04"), ...palette(["#c4730b", "#bdad5f", "#d8ccc7"]), u_softness: 0.7, u_intensity: 0.15, u_noise: 0.5, u_shape: GrainGradientShapes.wave },
+    shot: `<div class="shot center"><p class="headline">Never explain yourself again.</p></div>`,
+    params: "grain gradient · wave · #C4730B #BDAD5F #D8CCC7 on #140C04 · softness 0.7 · intensity 0.15 · noise 0.5 · speed 0.35" },
+  { id: "opening", group: "moment", name: "Peach swirl", chip: "Playful",
+    why: "Wide soft bands turning slowly from one corner. Bright and friendly; for a playful brand's title cards, never under dense UI.",
+    shader: swirlFragmentShader, speed: 0.4, sizing: defaultObjectSizing, sizingOver: { offsetX: -0.4, offsetY: 1, scale: 1 },
+    u: { u_colorBack: c("#ff8b61"), ...palette(["#fefff0", "#ffd8bd", "#ff8b61"]), u_bandCount: 2, u_twist: 0.3, u_center: 0.2, u_proportion: 0.5, u_softness: 0, u_noiseFrequency: 0, u_noise: 0 },
+    shot: `<div class="shot bottom" style="color:#2a1308"><p class="headline">Notes that write back.</p></div>`,
+    params: "swirl · 2 bands · twist 0.3 · #FEFFF0 #FFD8BD #FF8B61 · speed 0.4" },
+  { id: "paper", group: "moment", name: "Paper mesh, light", chip: "Calm",
+    why: "A near-white field with cool and warm tints barely moving, for brands whose product is light. Dark text, a light card, a soft shadow.",
+    shader: meshGradientFragmentShader, speed: 0.12, sizing: defaultObjectSizing, grain: 0.05,
+    u: { ...palette(["#eef1f7", "#d6dff0", "#f3ece6", "#e3e8f2"]), u_distortion: 0.6, u_swirl: 0.2, u_grainMixer: 0, u_grainOverlay: 0 },
+    shot: `<div class="shot left" style="color:#141824"><p class="headline">Payments for the internet.</p></div>${card("#5a67f2", true)}`,
+    params: "mesh · #EEF1F7 #D6DFF0 #F3ECE6 · speed 0.12 · distortion 0.6 · swirl 0.2 · grain 5%" },
+];
+
+const picks = new Set((() => { try { return JSON.parse(localStorage.getItem("reel-picks") || "[]"); } catch { return []; } })());
+const pickText = document.getElementById("pickText");
+const showPicks = () => {
+  const names = looks.filter(l => picks.has(l.id)).map(l => l.name);
+  pickText.innerHTML = names.length ? `Picked: <strong>${names.join(", ")}</strong>` : "No picks yet. Press “Pick” under the looks you like.";
+  try { localStorage.setItem("reel-picks", JSON.stringify([...picks])); } catch {}
+};
+
+looks.forEach((look, index) => {
+  const fig = document.createElement("figure");
+  fig.innerHTML = `<div class="frame" style="--grain:${look.grain || 0};--vig:${look.vig || 0}"><div class="bg"></div><div class="grain"></div><div class="vignette"></div>${look.shot}</div>
+    <figcaption><div class="top"><span class="num">${String(index + 1).padStart(2, "0")}</span><span class="name">${look.name}</span><span class="chip ${look.chipClass || ""}">${look.chip}</span><span class="spacer"></span>
+    <button type="button" class="large">View large</button>${look.chipClass ? "" : `<button type="button" class="pick" aria-pressed="${picks.has(look.id)}">Pick</button>`}</div>
+    <p class="why">${look.why}</p><div class="params">${look.params}</div></figcaption>`;
+  document.getElementById(look.group).append(fig);
+  const frame = fig.querySelector(".frame"), bg = fig.querySelector(".bg");
+  if (look.flat) bg.style.background = look.flat;
+  else {
+    const u = { ...look.u, ...sizing(look.sizing, look.sizingOver) };
+    if (look.needsNoise) u.u_noiseTexture = noise;
+    new ShaderMount(bg, look.shader, u, undefined, reduce ? 0 : look.speed, 0, 1, 1600 * 900);
+  }
+  if (look.drift && !reduce) bg.animate([{ transform: "scale(1) translateX(0)" }, { transform: "scale(1.04) translateX(-2%)" }], { duration: 10000, direction: "alternate", iterations: Infinity, easing: "linear" });
+  fig.querySelector(".large").addEventListener("click", () => { frame.requestFullscreen?.().catch(() => {}); });
+  fig.querySelector(".pick")?.addEventListener("click", e => {
+    picks.has(look.id) ? picks.delete(look.id) : picks.add(look.id);
+    e.currentTarget.setAttribute("aria-pressed", picks.has(look.id));
+    showPicks();
+  });
+});
+showPicks();
+
+document.getElementById("copyPicks").addEventListener("click", async () => {
+  const text = "Background picks: " + (looks.filter(l => picks.has(l.id)).map((l, i) => `${l.name} (${l.id})`).join(", ") || "none");
+  try { await navigator.clipboard.writeText(text); pickText.textContent = "Copied. Paste it back into the chat."; }
+  catch { pickText.textContent = text; getSelection().selectAllChildren(pickText); }
+});
+document.getElementById("clearPicks").addEventListener("click", () => {
+  picks.clear(); document.querySelectorAll(".pick").forEach(b => b.setAttribute("aria-pressed", "false")); showPicks();
+});
+</script>

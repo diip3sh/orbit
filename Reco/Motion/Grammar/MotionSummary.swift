@@ -33,6 +33,9 @@ nonisolated struct MotionSummary: Encodable, Equatable, Sendable {
         var start: Double
         var duration: Double
         var seam: MotionSeam
+
+        /// What it's drawn over: its own field, or the canvas's.
+        var field: MotionField
         var shot: MotionShot?
         var layers: [Layer]
         var camera: [Move]
@@ -88,7 +91,7 @@ nonisolated struct MotionSummary: Encodable, Equatable, Sendable {
             var camera = MoveContext(sceneDuration: scene.duration, canvas: document.canvas.size)
             camera.lookAt = CGPoint(x: scene.camera.base(.positionX, canvas: document.canvas.size), y: scene.camera.base(.positionY, canvas: document.canvas.size))
             return Scene(
-                id: scene.id, start: start, duration: scene.duration, seam: scene.seam, shot: scene.shot,
+                id: scene.id, start: start, duration: scene.duration, seam: scene.seam, field: scene.field ?? document.canvas.field, shot: scene.shot,
                 layers: scene.layers.map { Self.layer($0, fromShot: shotIDs.contains($0.id), in: scene, canvas: document.canvas.size) },
                 camera: scene.camera.moves.map { Self.move($0, in: camera) }
             )

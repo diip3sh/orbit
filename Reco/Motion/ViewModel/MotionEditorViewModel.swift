@@ -79,9 +79,10 @@ final class MotionEditorViewModel {
     /// Plays `document` from `time`, capturing the UI its plan needs first.
     func preview(_ document: MotionDocument, at time: Double) async throws {
         let canvas = document.canvas
-        let plan = try await UICapture.plan(
+        var plan = try await UICapture.plan(
             for: document, bundle: bundleURL, shorterSide: min(min(canvas.size.width, canvas.size.height), Self.previewShorterSide)
         )
+        plan.isPreview = true
         let composition = try await MotionCompositionBuilder.composition(for: plan)
         try Task.checkCancellation()
         playback.load(

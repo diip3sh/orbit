@@ -1,0 +1,595 @@
+# Motion quality
+
+> Make the launch videos look made by a top motion designer, not generated. The current videos read
+> as AI-made for six reasons: flat look, fade-and-blur motion, system type, no brand assets, no sound,
+> and no direction. Fix them in that order: research is in the craft rules and the renderer, assets
+> come in through a tool, and direction comes from skill files the agent loads.
+
+## Why
+
+Spec 0011 phases 0–4 work end to end: from an address, the agent makes a 20–40 s motion video of the
+real UI with clean lint. The user's verdict on the Supabase, Cardboard and Linear videos (2026-10-07):
+"pretty basic… anybody can do these with Opus 5.5… nothing to wow about." Phases 5–7 (music, editing,
+formats) wait until this is fixed.
+
+Measured against the research below, the gap isn't the grammar's timing. It is everything around
+it. A Reco frame today:
+- **Flat look.** A solid near-black background with no light, no grain and no texture. Every
+  pixel is 8-bit with no dither.
+- **Template motion.**
+  - Entrances are fade-ups and blur-ins, the first tell on everyone's list.
+  - There is no motion blur, though spec 0011 promised a 180° shutter.
+  - There are no masks other than the text reveals, and no velocity-matched cuts.
+  - Every move eases out to rest the same way.
+- **System type.** SF Pro, New York or SF Mono in four weights, with fixed tracking, whatever
+  the brand.
+- **No brand assets.** The logo is whatever element can be lifted from the page. The agent
+  can't bring in a file: it has no download tool and no Write.
+- **No sound.**
+- **No direction.**
+  - The playbook goes research → script → shots in one pass.
+  - There is no arc, no chosen direction and no signature move.
+  - There is no time-coded storyboard and no review by an independent eye.
+
+## Expected outcome
+
+- Three products (supabase.com, cardboard.ai, linear.app) made from their address alone:
+  - **A blind side-by-side.** People shown one of these next to an official launch film of a
+    comparable product (Linear Diffs, Ask Attio, Raycast) at phone size don't reliably pick
+    which is ours (≤ 65% correct over 10 viewers).
+  - **No two alike.** The three videos differ in palette, type, motion register and signature
+    move.
+- Every video carries:
+  - the brand's real logo and typeface (or the closest open one);
+  - a lit, textured background derived from the brand's colours;
+  - masked reveals;
+  - motion blur at speed peaks;
+  - velocity-matched cuts;
+  - one hero moment;
+  - music and sound effects placed on the picture.
+- The agent works like a studio: brief → arc → three directions, kill two → storyboard → build →
+  critic → fix. The method lives in skill files the run loads, not in a growing prompt.
+- Still true: the agent names what happens and the grammar does the motion (spec 0011, *Taste in
+  the grammar*). Quality comes from a richer grammar and better direction, not from the agent
+  writing keyframes.
+
+## Research
+
+From the background research of 2026-10-07: four parallel reports on craft, launch films,
+other tools' skills and Reco's code. Tags:
+- **[P]** a primary source states the number.
+- **[S]** a secondary source.
+- **[U]** practitioner norm, a starting value to tune by eye.
+
+### What the admired films do
+
+| Film | What makes it |
+|---|---|
+| Linear Agent, Linear Diffs (2026) | Masked type "out from behind invisible edges, no scaling or blurring", long holds, slow drift over dark UI, shallow depth of field in macro shots, a match cut from issue to diff [S impractical.ai] |
+| Raycast "It's out", Cursor 2.0, Framer 3.0 | Hard cuts on the beat, punch-ins isolating one control, zoom-throughs *through* panels, "fast attack, long high-friction tail" [S] |
+| Ask Attio, Dia | Typed query, 2.5D drift over layered dark UI, stark statements by masked reveal [S] |
+| Figma Config 2025 (Relay) | Deliberately 15 fps for a handmade feel; a brand motion library with "expressive" and "functional" type [P figma.com blog] |
+| Vercel Ship 2025 (basement) | Animated "on twos", EXR passes, graded in Resolve [P basement.studio] |
+| Apple "Power to the Pro" (BUCK) | 250 frames, each a finished style frame before anything moved [P buck.co] |
+
+Common to all of them:
+- Real UI is the hero, with no abstract AI metaphors.
+- Type does the narration; there is no voiceover.
+- Easing is a fast attack with a long tail, and nothing bounces.
+- Two editing modes: snappy (cuts on the beat, punch-ins) and calm (masked type, holds, drift).
+  Spec 0011 measured the same split.
+
+### The tells of AI motion (and the fix)
+
+| Tell | Studio fix |
+|---|---|
+| Every element fades up 20–40 px and blurs in | Masks: text rises 100–110% of its line height from behind a hard edge, no opacity [U]; blur-in only with a 105–110% → 100% scale settle |
+| One ease on everything, settling in ~20 frames | Registers per brand; premium settles take 30–33 frames at 30 fps, the last 5% of travel a third of the time [S launch-video-clone] |
+| Lockstep groups, constant stagger | Eased stagger: the offsets shrink (×0.84 per item, HyperFrames waterfall) |
+| Shots ease in from rest after a cut | Cut in already moving; the speed matches across the cut ("cut-the-curve": ±230 px on power4 either side ≈ 3,070 px/s) [S HyperFrames] |
+| No motion blur; teleporting moves | 180° shutter; 270–360° or 40–80 px directional blur only in the middle frames of a whip [U] |
+| Crossfades between busy UI | Hard cut, camera move or shared-element morph; crossfades ≤ 8 frames [U] |
+| Flat #0B0B0F or purple-blue gradient | Brand-derived OKLCH field: 2–3 stops within 60° of hue, lightness spread ≤ 25, chroma under the accent, off-centre light, vignette 10–25% [U]; tint neutrals to the brand [S HyperFrames] |
+| Banding | Grain at the threshold of notice ("if you notice it, halve it") [P instantgradient]; re-seeded at 12 Hz, not per frame (per-frame grain took the file from 9 to 85 MB) [S AbubakrChan] |
+| Glow on everything, sheen spilling past corners | Bloom only on the top 5–10% of luminance, ≤ 2–3% of the frame height; one glint per shot, on the hero, clipped to its radius [S video-shotcraft Q4] |
+| System or "safe" fonts | The brand's face (OFL or first-party), or its closest open match |
+| Invented labels, generated logos | Real files only: the site's header SVG, `favicon.svg`, `apple-touch-icon`, press kit; never drawn [S launch-video-clone, 30x-video] |
+| Constant shot lengths, slideshow (front-load then freeze), screensaver (everything drifting) | Long-short-short-long rhythm; reveals spread into the back half; one hero moment at 60–75% then 1–2 s of stillness [U] |
+| Camera shake, whole-frame slam on every beat | No shake on UI; ≤ 3 whole-frame impacts per film, ≥ 16 beats apart [S video-shotcraft R4] |
+| No self-review | A clean-context critic looks at frames with frame numbers [S video-shotcraft, EveryInc] |
+| Same look for every brand | Three written directions, two killed, one signature move from a brand asset [S AbubakrChan] |
+
+### Craft numbers
+
+| Parameter | Value | Source |
+|---|---|---|
+| Productive (UI beats) | cubic-bezier(0.2, 0, 0.38, 0.9) | IBM Carbon [P] |
+| Expressive entrance (hero) | (0, 0, 0.3, 1) | Carbon [P] |
+| Emphasized decelerate | (0.05, 0.7, 0.1, 1) | Material 3 [P] |
+| Exit | (0.4, 0.14, 1, 1); ~15% shorter than its entrance | Carbon [P], Material [P] |
+| Spring bounce | 0 by default; 0.15 barely felt; ≤ 0.3 only for things arriving with momentum | WWDC23 [P] |
+| Overshoot | 5–10% of travel, once, then settled; never on fades or text | [S], [U] |
+| Anticipation | 2–4 frames, 2–5% of travel, once or twice per film | [U] |
+| Follow-through | Content lands 1–3 frames after its container | [U], launch-video-clone measured ~1 frame |
+| Stagger | 2–4 frames, eased, spread ≤ 40% of the move | Jitter [P], [U] |
+| Shutter | 180°; whips 270–360° | AE default [P] |
+| Whip pan | 10 frames, 5 either side of the cut, blur peaking at the cut | [S photofocus] |
+| Zoom-through | Out 1→1.2, blur 10 px (text) / 18–20 (surfaces), 0.2 s power3.in; cut at peak; in from 0.75, expo.out 0.5 s; the inverse (0.8 / 1.25) for arrivals | HyperFrames cut catalog [S] |
+| Line mask | 12–18 frames a line at 30 fps, lines 3–5 frames apart, no fade | [U] |
+| Tracking breathe | +10–20% → 0 over 1–2 s, or +2–5% drift across a hold | [U] |
+| Read text | ≥ 5.2% of frame height (56 px at 1080p); text is either read or texture, never between | video-shotcraft Q11 [S] |
+| Reading rate | ≤ 17 characters/s, ≥ 20 frames per text | Netflix [P] |
+| Parallax | Background 0.2–0.4×, hero 1×, foreground 1.3–2×; ≤ 3 planes | [U] |
+| UI tilt | rotateX 10–25°, Y/Z ±5–15°; > 30° only while moving; dense information seen straight on | [U], video-shotcraft Q6 |
+| Lifts | ≥ 2× the shown size; never past 1:1 without a sharper capture; depth of field never hides soft text | HyperFrames, video-shotcraft Q2 [S] |
+| Grain | 2–6% luminance, monochrome, 1–1.5 px at 1080p | [U] |
+| Chromatic aberration | ≤ 1–2 px at the corners, or only on whip frames; never uniform | [S], [U] |
+| Beat | frames = 60 × fps / BPM; cut 1–2 frames before the transient | [S], [U] |
+| SFX | whoosh peaks at the move's speed peak; alternate two samples, stepping down 0.40 → 0.25; compensate AAC priming (~1.3 frames at 30 fps) | video-shotcraft S1–S5 [S] |
+
+Brand → motion register:
+- **Precise or technical** (Linear, Vercel, Supabase):
+  - expo/quint-out, 10–18 frames, no overshoot
+  - cuts and push-throughs, mono typing
+  - hairline grids, almost no grain, no glow
+- **Premium or calm** (Apple, Stripe):
+  - long tails, 20–36 frames, long holds
+  - dolly with depth of field, match cuts, tracking-out type
+  - soft fields, grain, one light sweep
+- **Playful** (Notion, consumer):
+  - spring bounce 0.2–0.35
+  - pops from 80–90%, never from 0
+  - brand-shape wipes, saturated palette
+- **Bold** (launch hype):
+  - expo in-out, whips of 8–10 frames with a long shutter
+  - big type crops, cuts locked to the music
+
+How studios derive the register:
+1. Pick three adjectives.
+2. Give each a speed, a curve, a shape vocabulary and a transition family.
+3. Make a signature move from a brand asset: the logo's geometry as the wipe, the corner radius as
+   the mask, the accent as the sweep.
+4. Ban whatever contradicts the adjectives.
+
+### How the best agent skills are organised
+
+| Skill | Structure worth taking |
+|---|---|
+| HyperFrames `product-launch-video` (Apache-2.0) | Capture → design system → story (one arc: PAS, demo loop, before-after-bridge, feature-benefit cascade; each beat tagged with a persuasion move and an emotion) → time-coded shots → build → finalize. A `## Video direction` block written once (palette, motion grammar, holds, negative list); shots hold only deltas. Names both failure modes: *slideshow* and *screensaver* |
+| video-shotcraft | Styleframe before storyboard. One technique per shot; each technique is the hero only once per film. Err slower ("every note said slow down"). A clean-context subagent reviews with frame numbers |
+| launch-video-clone | Measures a reference film and grades the render against its curves. A logo source order. "Out of the box, Opus 5.5 makes the generic AI motion look" |
+| AbubakrChan/product-launch-motion | "No house style: write three directions, kill two, keep a signature move"; the accent rationed on a written budget; re-render to a new file after each critique |
+| EveryInc/product-launch-video | Four parallel critics (layout, readability, pacing, brand) on ~20 rendered frames |
+| 30x-video | "Scrape first, design second"; an asset audit records every file as USE or SKIP before any shot uses it |
+
+### Assets and licensing
+
+- **Logo.** In order:
+  1. inline SVG inside `header`/`nav`/`[role=banner]` (found structurally: class names caught 0
+     of 32 on heygen.com);
+  2. `favicon.svg`;
+  3. `apple-touch-icon`;
+  4. press kit;
+  5. simple-icons (CC0 data, the trademark still the owner's).
+
+  Two services are out:
+  - Brandfetch's Logo API requires hotlinking and forbids downloading, so it can't feed a stored
+    bundle.
+  - Clearbit's API shut down on 2025-12-08.
+- **Fonts.**
+  - Google Fonts are OFL: fine to render into video, fetched from `github.com/google/fonts`.
+  - A site's own `@font-face` file is usually web-licensed, and video needs another licence. So
+    use it only when the user owns the brand (they say so in the bar), else the closest OFL face.
+- **Images and video.** The site's own `og:image`, hero images and `<video>`s are first-party.
+  Unsplash and Pexels require hotlinking plus attribution: out.
+- **Icons.** Lucide (ISC), Phosphor (MIT).
+- **Music and SFX.**
+  - Pixabay bans commercial use of content showing trademarks, and some of its tracks raise
+    Content ID claims.
+  - Uppbeat's free tier excludes advertising.
+  - Kenney SFX are CC0.
+
+  So we bundle a small CC0 SFX set, take music from the user (a file) or a source whose licence
+  covers ads, decided in the Q5 open question.
+
+### Agent wiring (verified 2026-10-07)
+
+- `--tools WebSearch,WebFetch` hides the Skill tool: a headless run with a skill in
+  `AgentRun/.claude/skills` said "I don't have a Skill tool".
+- With `--tools WebSearch,WebFetch,Skill,Read --allowedTools … Skill "Read(./.claude/skills/**)"`
+  the same run used the skill and read a file next to it.
+- `--setting-sources project` is meant to keep the user's own skills and settings out. The run
+  listed only Claude Code's bundled skills besides ours; still to confirm with a personal skill
+  present.
+- The scoped Read limits reading to our skill files, so the run still can't read the user's disk.
+- WebFetch can't save bytes. Downloading is a Reco MCP tool (`fetch_asset`) that writes into the
+  bundle, not Bash or Write.
+
+### What Reco can't express today (audit)
+
+- **Fills.** No gradients anywhere (shape, text or background).
+- **Shapes.** Only a filled rounded rectangle: no ellipse, path, stroke or SVG.
+- **Compositing.** No masks or mattes between layers, no blend modes.
+- **Effects.**
+  - No bloom, grain, vignette, grade, light sweep or chromatic aberration.
+  - No motion blur.
+  - Shadows are black and fall straight down.
+- **Type.**
+  - No font files and no family field; four weights.
+  - Tracking is fixed at −1.2% and isn't animatable.
+  - No colour animation.
+- **Moves.** No easing on moves: only hand keyframes take one. A spring has no bounce.
+- **Assets and sound.**
+  - No way for the agent to add a file.
+  - No image or video layer besides lifted UI.
+  - No audio.
+- **Output.** 8-bit BGRA with no dither, so dark gradients will band.
+
+## Approach
+
+Six phases, ordered by what moves the verdict most per effort. Each ends with the three sites
+re-run from their address and the frames compared with the previous round's (kept in
+`~/Movies/Reco/quality/<phase>/`).
+
+| Phase | Size | Status |
+|---|---|---|
+| Q1 - Assets: `fetch_asset`, logos, fonts, images | M | Todo |
+| Q2 - Look: fields, light, grain, 10-bit | M | Fields picked; build todo |
+| Q3 - Motion: reel, rhythm, camera, blur, masks, registers, seams | L | Todo |
+| Q4 - Direction: skill files, storyboard, critic | M | Todo |
+| Q5 - Sound: SFX and music on the picture | M | Todo (absorbs 0011 phase 5) |
+| Q6 - New shots and the blind test | M | Todo |
+
+**Order of work:**
+1. The Q3 motion reel, so the user picks transitions and motion before any of it is built.
+2. Q2 (the fields are picked).
+3. Q3.
+4. Q1 and Q4 together: the skills are text, and they name what Q2 and Q3 built.
+5. Q5.
+6. Q6.
+
+**Progress log** (newest last; resume from the last line after a compact):
+- 2026-10-07: started step 1, the motion reel (`docs/references/motion-reel/reel.html`).
+- 2026-10-07: reel published: `claude.ai/artifact/FpneBQ15gRrmfMxJfzUUid`, source
+  `docs/references/motion-reel/reel.html`.
+  - 39 live frames: 12 transitions, 14 text reveals, 5 registers, 6 camera moves, 2 rhythms.
+  - Each row pairs one of Reco's moves today, with its real timings from `MoveExpansion`,
+    `SeamExpansion` and `ShotLayout`, against the proposal.
+  - Checked headless at several times with no script errors.
+  - Waiting for the user's picks; record them here.
+- 2026-10-07: what today's videos do (read from the five `.motion` bundles in `~/Movies/Reco`).
+  - Scenes run 2.5–4.5 s, except a feature sequence of 10–15 s.
+  - Most seams are hard cuts. A zoom-through follows the hook; there is sometimes one cut on
+    motion, and a fade into the end card.
+  - Every shot drifts at 2% of the width a second, capped at 4% per scene, so 1% a second in a
+    4 s scene.
+  - Cut on motion carries only that drift speed, so it plays as a plain cut.
+  - This is why "everything moves at the same speed": nothing in the grammar is ever fast. The
+    seams already exist; what's missing is speed contrast, motion blur and masks.
+  - Next: Q2 while the picks come in.
+- 2026-10-07: the user's picks from the reel. They now define Q3's scope; see *Q3 - Motion*,
+  *Picks*.
+- 2026-10-07: Q2.1 (the four fields) done; see *Q2 - Look*, *Steps*. A real-content check
+  showed the fields need placing around the type: next is Q2.1b, then Q2.2.
+
+### Q1 - Assets (M)
+
+- **`fetch_asset(bundle, url, kind)`**, an MCP tool. `kind` is logo, font, image or video. It
+  downloads into `assets/fetched/` and replies with the stored path, size, format and the
+  licence note it applied.
+  - Only `https`. ≤ 50 MB. One redirect chain, no `file:`.
+  - Content sniffed, so the extension can't lie.
+  - Fonts only from `fonts.gstatic.com` / `github.com/google/fonts`, or the product's own site
+    when the brand is the user's.
+- **`inspect_page` → `brand`** gains `logos` (structural header/nav SVGs, ranked favicons,
+  `apple-touch-icon`, `og:image`), `fonts` (the computed families of the headline and body, their
+  `@font-face` sources) and `media` (hero `<video>` and image sources). The agent fetches from
+  this list, not from a search.
+- **SVG** is drawn by WebKit at the scale shown (the lift path: one page, snapshot with alpha), so
+  logos stay sharp at any zoom.
+- **Fonts.** `TextContent.font` names a font asset. It is registered for the process with
+  `CTFontManagerRegisterFontURLs` (`.process` scope) when a plan is built. The face falls back to
+  `face` if it fails.
+  - Weights 100–900.
+  - Tracking and line height become fields.
+- **Image and video layers.** An image layer takes any fetched file. A `video` layer plays a
+  fetched clip, muted, on the scene's clock: the live-take track, without a page.
+- **Asset audit.** `edit_motion` lists every asset with whether a scene uses it. The skill makes
+  the agent record USE or SKIP with a reason before writing scenes.
+- **Done when:** the three sites' end cards carry their real logos (SVG for Supabase and Linear),
+  their headlines are set in the brand face or its named OFL substitute, and no file outside the
+  bundle was written.
+
+### Q2 - Look (M)
+
+- **Steps.** Built and verified one at a time; each ends with the tests passing and lint clean.
+  1. **Q2.1 Fields: done (2026-10-07).**
+     - `canvas.field` and `scene.field` (`ember`, `matrix`, `halo`, `sunlit`, `plain`).
+     - `set_canvas` and `set_scene` take it; `edit_motion`'s reply gives each scene's field.
+     - The Scene inspector has a Field picker.
+     - `FieldPalette` derives the colours from `style.accent` (see *Built* below).
+     - Each scene draws its own field under its layers, on the video's clock.
+  2. **Q2.1b Field placement (next).** A real check (a copy of the Supabase video with `matrix`,
+     and `halo` on its end card, rendered through the plan;
+     `scratchpad/supabase-fields.png`) drew right, but composed badly:
+     - matrix's lit sphere sits dead centre, right behind the hook's and title's centred headlines,
+       so the type reads busy;
+     - halo's smoke covers the end card's name. The tile picked had the logo inside the ring and
+       the name below it.
+
+     To build:
+     - the end card on `halo`: the logo inside the ring, the name and detail below it, as picked;
+     - a field's lit mass kept off the text: the sphere moves to a side when the shot's text is
+       centred;
+     - a design check for text whose contrast against the field under it falls below 4.5:1.
+  3. **Q2.2 Grain and vignette:** a whole-frame pass after everything, so grain sits on the UI too.
+  4. **Q2.3 Grade and bloom.**
+  5. **Q2.4 Half-float frames, dither to 8-bit, 10-bit HEVC and ProRes,** and the banding check.
+  6. **Q2.5 Light:** coloured, offset shadows; rim; the `sweep` move.
+  7. **Q2.6 Gradient fills** on shapes and text, and the gradient-headline lint.
+- **Built (Q2.1).**
+  - **Kernels.** `Reco/Motion/Render/FieldKernels.metal.txt` holds the GLSL ported to Core Image
+    stitchable kernels; `FieldRenderer` draws them.
+    - They're compiled at run time by the system's Metal compiler, about 8 ms once. Xcode 26
+      builds `.metal` files only with a separately downloaded Metal Toolchain, which every builder
+      and CI would need.
+    - Each kernel is compiled alone. Compiled together, Core Image drew only whichever sampling
+      kernel it drew first; the other came out transparent (macOS 26.5).
+  - **Fidelity.** Each look is drawn as the 1280×720 gallery tile it was picked on, at a pixel
+    ratio of 2, scaled to the frame.
+    - Against Paper Shaders' WebGL at u_time 4 and 1280×720: ember 50.8 dB, matrix 72.0, halo
+      64.8, sunlit 56.3, with mean differences of at most 0.15 code values.
+    - The grain gradient's `fwidth` is taken as a GPU does, to the other pixel of the 2×2 quad.
+      Forward differences everywhere gave 27–33 dB: the same grain, different speckles.
+  - **Colours.** Each stop keeps its picked OKLCH lightness and its hue offset from the lead. The
+    lead takes the brand's hue, and its chroma up to the picked one's. A brand with chroma under
+    0.03 gets cool greys.
+  - **Cost** (M5, Debug, p50):
+
+    | Field | 1080p whole | 1080p preview | 4K export |
+    |---|---|---|---|
+    | ember | 2.7–4.1 ms | 1.5 ms | 9.8 ms |
+    | halo | 3.0 ms | 1.6 ms | 11.1 ms |
+    | sunlit | 2.6 ms | 1.4 ms | 9.7 ms |
+    | matrix | 0.35 ms | 0.3 ms | 0.65 ms |
+
+    The preview (`MotionPlan.isPreview`) draws the soft looks at most at 720p and scales them up;
+    exports draw them whole, for crisp grain. Matrix is always drawn whole.
+  - **Push seam.** A push now moves whole frames, each with its own field. Before, a scene's UI
+    wider than the frame showed through the incoming scene's empty background (golden
+    `motion-grammar-12100` redrawn).
+- **Fields picked (2026-10-07).** Source, settings and porting notes: `docs/references/paper-shaders/`. Picked from a live gallery of 12 (`gallery.html` there), these
+  [Paper Shaders](https://github.com/paper-design/shaders) 0.0.81 looks (Apache-2.0: keep its NOTICE in
+  the app's acknowledgements), ported from their GLSL to Metal kernels for Core Image:
+
+  | Field | Shader and settings | Use |
+  |---|---|---|
+  | `ember` | grain gradient, corners; three shades of the brand hue on #050405; softness 0.6, intensity 0.35, noise 0.3, speed 0.4 | Bold brands; type in the dark gap |
+  | `matrix` | dithering, sphere, 4×4 ordered, 2 px; the brand hue on near-black; speed 0.35 | Technical brands (databases, APIs, dev tools) |
+  | `halo` | smoke ring; white and the brand hue on black; radius 0.3, thickness 0.65, noise 3 × 8, speed 0.3 | The end card's logo moment |
+  | `sunlit` | grain gradient, wave; three warm tones of the brand on a dark ground; softness 0.7, intensity 0.15, noise 0.5, speed 0.35 | Calm or playful title cards |
+
+  Not picked: ink mesh, light from above, neural glow, dot grid, peach swirl, light paper mesh.
+  Frames are deterministic (`time = frame / fps`), so preview and export match; the shader's own
+  noise texture goes into the app as a resource.
+- **Background field.** `canvas.background` can be a field instead of a colour:
+  - 2–4 colour points, interpolated in OKLab, drifting ≤ 5% of the frame per 10 s;
+  - a light (position, radius, intensity) and a vignette.
+  - Derived from `brand` by rule: neutrals tinted toward the brand hue, chroma under the
+    accent, lightness spread ≤ 25. The agent picks a field by name (`ember`, `matrix`, `halo`,
+    `sunlit`, or a plain colour), never numbers.
+- **Gradient fills** on shapes and text (linear, radial). Lint flags gradient text in a headline:
+  a tell.
+- **Light.**
+  - Shadows get colour and an x offset.
+  - A `rim` light on a UI plane: a thin edge highlight that follows its tilt.
+  - A `sweep` move: one specular band crossing a layer once, clipped to its shape, additive
+    ≤ 40%. Lint: one sweep per scene, three per film.
+- **Bloom.** Thresholded at the top ~8% of luminance, radius ≤ 2.5% of the height, on the
+  whole frame.
+- **Grade.** One per document: lifted blacks, a slight tint toward the brand, saturation held
+  under the accent.
+- **Grain.** Monochrome, about 4%, re-seeded at 12 Hz, applied after the grade.
+- **Pipeline.**
+  - Frames drawn in half-float (the HDR compositor's path).
+  - Dithered to 8-bit for H.264.
+  - 10-bit for HEVC and ProRes, so dark fields don't band.
+- **Design check** adds banding (steps wider than 4 px in a smooth field) and bloom clipping.
+- **Done when:**
+  - The three sites' frames show no banding at 4K H.264 and 1080p HEVC (measured: no luma step
+    over 1 code value across 8 px in the field).
+  - Mean luma stays in the measured 12–24 band.
+  - A 4K frame with field, bloom, grade and grain renders within the 8 ms preview budget at
+    display size (exports may take longer).
+
+### Q3 - Motion (L)
+
+- **Picks (2026-10-07).** Picked from the motion reel (`docs/references/motion-reel/reel.html`,
+  the ids below are its frames'). Q3 builds these and only these; where a bullet below names
+  something not picked, the picks win.
+  - **Seams:**
+    - `morph`: shared element; the card flies, grows and straightens into the next shot's panel;
+      0.65 s on (0.2, 0, 0, 1); the panel's rows follow 2 frames apart, ×0.84.
+    - `inverseZoomThrough`: out 1 → 0.8 power3.in 0.2 s, in 1.25 → 1 expo.out 0.5 s, blur 10 px.
+    - `matchCut`: the camera dives 4× into a named layer and comes out of the next scene's at the
+      same place and size; speeds matched across the cut.
+    - `shapeWipe`: the next scene grows from a rounded square with the brand's corner radius,
+      expo.in-out 0.8 s, settling from 108%.
+  - **Text:**
+    - `blurWipe` stays the default headline reveal for sans faces. Mask rise is not adopted.
+    - `type` gets a human pace (55 ms ± 25 ms a key) and a caret that blinks at rest.
+    - `roll` becomes masked: in from below, out above, no fade, every 0.75 s.
+  - **Camera:** `punchIn`: to 3.2× on one control in 0.32 s expo.in-out, creeping 4%, then a hard
+    cut back wide.
+  - **Rhythm:** both picked. Today's even pacing and the energy curve are both offered;
+    the brand or the storyboard chooses between them, so the energy curve is not forced on every
+    video.
+  - **Not picked:**
+    - seams: cut the curve, whip, masked push, nor today's crossfade, blur cut, push, zoom-through
+      or cut on motion;
+    - text: mask rise, per character, masked word by word, rise and settle, tracking breathe;
+    - camera: parallax truck, push with orbit, rack focus, nor today's drift or push;
+    - registers: none of the four.
+
+    Today's unpicked moves stay in the grammar until replaced; the new ones above are what Q3
+    adds.
+  - **Open:** were the registers rejected, or just not chosen yet? Until the user says, Q3 doesn't
+    build `style.motion`.
+- **Motion reel first.** Done (see the progress log). Before building, a live gallery like the backgrounds' one (HTML and
+  WebGL, the same UI card and headline in every frame), so the user picks by eye. Picks are
+  recorded here, with their source saved in `docs/references/`.
+  - **Transitions:** cut-the-curve, whip, zoom-through and its inverse, match cut, shape wipe in
+    the brand radius, mask reveal, plus today's fade and blur cut for comparison.
+  - **Text reveals:** maskRise, per-character, tracking breathe, scale settle, typing, roll,
+    against today's blur-in.
+  - **Registers:** the same 6 s shot played precise, calm, playful and bold.
+  - **Camera:** drift, push, orbit with parallax, rack focus, punch-in.
+  - **Rhythm:** one 15 s sequence paced flat, as today, against paced with an energy curve.
+- **Rhythm.** Today every move and scene runs at about the same speed, so nothing lands.
+  - The storyboard gives each beat an energy level from 1 to 5, along a curve:
+    1. a calm open;
+    2. rising through the features;
+    3. the hero at 60–75%, fastest and biggest;
+    4. 1–2 s of stillness;
+    5. a calm end card.
+  - Energy sets the scene's length, its moves' speed (duration scale 0.6–1.5×), its seam (cuts
+    and whips when high, match cuts and drifts when low) and whether the camera moves.
+  - Moves inside a shot contrast too:
+    - a fast attack with a long tail;
+    - one element fast and the rest following;
+    - holds where nothing moves.
+  - Lint: the fastest beat must be at least 3× the slowest in move speed, as scene length
+    already is.
+- **Camera.** It moves for a reason and carries energy between shots.
+  - Up to 3 planes at parallax 0.3×, 1× and 1.5×.
+  - An orbit of 3–8° yaw while pushing, never a pure straight push.
+  - A rack focus over 12–20 frames.
+  - A punch-in to one control.
+  - Velocity carried across cuts.
+  - No shake on UI.
+- **Motion blur.**
+  - 180° shutter per layer and camera, sampled across the shutter as the editor does
+    (`blurOffsets`): 8 samples in the preview, 16 in export.
+  - Only frames with speed get sampled, so still frames cost nothing.
+  - Whip seams use 300°.
+- **Masks.**
+  - A layer can be masked by another layer's shape or alpha (`matte: <layer id>`,
+    alpha or inverted).
+  - A group can clip its children to its bounds.
+  - From these come the reveals:
+    - `maskRise`: text or UI rising from behind an edge, no fade. It becomes the default
+      headline reveal for sans faces, replacing `blurWipe` as the default.
+    - `shapeWipe`: the brand's corner radius growing to reveal the next layer.
+    - Type through a UI card.
+- **Registers.**
+  - `style.motion` is `precise | calm | playful | bold`, set from the brand, never per move.
+  - It picks:
+    - the enter, exit and move curves (the Carbon and Material values above);
+    - the duration scale;
+    - the stagger curve;
+    - whether a single overshoot is allowed on arrivals with momentum (`playful`, `bold`
+      only, bounce ≤ 0.3).
+  - Moves keep their names. Their timings come from the register, so two brands don't move
+    alike.
+- **Settles and staggers.**
+  - Scale settles in log-quartic over 30–33 frames at 30 fps (`calm`, `precise`), 18–24
+    (`bold`).
+  - Staggers shrink ×0.84 per item.
+  - Containers lead their content by 1–2 frames (follow-through).
+- **Seams.**
+  - `cutOnMotion` becomes "cut-the-curve": the outgoing shot accelerates on power4.in and the
+    incoming one starts at the same speed and direction.
+  - `whip`: 10 frames, a long shutter at the cut.
+  - `inverseZoomThrough` for arrivals.
+  - `matchCut`: the next scene's named layer starts where the previous scene's named layer
+    ended, in position and scale.
+  - `fade` is limited to 8 frames between UI scenes.
+- **Type moves.**
+  - `track` (tracking from +15% to 0, or a slow +3% drift through a hold).
+  - `settle` (from 108% with a mask).
+  - `weight` (variable axis, for fonts that have one).
+  - `crop`: a huge word at 2–4× the frame width, panning slowly, used as texture.
+- **Lint additions:**
+  - every element entering within 2 frames of another;
+  - all shots the same length (±15%);
+  - an overshoot outside `playful`/`bold`;
+  - a fade between UI scenes > 8 frames;
+  - text shown under chars/17 + 0.5 s or under 20 frames;
+  - more than one sweep per scene;
+  - no hold of ≥ 1 s after the hero;
+  - a scene whose reveals all fall in its first quarter (slideshow);
+  - every layer drifting (screensaver).
+- **Done when:**
+  - A frame-by-frame measurement of the rebuilt Linear Agent recreation (spec 0011 phase 0)
+    matches the reference's move curve with correlation ≥ 0.95, the launch-video-clone test.
+  - The cut speed across seams matches within 10%.
+  - Golden frames cover each new seam and reveal.
+
+### Q4 - Direction (M)
+
+- **Skills.** Shipped in the app (`Reco/AgentRecording/Skills/`) and copied into
+  `AgentRun/.claude/skills/` before each run, like `reco-mcp.json`. The run gets
+  `--tools WebSearch,WebFetch,Skill,Read`, `--allowedTools … Skill "Read(./.claude/skills/**)"`
+  and `--setting-sources project`.
+
+  | Skill | What it holds |
+  |---|---|
+  | `launch-director` | The method: brief and one promise → pick one arc (PAS, demo loop, before-after-bridge, feature-benefit cascade) → beats with a persuasion move and an emotion → three directions in a sentence each, kill two, keep a signature move → `## Video direction` block (palette, register, type, holds, negative list) → time-coded storyboard → build with `edit_motion` → critic → fix once → export |
+  | `motion-craft` | The craft numbers and tells above, as rules with reasons; which reveal, seam and shot fits which beat; err slower |
+  | `brand-motion` | Attributes → register, field preset, type treatment and signature move; worked examples for a technical, a calm and a playful brand |
+  | `brand-assets` | Where logos, fonts and media come from, in order; the licence rules; the USE/SKIP audit |
+  | `critic` | How to read a contact sheet: frame-numbered findings against the tells list, legibility (5.2% height), one hero, rhythm, brand fit. Run as a second, clean-context `claude -p` by Reco after the first preview: it sees only the sheet, the storyboard and the skill, and returns findings the first run then fixes |
+
+- **Playbook.** The launch playbook shrinks to pointing at `launch-director`. `edit_motion`'s
+  description keeps the grammar reference.
+- **Storyboard.** The run writes it into the bundle (`storyboard.md`, through `edit_motion`'s
+  new `set_notes`). It shows in the chat, so a person sees the plan the video was built from.
+- **Done when:**
+  - Each of the three runs leaves a storyboard with an arc, three directions and a signature
+    move, and a critic pass whose findings were fixed.
+  - The three videos differ in register and field preset.
+  - Run time stays under 8 minutes.
+
+### Q5 - Sound (M)
+
+- **SFX.** A bundled CC0 set (Kenney, about 40 files: whooshes, ticks, impacts, risers, keys),
+  placed by rule:
+  - whooshes peak at a move's speed peak;
+  - clicks land on the press frame;
+  - typing gets keys;
+  - repeats alternate between two samples and step down in volume;
+  - AAC priming is compensated.
+- **Music.** A file the user drops in, or none. Spec 0011 phase 5's onset and beat tracking moves
+  here. Snapping seams 1–2 frames before beats is per document.
+- **Mix.** Loudness to −14 LUFS integrated.
+- **Done when:** sounds land within 1 frame of their events in the exported file (measured), and
+  the mix measures −14 ± 1 LUFS.
+
+### Q6 - New shots and the blind test (M)
+
+- **New shots:**
+  - `punchIn`: one control at 3–6×, lifted at that scale, depth of field on the rest.
+  - `heroReveal`: the 60–75% moment; a full action arc of spotlight → push → rim light →
+    settle, then stillness.
+  - `bigType`: a statement set huge, masked, cropped.
+  - `stat`: a counter that counts.
+  - `finale`: earlier elements land in place around the wordmark.
+- **The blind test** from *Expected outcome*, with the scores recorded here.
+
+## Risks
+
+- **More knobs, more ways to look generated.** The register, field presets and lint keep choices
+  few. The agent never sets a curve or a colour stop.
+- **Render time.** Motion blur, bloom and grain are per frame. The preview may drop to half
+  resolution during playback; exports are offline.
+- **Licences.** Fonts and logos follow the rules above. When in doubt, use the OFL substitute and
+  the site's own files.
+- **Critic cost.** A second run adds about 1 minute. It is skipped on chat edits.
+
+## Open questions
+
+1. Music: user file only, or a licensed library through an API (Artlist, Epidemic) at the
+   user's cost?
+2. Should the bar ask "is this your brand?" so the site's own font and media can be used directly?
+3. Animating on twos (12 fps characters over 24/60 fps camera), as Config and Vercel did: a
+   `cadence` per register, or not at all?

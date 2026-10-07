@@ -47,6 +47,9 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   macOS forgets the Screen Recording permission and prompts forever. If a permission gets stuck:
   `tccutil reset ScreenCapture com.diip3sh.Reco`, then relaunch.
 - New `.swift` files need no pbxproj edit (file-system synchronized groups).
+- Don't add `.metal` files: Xcode 26 builds them only with the separately downloaded Metal Toolchain,
+  which every builder and CI would need. Core Image kernels are `.metal.txt` resources compiled at run
+  time (`FieldRenderer`).
 - Don't call an ObjC API whose completion handler is `() -> Void` through Swift's async import
   (`await writer.finishWriting()`). `AVAssetExportSession.export(to:as:)` is back-deployed below
   macOS 26, so its body is compiled into the app with a same-named but incompatible thunk, and the
@@ -925,6 +928,32 @@ Key facts:
 - One capture at a time (`UICapture.isCapturing`): two at once made the WebKit GPU process quit.
 - `AgentProcess` reads pipes with `read(2)`; `availableData` threw on a non-blocking pipe and crashed the app.
 
+### S7 — Motion quality, Q2.1: fields (`remotion`, spec 0012)
+
+A scene can be drawn over a lit, textured field instead of the plain background: `canvas.field` for the
+video, `scene.field` for one scene (`ember`, `matrix`, `halo`, `sunlit`, `plain`), coloured from
+`style.accent` by rule. The four looks were picked by eye from a gallery of Paper Shaders
+(Apache-2.0; its NOTICE is in Settings → About, its licence in the bundle).
+
+| File | Role |
+|---|---|
+| `Motion/Model/MotionField.swift`, `OKLCH.swift` | The names; OKLCH to and from sRGB, gamut-mapped by chroma |
+| `Motion/Render/FieldPalette.swift` | A field's colours from the brand: the picked lightness steps and hue offsets, the brand's hue, its chroma up to the picked one's; cool greys without a hue |
+| `Motion/Render/FieldKernels.metal.txt`, `FieldNoise.png` | The GLSL ported to Core Image stitchable kernels, and the shaders' noise texture |
+| `Motion/Render/FieldRenderer.swift` | Compiles each kernel alone at run time and draws a field at a time and size |
+| `Motion/Render/MotionFrameRenderer.swift` | Each scene's layers over its own field, on the video's clock |
+
+Key facts:
+- A field is drawn as the 1280×720 gallery tile it was picked on (pixel ratio 2), scaled to the frame.
+  Against the WebGL originals at u_time 4: 50.8–72.0 dB PSNR. The grain gradient's `fwidth` is taken
+  to the other pixel of the 2×2 quad as a GPU does; forward differences gave 27–33 dB.
+- Compiled together, Core Image drew only the first sampling kernel it drew; the other came out
+  transparent (macOS 26.5). Each kernel is compiled alone (`#define <name>_ONLY`).
+- Cost (M5, Debug, 1080p p50): ember 2.7–4.1 ms, halo 3.0, sunlit 2.6, matrix 0.35. The preview
+  (`MotionPlan.isPreview`) draws the soft looks at most at 720p and scales them up (1.4–1.6 ms); exports
+  draw them whole (4K: ~10 ms).
+- A push seam moves whole frames, each with its field.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -997,8 +1026,9 @@ should hold but need re-measuring.
 
 | Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps, shown elements, playbook | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop); linear.app walkthroughs run from the app through `reco://record-agent`. Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
 | S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 done: moves, seams, shots, lint, scenes lane and inspector; the benchmark rebuilt in 10 lines and three sites rendered, awaiting the user's side-by-side. Phase 4 done: agent tools, Launch Video mode, chat with selection; three sites run from their address with clean lint and design check, three chat edits change only their targets; cost recorded for one run. The window seen in a window capture; editing by hand not yet tried |
+| S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields done: four looks ported and matched to WebGL, coloured from the brand, per scene, preview at 720p. Not yet seen in the app window or on a real run. Next: Q2.1b, placing fields around the type (a real check showed the sphere and the smoke under headlines), then Q2.2 grain |
 
-What to build next: `docs/specs/0011-motion-editor.md` (October 2026), phase by phase. The earlier
+What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
 `docs/specs/0004-next-features.md`.
 

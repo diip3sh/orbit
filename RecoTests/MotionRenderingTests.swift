@@ -44,8 +44,19 @@ struct MotionRenderingTests {
         }
     }
 
+    /// The four fields at one moment, drawn at 480 px. The kernels match Paper Shaders'
+    /// WebGL at 50–72 dB (spec 0012, Q2). A speckle or a dither cell on its threshold may flip on
+    /// another GPU, so only the mean difference is held.
+    @Test func fieldGoldenFrames() throws {
+        for field in [MotionField.ember, .matrix, .halo, .sunlit] {
+            let palette = FieldPalette(field, accent: RGBAColor(hex: "#3ecf8e"), background: MotionCanvas().background)
+            let image = FieldRenderer.image(field, palette: palette, at: 10, size: CGSize(width: 480, height: 270))
+            try Self.expectGolden("motion-field-\(field.rawValue)", image, most: 255)
+        }
+    }
+
     /// Compares `image` with the golden frame `name`; a missing one is written to the temporary folder.
-    private static func expectGolden(_ name: String, _ image: CIImage) throws {
+    private static func expectGolden(_ name: String, _ image: CIImage, most allowed: Int = 32) throws {
         let frame = try pixels(of: image)
         guard let golden = Fixture.url(name, withExtension: "png") else {
             let written = URL.temporaryDirectory.appending(path: "\(name).png")
@@ -56,7 +67,7 @@ struct MotionRenderingTests {
         let goldenImage = try #require(CIImage(contentsOf: golden))
         let difference = try difference(frame, pixels(of: goldenImage))
         #expect(difference.mean < 0.5, "\(name): mean difference \(difference.mean)")
-        #expect(difference.most <= 32, "\(name): largest difference \(difference.most)")
+        #expect(difference.most <= allowed, "\(name): largest difference \(difference.most)")
     }
 
     @Test func thePreviewDrawsWhatTheRendererDraws() async throws {

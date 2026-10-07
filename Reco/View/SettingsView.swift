@@ -355,6 +355,11 @@ struct AboutSection: View {
             LabeledContent("Based On") {
                 Link("BetterCapture by Joshua Sattler", destination: URL(string: "https://github.com/jsattler/BetterCapture")!)
             }
+
+            // Paper Shaders' NOTICE (Apache-2.0): the motion editor's backgrounds are ported from them
+            LabeledContent("Motion Backgrounds") {
+                Link("Powered by Paper Shaders, © 2026 Paper", destination: URL(string: "https://shaders.paper.design")!)
+            }
         }
     }
 }

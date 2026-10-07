@@ -44,7 +44,7 @@ nonisolated enum MotionFrameRenderer {
         _ = try context.startTask(toRender: image(at: time, plan: plan, frames: frames), to: destination).waitUntilCompleted()
     }
 
-    /// A scene's layers at `time` in it, over nothing, blurred as its camera is.
+    /// A scene's layers at `time` in it, blurred as its camera is, over its field.
     private static func sceneImage(_ index: Int, at time: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage]) -> CIImage {
         let scene = plan.scenes[index]
         var image = CIImage.empty()
@@ -71,10 +71,14 @@ nonisolated enum MotionFrameRenderer {
             }
             image = drawn(content, layer: layer, at: placement, time: time, plan: plan).composited(over: image)
         }
-        let blur = scene.cameraValue(.blur, at: time) * plan.outputScale
-        guard blur >= 0.3 else { return image }
         let bounds = CGRect(origin: .zero, size: plan.outputSize)
-        return image.clampedToExtent().applyingGaussianBlur(sigma: blur).cropped(to: bounds)
+        // On the video's clock, so a field runs on across a cut to a scene with the same one
+        let field = FieldRenderer.image(
+            scene.field, palette: scene.palette, at: scene.start + time, size: plan.outputSize, preview: plan.isPreview
+        )
+        let blur = scene.cameraValue(.blur, at: time) * plan.outputScale
+        guard blur >= 0.3 else { return image.composited(over: field) }
+        return image.clampedToExtent().applyingGaussianBlur(sigma: blur).cropped(to: bounds).composited(over: field)
     }
 
     /// A take's frame with its cursor at `time` in the take, inside the element's painted shape. The

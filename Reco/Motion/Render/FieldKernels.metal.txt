@@ -1,0 +1,268 @@
+//
+//  FieldKernels.metal.txt
+//  Reco
+//
+//  The fields of spec 0012, Q2: Paper Shaders 0.0.81's grain gradient (ember, sunlit), dithering
+//  (matrix) and smoke ring (halo), Copyright 2026 Paper, Apache-2.0, ported from their GLSL
+//  (docs/references/paper-shaders) to Core Image stitchable kernels.
+//
+//  Each draws its frame as the 1280×720 gallery tile the look was picked from would, at a pixel
+//  ratio of 2: `frame` is (reference pixels per output pixel, the reference width and height, the
+//  look's time). Sizing is the library's defaults with the picked scale. GLSL's mod is
+//  x − y·floor(x / y), which Metal's fmod isn't for negative x.
+//
+//  FieldRenderer compiles each kernel alone, defining `<name>_ONLY`: compiled together, Core Image
+//  drew only whichever sampling kernel it drew first and the other came out transparent (macOS
+//  26.5).
+//
+
+#include <metal_stdlib>
+#include <CoreImage/CoreImage.h>
+
+using namespace metal;
+
+namespace paper {
+
+constant float twoPi = 6.28318530718;
+constant float pi = 3.14159265358979323846;
+constant int bayer4x4[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+
+inline float2 mod289(float2 x) { return x - 289.0 * floor(x / 289.0); }
+inline float3 mod289(float3 x) { return x - 289.0 * floor(x / 289.0); }
+inline float3 permute(float3 x) { return mod289((x * 34.0 + 1.0) * x); }
+
+inline float snoise(float2 v) {
+    const float4 c = float4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+    float2 i = floor(v + dot(v, c.yy));
+    float2 x0 = v - i + dot(i, c.xx);
+    float2 i1 = (x0.x > x0.y) ? float2(1.0, 0.0) : float2(0.0, 1.0);
+    float4 x12 = x0.xyxy + c.xxzz;
+    x12.xy -= i1;
+    i = mod289(i);
+    float3 p = permute(permute(i.y + float3(0.0, i1.y, 1.0)) + i.x + float3(0.0, i1.x, 1.0));
+    float3 m = max(0.5 - float3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
+    m = m * m;
+    m = m * m;
+    float3 x = 2.0 * fract(p * c.www) - 1.0;
+    float3 h = abs(x) - 0.5;
+    float3 ox = floor(x + 0.5);
+    float3 a0 = x - ox;
+    m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
+    float3 g;
+    g.x = a0.x * x0.x + h.x * x0.y;
+    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+    return 130.0 * dot(m, g);
+}
+
+inline float2 rotate(float2 uv, float angle) {
+    float c = cos(angle), s = sin(angle);
+    return float2(c * uv.x - s * uv.y, s * uv.x + c * uv.y);
+}
+
+/// The noise texture's red at `p`'s cell, as WebGL sampled it: linear, clamped, 128 px, its
+/// first row at the bottom (the image is flipped once in Swift).
+inline float randomR(coreimage::sampler noise, float2 p) {
+    float2 uv = fract(floor(p) / 100.0 + 0.5);
+    return noise.sample(noise.transform(uv * 128.0)).r;
+}
+
+inline float valueNoise(coreimage::sampler noise, float2 st) {
+    float2 i = floor(st);
+    float2 f = fract(st);
+    float a = randomR(noise, i);
+    float b = randomR(noise, i + float2(1.0, 0.0));
+    float c = randomR(noise, i + float2(0.0, 1.0));
+    float d = randomR(noise, i + float2(1.0, 1.0));
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+/// The CSS vignette the gallery laid over the field: radial-gradient(120% 90% at 50% 45%,
+/// transparent 55%, black `amount` 100%). `p` is from the frame's centre, y up.
+inline float4 vignetted(float3 color, float2 p, float2 size, float amount) {
+    float d = length((p - float2(0.0, 0.05 * size.y)) / (float2(1.2, 0.9) * size));
+    return float4(color * (1.0 - amount * clamp((d - 0.55) / 0.45, 0.0, 1.0)), 1.0);
+}
+
+// MARK: - Grain gradient
+
+/// The shape before grain: a wave (`kind` 1) or two corners (4).
+inline float grainShape(float2 uv, float kind, float t) {
+    if (kind < 1.5) {
+        float wave = cos(0.5 * uv.x - 4.0 * t) * sin(1.5 * uv.x + 2.0 * t) * (0.75 + 0.25 * cos(6.0 * t));
+        return 1.0 - smoothstep(-1.0, 1.0, uv.y + wave);
+    }
+    uv *= 0.6;
+    float2 outer = float2(0.5);
+    float2 bl = smoothstep(float2(0.0), outer, uv + float2(0.1 + 0.1 * sin(3.0 * t), 0.2 - 0.1 * sin(5.25 * t)));
+    float2 tr = smoothstep(float2(0.0), outer, 1.0 - uv);
+    float shape = 1.0 - bl.x * bl.y * tr.x * tr.y;
+    uv = -uv;
+    bl = smoothstep(float2(0.0), outer, uv + float2(0.1 + 0.1 * sin(3.0 * t), 0.2 - 0.1 * cos(5.25 * t)));
+    tr = smoothstep(float2(0.0), outer, 1.0 - uv);
+    shape -= bl.x * bl.y * tr.x * tr.y;
+    return 1.0 - smoothstep(0.0, 1.0, shape);
+}
+
+/// fbmR's three slow octave stacks, which don't change across a pixel.
+inline float3 slowFbm(coreimage::sampler noise, float2 n0, float2 n1, float2 n2) {
+    float amplitude = 0.2;
+    float3 total = float3(0.0);
+    for (int i = 0; i < 3; i++) {
+        n0 = rotate(n0, 0.3);
+        n1 = rotate(n1, 0.3);
+        n2 = rotate(n2, 0.3);
+        total += float3(valueNoise(noise, n0), valueNoise(noise, n1), valueNoise(noise, n2)) * amplitude;
+        n0 *= 1.99;
+        n1 *= 1.99;
+        n2 *= 1.99;
+        amplitude *= 0.6;
+    }
+    return total;
+}
+
+/// fbmR's fourth stack, at 0.4 of the grain: it changes across a pixel.
+inline float fastFbm(coreimage::sampler noise, float2 n3) {
+    float amplitude = 0.2;
+    float total = 0.0;
+    for (int i = 0; i < 3; i++) {
+        n3 = rotate(n3, 0.3);
+        total += valueNoise(noise, n3) * amplitude;
+        n3 *= 1.99;
+        amplitude *= 0.6;
+    }
+    return total;
+}
+
+/// The grain at `g`: how much it distorts the shape, and its speckle. fbmR adds its fourth stack
+/// to the third and leaves the fourth sum at 0; kept, as that's the look picked.
+inline float2 grain(coreimage::sampler noise, float2 g, float3 slow) {
+    float base = snoise(g * 0.5);
+    float z = slow.z + fastFbm(noise, rotate(0.4 * g, 2.0));
+    return float2(base * snoise(g * 0.2) - slow.x - slow.y, clamp(0.75 * base - z, 0.0, 1.0));
+}
+
+}
+
+#ifdef grainGradientField_ONLY
+/// `look` is (softness, intensity, noise, shape: 1 wave, 4 corners); three colours on `back`.
+[[stitchable]] float4 grainGradientField(
+    coreimage::sampler noise, float4 frame, float4 look, float vignette, float4 back, float4 c0, float4 c1, float4 c2,
+    coreimage::destination dest
+) {
+    float2 size = frame.yz;
+    float2 p = dest.coord() * frame.x - 0.5 * size;
+    float t = 0.1 * (frame.w + 7.0);
+    float softness = look.x, kind = look.w;
+    // The vertex shader's UVs: an object contained in the frame, or a pattern at a pixel ratio of 2
+    float2 shapeUV = kind > 3.5 ? p / min(size.x, size.y) : 0.005 * p / 2.0;
+    float grainStep = kind > 3.5 ? 0.7 : 0.8;
+    float2 g = grainStep * p;
+
+    float3 slow = paper::slowFbm(noise, 0.002 * g + 10.0, 0.003 * g, 0.001 * g);
+    float distortion = look.y * 2.0 / 3.0, speckle = look.z * 10.0 / 3.0;
+    float2 here = paper::grain(noise, g, slow);
+    float shape = paper::grainShape(shapeUV, kind, t) + distortion * (here.x + 0.5) + speckle * here.y;
+    // fwidth(shape), which a Core Image kernel has no derivative for: its change to the other pixel
+    // of its 2×2 quad across and down, as a GPU takes it. The shape barely changes over a pixel; the
+    // grain does.
+    float2 toPartner = select(float2(grainStep), float2(-grainStep), fmod(floor(dest.coord() * frame.x), 2.0) > 0.5);
+    float2 across = paper::grain(noise, g + float2(toPartner.x, 0.0), slow);
+    float2 down = paper::grain(noise, g + float2(0.0, toPartner.y), slow);
+    float aa = abs(distortion * (across.x - here.x) + speckle * (across.y - here.y)) + abs(distortion * (down.x - here.x) + speckle * (down.y - here.y));
+
+    shape = clamp(shape - 0.5 / 3.0, 0.0, 1.0);
+    float total = smoothstep(0.0, softness + 2.0 * aa, clamp(shape * 3.0, 0.0, 1.0));
+    float mixer = shape * 2.0;
+    float4 gradient = float4(c0.rgb * c0.a, c0.a);
+    float4 stops[2] = { c1, c2 };
+    for (int i = 0; i < 2; i++) {
+        float local = clamp(mixer - float(i), 0.0, 1.0);
+        local = smoothstep(0.5 - 0.5 * softness - aa, 0.5 + 0.5 * softness + aa, local);
+        gradient = mix(gradient, float4(stops[i].rgb * stops[i].a, stops[i].a), local);
+    }
+    float opacity = gradient.a * total;
+    float3 color = gradient.rgb * total + back.rgb * back.a * (1.0 - opacity);
+    return paper::vignetted(color, p, size, vignette);
+}
+#endif
+
+// MARK: - Dithering
+
+#ifdef ditheringField_ONLY
+/// A sphere lit from a turning light, at scale 0.6, in 4×4 ordered dither of 2 px cells.
+[[stitchable]] float4 ditheringField(float4 frame, float vignette, float4 back, float4 front, coreimage::destination dest) {
+    float2 size = frame.yz;
+    float2 p = dest.coord() * frame.x - 0.5 * size;
+    float t = 0.5 * frame.w;
+    float cell = 2.0 * 2.0;
+    float2 cells = p / cell;
+    float2 shapeUV = 2.0 * (floor(cells) + 0.5) * cell / min(size.x, size.y) / 0.6;
+    float d = 1.0 - dot(shapeUV, shapeUV);
+    float3 position = float3(shapeUV, sqrt(max(0.0, d)));
+    float3 light = normalize(float3(cos(1.5 * t), 0.8, sin(1.25 * t)));
+    float shape = (0.5 + 0.5 * dot(light, position)) * step(0.0, d);
+    int2 index = int2(fract(cells / 4.0) * 4.0);
+    float lit = step(0.5, shape + float(paper::bayer4x4[index.y * 4 + index.x]) / 16.0 - 0.5);
+    float3 color = front.rgb * lit + back.rgb * (1.0 - lit);
+    return paper::vignetted(color, p, size, vignette);
+}
+#endif
+
+// MARK: - Smoke ring
+
+namespace paper {
+
+inline float2 smokeFbm(coreimage::sampler noise, float2 n0, float2 n1) {
+    float2 total = float2(0.0);
+    float amplitude = 0.4;
+    for (int i = 0; i < 8; i++) {
+        total += float2(valueNoise(noise, n0), valueNoise(noise, n1)) * amplitude;
+        n0 *= 1.99;
+        n1 *= 1.99;
+        amplitude *= 0.65;
+    }
+    return total;
+}
+
+inline float smokeNoise(coreimage::sampler noise, float2 uv, float2 polar, float t, float scale) {
+    float2 left = polar + 0.03 * t;
+    float period = max(abs(scale * twoPi), 1e-6);
+    float2 right = float2(fract(polar.x / period) * period, polar.y) + 0.03 * t;
+    float2 n = smokeFbm(noise, left, right);
+    return mix(n.y, n.x, smoothstep(-0.25, 0.25, uv.x));
+}
+
+}
+
+#ifdef smokeRingField_ONLY
+/// `ring` is (radius, thickness, inner shape, noise scale), at scale 0.8 and 8 noise iterations;
+/// `c0` at the ring's core, `c1` at its edge.
+[[stitchable]] float4 smokeRingField(
+    coreimage::sampler noise, float4 frame, float4 ring, float vignette, float4 back, float4 c0, float4 c1,
+    coreimage::destination dest
+) {
+    float2 size = frame.yz;
+    float2 p = dest.coord() * frame.x - 0.5 * size;
+    float2 uv = p / min(size.x, size.y) / 0.8;
+    float t = frame.w;
+    float cycle = 3.0, period = 2.0 * cycle;
+    float first = fract((0.1 * t + cycle) / period) * period;
+    float second = fract((0.1 * t) / period) * period;
+    float blend = 0.5 + 0.5 * sin(0.1 * t * paper::pi / cycle - 0.5 * paper::pi);
+    float angle = atan2(uv.y, uv.x) + 0.001;
+    float l = length(uv);
+    float radial = 0.5 * l - rsqrt(max(1e-4, l));
+    float n = mix(paper::smokeNoise(noise, uv, float2(angle, first - radial) * ring.w, t, ring.w),
+                  paper::smokeNoise(noise, uv, float2(angle, second - radial) * ring.w, t, ring.w), blend);
+    uv *= 0.8 + 1.2 * n;
+    float distance = length(uv);
+    float shape = (1.0 - smoothstep(ring.x, ring.x + ring.y, distance)) * smoothstep(ring.x - pow(ring.z, 3.0) * ring.y, ring.x, distance);
+    float4 gradient = mix(float4(c1.rgb * c1.a, c1.a), float4(c0.rgb * c0.a, c0.a), clamp(shape * shape, 0.0, 1.0));
+    float opacity = gradient.a * shape;
+    float3 color = gradient.rgb * shape + back.rgb * back.a * (1.0 - opacity);
+    // The shader's own dither against banding, in output pixels
+    color += 1.0 / 256.0 * (fract(sin(dot(0.014 * dest.coord(), float2(12.9898, 78.233))) * 43758.5453123) - 0.5);
+    return paper::vignetted(color, p, size, vignette);
+}
+#endif

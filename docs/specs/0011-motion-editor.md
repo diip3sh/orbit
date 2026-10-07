@@ -419,9 +419,9 @@ end of every phase and its scores recorded here.
 | 2 - Real UI layers | L | Done; the window not yet seen in the app |
 | 3 - Grammar v1 | L | Done but the side-by-side and the three-site judgement |
 | 4 - Agent | L | Done but the side-by-side; cost recorded for one run of three |
-| 5 - Music and beats | M | Todo |
-| 6 - Editing | L | Todo |
-| 7 - Formats and polish | M | Todo |
+| 5 - Music and beats | M | Paused for spec 0012 (moves into its Q5) |
+| 6 - Editing | L | Paused for spec 0012 |
+| 7 - Formats and polish | M | Paused for spec 0012 |
 
 ### Phase 0 - Benchmark and spikes (M)
 

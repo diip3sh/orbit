@@ -16,16 +16,20 @@ nonisolated extension AgentToolCatalog {
         when it starts and ends in seconds into its scene, and the rules' findings to fix. Nothing renders here: then call \
         capture_ui and preview_motion.
 
-        Video: canvas {size [1920,1080], frameRate 60, background "#rrggbb", pacing}, style {text, dim, accent: "#rrggbb"; \
-        face sans|serif|mono; alignment leading|center} from inspect_page's brand, assets, scenes. Pacing driftAndCut: 3–5 s \
-        shots, the camera drifting at constant speed, hard cuts (Linear). beats: 1–2 s beats, eased camera moves (Raycast).
+        Video: canvas {size [1920,1080], frameRate 60, background "#rrggbb", field, pacing}, style {text, dim, accent: \
+        "#rrggbb"; face sans|serif|mono; alignment leading|center} from inspect_page's brand, assets, scenes. Pacing \
+        driftAndCut: 3–5 s shots, the camera drifting at constant speed, hard cuts (Linear). beats: 1–2 s beats, eased \
+        camera moves (Raycast). Field, what scenes are drawn over, moving slowly and coloured from the accent: ember (grain \
+        pooling in two corners, type in the dark between: bold brands), matrix (a lit sphere in ordered dither: technical \
+        brands), halo (a ring of smoke: behind an end card's logo), sunlit (a soft grain wave: calm or playful titles), \
+        plain (the background colour, the default).
 
         Asset: {id, url, selector, viewport [w,h] (default [1440,900]), hide [selectors]}: an element of a real page, lifted \
         alone with its rounded corners: a product screenshot, an app mockup, a card, a logo; never a whole section. With \
         steps (record_page's hover, click, type, scroll; selectors on that page) and duration it is live: a take of the \
         element playing from its scene's start.
 
-        Scene: {id, duration, seam, shot, layers, camera}. Shots and their slots (ui is an asset id):
+        Scene: {id, duration, seam, shot, field (else the canvas's), layers, camera}. Shots and their slots (ui is an asset id):
         - hook: text (6 words at most) over ui, the product dimmed.
         - title: text, detail (a line under it), items [{text}]: the headline's last word rolls through the items' text \
         ("Agents for DevOps" → "Triage" → "Planning").
@@ -44,7 +48,7 @@ nonisolated extension AgentToolCatalog {
         right, up, down). intensity 1 is the grammar's own amount.
 
         Operations: set_canvas {canvas}; set_style {style}; set_asset {asset} (adds, or replaces the same id); add_scene \
-        {scene, index}; set_scene {id, duration, seam, shot} (shot replaces the shot); set_layer {id, layer} (a layer of the \
+        {scene, index}; set_scene {id, duration, seam, shot, field} (shot replaces the shot); set_layer {id, layer} (a layer of the \
         scene's own: {id, content: {"text": {text, size, face, weight, color}} or {"ui": {asset, width}}, transform \
         {position [x,y,z]}, moves}); set_moves {id, target, moves} (target a layer id from the reply, or camera: replaces \
         all its moves, a shot's layer keeping its place; copy the moves you keep from the reply); move_scene {id, index}; \
@@ -64,6 +68,7 @@ nonisolated extension AgentToolCatalog {
         "canvas":{"type":"object"},"style":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
         "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","cutOnMotion","zoomThrough","blurCut","push","fade"]},
         "shot":{"type":"object","description":"{shot: hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard, text, detail, ui, items, region}"},
+        "field":{"type":"string","enum":["ember","matrix","halo","sunlit","plain"]},
         "moves":{"type":"array","items":{"type":"object"}}},
         "required":["op"],"additionalProperties":false}}},
         "required":["operations"],"additionalProperties":false}

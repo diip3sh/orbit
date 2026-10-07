@@ -76,6 +76,10 @@ nonisolated struct MotionPlan: Sendable {
         let start: Double
         let duration: Double
 
+        /// What the layers are drawn over, and its colours.
+        let field: MotionField
+        let palette: FieldPalette
+
         /// Parents before their children, in document order.
         var layers: [Layer]
 
@@ -138,6 +142,10 @@ nonisolated struct MotionPlan: Sendable {
 
     let frameRate: Int
     let background: CIColor
+
+    /// Drawn for the editor's preview, which the window shows smaller: detail it can't show may be
+    /// traded for speed.
+    var isPreview = false
     private(set) var scenes: [Scene]
 
     /// Assets to lift before this plan can draw them sharp, by id, with the scale (image pixels per
@@ -277,9 +285,12 @@ extension MotionPlan {
         var scenes = expanded.scenes.map { scene in
             defer { start += scene.duration }
             let context = MoveContext(sceneDuration: scene.duration, canvas: canvas)
+            let field = scene.field ?? document.canvas.field
             var planned = Scene(
                 start: start,
                 duration: scene.duration,
+                field: field,
+                palette: FieldPalette(field, accent: document.style.accent, background: document.canvas.background),
                 layers: flattened(scene.layers, parent: nil, sizes: sizes, context: context),
                 camera: tracks(scene.camera.keyframes),
                 cameraBase: Dictionary(uniqueKeysWithValues: MotionProperty.camera.map { ($0, scene.camera.base($0, canvas: canvas)) })
