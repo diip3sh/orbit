@@ -39,12 +39,14 @@ nonisolated enum MovieEncoder {
         }
     }
 
-    /// Feeds each stream's samples from the reader to the writer on a queue of its own as the writer takes them.
+    /// Feeds each stream's samples from the reader to the writer, each on a queue of its own, as the writer takes
+    /// them. One queue for all deadlocked: the reader's `copyNextSampleBuffer` for one stream can wait until another
+    /// stream's samples are taken, which can't happen while it blocks their shared queue. Every export on the CI
+    /// runner hung that way, while it passed on an M5.
     private final class Pump: @unchecked Sendable {
         private let reader: AVAssetReader
         private let streams: [Stream]
         private let progress: Progress
-        private let queue = DispatchQueue(label: "\(Bundle.main.bundleIdentifier ?? "Reco").export")
 
         init(reader: AVAssetReader, streams: [Stream], progress: Progress) {
             self.reader = reader
@@ -61,8 +63,9 @@ nonisolated enum MovieEncoder {
         func run() async {
             await withCheckedContinuation { continuation in
                 let group = DispatchGroup()
-                for stream in streams {
+                for (index, stream) in streams.enumerated() {
                     group.enter()
+                    let queue = DispatchQueue(label: "\(Bundle.main.bundleIdentifier ?? "Reco").export.\(index)")
                     stream.input.requestMediaDataWhenReady(on: queue) { [progress] in
                         while stream.input.isReadyForMoreMediaData {
                             guard let sample = stream.output.copyNextSampleBuffer(), stream.input.append(sample) else {
@@ -76,7 +79,7 @@ nonisolated enum MovieEncoder {
                         }
                     }
                 }
-                group.notify(queue: queue) { continuation.resume() }
+                group.notify(queue: .global()) { continuation.resume() }
             }
         }
     }

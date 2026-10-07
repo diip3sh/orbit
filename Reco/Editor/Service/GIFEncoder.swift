@@ -46,19 +46,60 @@ nonisolated enum GIFEncoder {
         defer { try? file.close() }
         try file.write(contentsOf: GIFMuxer.header(width: Int(videoComposition.renderSize.width), height: Int(videoComposition.renderSize.height)))
 
-        var count = 0
-        while let sample = output.copyNextSampleBuffer() {
-            try Task.checkCancellation()
-            guard let buffer = sample.imageBuffer, let image = image(of: buffer) else { throw AVError(.unknown) }
-            try file.write(contentsOf: try frame(of: image, delay: delay(ofFrame: count, frameRate: frameRate)))
-            count += 1
-            progress(min(Double(count) / expectedFrames, 1))
+        let frames = Frames(reader: reader, output: output, file: file, frameRate: frameRate, expectedFrames: expectedFrames, progress: progress)
+        // `copyNextSampleBuffer` blocks until the compositor has drawn the frame: on a queue of its own, so it never
+        // holds one of the few cooperative threads (3 on the CI runner) the rest of the app's tasks need
+        let count = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue(label: "\(Bundle.main.bundleIdentifier ?? "Reco").gif").async {
+                    continuation.resume(with: Result { try frames.writeAll() })
+                }
+            }
+        } onCancel: {
+            frames.cancel()
         }
+        try Task.checkCancellation()
         if reader.status == .failed {
             throw reader.error ?? AVError(.unknown)
         }
         guard count > 0 else { throw AVError(.noDataCaptured) }
         try file.write(contentsOf: GIFMuxer.trailer)
+    }
+
+    /// Reads every frame and appends it to the file. `writeAll()` runs on one queue only.
+    private final class Frames: @unchecked Sendable {
+        private let reader: AVAssetReader
+        private let output: AVAssetReaderOutput
+        private let file: FileHandle
+        private let frameRate: Double
+        private let expectedFrames: Double
+        private let progress: @Sendable (Double) -> Void
+
+        init(reader: AVAssetReader, output: AVAssetReaderOutput, file: FileHandle, frameRate: Double, expectedFrames: Double, progress: @escaping @Sendable (Double) -> Void) {
+            self.reader = reader
+            self.output = output
+            self.file = file
+            self.frameRate = frameRate
+            self.expectedFrames = expectedFrames
+            self.progress = progress
+        }
+
+        /// Ends `writeAll()` at the next frame. `cancelReading` may be called from any thread.
+        func cancel() {
+            reader.cancelReading()
+        }
+
+        /// Returns how many frames were written; stops early, without an error, when the reader is cancelled.
+        func writeAll() throws -> Int {
+            var count = 0
+            while let sample = output.copyNextSampleBuffer() {
+                guard let buffer = sample.imageBuffer, let image = GIFEncoder.image(of: buffer) else { throw AVError(.unknown) }
+                try file.write(contentsOf: try GIFEncoder.frame(of: image, delay: GIFEncoder.delay(ofFrame: count, frameRate: frameRate)))
+                count += 1
+                progress(min(Double(count) / expectedFrames, 1))
+            }
+            return count
+        }
     }
 
     /// One frame's blocks for the file, from a one-frame GIF of `image`.
