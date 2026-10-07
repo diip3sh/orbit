@@ -118,9 +118,10 @@ struct EditorViewModelTests {
         #expect(viewModel.project.canvas.background == .image)
         #expect(viewModel.undoManager.undoActionName == "Background Image")
         let bookmark = try #require(viewModel.project.canvas.imageBookmark)
-        let image = try #require(await BackgroundImageLoader.image(from: bookmark))
-        #expect(image.width == BackgroundImageLoader.maximumSize && image.height < 10)
-        #expect(image.colorSpace?.name == CGColorSpace.sRGB)
+        let loaded = try #require(await BackgroundImageLoader.image(from: bookmark))
+        #expect(loaded.image.width == BackgroundImageLoader.maximumSize && loaded.image.height < 10)
+        #expect(loaded.image.colorSpace?.name == CGColorSpace.sRGB)
+        #expect(loaded.url == picture.resolvingSymlinksInPath())
     }
 
     @Test func splittingThenCuttingTheSelectionLeavesItOut() async throws {

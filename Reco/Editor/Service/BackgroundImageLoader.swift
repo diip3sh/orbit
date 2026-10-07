@@ -27,10 +27,10 @@ nonisolated enum BackgroundImageLoader {
         return try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
     }
 
-    /// The picture `bookmark` opens, upright and in sRGB like the overlays, or `nil` when it's gone
-    /// or unreadable.
+    /// The picture `bookmark` opens, upright and in sRGB like the overlays, with the file it was read from
+    /// (symlinks resolved, so `/var` and `/private/var` compare equal), or `nil` when it's gone or unreadable.
     @concurrent
-    static func image(from bookmark: Data) async -> CGImage? {
+    static func image(from bookmark: Data) async -> (image: CGImage, url: URL)? {
         var isStale = false
         guard let url = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale) else {
             return nil
@@ -57,6 +57,6 @@ nonisolated enum BackgroundImageLoader {
         }
         // Frames are composited without color management, so the picture's colors are converted here
         context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        return context.makeImage()
+        return context.makeImage().map { ($0, url.resolvingSymlinksInPath()) }
     }
 }

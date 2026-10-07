@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 835 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 844 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -551,30 +551,52 @@ Key facts:
 ### S1 — Editor, phase 6: canvas and export polish (`feat/editor-shell`, spec 0003)
 
 The recording sits on a canvas: a shape (original, 16:9, 9:16, 1:1, 4:3), a gradient, color,
-picture or transparent background, padding, rounded corners and a shadow. New projects get the
-styled default. Export picks a format (MP4, ProRes, GIF), size, frame rate and quality, and ProRes becomes 4444, which keeps a
+picture or transparent background, padding, rounded corners, a shadow and a border. The Background tab offers ten gradient
+presets, the system's wallpapers and a blur for pictures. New projects get the styled default. Export picks a format (MP4, ProRes, GIF), size, frame rate and quality, and ProRes becomes 4444, which keeps a
 transparent background; HDR recordings stay HDR in MP4 and ProRes. The Library (S7) lists
 the recordings with pictures; a click opens one in the editor.
 
 | File | Role |
 |---|---|
-| `Editor/Model/CanvasStyle.swift` | The inspector's canvas settings; `plain` is the recording as it is |
-| `Editor/Render/CanvasLayout.swift` | Output size, the video's frame and rounded mask, the backdrop (background and shadow) drawn once into an IOSurface, and the regions frames are drawn in |
+| `Editor/Model/CanvasStyle.swift`, `GradientPreset.swift` | The inspector's canvas settings (gradient colors, picture blur, border); `plain` is the recording as it is; `init(from:)` in an extension reads projects saved before the blur and border. A preset is stored as its two colors, so `gradientPreset` finds which one the colors are (Slate, the default, first) |
+| `Editor/Render/CanvasLayout.swift` | Output size, the video's frame and rounded mask, the backdrop (background with its blur, the border and the shadow) drawn once into an IOSurface, and the regions frames are drawn in |
 | `Editor/Render/FrameRenderer.swift` | `draw(_:at:plan:into:context:)`: the frame region by region, for the compositor and the tests alike |
 | `Editor/Render/RenderResources.swift`, `RenderTarget.swift` | What plans draw with from the system (key labels, arrow, background picture); what a plan is for (the preview, or an export's size and dynamic range) |
 | `Editor/Render/HDREditorCompositor.swift`, `Editor/Model/DynamicRange.swift` | 10-bit or half-float frames in, half-float out; SDR, PQ or HLG from the track's transfer function |
-| `Editor/Service/BackgroundImageLoader.swift` | Security-scoped bookmark to the chosen picture, read upright, in sRGB, at most 4096 px |
+| `Editor/Service/BackgroundImageLoader.swift` | Security-scoped bookmark to the chosen picture, read upright, in sRGB, at most 4096 px; returns the file it resolved to, so the inspector can ring the chosen wallpaper |
+| `Editor/Service/SystemWallpaper.swift` | The 13 desktop pictures macOS has on disk, with their thumbnails, listed off the main actor; chosen like any picture, through `setBackgroundImage` |
+| `Editor/View/SwatchGrid.swift`, `BackgroundFillControls.swift` | Five-column grid of 16:10 swatches with an accent ring on the chosen one (gradient presets, wallpapers); what each background kind is made of (presets and colors, color, wallpapers + Choose Image… + Blur) |
+| `Editor/ViewModel/EditorViewModel+Background.swift` | `applyGradient` (both colors, one undo step), `updateBackgroundImage(for:)` (the one place the picture is read, for load and every rebuild), the wallpaper list |
 | `Editor/Model/ExportSettings.swift`, `Editor/View/ExportOptions.swift` | Format, quality, size (a shorter side: 720, 1080, 2160, only those under the canvas's) and frame rate (15, 30, 60, not above the recording's; a GIF's at most 30: 60 fps delays are 1 or 2 cs, which browsers slow to 10 cs); the quality's estimated sizes |
 
 Key facts:
 - The canvas keeps the video's shorter side (9:16 from 4K is 2160×3840), and padding (8%), corner
-  radius (1.5%) and the shadow's blur (3%) are shares of it. An export at another size is drawn at
+  radius (1.5%), the shadow's blur (3%), the border (up to 2%) and the picture's blur (up to 3%) are shares of it. An export at another size is drawn at
   that size, not scaled afterwards. Zoom and canvas placement are one transform, so the video is
   resampled once; the cursor is drawn at its final scale.
 - Exporting at the original size uses `CanvasLayout.nativeShorterSide`: a canvas just big enough that the
   unzoomed video keeps its own pixels inside the padding (the preview keeps the video's shorter side, for
   its frame budget). Exports shrink frames with `highQualityDownsample` (`RenderPlan.downsamplesSmoothly`);
   linear sampling blurred a Retina recording's text at 1080p. Its export cost isn't measured yet.
+- Wallpapers (measured on macOS 27.0.1, M2): `/System/Library/Desktop Pictures` has 63 `.madesktop` plists, which are
+  MobileAsset references downloaded on demand (`/System/Library/AssetsV2/com_apple_MobileAsset_DesktopPicture/` held only
+  the catalog: none were on disk), 13 full-size `.heic` files of 6016×6016 px and 8.7–25 MB (iMac in 7 colors, Mac in 4,
+  Radial Sky Blue, Sonoma) and `.thumbnails/` with 138 HEICs of 214×130 px. Only the 13 are offered: a thumbnail stretched
+  to a 2160 px canvas would be 16.6× enlarged, so thumbnails are tiles only. Solid Colors (128×128 PNGs) duplicate the Color
+  background, the aerials and Sonoma videos are video, and `.wallpapers/Sonoma Horizon.heic` (3840×2160) is skipped.
+  A picked one is read once, off the main actor, at the 4096 px cap (`sips -Z 4096` took 0.49 s with re-encoding; 64 MB held).
+  `ponytail:` downloaded `.madesktop` assets aren't offered.
+- Blur (`CanvasStyle.backgroundBlur`, picture backgrounds only): sigma up to 3% of the frame's shorter side
+  (`CanvasLayout.maximumBackgroundBlur`), applied after the picture is placed: clamped to its extent so the edges stay
+  opaque, blurred, cropped to the frame. Part of the backdrop, so once per plan. Measured on an M2, Debug, load average 3–6,
+  3840×2160 video with a 4096×4096 picture, 30 builds: backdrop 8.5 ms p50 / 8.9 p95 sharp (56 ms the first time), 15.2 / 15.7
+  blurred (16 / 28 in a busier run). Slider drags rebuild the plan, so that is per drag step, never per frame.
+- Border (`borderWidth` 0–2% of the shorter side, any opaque color): drawn outward from the video into the backdrop, a rounded
+  rectangle of the video's frame grown by the width with radius = corner radius + width (concentric; square stays square),
+  under the video, so its color shows around the rounded corners. The shadow is cast by video and border together. Width is
+  whole pixels, capped by the gap to the canvas edge (`CanvasLayout.borderWidth(_:around:)`), so with no padding there is no
+  border and the slider is disabled. Nothing per frame; the video's frame, transform and native size don't change. An inset
+  border was left out: it looks like a border with less padding and would resample the video.
 - With padding, Original grows by it (`CanvasLayout.paddedRatio`), so the padding is equal on every side; a
   fixed shape whose ratio differs from the video's puts the rest on one axis.
 - Frames are drawn region by region (`CanvasLayout.regions`): the padding from the backdrop alone,
@@ -617,8 +639,8 @@ slate gradient.
 | `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar, centred, never larger than the screen less 40 pt; the editor and Web Recording open at 1533×943 (the size picked by hand on 2026-10-05) |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the transport in the timeline's header |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart; a line at each label, dots between; labels carry their units, "0.5s", "1m 30s", "1h", since a clock's "0:00.5" didn't say what it counted), the playhead's knob, the zoom blocks |
-| `Editor/Model/InspectorTab.swift`, `Editor/View/InspectorTabBar.swift` | The inspector's tabs (2026-10-07): Background · Camera ‖ Audio ‖ Cursor · Keyboard ‖ Captions ‖ Motion, as icons on one capsule track with a line between groups and a sliding fill; only the chosen tab's sections show (Canvas; Audio; Cursor and Clicks; Keystrokes; Zoom). Camera and Captions stay disabled until the camera is its own track and a transcript exists (spec 0004, N19, N5); Audio is always available. The tab is `EditorView` state, so it survives export; selecting a zoom turns to Motion. Motion holds the zoom's and the cursor's movement (Mellow, Smooth, Fast; the cursor's also None) and Motion Blur (a slider, Off at 0): `ZoomMotion` sets the camera spring at 6, 10 or 16 rad/s (96% of a move in 0.83, 0.5 or 0.31 s), saved in the project as `zoomMotion`, blur as `motionBlur` |
-| `Editor/View/Inspector*.swift`, `EditorInspectorSections.swift`, `TickSlider.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | `EditorInspector` and its sections, which fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides. Every slider is a `TickSlider`: a track with ticks, accent fill up to a bar at the value, dragged 1:1 from the grab (a press away from the bar takes it there first), VoiceOver adjustable in 20 steps, without a focus ring |
+| `Editor/Model/InspectorTab.swift`, `Editor/View/InspectorTabBar.swift` | The inspector's tabs (2026-10-07): Background · Camera ‖ Audio ‖ Cursor · Keyboard ‖ Captions ‖ Motion, as icons on one capsule track with a line between groups and a sliding fill; only the chosen tab's sections show (Background's one untitled section: aspect, background, padding, corners, shadow, border; Audio; Cursor and Clicks; Keystrokes; Zoom). Camera and Captions stay disabled until the camera is its own track and a transcript exists (spec 0004, N19, N5); Audio is always available. The tab is `EditorView` state, so it survives export; selecting a zoom turns to Motion. Motion holds the zoom's and the cursor's movement (Mellow, Smooth, Fast; the cursor's also None) and Motion Blur (a slider, Off at 0): `ZoomMotion` sets the camera spring at 6, 10 or 16 rad/s (96% of a move in 0.83, 0.5 or 0.31 s), saved in the project as `zoomMotion`, blur as `motionBlur` |
+| `Editor/View/Inspector*.swift`, `EditorInspectorSections.swift`, `TickSlider.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | `EditorInspector` and its sections, which fold away under a dim title (Background's has none, so it never folds), `SwatchGrid` (preset and wallpaper tiles, the chosen one ringed in the accent colour), sliders with their values, switches, and tiles whose highlight slides. Every slider is a `TickSlider`: a track with ticks, accent fill up to a bar at the value, dragged 1:1 from the grab (a press away from the bar takes it there first), VoiceOver adjustable in 20 steps, without a focus ring |
 | `Editor/View/ExportOptions.swift`, `ExportProgressBar.swift` | Export's inspector: format, size and frame rate as `SegmentedChoice` tabs (an option can be disabled), the quality as rows with their estimated sizes, Export and Copy to Clipboard (side by side, or stacked when the column is narrow) pinned under a line; progress |
 
 Key facts:
@@ -1179,7 +1201,7 @@ should hold but need re-measuring.
 | S1 editor phase 3: trim, split and cut, audio volume | Done; trimming, cutting and clicks at cuts still need a check in the app on a real recording |
 | S1 editor phase 4: auto-zoom, zoom lane, camera | Done; auto-zoom placement, full-frame-rate transitions and editing zooms on the timeline still need a check in the app on real recordings |
 | S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
-| S1 editor phase 6: canvas and export polish | Done; the canvas, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags) and transparent exports still need a check in the app |
+| S1 editor phase 6: canvas and export polish | Done; the canvas, gradient presets, wallpapers (and one after relaunch), picture blur, the border, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags) and transparent exports still need a check in the app |
 | S1 editor design: system colors, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 | S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |

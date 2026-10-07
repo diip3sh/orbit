@@ -62,6 +62,14 @@ extension CanvasLayout {
     /// that blurry.
     nonisolated private static let shadowReduction = 8.0
 
+    /// A fully blurred picture background is blurred by this share of the frame's shorter side (the Gaussian's
+    /// sigma). It runs with the backdrop, on every rebuild of the plan (a slider drag too), never per frame.
+    /// Measured on an M2, Debug, load average 3–6, for a 3840×2160 video with a 4096×4096 picture on the default
+    /// canvas, 30 builds each: the backdrop took 8.5 ms p50 / 8.9 ms p95 sharp (56 ms the first time) and
+    /// 15.2 / 15.7 ms blurred (16 / 28 in the first, busier run). Full resolution is cheap enough, so there's
+    /// no reduced-size blur like the shadow's.
+    nonisolated static let maximumBackgroundBlur = 0.03
+
     nonisolated private static let context = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull()])
 
     /// Core Image evaluates every overlay across the whole region it renders; in bands, it skips
@@ -189,23 +197,41 @@ extension CanvasLayout {
         (length / 2).rounded() * 2
     }
 
-    /// The background with the video's shadow, rendered into a buffer that frames read in place.
+    /// How wide a border of `width` pixels around `videoFrame` is: whole pixels, never past the nearest
+    /// canvas edge, so the padding holds it.
+    nonisolated static func borderWidth(_ width: CGFloat, around videoFrame: CGRect) -> CGFloat {
+        min(width, videoFrame.minX, videoFrame.minY).rounded()
+    }
+
+    /// The background with the video's border and shadow, rendered into a buffer that frames read in place.
     nonisolated private static func backdrop(
         style: CanvasStyle, size: CGSize, videoFrame: CGRect, cornerRadius: CGFloat, image: CGImage?
     ) -> CIImage {
         let bounds = CGRect(origin: .zero, size: size)
         var backdrop = background(of: style, bounds: bounds, image: image)
+        let shorterSide = min(size.width, size.height)
+        // The border grows outward from the video, concentric with its corners, so the video keeps its size
+        let border = borderWidth(style.borderWidth * shorterSide, around: videoFrame)
+        let framed = videoFrame.insetBy(dx: -border, dy: -border)
+        let framedRadius = cornerRadius > 0 ? cornerRadius + border : 0
         if style.shadow > 0 {
-            let shorterSide = min(size.width, size.height)
             let reduction = CGAffineTransform(scaleX: 1 / shadowReduction, y: 1 / shadowReduction)
             let shape = CIFilter.roundedRectangleGenerator()
-            shape.extent = videoFrame.offsetBy(dx: 0, dy: -shadowDrop * shorterSide).applying(reduction)
-            shape.radius = Float(cornerRadius / shadowReduction)
+            shape.extent = framed.offsetBy(dx: 0, dy: -shadowDrop * shorterSide).applying(reduction)
+            shape.radius = Float(framedRadius / shadowReduction)
             shape.color = CIColor(red: 0, green: 0, blue: 0, alpha: 0.6 * style.shadow)
             let shadow = shape.outputImage?
                 .applyingGaussianBlur(sigma: shadowBlur * shorterSide / shadowReduction)
                 .transformed(by: reduction.inverted())
             backdrop = shadow?.composited(over: backdrop) ?? backdrop
+        }
+        if border > 0 {
+            // Under the video, so its color shows around the video's rounded corners
+            let frame = CIFilter.roundedRectangleGenerator()
+            frame.extent = framed
+            frame.radius = Float(framedRadius)
+            frame.color = CIColor(cgColor: style.borderColor.cgColor)
+            backdrop = frame.outputImage?.composited(over: backdrop) ?? backdrop
         }
 
         var buffer: CVPixelBuffer?
@@ -235,7 +261,12 @@ extension CanvasLayout {
             let placement = CGAffineTransform(scaleX: scale, y: scale).concatenating(CGAffineTransform(
                 translationX: (bounds.width - picture.extent.width * scale) / 2, y: (bounds.height - picture.extent.height * scale) / 2
             ))
-            return picture.transformed(by: placement, highQualityDownsample: true)
+            let placed = picture.transformed(by: placement, highQualityDownsample: true)
+            guard style.backgroundBlur > 0 else { return placed }
+            // Clamped, so the picture's edges don't fade out, then cut back to the frame
+            return placed.clampedToExtent()
+                .applyingGaussianBlur(sigma: style.backgroundBlur * maximumBackgroundBlur * min(bounds.width, bounds.height))
+                .cropped(to: bounds)
         case .color, .image:
             return CIImage(color: CIColor(cgColor: style.color.cgColor))
         case .transparent:

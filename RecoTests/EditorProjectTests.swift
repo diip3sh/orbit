@@ -33,6 +33,9 @@ struct EditorProjectTests {
         project.canvas.aspect = .portrait
         project.canvas.background = .image
         project.canvas.imageBookmark = Data([1, 2, 3])
+        project.canvas.backgroundBlur = 0.4
+        project.canvas.borderWidth = 0.01
+        project.canvas.borderColor = RGBAColor(red: 1, green: 0, blue: 0, alpha: 1)
         project.audio[track: 1].isMuted = true
 
         let data = try JSONEncoder().encode(project)
@@ -104,5 +107,27 @@ struct EditorProjectTests {
         #expect(audio.tracks == [AudioMixSettings.Track(volume: 0.5, isMuted: true)])
         #expect(audio.clickVolume == 0 && audio.background == nil && !audio.addsAudio)
         #expect(AudioMixSettings(background: BackgroundAudio(bookmark: Data(), name: "Song")).addsAudio)
+    }
+
+    @Test func readsACanvasSavedBeforeBlurAndBorderWithDefaults() throws {
+        let canvas = try JSONDecoder().decode(CanvasStyle.self, from: Data(#"{ "aspect": "1:1", "padding": 0.1, "background": "color" }"#.utf8))
+        var expected = CanvasStyle()
+        expected.aspect = .square
+        expected.padding = 0.1
+        expected.background = .color
+
+        #expect(canvas == expected)
+        #expect(canvas.backgroundBlur == 0 && canvas.borderWidth == 0)
+        #expect(try JSONDecoder().decode(CanvasStyle.self, from: Data("{}".utf8)) == CanvasStyle())
+    }
+
+    @Test func theDefaultGradientIsSlateAndAPickedOneIsNoPreset() {
+        var canvas = CanvasStyle()
+        #expect(canvas.gradientPreset == .slate)
+
+        canvas.gradientStart.red = 0.5
+        #expect(canvas.gradientPreset == nil)
+        #expect(Set(GradientPreset.all.map(\.name)).count == GradientPreset.all.count)
+        #expect(GradientPreset.all.first == .slate)
     }
 }

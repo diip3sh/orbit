@@ -86,4 +86,64 @@ struct CanvasLayoutTests {
         #expect(withPicture.pixel(at: CGPoint(x: 5, y: 295)) == [255, 0, 0, 255])
         #expect(withoutPicture.pixel(at: CGPoint(x: 5, y: 295)) == [0, 0, 255, 255])
     }
+
+    /// A picture of `width` × `height` pixels, red on the left half and blue on the right.
+    private func twoHalves(width: Int, height: Int) throws -> CGImage {
+        let sRGB = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let context = try #require(CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width / 2, height: height))
+        context.setFillColor(red: 0, green: 0, blue: 1, alpha: 1)
+        context.fill(CGRect(x: width / 2, y: 0, width: width / 2, height: height))
+        return try #require(context.makeImage())
+    }
+
+    @Test func blursAPictureBackgroundAcrossItsSeamAndKeepsItsEdgesOpaque() throws {
+        var style = CanvasStyle(aspect: .standard, padding: 0.1, shadow: 0, background: .image)
+        let picture = try twoHalves(width: 400, height: 300)
+        let videoSize = CGSize(width: 400, height: 300)
+
+        let sharp = try #require(CanvasLayout(style: style, videoSize: videoSize, shorterSide: nil, background: picture).backdrop)
+        style.backgroundBlur = 1
+        let blurred = try #require(CanvasLayout(style: style, videoSize: videoSize, shorterSide: nil, background: picture).backdrop)
+
+        #expect(sharp.pixel(at: CGPoint(x: 199, y: 10)) == [255, 0, 0, 255])
+        #expect(sharp.pixel(at: CGPoint(x: 200, y: 10)) == [0, 0, 255, 255])
+        // A sigma of 9 px mixes the halves at the seam
+        let seam = blurred.pixel(at: CGPoint(x: 199, y: 10))
+        #expect(seam[0] > 100 && seam[2] > 100 && seam[3] == 255)
+        #expect(blurred.pixel(at: CGPoint(x: 5, y: 10)) == [255, 0, 0, 255])
+        #expect(blurred.pixel(at: .zero)[3] == 255 && blurred.pixel(at: CGPoint(x: 399, y: 299))[3] == 255)
+    }
+
+    @Test func aBorderIsWholePixelsNeverPastTheCanvasEdge() {
+        #expect(CanvasLayout.borderWidth(50, around: CGRect(x: 40, y: 30, width: 320, height: 240)) == 30)
+        #expect(CanvasLayout.borderWidth(5.6, around: CGRect(x: 40, y: 30, width: 320, height: 240)) == 6)
+        #expect(CanvasLayout.borderWidth(50, around: CGRect(x: 0, y: 0, width: 400, height: 300)) == 0)
+    }
+
+    @Test func aBorderFollowsTheVideosRoundedCornersOutward() throws {
+        var style = CanvasStyle(aspect: .standard, padding: 0.1, cornerRadius: 0.05, shadow: 0, background: .color)
+        style.color = RGBAColor(red: 0, green: 0, blue: 1, alpha: 1)
+        style.borderWidth = 0.02
+        style.borderColor = RGBAColor(red: 1, green: 0, blue: 0, alpha: 1)
+
+        let layout = CanvasLayout(style: style, videoSize: CGSize(width: 400, height: 300), shorterSide: nil, background: nil)
+        let backdrop = try #require(layout.backdrop)
+
+        // The video is (40, 30, 320 × 240) and the border 6 px wide, so its frame (34, 24, 332 × 252) has a radius of 21
+        #expect(layout.videoFrame == CGRect(x: 40, y: 30, width: 320, height: 240))
+        #expect(backdrop.pixel(at: CGPoint(x: 37, y: 150)) == [255, 0, 0, 255])
+        #expect(backdrop.pixel(at: CGPoint(x: 31, y: 150)) == [0, 0, 255, 255])
+        // Inside the border's corner arc, and outside it
+        #expect(backdrop.pixel(at: CGPoint(x: 41, y: 31)) == [255, 0, 0, 255])
+        #expect(backdrop.pixel(at: CGPoint(x: 35, y: 25)) == [0, 0, 255, 255])
+
+        style.borderWidth = 0
+        let without = try #require(CanvasLayout(style: style, videoSize: CGSize(width: 400, height: 300), shorterSide: nil, background: nil).backdrop)
+        #expect(without.pixel(at: CGPoint(x: 37, y: 150)) == [0, 0, 255, 255])
+    }
 }

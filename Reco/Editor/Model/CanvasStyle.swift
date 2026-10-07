@@ -27,11 +27,23 @@ nonisolated struct CanvasStyle: Codable, Equatable, Sendable {
     var color = RGBAColor(red: 0.11, green: 0.11, blue: 0.13, alpha: 1)
 
     /// A gradient's colors, from the top-left corner to the bottom-right.
-    var gradientStart = RGBAColor(red: 0.29, green: 0.32, blue: 0.38, alpha: 1)
-    var gradientEnd = RGBAColor(red: 0.12, green: 0.13, blue: 0.16, alpha: 1)
+    var gradientStart = GradientPreset.slate.start
+    var gradientEnd = GradientPreset.slate.end
 
     /// A security-scoped bookmark to the picture the user chose for an ``Background/image`` background.
     var imageBookmark: Data?
+
+    /// How much an image background is blurred, from 0 (sharp) to 1 (see ``CanvasLayout/maximumBackgroundBlur``).
+    var backgroundBlur = 0.0
+
+    /// A frame around the video, as a share of the frame's shorter side; 0 is none.
+    var borderWidth = 0.0
+    var borderColor = RGBAColor(red: 1, green: 1, blue: 1, alpha: 1)
+
+    /// The preset the gradient's colors are, or `nil` when they were picked by hand.
+    var gradientPreset: GradientPreset? {
+        GradientPreset.all.first { $0.start == gradientStart && $0.end == gradientEnd }
+    }
 
     /// The recording as it is: its own shape, filling the frame.
     static let plain = CanvasStyle(aspect: .source, padding: 0, cornerRadius: 0, shadow: 0)
@@ -62,5 +74,28 @@ nonisolated struct CanvasStyle: Codable, Equatable, Sendable {
 
         /// Only ProRes 4444 exports keep it; the other formats export it black.
         case transparent
+    }
+}
+
+// MARK: - Decoding
+
+extension CanvasStyle {
+
+    /// Settings added after a project was saved take their defaults when missing.
+    nonisolated init(from decoder: any Decoder) throws {
+        self.init()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        aspect = try container.decodeIfPresent(Aspect.self, forKey: .aspect) ?? aspect
+        padding = try container.decodeIfPresent(Double.self, forKey: .padding) ?? padding
+        cornerRadius = try container.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? cornerRadius
+        shadow = try container.decodeIfPresent(Double.self, forKey: .shadow) ?? shadow
+        background = try container.decodeIfPresent(Background.self, forKey: .background) ?? background
+        color = try container.decodeIfPresent(RGBAColor.self, forKey: .color) ?? color
+        gradientStart = try container.decodeIfPresent(RGBAColor.self, forKey: .gradientStart) ?? gradientStart
+        gradientEnd = try container.decodeIfPresent(RGBAColor.self, forKey: .gradientEnd) ?? gradientEnd
+        imageBookmark = try container.decodeIfPresent(Data.self, forKey: .imageBookmark)
+        backgroundBlur = try container.decodeIfPresent(Double.self, forKey: .backgroundBlur) ?? backgroundBlur
+        borderWidth = try container.decodeIfPresent(Double.self, forKey: .borderWidth) ?? borderWidth
+        borderColor = try container.decodeIfPresent(RGBAColor.self, forKey: .borderColor) ?? borderColor
     }
 }

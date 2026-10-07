@@ -8,7 +8,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The canvas's shape, background, padding, corners and shadow.
+/// The canvas's shape, background, padding, corners, shadow and border, in one section with no title.
 struct CanvasInspectorSection: View {
     @Bindable var viewModel: EditorViewModel
 
@@ -17,7 +17,7 @@ struct CanvasInspectorSection: View {
     var body: some View {
         let videoSize = viewModel.source?.naturalSize ?? CGSize(width: 16, height: 9)
 
-        InspectorSection("Canvas") {
+        InspectorSection(nil) {
             InspectorField("Aspect Ratio") {
                 TilePicker(selection: $viewModel.canvas.aspect, values: CanvasStyle.Aspect.allCases) { aspect in
                     aspect == .source ? "Original" : LocalizedStringKey(aspect.rawValue)
@@ -41,44 +41,37 @@ struct CanvasInspectorSection: View {
                 }
             }
 
-            Group {
-                switch viewModel.canvas.background {
-                case .gradient:
-                    HStack {
-                        ColorPicker("Start", selection: $viewModel.canvas.gradientStart.cgColor, supportsOpacity: false)
-                        Spacer()
-                        ColorPicker("End", selection: $viewModel.canvas.gradientEnd.cgColor, supportsOpacity: false)
-                    }
-                case .color:
-                    ColorPicker("Color", selection: $viewModel.canvas.color.cgColor, supportsOpacity: false)
-                case .image:
-                    Button {
-                        choosesBackgroundImage = true
-                    } label: {
-                        Label("Choose Image…", systemImage: "photo")
-                            .frame(maxWidth: .infinity)
-                    }
-                case .transparent:
-                    EmptyView()
-                }
-            }
-            .transition(.opacity)
+            BackgroundFillControls(viewModel: viewModel, choosesImage: $choosesBackgroundImage)
 
-            InspectorSlider("Padding", value: $viewModel.canvas.padding, in: 0...0.25) {
+            InspectorSlider("Padding", value: $viewModel.canvas.padding, in: 0...0.25, defaultValue: CanvasStyle().padding) {
                 Text($0, format: .percent.precision(.fractionLength(0)))
             }
-            InspectorSlider("Corners", value: $viewModel.canvas.cornerRadius, in: 0...0.05) {
+            InspectorSlider("Corners", value: $viewModel.canvas.cornerRadius, in: 0...0.05, defaultValue: CanvasStyle().cornerRadius) {
                 Text($0, format: .percent.precision(.fractionLength(1)))
             }
-            InspectorSlider("Shadow", value: $viewModel.canvas.shadow, in: 0...1) {
+            InspectorSlider("Shadow", value: $viewModel.canvas.shadow, in: 0...1, defaultValue: CanvasStyle().shadow) {
                 Text($0, format: .percent.precision(.fractionLength(0)))
             }
+            // The border grows into the padding, so without any there's no room for it
+            let hasNoRoomForBorder = viewModel.canvas.padding == 0
+            Group {
+                InspectorSlider("Border", value: $viewModel.canvas.borderWidth, in: 0...0.02, defaultValue: 0) {
+                    $0 == 0 ? Text("Off") : Text($0, format: .percent.precision(.fractionLength(1)))
+                }
+                if viewModel.canvas.borderWidth > 0 {
+                    ColorPicker("Border Color", selection: $viewModel.canvas.borderColor.cgColor, supportsOpacity: false)
+                }
+            }
+            .disabled(hasNoRoomForBorder)
+            // Text in ink doesn't dim by itself when disabled
+            .opacity(hasNoRoomForBorder ? 0.4 : 1)
         } footer: {
             if viewModel.canvas.background == .transparent {
                 Text("Only ProRes 4444 exports keep the background transparent; other formats make it black.")
             }
         }
         .editorMotion(value: viewModel.canvas.background)
+        .task { await viewModel.loadWallpapers() }
         .fileImporter(isPresented: $choosesBackgroundImage, allowedContentTypes: [.image]) { result in
             if case .success(let url) = result {
                 viewModel.setBackgroundImage(url)

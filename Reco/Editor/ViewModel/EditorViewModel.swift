@@ -58,10 +58,16 @@ final class EditorViewModel {
 
     /// The keyboard layout in use when the editor opened, the system's arrow for recordings made
     /// without the cursor, and the background picture.
-    @ObservationIgnored private var resources = RenderResources.none
+    @ObservationIgnored var resources = RenderResources.none
 
     /// The bookmark whose picture is in ``resources``.
-    @ObservationIgnored private var backgroundBookmark: Data?
+    @ObservationIgnored var backgroundBookmark: Data?
+
+    /// The file the canvas's picture was read from, so the inspector can ring the chosen wallpaper.
+    var backgroundImageURL: URL?
+
+    /// The system's wallpapers the inspector offers, once ``loadWallpapers()`` has read them.
+    var wallpapers: [SystemWallpaper] = []
 
     /// Which edits share an undo step.
     @ObservationIgnored private var coalescedEdits = EditCoalescing()
@@ -98,13 +104,9 @@ final class EditorViewModel {
             fail(.unreadableProject(error))
             return
         }
-        var resources = RenderResources(
-            keyLabels: KeyLabelFormatter.current(),
-            arrow: source.telemetry?.capture.cursorInVideo == false ? StandardCursors.arrowSprite : nil
-        )
-        if let bookmark = project.canvas.imageBookmark {
-            resources.background = await BackgroundImageLoader.image(from: bookmark)
-        }
+        resources.keyLabels = KeyLabelFormatter.current()
+        resources.arrow = source.telemetry?.capture.cursorInVideo == false ? StandardCursors.arrowSprite : nil
+        let backgroundIsReadable = await updateBackgroundImage(for: project.canvas.imageBookmark)
         let plan = await RenderPlan.build(project: project, source: source, resources: resources)
         let extra = await extraAudio(for: project.audio, source: source)
         let composition: EditorComposition
@@ -118,13 +120,12 @@ final class EditorViewModel {
 
         self.source = source
         self.project = project
-        self.resources = resources
-        backgroundBookmark = project.canvas.imageBookmark
         savedProject = project
         markers = source.telemetry.map(TimelineMarkers.init)
         updateTimeline()
         show(composition, plan: plan, atSource: time ?? 0)
-        if project.canvas.imageBookmark != nil, resources.background == nil {
+        // After show(...): failing while the source is still nil would flash "Can't Open Recording"
+        if !backgroundIsReadable {
             fail(.unreadableBackground)
         }
         logger.info("Opened \(self.videoURL.lastPathComponent)")
@@ -304,16 +305,8 @@ final class EditorViewModel {
         rebuild?.cancel()
         let project = project
         rebuild = Task {
-            let bookmark = project.canvas.imageBookmark
-            if bookmark != backgroundBookmark {
-                resources.background = nil
-                if let bookmark {
-                    resources.background = await BackgroundImageLoader.image(from: bookmark)
-                    if resources.background == nil {
-                        fail(.unreadableBackground)
-                    }
-                }
-                backgroundBookmark = bookmark
+            if !(await updateBackgroundImage(for: project.canvas.imageBookmark)) {
+                fail(.unreadableBackground)
             }
             let plan = await RenderPlan.build(project: project, source: source, resources: resources)
             let extra = await extraAudio(for: self.project.audio, source: source)
