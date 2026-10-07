@@ -15,6 +15,9 @@ struct EditorView: View {
 
     @State private var showsInspector = true
 
+    /// The inspector's tab, kept here so it survives a visit to export.
+    @State private var inspectorTab = InspectorTab.background
+
     /// Whether the title bar's name is being edited, which Esc must end before it leaves export.
     @State private var isRenaming = false
 
@@ -45,7 +48,7 @@ struct EditorView: View {
                         if let export {
                             ExportOptions(viewModel: viewModel, session: export)
                         } else {
-                            EditorInspector(viewModel: viewModel)
+                            EditorInspector(viewModel: viewModel, tab: $inspectorTab)
                         }
                     }
                     .transition(.opacity)

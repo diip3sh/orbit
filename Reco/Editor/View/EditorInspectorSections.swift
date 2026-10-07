@@ -7,41 +7,65 @@
 
 import SwiftUI
 
-/// The editor's right column: a notice when the telemetry is missing, then the canvas, the selected
-/// zoom, the cursor, click highlights, keystrokes and the audio tracks.
+/// The editor's right column: the tab bar, a notice when the telemetry is missing, then the chosen tab's
+/// sections. Selecting a zoom on the timeline turns to Motion, where its settings are.
 struct EditorInspector: View {
     @Bindable var viewModel: EditorViewModel
+    @Binding var tab: InspectorTab
 
     /// The width it opens at, picked by hand on 2026-10-07 in a 1533 pt window: room for five aspect tiles
     /// with their names and the sliders' values. The export page's options use the same column.
     static let idealWidth: CGFloat = 380
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                if let reason = viewModel.source?.telemetryError {
-                    Label(reason.localizedDescription, systemImage: "info.circle")
-                        .font(.callout)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(EditorTheme.mediumSpacing)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.primary.opacity(0.06), in: .rect(cornerRadius: 8))
-                        .padding([.horizontal, .top])
-                }
+        let trackNames = viewModel.source?.audioTrackNames ?? []
 
-                CanvasInspectorSection(viewModel: viewModel)
-                ZoomInspectorSection(viewModel: viewModel)
-                CursorInspectorSection(viewModel: viewModel)
-                ClicksInspectorSection(viewModel: viewModel)
-                KeystrokesInspectorSection(viewModel: viewModel)
-                if let names = viewModel.source?.audioTrackNames, !names.isEmpty {
-                    AudioInspectorSection(viewModel: viewModel, trackNames: names)
+        VStack(spacing: 0) {
+            InspectorTabBar(selection: $tab) { $0.isAvailable(hasAudio: !trackNames.isEmpty) }
+                .padding([.horizontal, .top])
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    if let reason = viewModel.source?.telemetryError {
+                        Label(reason.localizedDescription, systemImage: "info.circle")
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(EditorTheme.mediumSpacing)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.primary.opacity(0.06), in: .rect(cornerRadius: 8))
+                            .padding([.horizontal, .top])
+                    }
+
+                    switch tab {
+                    case .background:
+                        CanvasInspectorSection(viewModel: viewModel)
+                    case .audio:
+                        AudioInspectorSection(viewModel: viewModel, trackNames: trackNames)
+                    case .cursor:
+                        CursorInspectorSection(viewModel: viewModel)
+                        ClicksInspectorSection(viewModel: viewModel)
+                    case .keyboard:
+                        KeystrokesInspectorSection(viewModel: viewModel)
+                    case .motion:
+                        ZoomInspectorSection(viewModel: viewModel)
+                    case .camera, .caption:
+                        EmptyView()
+                    }
                 }
+                .toggleStyle(.inspector)
+                .controlSize(.small)
             }
-            .toggleStyle(.inspector)
-            .controlSize(.small)
+            .scrollIndicators(.never)
+            // Each tab opens at its top
+            .id(tab)
+            .transition(.opacity)
         }
-        .scrollIndicators(.never)
+        .editorMotion(EditorTheme.quickMotion, value: tab)
+        .onChange(of: viewModel.selection) { _, selection in
+            if case .zoom = selection {
+                tab = .motion
+            }
+        }
     }
 }
 
