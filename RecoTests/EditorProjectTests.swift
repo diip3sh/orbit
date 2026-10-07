@@ -21,6 +21,7 @@ struct EditorProjectTests {
         project.keystrokes.showsAllKeys = true
         project.cursor.smoothing = .mellow
         project.cursor.hidesWhenIdle = true
+        project.zoomMotion = .fast
         project.canvas.aspect = .portrait
         project.canvas.background = .image
         project.canvas.imageBookmark = Data([1, 2, 3])

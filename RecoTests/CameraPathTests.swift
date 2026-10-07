@@ -35,6 +35,16 @@ struct CameraPathTests {
         #expect(isClose(path.viewport(at: 4), to: CameraPath.Viewport(center: CGPoint(x: 0.3, y: 0.6), scale: 2)))
     }
 
+    @Test func aStifferSpringZoomsInSooner() {
+        let zooms = [zoom(1..<5, at: CGPoint(x: 0.3, y: 0.6))]
+        let scale = { (motion: ZoomMotion) in
+            CameraPath(zooms: zooms, cursor: [], duration: 10, stiffness: motion.frequency).viewport(at: 1.25).scale
+        }
+
+        #expect(scale(.mellow) < scale(.smooth))
+        #expect(scale(.smooth) < scale(.fast))
+    }
+
     @Test func reachesTheWholeFrameBetweenZooms() {
         let path = CameraPath(zooms: [zoom(1..<3, at: CGPoint(x: 0.3, y: 0.6)), zoom(6..<8, at: CGPoint(x: 0.7, y: 0.4))], cursor: [], duration: 10)
 

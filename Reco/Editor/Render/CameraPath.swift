@@ -29,10 +29,6 @@ nonisolated struct CameraPath: Sendable {
 
     static let sampleRate = 120.0
 
-    /// The spring's natural frequency, in radians per second: a move is 96% done after 0.5 s. The
-    /// spring stops within 0.04 px of its target at 4K, about 1.4 s after a 2× zoom starts or ends.
-    static let stiffness = 10.0
-
     /// The share of the view, around its centre, in which the cursor moves without the view following.
     static let deadZone = 0.5
 
@@ -44,14 +40,15 @@ nonisolated struct CameraPath: Sendable {
     ///   - cursor: The cursor's positions in the video, sorted by source time, each held until the
     ///     next. Without them, a zoom that follows the cursor centres on the frame.
     ///   - duration: The recording's length in seconds.
-    init(zooms: [ZoomSegment], cursor: [(time: Double, point: CGPoint)], duration: Double) {
+    ///   - stiffness: The spring's natural frequency, in radians per second (``ZoomMotion/frequency``).
+    init(zooms: [ZoomSegment], cursor: [(time: Double, point: CGPoint)], duration: Double, stiffness: Double = ZoomMotion.smooth.frequency) {
         guard !zooms.isEmpty else {
             samples = []
             return
         }
-        var centerX = Spring(position: 0.5, frequency: Self.stiffness, rate: Self.sampleRate)
-        var centerY = Spring(position: 0.5, frequency: Self.stiffness, rate: Self.sampleRate)
-        var logScale = Spring(position: 0, frequency: Self.stiffness, rate: Self.sampleRate)
+        var centerX = Spring(position: 0.5, frequency: stiffness, rate: Self.sampleRate)
+        var centerY = Spring(position: 0.5, frequency: stiffness, rate: Self.sampleRate)
+        var logScale = Spring(position: 0, frequency: stiffness, rate: Self.sampleRate)
         var zoomIndex = 0
         var cursorIndex = 0
         var followed: CGPoint?

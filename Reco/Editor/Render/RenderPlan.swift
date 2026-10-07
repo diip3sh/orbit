@@ -75,7 +75,8 @@ extension RenderPlan {
         // with 455 zooms, 3,000 clicks and 12,000 keys (M1, Debug), the camera takes 38 ms and the
         // cursor 35; the plan builds in 42 ms instead of 105
         async let camera = CameraPath(
-            zooms: project.zooms, cursor: source.telemetry.map { cursorPoints(for: $0, during: project.zooms) } ?? [], duration: source.duration
+            zooms: project.zooms, cursor: source.telemetry.map { cursorPoints(for: $0, during: project.zooms) } ?? [], duration: source.duration,
+            stiffness: project.zoomMotion.frequency
         )
         async let cursor = source.telemetry.flatMap {
             drawnCursor(for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: resources.arrow)

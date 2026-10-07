@@ -47,6 +47,7 @@ struct EditorInspector: View {
                     case .keyboard:
                         KeystrokesInspectorSection(viewModel: viewModel)
                     case .motion:
+                        MotionInspectorSection(viewModel: viewModel)
                         ZoomInspectorSection(viewModel: viewModel)
                     case .camera, .caption:
                         EmptyView()
@@ -135,7 +136,33 @@ struct ZoomInspectorSection: View {
     }
 }
 
-/// The drawn cursor's visibility, size, movement and animations.
+/// How the camera and the drawn cursor move.
+struct MotionInspectorSection: View {
+    @Bindable var viewModel: EditorViewModel
+
+    var body: some View {
+        let telemetry = viewModel.source?.telemetry
+        let cursorIsRecorded = telemetry?.capture.cursorInVideo != false
+
+        InspectorSection("Motion") {
+            InspectorField("Zoom") {
+                SegmentedChoice(selection: $viewModel.zoomMotion, options: [(.mellow, "Mellow"), (.smooth, "Smooth"), (.fast, "Fast")])
+            }
+            InspectorField("Cursor") {
+                SegmentedChoice(selection: $viewModel.cursor.smoothing, options: [(.mellow, "Mellow"), (.smooth, "Smooth"), (.fast, "Fast")])
+                    .disabled(cursorIsRecorded)
+                    // Text in ink doesn't dim by itself when disabled
+                    .opacity(cursorIsRecorded ? 0.4 : 1)
+            }
+        } footer: {
+            if telemetry?.capture.cursorInVideo == true {
+                Text("The cursor is part of this recording's video, so it moves as it was recorded.")
+            }
+        }
+    }
+}
+
+/// The drawn cursor's visibility, size and animations.
 struct CursorInspectorSection: View {
     @Bindable var viewModel: EditorViewModel
 
@@ -146,9 +173,6 @@ struct CursorInspectorSection: View {
             Toggle("Show Cursor", isOn: $viewModel.cursor.isEnabled)
             InspectorSlider("Size", value: $viewModel.cursor.size, in: 0.5...3) {
                 Text("\($0, format: .number.precision(.fractionLength(1)))×")
-            }
-            InspectorField("Movement") {
-                SegmentedChoice(selection: $viewModel.cursor.smoothing, options: [(.mellow, "Mellow"), (.smooth, "Smooth"), (.fast, "Fast")])
             }
             Toggle("Shrink on Click", isOn: $viewModel.cursor.animatesClicks)
             Toggle("Hide When Idle", isOn: $viewModel.cursor.hidesWhenIdle)
