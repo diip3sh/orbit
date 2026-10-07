@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 825 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 831 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -443,6 +443,25 @@ Key facts:
   455 zooms (half following the cursor): the plan builds in ~45 ms (camera 36 ms, cursor 9 ms);
   0.1 ms without zooms. A zoomed 4K frame with a ring and a chip renders in 4.7 ms p50 / 8.1 ms p95
   (4.2 / 7.4 unzoomed).
+- **Motion blur** (2026-10-08; Motion tab, `EditorProject.motionBlur`, 0 to 1, 0 = off): the shutter is
+  `motionBlur / output frame rate` seconds (`RenderPlan.shutter`; 1 = open the whole frame; the export's rate comes
+  through `RenderTarget.frameRate`, the preview uses the recording's). While the video's corners travel 0.5 px or more
+  across the shutter, `FrameRenderer.placements(at:plan:)` returns one placement per 2 px of travel, 2 to `RenderPlan.maximumBlurSamples` (8 in exports, 2 in the preview: 8 cost 12.4–14 ms p95 at 4K mid-zoom on an M2 in Debug, 2 cost 5.6), evenly
+  spaced and centred on the frame's time, and the frame is drawn at each, scaled to its share of the alpha
+  (`fading(to:)`; `CIColorMatrix` on all four channels would divide the colour twice, since Core Image unpremultiplies
+  first) and added (`CIAdditionCompositing`). Under 0.5 px, and with blur off, it draws once with the same graph as
+  before, so frames without camera motion (the spring stops within 0.04 px of its target) are byte-identical to today's
+  (tested with the buffers' bytes). The cursor blurs the same way when it moves 1 px or more on screen, including the
+  camera's move: its image is placed at each sample, the samples summed, and the sum composited over the frame once.
+  Measured 2026-10-08 on a MacBook Air (Mac14,2, M2), Debug, load average ~5.5 (WindowServer and two Chrome GPU
+  processes), 4K frame on the default canvas with a ring and a chip, blur 1 at 60 fps, 300 renders alternating with
+  blur 0 so load hits both: at the peak of a 2× zoom (8 samples) 9.5–11 ms p50 / 12.4–14 p95, against 4.2–4.5 / 5.2–6.8
+  without blur; over the 1 s a zoom's frames blur (60 of 90 at 60 fps, 8 samples for the first 0.6 s) 11.0 p50 / 13.8 p95.
+  Each sample costs about 0.7–0.9 ms, so **a fast 4K zoom with blur on doesn't hold the 8 ms budget** (the preview
+  drops frames over that stretch; an export isn't real time); blur is off by default and costs nothing off. Fewer
+  samples (4: 6.0 p50 / 9.5 p95; 2: 4.3 / 5.6) trade ghosting for time. Sharing the clamped frame between the samples
+  made no difference. The cursor's blur is cheap: moving 30 px a frame with no camera motion, 3.7–3.9 ms p50 /
+  5.3–5.6 p95 with 8 samples against 3.7–3.9 / 5.0–5.2 without.
 - The soft-zoom hint shows when the recording has under 2 video pixels per screen point
   (`InputTelemetry.pixelsPerPoint`); telemetry doesn't record the Native Resolution setting itself.
 
@@ -452,7 +471,7 @@ A recording made without the cursor gets it back in the editor: drawn from its r
 smoothed position, sharp when zoomed, with its hot spot on every click highlight. The inspector's
 Cursor tab (2026-10-07) holds the Cursor section (show or hide, style, size with Reset, "Always Use Pointer",
 shrinking on click, hiding when idle, "Loop Position") and the Clicks section (effect, color, size, duration,
-buttons, click sound). Movement (Mellow, Smooth, Fast) is in the Motion tab.
+buttons, click sound). Movement (Mellow, Smooth, Fast, None) is in the Motion tab.
 
 | File | Role |
 |---|---|
@@ -474,7 +493,9 @@ Key facts:
   neighbouring clicks, and is added at lookup, so it's exact between samples too.
 - Presets are critically damped springs at 7, 12.5 and 25 rad/s, trailing a steady move by 290, 160
   and 80 ms. Smooth is Cap's default (tension 470, mass 3) without its 0.03% overshoot. A move back
-  by less than 2 pt is jitter and dropped.
+  by less than 2 pt is jitter and dropped. **None** (`Smoothing.off`, `frequency` is `nil`) follows the recorded positions
+  as they are: no spring and no jitter filter, each position held until the next (sampled at 120 Hz like the others);
+  clicks and the loop's glide still ease on.
 - Shapes shown for under 150 ms are dropped. A press shrinks the cursor to 0.8× over 130 ms while
   held. Idle hiding fades out over 0.3 s after 2 s without a move or click, and back in before the
   next one.
@@ -585,7 +606,7 @@ slate gradient.
 | `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar, centred, never larger than the screen less 40 pt; the editor and Web Recording open at 1533×943 (the size picked by hand on 2026-10-05) |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the transport in the timeline's header |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart; a line at each label, dots between; labels carry their units, "0.5s", "1m 30s", "1h", since a clock's "0:00.5" didn't say what it counted), the playhead's knob, the zoom blocks |
-| `Editor/Model/InspectorTab.swift`, `Editor/View/InspectorTabBar.swift` | The inspector's tabs (2026-10-07): Background · Camera ‖ Audio ‖ Cursor · Keyboard ‖ Captions ‖ Motion, as icons on one capsule track with a line between groups and a sliding fill; only the chosen tab's sections show (Canvas; Audio; Cursor and Clicks; Keystrokes; Zoom). Camera and Captions stay disabled until the camera is its own track and a transcript exists (spec 0004, N19, N5); Audio without tracks too. The tab is `EditorView` state, so it survives export; selecting a zoom turns to Motion. Motion holds the zoom's and the cursor's movement (Mellow, Smooth, Fast): `ZoomMotion` sets the camera spring at 6, 10 or 16 rad/s (96% of a move in 0.83, 0.5 or 0.31 s), saved in the project as `zoomMotion` |
+| `Editor/Model/InspectorTab.swift`, `Editor/View/InspectorTabBar.swift` | The inspector's tabs (2026-10-07): Background · Camera ‖ Audio ‖ Cursor · Keyboard ‖ Captions ‖ Motion, as icons on one capsule track with a line between groups and a sliding fill; only the chosen tab's sections show (Canvas; Audio; Cursor and Clicks; Keystrokes; Zoom). Camera and Captions stay disabled until the camera is its own track and a transcript exists (spec 0004, N19, N5); Audio without tracks too. The tab is `EditorView` state, so it survives export; selecting a zoom turns to Motion. Motion holds the zoom's and the cursor's movement (Mellow, Smooth, Fast; the cursor's also None) and Motion Blur (a slider, Off at 0): `ZoomMotion` sets the camera spring at 6, 10 or 16 rad/s (96% of a move in 0.83, 0.5 or 0.31 s), saved in the project as `zoomMotion`, blur as `motionBlur` |
 | `Editor/View/Inspector*.swift`, `EditorInspectorSections.swift`, `TickSlider.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | `EditorInspector` and its sections, which fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides. Every slider is a `TickSlider`: a track with ticks, accent fill up to a bar at the value, dragged 1:1 from the grab (a press away from the bar takes it there first), VoiceOver adjustable in 20 steps, without a focus ring |
 | `Editor/View/ExportOptions.swift`, `ExportProgressBar.swift` | Export's inspector: format, size and frame rate as `SegmentedChoice` tabs (an option can be disabled), the quality as rows with their estimated sizes, Export and Copy to Clipboard (side by side, or stacked when the column is narrow) pinned under a line; progress |
 

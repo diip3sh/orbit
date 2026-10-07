@@ -90,6 +90,11 @@ struct EditorViewModelTests {
         #expect(viewModel.project.cursor.smoothing == .fast)
         #expect(viewModel.undoManager.undoActionName == "Cursor")
 
+        viewModel.motionBlur = 0.5
+
+        #expect(viewModel.project.motionBlur == 0.5)
+        #expect(viewModel.undoManager.undoActionName == "Motion Blur")
+
         viewModel.canvas.aspect = .square
 
         #expect(viewModel.project.canvas.aspect == .square)

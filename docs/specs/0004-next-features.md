@@ -81,6 +81,12 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N1 — Motion blur on camera and cursor
 
+- **Status (2026-10-08): shipped** as one **Motion Blur** slider in the Motion tab (0 to 1 of the frame; 0 is off and
+  the default), not separate cursor and zoom amounts. The cursor blurs with the camera's and its own moves. The
+  8-sample average costs more than the 1.6 ms measured above: at 4K on an M2 (Debug, load ~5.5) each sample is about
+  0.7–0.9 ms, so the peak of a zoom is 9.5–11 ms p50 / 12.4–14 p95 against 4.2–4.5 / 5.2–6.8 without blur, over the
+  budget. Samples scale with travel (one per 2 px, 2 to 8). The cursor's blur is cheap (+0.2 ms p50). Details in
+  CLAUDE.md, editor phase 4. Open: fuse the samples into one kernel, and separate zoom-in/pan amounts.
 - **What:** blur along the view's movement while it zooms or pans, and along the cursor's path.
   There is one amount each, in the Zoom and Cursor sections. Screen Studio has three sliders
   (cursor, zoom-in, pan); start with two.
@@ -102,6 +108,8 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N2 — Cursor: loop to start, stop before end, tilt
 
+- **Status (2026-10-08):** *loop* shipped ("Loop Position"). *Stop before end* and *tilt* are not built. Related and
+  shipped: cursor movement **None** (the recorded positions, no spring or jitter filter).
 - **What:**
   - *Loop:* in the last second, the cursor glides back to where it was in the first frame, so a
     video or GIF loops.

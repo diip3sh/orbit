@@ -55,6 +55,16 @@ nonisolated struct RenderPlan: Sendable {
     /// Shrinks frames with Core Image's high-quality downsampling, as exports do: a 1080p export of a
     /// Retina recording halves it, and plain linear sampling blurs its text. The preview skips it.
     var downsamplesSmoothly = false
+
+    /// How long the shutter is open over a frame, in seconds: the project's motion blur over the output's
+    /// frame rate. 0 draws every frame sharp.
+    var shutter = 0.0
+
+    /// The most samples a blurred frame averages. Measured on an M2, Debug, 4K at the peak of a 2× zoom (load
+    /// average 5.5): 8 samples took 12.4–14 ms p95, 4 took 9.5 and 2 took 5.6, against 5.2–6.8 unblurred. So the
+    /// preview takes 2 to stay in the 8 ms budget and exports, which aren't real time, take 8.
+    /// ponytail: fuse the samples into one Metal kernel if the preview's blur should match the export's.
+    var maximumBlurSamples = 8
 }
 
 // MARK: - Building
@@ -122,7 +132,8 @@ extension RenderPlan {
             chipImages: labels.map { OverlayImages.encoded(OverlayImages.chip(label: $0, height: chipHeight), in: dynamicRange) },
             canvas: canvas,
             dynamicRange: dynamicRange,
-            downsamplesSmoothly: target.shorterSide != nil
+            downsamplesSmoothly: target.shorterSide != nil,
+            shutter: project.motionBlur / (target.frameRate ?? source.frameRate), maximumBlurSamples: target.shorterSide == nil ? 2 : 8
         )
     }
 

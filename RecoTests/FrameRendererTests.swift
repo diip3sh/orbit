@@ -19,6 +19,10 @@ struct FrameRendererTests {
 
     /// Draws the frame as the compositor does, into a buffer the canvas's size, with half floats for HDR.
     private func render(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CIImage {
+        drawn(frame, at: time, plan: plan).map { CIImage(cvPixelBuffer: $0) } ?? .empty()
+    }
+
+    private func drawn(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CVPixelBuffer? {
         var buffer: CVPixelBuffer?
         CVPixelBufferCreate(
             nil, Int(plan.canvas.size.width), Int(plan.canvas.size.height),
@@ -26,9 +30,18 @@ struct FrameRendererTests {
             [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer
         )
         guard let buffer, (try? FrameRenderer.draw(frame, at: time, plan: plan, into: buffer, context: Self.context)) != nil else {
-            return .empty()
+            return nil
         }
-        return CIImage(cvPixelBuffer: buffer)
+        return buffer
+    }
+
+    /// The buffer's bytes, row padding included.
+    private func bytes(of buffer: CVPixelBuffer?) -> [UInt8] {
+        guard let buffer else { return [] }
+        CVPixelBufferLockBaseAddress(buffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddress(buffer) else { return [] }
+        return Array(UnsafeRawBufferPointer(start: base, count: CVPixelBufferGetBytesPerRow(buffer) * CVPixelBufferGetHeight(buffer)))
     }
 
     private var plan: RenderPlan {
@@ -40,10 +53,11 @@ struct FrameRendererTests {
     /// otherwise. The overlays are drawn in `dynamicRange`, as plans draw them.
     private func plan(
         at time: Double, zooms: [ZoomSegment] = [], cursor: InputTelemetry.CursorSprite? = nil, canvas: CanvasStyle = .plain,
-        dynamicRange: DynamicRange = .sdr, cursorStyle: CursorStyle? = nil, clickEffect: ClickHighlightStyle.Effect = .circle
+        dynamicRange: DynamicRange = .sdr, cursorStyle: CursorStyle? = nil, clickEffect: ClickHighlightStyle.Effect = .circle,
+        shutter: Double = 0, telemetry: InputTelemetry? = nil
     ) -> RenderPlan {
         let drawn = cursorStyle.flatMap {
-            RenderPlan.drawnCursor(for: cursorTelemetry, style: $0, duration: 10, videoHeight: bounds.height, arrow: nil)
+            RenderPlan.drawnCursor(for: telemetry ?? cursorTelemetry, style: $0, duration: 10, videoHeight: bounds.height, arrow: nil)
         }
         return RenderPlan(
             timeMap: TimeMap(cuts: [], sourceDuration: 10, frameRate: 60),
@@ -61,7 +75,8 @@ struct FrameRendererTests {
             keystrokes: [KeystrokeChip(time: time, image: 0)],
             chipImages: [OverlayImages.encoded(OverlayImages.chip(label: "⌘C", height: 30), in: dynamicRange)],
             canvas: CanvasLayout(style: canvas, videoSize: bounds.size, shorterSide: nil, background: nil).encoded(in: dynamicRange),
-            dynamicRange: dynamicRange
+            dynamicRange: dynamicRange,
+            shutter: shutter
         )
     }
 
@@ -280,5 +295,98 @@ struct FrameRendererTests {
         // The shadow, below the video
         #expect(image.pixel(at: CGPoint(x: 200, y: 26))[3] > 40)
         #expect(image.pixel(at: CGPoint(x: 200, y: 150)) == [0, 0, 0, 255])
+    }
+
+    // MARK: - Motion blur
+
+    /// Left half black, right half white, with a vertical edge at x = 150.
+    private var edge: CIImage {
+        CIImage(color: .black).cropped(to: CGRect(x: 0, y: 0, width: 150, height: 300)).composited(over: CIImage(color: .white).cropped(to: bounds))
+    }
+
+    /// Squares of two greys, so a frame drawn from other pixels, or blended, differs in many bytes.
+    private var checkers: CIImage {
+        CIFilter(name: "CICheckerboardGenerator", parameters: [
+            "inputWidth": 7, "inputColor0": CIColor(red: 0.2, green: 0.4, blue: 0.9), "inputColor1": CIColor(red: 0.9, green: 0.8, blue: 0.1), "inputCenter": CIVector(x: 3, y: 5)
+        ])?.outputImage?.cropped(to: bounds) ?? .empty()
+    }
+
+    /// One 60 fps frame's worth of shutter.
+    private let frame = 1.0 / 60
+
+    @Test func aStillCameraDrawsExactlyWhatWithoutBlurDoes() {
+        // No zooms, and a zoom that has long settled (the spring is within 0.04 px of it by 1.4 s)
+        for zooms in [[], [zoomOnClick]] {
+            let sharp = bytes(of: drawn(checkers, at: 5, plan: plan(at: 5, zooms: zooms)))
+            let blurred = bytes(of: drawn(checkers, at: 5, plan: plan(at: 5, zooms: zooms, shutter: frame)))
+            #expect(!sharp.isEmpty && sharp == blurred)
+            #expect(FrameRenderer.placements(at: 5, plan: plan(at: 5, zooms: zooms, shutter: frame)).count == 1)
+        }
+    }
+
+    @Test func aMovingCameraSpreadsAnEdgeAcrossMorePixels() {
+        // 0.1 s into a 2× zoom the view is magnifying by about 4 per second
+        func width(of image: CIImage) -> Int {
+            (0..<Int(bounds.width)).filter { (10...245).contains(image.pixel(at: CGPoint(x: $0, y: 150))[0]) }.count
+        }
+        let sharp = width(of: render(edge, at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick])))
+        let blurred = width(of: render(edge, at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick], shutter: frame)))
+
+        #expect(sharp <= 3)
+        #expect(blurred > sharp + 3)
+        // And the blurred frame is still opaque and keeps the edge's sides
+        let image = render(edge, at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick], shutter: frame))
+        #expect(image.pixel(at: CGPoint(x: 5, y: 150)) == [0, 0, 0, 255])
+        #expect(image.pixel(at: CGPoint(x: 395, y: 150)) == [255, 255, 255, 255])
+    }
+
+    @Test func averagingKeepsAFlatFramesColorAndAlpha() {
+        let flat = CIImage(color: CIColor(red: 0.2, green: 0.5, blue: 0.8)).cropped(to: bounds)
+        let sharp = render(flat, at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick])).pixel(at: CGPoint(x: 200, y: 150))
+        let blurred = render(flat, at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick], shutter: frame)).pixel(at: CGPoint(x: 200, y: 150))
+
+        #expect(zip(sharp, blurred).allSatisfy { abs(Int($0) - Int($1)) <= 1 })
+    }
+
+    @Test func aMovingCursorSpreadsAlongItsPathAndAStillOneDoesNot() {
+        // Moves right at 100 pt (200 px) a second from (20, 50) pt: at 1 s, 240 px from the left and 200 up
+        var moving = cursorTelemetry
+        moving.cursor = (0...120).map { .init(time: Double($0) / 60, location: CGPoint(x: 20 + 100 * Double($0) / 60, y: 50)) }
+        let style = CursorStyle(appearance: .dot, smoothing: .off)
+        let black = CIImage(color: .black).cropped(to: bounds)
+
+        // A shutter of 0.1 s covers 20 px: the 32 px dot reaches 10 px further ahead, where it's sharp without
+        let sharp = render(black, at: 1, plan: plan(at: 5, cursorStyle: style, telemetry: moving))
+        let blurred = render(black, at: 1, plan: plan(at: 5, cursorStyle: style, shutter: 0.1, telemetry: moving))
+        #expect(sharp.pixel(at: CGPoint(x: 260, y: 200)) == [0, 0, 0, 255])
+        #expect(blurred.pixel(at: CGPoint(x: 260, y: 200))[0] > 20)
+        // And it's the same dot, less bright where the movement leaves it
+        #expect(blurred.pixel(at: CGPoint(x: 240, y: 200))[0] > 60)
+
+        // At rest, the same bytes
+        let still = plan(at: 5, cursorStyle: style)
+        let stillBlurred = plan(at: 5, cursorStyle: style, shutter: 0.1)
+        #expect(bytes(of: drawn(black, at: 1, plan: still)) == bytes(of: drawn(black, at: 1, plan: stillBlurred)))
+    }
+
+    @Test func placementsAreOneWhenTheShutterIsClosedOrTheCameraStillAndMoreAcrossAMove() {
+        #expect(FrameRenderer.placements(at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick])).count == 1)
+        #expect(FrameRenderer.placements(at: 5, plan: plan(at: 0, zooms: [zoomOnClick], shutter: frame)).count == 1)
+
+        let moving = FrameRenderer.placements(at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick], shutter: frame))
+        #expect(moving.count == 8)
+        // Zooming in, so each is a bigger magnification than the one before, and the middle is the frame's own
+        #expect(zip(moving, moving.dropFirst()).allSatisfy { $0.a < $1.a })
+        let centred = plan(at: 0, zooms: [zoomOnClick]).camera.viewport(at: 0.1).scale
+        #expect(moving[0].a < centred && centred < moving[7].a)
+
+        // A move of a few pixels is covered by fewer: this shutter is a fifth as long
+        let slow = FrameRenderer.placements(at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick], shutter: frame / 5))
+        #expect((2..<8).contains(slow.count))
+
+        // The preview's cap
+        var preview = plan(at: 0, zooms: [zoomOnClick], shutter: frame)
+        preview.maximumBlurSamples = 2
+        #expect(FrameRenderer.placements(at: 0.1, plan: preview).count == 2)
     }
 }

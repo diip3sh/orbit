@@ -148,13 +148,19 @@ struct MotionInspectorSection: View {
             InspectorField("Zoom") {
                 SegmentedChoice(selection: $viewModel.zoomMotion, options: [(.mellow, "Mellow"), (.smooth, "Smooth"), (.fast, "Fast")])
             }
+            InspectorSlider("Motion Blur", value: $viewModel.motionBlur, in: 0...1, defaultValue: 0) {
+                $0 == 0 ? Text("Off") : Text($0, format: .percent.precision(.fractionLength(0)))
+            }
             InspectorField("Cursor") {
-                SegmentedChoice(selection: $viewModel.cursor.smoothing, options: [(.mellow, "Mellow"), (.smooth, "Smooth"), (.fast, "Fast")])
+                SegmentedChoice(selection: $viewModel.cursor.smoothing, options: [(.mellow, "Mellow"), (.smooth, "Smooth"), (.fast, "Fast"), (.off, "None")])
                     .disabled(cursorIsRecorded)
                     // Text in ink doesn't dim by itself when disabled
                     .opacity(cursorIsRecorded ? 0.4 : 1)
             }
         } footer: {
+            if viewModel.motionBlur > 0, viewModel.project.zooms.isEmpty {
+                Text("Blurs the camera's moves; frames without them stay sharp.")
+            }
             if telemetry?.capture.cursorInVideo == true {
                 Text("The cursor is part of this recording's video, so it moves as it was recorded.")
             }

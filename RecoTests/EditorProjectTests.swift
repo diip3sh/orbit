@@ -27,6 +27,8 @@ struct EditorProjectTests {
         project.clickHighlights.effect = .ripple
         project.audio.clickVolume = 0.4
         project.zoomMotion = .fast
+        project.motionBlur = 0.6
+        project.cursor.smoothing = .off
         project.canvas.aspect = .portrait
         project.canvas.background = .image
         project.canvas.imageBookmark = Data([1, 2, 3])
@@ -45,6 +47,7 @@ struct EditorProjectTests {
         let project = try JSONDecoder().decode(EditorProject.self, from: Data(json.utf8))
 
         #expect(project == EditorProject(cuts: [1..<2]))
+        #expect(project.motionBlur == 0)
     }
 
     @Test func rejectsAnUnknownVersion() {

@@ -222,11 +222,10 @@ final class EditorViewModel {
         await rebuild?.value
         guard let source, var composition else { return nil }
         // Drawn at the export's size, frame rate and dynamic range; otherwise the same as the preview
-        let target = RenderTarget(shorterSide: exportShorterSide(settings.resolution), keepsHDR: settings.keepsHDR)
+        let frameRate = settings.outputFrameRate(recordingRate: source.frameRate)
+        let target = RenderTarget(shorterSide: exportShorterSide(settings.resolution), frameRate: frameRate, keepsHDR: settings.keepsHDR)
         let plan = await RenderPlan.build(project: project, source: source, resources: resources, target: target)
-        composition.videoComposition = CompositionBuilder.videoComposition(
-            for: source, plan: plan, frameRate: settings.outputFrameRate(recordingRate: source.frameRate)
-        )
+        composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan, frameRate: frameRate)
         let url = destination.outputURL(for: videoURL, format: settings.format)
         exportProgress = 0
         defer { exportProgress = nil }

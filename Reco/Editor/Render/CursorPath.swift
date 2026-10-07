@@ -71,7 +71,8 @@ nonisolated struct CursorPath: Sendable {
     ///   - videoHeight: The video's height in pixels, to flip positions into Core Image space.
     /// - Returns: `nil` without cursor positions or capture geometry.
     init?(telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, loop: Loop? = nil) {
-        let moves = Self.withoutJitter(telemetry.cursor)
+        // Without smoothing the cursor is where it was recorded, jitter included
+        let moves = style.smoothing == .off ? telemetry.cursor : Self.withoutJitter(telemetry.cursor)
         guard !moves.isEmpty, !telemetry.geometry.isEmpty else { return nil }
         let samples = Self.smoothed(
             moves, geometry: telemetry.geometry, frequency: style.smoothing.frequency, duration: duration, videoHeight: videoHeight
@@ -181,17 +182,16 @@ nonisolated extension CursorPath {
     }
 
     /// The positions held until the next and placed with the geometry in effect, followed by a
-    /// spring at ``sampleRate``.
+    /// spring at ``sampleRate``, or just held when `frequency` is `nil`.
     /// - Parameter moves: Not empty, sorted by time.
     /// - Parameter geometry: Not empty, sorted by time.
     private static func smoothed(
-        _ moves: [InputTelemetry.CursorSample], geometry: [InputTelemetry.Geometry], frequency: Double, duration: Double, videoHeight: CGFloat
+        _ moves: [InputTelemetry.CursorSample], geometry: [InputTelemetry.Geometry], frequency: Double?, duration: Double, videoHeight: CGFloat
     ) -> [CGPoint] {
         var moveIndex = 0
         var geometryIndex = 0
         let start = RenderPlan.coreImagePoint(InputTelemetry.videoPixel(for: moves[0].location, geometry: geometry[0]), videoHeight: videoHeight)
-        var horizontal = Spring(position: start.x, frequency: frequency, rate: sampleRate)
-        var vertical = Spring(position: start.y, frequency: frequency, rate: sampleRate)
+        var springs = frequency.map { (Spring(position: start.x, frequency: $0, rate: sampleRate), Spring(position: start.y, frequency: $0, rate: sampleRate)) }
 
         let last = Int((duration * sampleRate).rounded(.up))
         var samples: [CGPoint] = []
@@ -207,9 +207,9 @@ nonisolated extension CursorPath {
             let pixel = InputTelemetry.videoPixel(for: moves[moveIndex].location, geometry: geometry[geometryIndex])
             let target = RenderPlan.coreImagePoint(pixel, videoHeight: videoHeight)
 
-            samples.append(CGPoint(x: horizontal.position, y: vertical.position))
-            horizontal.advance(to: target.x)
-            vertical.advance(to: target.y)
+            samples.append(springs.map { CGPoint(x: $0.0.position, y: $0.1.position) } ?? target)
+            springs?.0.advance(to: target.x)
+            springs?.1.advance(to: target.y)
         }
         return samples
     }

@@ -14,4 +14,10 @@ extension EditorViewModel {
         get { project.zoomMotion }
         set { edit("Zoom Motion") { $0.zoomMotion = newValue } }
     }
+
+    /// How much the camera's moves blur, from 0 to 1. Each change is an edit; one slider drag is one step.
+    var motionBlur: Double {
+        get { project.motionBlur }
+        set { edit("Motion Blur", coalescing: true) { $0.motionBlur = newValue } }
+    }
 }

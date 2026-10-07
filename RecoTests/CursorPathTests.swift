@@ -65,15 +65,31 @@ struct CursorPathTests {
         }
     }
 
+    @Test func withoutSmoothingTheCursorIsWhereItWasRecordedJitterIncluded() throws {
+        // A zig-zag with a 1 pt move back, which smoothing would drop as jitter
+        let moves: [(time: Double, point: CGPoint)] = [(0, CGPoint(x: 100, y: 100)), (0.1, CGPoint(x: 300, y: 150)), (0.2, CGPoint(x: 299, y: 150)), (0.3, CGPoint(x: 500, y: 400))]
+        var style = CursorStyle()
+        style.smoothing = .off
+        let path = try path(telemetry(cursor: moves), style: style)
+
+        // Core Image's y is 800 minus the screen's; a position is held until the next, like the recording's
+        for (time, point) in moves {
+            let position = path.position(at: time + 0.001)
+            #expect(abs(position.x - point.x) < 1e-9 && abs(position.y - (800 - point.y)) < 1e-9)
+        }
+        #expect(abs(path.position(at: 0.15).x - 300) < 1e-9)
+    }
+
     @Test func trailsASteadyMoveByTwoOverTheFrequency() throws {
-        for smoothing in CursorStyle.Smoothing.allCases {
+        for smoothing in CursorStyle.Smoothing.allCases where smoothing.frequency != nil {
             var style = CursorStyle()
             style.smoothing = smoothing
             let path = try path(telemetry(cursor: sweep(speed: 600, until: 2)), style: style)
 
             // Settled by 1.5 s. Positions are held until the next, which trails by up to a 60 Hz sample more
+            let frequency = try #require(smoothing.frequency)
             let lag = 100 + 600 * 1.5 - path.position(at: 1.5).x
-            #expect(lag > 600 * 2 / smoothing.frequency && lag < 600 * (2 / smoothing.frequency + 1.0 / 60))
+            #expect(lag > 600 * 2 / frequency && lag < 600 * (2 / frequency + 1.0 / 60))
             // And comes to rest where the cursor did
             #expect(abs(path.position(at: 4).x - 1300) < 0.01)
         }

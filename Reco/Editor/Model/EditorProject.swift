@@ -31,6 +31,10 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     var keystrokes = KeystrokeOverlayStyle()
     var cursor = CursorStyle()
     var zoomMotion = ZoomMotion.smooth
+
+    /// How long the shutter stays open over a frame, from 0 (never: every frame is sharp) to 1 (the whole
+    /// frame). The camera's moves blur by what they travel in that time.
+    var motionBlur = 0.0
     var canvas = CanvasStyle()
     var audio = AudioMixSettings()
 
@@ -59,6 +63,7 @@ extension EditorProject {
         keystrokes = try container.decodeIfPresent(KeystrokeOverlayStyle.self, forKey: .keystrokes) ?? KeystrokeOverlayStyle()
         cursor = try container.decodeIfPresent(CursorStyle.self, forKey: .cursor) ?? CursorStyle()
         zoomMotion = try container.decodeIfPresent(ZoomMotion.self, forKey: .zoomMotion) ?? .smooth
+        motionBlur = try container.decodeIfPresent(Double.self, forKey: .motionBlur) ?? 0
         canvas = try container.decodeIfPresent(CanvasStyle.self, forKey: .canvas) ?? CanvasStyle()
         audio = try container.decodeIfPresent(AudioMixSettings.self, forKey: .audio) ?? AudioMixSettings()
     }

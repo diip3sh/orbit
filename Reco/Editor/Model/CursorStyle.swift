@@ -45,15 +45,19 @@ nonisolated struct CursorStyle: Codable, Equatable, Sendable {
         case smooth
         case fast
 
-        /// The smoothing spring's natural frequency, in radians per second. The cursor trails a
-        /// steady move by 2 / `frequency` seconds: 290 ms, 160 ms and 80 ms. Smooth is the default
-        /// spring of Cap (tension 470, mass 3) made critically damped; Cap's friction of 70
+        /// The recorded positions as they were: no spring and no jitter filter. Shown as "None".
+        case off
+
+        /// The smoothing spring's natural frequency, in radians per second, or `nil` for ``off``. The
+        /// cursor trails a steady move by 2 / `frequency` seconds: 290 ms, 160 ms and 80 ms. Smooth is the
+        /// default spring of Cap (tension 470, mass 3) made critically damped; Cap's friction of 70
         /// overshoots by 0.03%, which doesn't show.
-        var frequency: Double {
+        var frequency: Double? {
             switch self {
             case .mellow: 7
             case .smooth: 12.5
             case .fast: 25
+            case .off: nil
             }
         }
     }
