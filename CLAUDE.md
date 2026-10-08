@@ -807,6 +807,16 @@ Key facts:
 - Window shots use the window recording config: SCK fits window + shadow into the window's frame, so
   shadow padding is uneven (same as recordings).
 - Verified on an M2 (1710×1112 pt, 2×): screen 3420×2224, window and area at 2×, sRGB, no Reco UI.
+- **HDR screenshots** (N16; Settings → General → Screenshots → Capture HDR Screenshots, macOS 26 and later, off by default,
+  `SettingsStore.capturesHDRScreenshots`): screen and area shots are taken with `SCScreenshotManager.captureScreenshot` and
+  `dynamicRange = .hdr` (`ScreenshotService.hdrConfiguration`) and keep the picture as `Screenshot.hdrImage` (16-bit extended
+  sRGB); `image` is drawn from it in 8-bit sRGB, highlights clipped (`standardRange(of:)`), for the card, pins, Copy (still a
+  PNG) and Recognize Text. Files (Save, history, drag-out) go through `ScreenshotService.write`: an HDR shot is a `.heic`
+  with an SDR base and an ISO gain map (`kCGImageDestinationEncodeToISOGainmap`), anything else a PNG; the Library and history
+  pruning take both (`Screenshot.contentTypes`, `LibraryItem.isScreenshot`). Window shots stay SDR: the HDR configuration has
+  no `scalesToFit`. Measured 2026-10-08 on macOS 27.0, M2: the HDR picture comes back as `sdrImage`, and `hdrImage` is nil
+  even for `.bothSDRAndHDR`, hence one `.hdr` capture (and both images from the same frame); a 3420×2224 capture took
+  100–126 ms, drawing its SDR picture 4–6 ms. Not yet checked with HDR content on screen.
 
 ### S2 — Web recordings (`feat/web-recordings`, spec 0005)
 

@@ -281,6 +281,16 @@ struct GeneralSettingsView: View {
                 )
             }
 
+            if #available(macOS 26.0, *) {
+                Section {
+                    Toggle("Capture HDR Screenshots", isOn: $settings.capturesHDRScreenshots)
+                } header: {
+                    Text("Screenshots")
+                } footer: {
+                    Text("Screen and area screenshots keep HDR content's brightness and are saved as HEIC. Copied screenshots stay standard PNGs.")
+                }
+            }
+
             Section {
                 Picker("Keep Screenshots", selection: $settings.screenshotHistoryRetention) {
                     ForEach(ScreenshotHistoryRetention.allCases) { retention in

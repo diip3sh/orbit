@@ -163,7 +163,7 @@ final class QuickAccessViewModel {
         let url = dragFolder.appending(path: screenshot.filename)
         dragFileTask = Task {
             do {
-                try await ScreenshotService.writePNG(screenshot.image, to: url)
+                try await ScreenshotService.write(screenshot, to: url)
                 guard !Task.isCancelled else {
                     try? FileManager.default.removeItem(at: dragFolder)
                     return

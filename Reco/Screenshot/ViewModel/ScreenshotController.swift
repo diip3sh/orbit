@@ -194,10 +194,9 @@ final class ScreenshotController {
         let retention = settings.screenshotHistoryRetention
         guard retention != .off else { return }
         let name = screenshot.filename
-        let image = screenshot.image
         historyWrites[name] = Task {
             do {
-                try await ScreenshotService.writePNG(image, to: ScreenshotHistory.directory.appending(path: name))
+                try await ScreenshotService.write(screenshot, to: ScreenshotHistory.directory.appending(path: name))
                 await ScreenshotHistory.prune(retention: retention)
             } catch {
                 logger.error("Screenshot history write failed: \(error.localizedDescription)")
