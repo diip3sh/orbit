@@ -33,10 +33,12 @@ nonisolated struct FieldPalette: Equatable, Sendable {
         colors = look.stops.map(color)
     }
 
-    /// The picked palette `field` takes: Paper's other shapes take their shader's pick's.
+    /// The picked palette `field` takes: Paper's other shapes take their shader's pick's, the grain's
+    /// sunlit's three hues (in bolt.new's blue, the lead, a violet and a pale grey: the user's favourite
+    /// ground; ember's one hue drew its blob and rings flat).
     static func look(for field: MotionField) -> Look? {
         switch field {
-        case .bloom, .orb, .ripple: looks[.ember]
+        case .bloom, .orb, .ripple: looks[.sunlit]
         case .warp, .swirl, .tide: looks[.matrix]
         default: looks[field]
         }

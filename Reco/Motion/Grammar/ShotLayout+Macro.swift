@@ -48,6 +48,8 @@ nonisolated extension ShotLayout {
         let stops = shot.stops
         guard !stops.isEmpty else { return Layout() }
         let shows = context.index == 0 ? macroBreath : 0
+        // In a light or dither film the opening's control arrives in its look's seam: typing waits for it
+        let arrival = context.index == 0 ? SeamExpansion.arrival(on: context.scene.field ?? context.canvas.field)?.duration ?? 0 : 0
 
         // Each element once, at a CSS pixel a 1080p pixel, stacked in the order they're first framed
         var frames: [String: CGRect] = [:]
@@ -60,8 +62,8 @@ nonisolated extension ShotLayout {
             top = frame.maxY + macroGap * unit
             var layer = uiLayer("\(context.scene.id).ui\(layout.layers.count)", asset: asset, width: frame.width, at: [frame.midX, frame.midY, 0])
             if case .lifted(var content) = layer.content, let source = context.assets[asset] {
-                content.typingStart = typingStart(of: source, shows: shows, in: context)
-                content.presses = presses(of: source, shows: shows)
+                content.typingStart = typingStart(of: source, shows: shows + arrival, in: context)
+                content.presses = presses(of: source, shows: shows + arrival)
                 layer.content = .lifted(content)
             }
             if shows > 0 {

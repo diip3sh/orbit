@@ -33,7 +33,7 @@ struct SeamLanguageTests {
         #expect(plan.scenes[2].overlap == SeamExpansion.ringDuration)
     }
 
-    /// Dither steps on at 15 frames a second; light and the ring ease.
+    /// Dither steps on at 15 frames a second; light and smoke burst out and settle.
     @Test func ditherStepsAndTheOthersEase() {
         let dither = SeamExpansion.Transition(seam: .dither, duration: SeamExpansion.ditherDuration)
         #expect(dither.progress(at: 0.05) == 0)
@@ -42,7 +42,9 @@ struct SeamLanguageTests {
         #expect(dither.progress(at: SeamExpansion.ditherDuration) == 1)
 
         let glow = SeamExpansion.Transition(seam: .glow, duration: SeamExpansion.glowDuration)
-        #expect(glow.progress(at: 0.1) < 0.1 / SeamExpansion.glowDuration)
+        #expect(glow.progress(at: 0.1) > 2 * 0.1 / SeamExpansion.glowDuration)
+        let ring = SeamExpansion.Transition(seam: .ring, duration: SeamExpansion.ringDuration)
+        #expect(ring.progress(at: 0.1) > 2 * 0.1 / SeamExpansion.ringDuration)
         #expect(glow.progress(at: SeamExpansion.glowDuration) == 1)
     }
 
@@ -75,13 +77,45 @@ struct SeamLanguageTests {
         let json = #"""
             {"version": 1, "canvas": {"field": "ember"},
              "scenes": [{"id": "one", "duration": 3}, {"id": "two", "duration": 3, "seam": "glow", "field": "bloom"},
-                        {"id": "three", "duration": 3, "seam": "dither", "field": "sunlit"}, {"id": "four", "duration": 3, "field": "matrix"},
+                        {"id": "three", "duration": 3, "seam": "dither", "field": "sunlit"}, {"id": "four", "duration": 3, "seam": "whip", "field": "matrix"},
                         {"id": "five", "duration": 3, "seam": "ring", "field": "halo"}]}
             """#
         let document = try JSONDecoder().decode(MotionDocument.self, from: Data(json.utf8))
         let findings = MotionLint.findings(in: document).filter { $0.rule == .look }
 
         #expect(findings.map(\.scene) == ["three", "four"])
+    }
+
+    /// A cut keeps the ground; a whip or the look's seam changes it.
+    @Test func aCutKeepsTheGround() throws {
+        let json = #"""
+            {"version": 1, "canvas": {"field": "bloom"},
+             "scenes": [{"id": "bar", "duration": 3}, {"id": "typed", "duration": 3, "field": "ember"},
+                        {"id": "closer", "duration": 3, "field": "ember"}, {"id": "page", "duration": 3, "seam": "glow", "field": "sunlit"},
+                        {"id": "code", "duration": 3, "seam": "whip", "field": "ripple"}]}
+            """#
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(json.utf8))
+
+        #expect(MotionLint.findings(in: document).filter { $0.rule == .look }.map(\.scene) == ["typed"])
+    }
+
+    /// A light or dither film's opening control arrives in its look's seam, and its typing waits for it;
+    /// satin's cuts in.
+    @Test(arguments: [(MotionField.bloom, MotionSeam?.some(.glow)), (.matrix, .dither), (.satin, nil)])
+    func anOpeningArrivesInItsLook(field: MotionField, seam: MotionSeam?) async throws {
+        let json = """
+            {"version": 1, "canvas": {"field": "\(field.rawValue)"}, "style": {"accent": "#1488fc"},
+             "assets": [{"id": "bar", "url": "https://example.com", "selector": "div", "glass": true, "typing": {"field": "p", "text": "hi"}}],
+             "scenes": [{"id": "bar", "duration": 4, "shot": {"shot": "macro", "ui": "bar"}}]}
+            """
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(json.utf8))
+        let plan = await MotionPlan.build(document, bundle: URL.temporaryDirectory)
+
+        #expect(plan.scenes[0].arrival?.seam == seam)
+        let arrives = ShotLayout.macroBreath + (plan.scenes[0].arrival?.duration ?? 0)
+        let layer = try #require(DocumentExpansion.expanded(document, sizes: ["bar": CGSize(width: 600, height: 50)]).scenes[0].layers.first)
+        guard case .lifted(let content) = layer.content else { Issue.record("not a ui layer"); return }
+        #expect(content.typingStart == arrives + ShotLayout.macroTypingDelay)
     }
 
     /// Paper's looks compete with type over them, not with a macro's glass.

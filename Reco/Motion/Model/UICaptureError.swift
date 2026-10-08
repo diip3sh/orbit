@@ -15,10 +15,14 @@ nonisolated enum UICaptureError: LocalizedError, Equatable {
     /// into view.
     case outOfView(String, String)
 
+    /// Asset id and its typing field's selector: typing changed nothing in it.
+    case notTyped(String, String)
+
     var errorDescription: String? {
         switch self {
         case .notFound(let id, let selector): "Asset \"\(id)\": the page has no element matching \(selector)."
         case .outOfView(let id, let selector): "Asset \"\(id)\": the element matching \(selector) can't be brought wholly into view."
+        case .notTyped(let id, let field): "Asset \"\(id)\": the field matching \(field) took none of the typed text: name the element that holds its text."
         }
     }
 }

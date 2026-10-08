@@ -2,9 +2,10 @@
 //  DebugShotTests.swift
 //  RecoTests
 //
-//  Temporary: renders look-dev films for spec 0012's looks. Delete before committing.
+//  Temporary: renders look-dev frames for spec 0012's looks. Delete before committing.
 //
 
+import CoreImage
 import Foundation
 import Testing
 @testable import Reco
@@ -14,25 +15,22 @@ struct DebugShotTests {
 
     static let scratch = "/private/tmp/claude-501/-Users-divyendra-orca-ssentch/00e31081-8885-4c36-a94f-be1c70a565c8/scratchpad"
 
-    @Test(arguments: [String]())
-    func renderLook(name: String) async throws {
-        let bundle = URL(filePath: Self.scratch + "/looks/\(name).motion")
-        guard FileManager.default.fileExists(atPath: bundle.path()) else { return }
-        let data = try Data(contentsOf: bundle.appending(path: "document.json"))
-        let document = try JSONDecoder().decode(MotionDocument.self, from: data)
-        try document.validate()
+    /// `frames.json`: {"bundle": path, "times": [s], "side": px, "out": path}; frames drawn as an export draws them.
+    @Test func renderFrames() async throws {
+        let spec = URL(filePath: Self.scratch + "/frames.json")
+        guard let data = try? Data(contentsOf: spec),
+              let job = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let path = job["bundle"] as? String, let times = job["times"] as? [Double], let out = job["out"] as? String else { return }
+        let bundle = URL(filePath: path)
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(contentsOf: bundle.appending(path: "document.json")))
         for finding in MotionLint.findings(in: document) {
-            print("LINT \(name) \(finding.scene): \(finding.message)")
+            print("LINT \(finding.scene): \(finding.message)")
         }
-        var settings = ExportSettings()
-        settings.resolution = 2160
-        settings.format = .h264
-        do {
-            let url = try await MotionExporter.export(document, bundle: bundle, settings: settings) { _ in }
-            print("EXPORTED \(url.path())")
-        } catch {
-            print("EXPORT FAILED \(error) \((error as NSError).userInfo)")
-            throw error
+        let plan = try await UICapture.plan(for: document, bundle: bundle, shorterSide: CGFloat(job["side"] as? Double ?? 540), frameRate: 30)
+        let frames = try await ContactSheet.frames(of: plan, at: times.map { ContactSheet.Moment(scene: "", time: $0) })
+        for (index, frame) in frames.enumerated() {
+            try await ScreenshotService.writePNG(frame, to: URL(filePath: out + "-\(index).png"))
         }
+        print("FRAMES \(frames.count)")
     }
 }

@@ -92,13 +92,23 @@ nonisolated enum MotionLint {
 
     /// One look a film: its scenes' fields from one family (satin, light or dither; plain and the halo go
     /// with any), and a seam in a field's language only into a scene of that language. A new technique a
-    /// shot is a generated video's tell (`docs/references/style-guide.md`).
+    /// shot is a generated video's tell (`docs/references/style-guide.md`). A cut keeps the ground: bolt.new's
+    /// cut in closer on its prompt jumped from a blob of light to two corners of it.
     private static func lookFindings(_ document: MotionDocument) -> [Finding] {
         var findings: [Finding] = []
         let looks: Set<MotionField.Family> = [.satin, .light, .dither]
         var first: (family: MotionField.Family, scene: String)?
+        var before: MotionField?
         for scene in document.scenes where scene.shot?.kind != .closing {
             let field = scene.field ?? document.canvas.field
+            defer { before = field }
+            if scene.seam == .cut, let before, before != field, looks.contains(field.family) {
+                findings.append(Finding(
+                    rule: .look, scene: scene.id,
+                    message: "A cut keeps the ground: this scene is over \(field.rawValue), the one before over \(before.rawValue). "
+                        + "Give it the same field, or change the ground with a whip or the look's seam."
+                ))
+            }
             if let family = scene.seam.family, family != .smoke, looks.contains(field.family), field.family != family {
                 findings.append(Finding(
                     rule: .look, scene: scene.id, message: "A \(scene.seam.rawValue) seam is drawn in the \(family.rawValue) looks' language; this scene is over \(field.rawValue)."

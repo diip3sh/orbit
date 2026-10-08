@@ -189,6 +189,110 @@ struct UICaptureTests {
         #expect(after.size.width > typing.ends[7] - 16 + 40)
     }
 
+    /// A rich-text editor as ProseMirror lays one out (a paragraph holding a break), its field named with its
+    /// element's selector too, as agents write it: typed, the caret on the paragraph's line, empty and typed.
+    @Test func measuresTheCaretInARichTextEditor() async throws {
+        let page = """
+        <!doctype html>
+        <html><body style="margin: 0; background: #fff">
+          <div id="box" style="width: 400px; padding: 16px; background: rgb(34, 34, 34)">
+            <div id="editor" contenteditable="true" style="color: #fff; font: 16px/40px sans-serif; outline: none"><p style="margin: 0"><br></p></div>
+          </div>
+        </body></html>
+        """
+        let pages = try await LocalPages.serving(["/": page])
+        let bundle = URL.temporaryDirectory.appending(path: "\(UUID().uuidString).motion")
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        var asset = MotionAsset(id: "box", url: pages.url("/"), selector: "#box", viewport: CGSize(width: 800, height: 600))
+        asset.typing = MotionAsset.Typing(field: "#box #editor", text: "ship it")
+        var document = MotionDocument()
+        document.assets = [asset]
+
+        try await UICapture.lift(["box": 2], of: document, into: bundle)
+
+        let typing = try #require(UILiftCache.typing(asset, in: bundle))
+        // 16 px padding, then half the 40 px line, not the line under the paragraph (76)
+        #expect((33...39).contains(typing.line))
+        #expect(abs(typing.ends[0] - 16) < 1)
+        #expect((40...70).contains(typing.ends[7] - 16))
+    }
+
+    /// A field that takes none of the keys fails its capture, so the agent hears it.
+    @Test func aFieldThatTakesNoTypingFailsItsCapture() async throws {
+        let page = """
+        <!doctype html>
+        <html><body style="margin: 0">
+          <div id="box" style="width: 400px; padding: 16px"><input id="field" onkeydown="event.preventDefault()"></div>
+        </body></html>
+        """
+        let pages = try await LocalPages.serving(["/": page])
+        let bundle = URL.temporaryDirectory.appending(path: "\(UUID().uuidString).motion")
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        var asset = MotionAsset(id: "box", url: pages.url("/"), selector: "#box", viewport: CGSize(width: 800, height: 600))
+        asset.typing = MotionAsset.Typing(field: "#field", text: "hi")
+        var document = MotionDocument()
+        document.assets = [asset]
+
+        await #expect(throws: UICaptureError.notTyped("box", "#field")) {
+            try await UICapture.lift(["box": 1], of: document, into: bundle)
+        }
+    }
+
+    /// A textarea taller than its text: the caret on its first line, not its middle.
+    @Test func measuresTheCaretInATextarea() async throws {
+        let page = """
+        <!doctype html>
+        <html><body style="margin: 0; background: #fff">
+          <div id="box" style="width: 400px; padding: 16px; background: rgb(34, 34, 34)">
+            <textarea id="field" rows="3" style="display: block; width: 100%; margin: 0; padding: 0; border: 0; font: 16px/40px sans-serif; resize: none"></textarea>
+          </div>
+        </body></html>
+        """
+        let pages = try await LocalPages.serving(["/": page])
+        let bundle = URL.temporaryDirectory.appending(path: "\(UUID().uuidString).motion")
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        var asset = MotionAsset(id: "box", url: pages.url("/"), selector: "#box", viewport: CGSize(width: 800, height: 600))
+        asset.typing = MotionAsset.Typing(field: "#field", text: "ship it")
+        var document = MotionDocument()
+        document.assets = [asset]
+
+        try await UICapture.lift(["box": 2], of: document, into: bundle)
+
+        let typing = try #require(UILiftCache.typing(asset, in: bundle))
+        // 16 px padding, then half the first 40 px line, not the middle of three (76)
+        #expect((33...39).contains(typing.line))
+        #expect((40...70).contains(typing.ends[7] - 16))
+    }
+
+    /// On glass, a picture laid over the whole card behind its text goes with the card's fill; its text stays.
+    @Test func liftsACardOnGlassWithoutItsBackdrop() async throws {
+        let page = """
+        <!doctype html>
+        <html><body style="margin: 0; background: #fff">
+          <div id="card" style="position: relative; width: 300px; height: 200px; background: rgb(20, 20, 20)">
+            <div style="position: absolute; inset: 0"><div style="height: 100%; background: rgb(255, 0, 0); visibility: visible"></div></div>
+            <h1 style="position: relative; margin: 0; padding: 20px; color: rgb(0, 255, 0); font: 40px sans-serif">Ship</h1>
+          </div>
+        </body></html>
+        """
+        let pages = try await LocalPages.serving(["/": page])
+        let bundle = URL.temporaryDirectory.appending(path: "\(UUID().uuidString).motion")
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        var asset = MotionAsset(id: "card", url: pages.url("/"), selector: "#card", viewport: CGSize(width: 800, height: 600))
+        asset.glass = true
+        var document = MotionDocument()
+        document.assets = [asset]
+
+        try await UICapture.lift(["card": 1], of: document, into: bundle)
+
+        let lift = try Pixels(try #require(UILiftCache.best(asset, in: bundle)).url)
+        #expect(lift.color(column: 150, row: 180).alpha == 0)
+        let green = (0..<lift.height).contains { row in
+            (0..<lift.width).contains { lift.color(column: $0, row: row).green > 200 && lift.color(column: $0, row: row).red < 100 }
+        }
+        #expect(green)
+    }
+
     /// A region lifts only that part of the element: the top of a long article.
     @Test func liftsARegionOfALongElement() async throws {
         let pages = try await LocalPages.serving(["/": Self.page])

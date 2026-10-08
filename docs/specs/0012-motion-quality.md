@@ -512,6 +512,29 @@ re-run from their address and the frames compared with the previous round's (kep
     and a `glow`, `ring` into the closing. Its dark UI on glass with the blue light through it reads as its
     own film: the prompt typed, the agent and model picker, the design-system and scale cards.
 
+- 2026-10-08: Looks, round 2, from the user's notes on bolt.new's film: the caret sat a line under the typed
+  text; the 4th macro's start was "really bad" (the glow flooded the frame cyan, then the design card came up
+  olive); the start had no transitions or animation, only cuts; the 3rd macro's ground (sunlit's blue, violet and
+  pale grey) was "really good". Fixed:
+  - **Caret**: an empty rich-text field's probe goes in its last block (after ProseMirror's paragraph it made a line);
+    a textarea's line is its first, not its middle (a later run got bolt.new's other hero, a two-line textarea).
+  - **Typing** goes to the field marked when it's measured: an agent's field selector that repeated the element's
+    found nothing joined to it, and a run shipped bolt.new's prompt untyped. Such a field now fails its capture.
+  - **Glow** ordered mostly by place, a band of light from the palette's palest stop to the brand's hue, over the
+    order's own range, eased out (the ring too): before, a third of each seam showed nothing, then crossed in 0.2 s.
+  - **Backdrops**: bare and glass lifts drop a picture laid over an element's whole back (bolt.new's lime theme
+    preview under its card's heading, turned to mud by the glass).
+  - **The opening**: the ground swells in from black; the control arrives in the look's seam (light out of the
+    blob's own outline, then a halo; dots from the edges). A cut keeps the ground (lint, skill).
+  - `bloom`, `orb`, `ripple` take sunlit's palette.
+
+  From the app, no instructions, four bolt.new runs (5–11 min each, 22–29 s at 4K). The first: the blob swells in, light
+  traces it and the prompt box lands on glass, the caret on the text's line through the typing; Build now, a whip to
+  Slides, a wave of light up into the agent and model picker, the ring into the closing. The next two found the
+  textarea caret and the joined-selector typing failure (one shipped its prompt untyped). The last, with both fixed
+  (`Bolt 5`): the prompt typed with the caret on its line, a glow up into the model picker, a whip to the 1000× and
+  98 % cards, the ring into the closing.
+
 ### Direction (picked 2026-10-07)
 
 Today's Linear video against Linear Agent (`scratchpad/refs/today`): ours shows the whole app at

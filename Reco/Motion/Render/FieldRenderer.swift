@@ -175,8 +175,8 @@ nonisolated enum FieldRenderer {
 nonisolated extension FieldRenderer {
 
     /// A seam's front: the order's units it spans, and how bright its light goes (screened over the frame).
-    static let glowWidth = 0.14
-    static let glowLevel = 1.2
+    static let glowWidth = 0.12
+    static let glowLevel = 0.9
 
     /// Dither's cells in a seam, in reference pixels (12 px at 1080p: twice the field's, so the UI drawn in
     /// them still reads as dots at a video's bitrate), and how far the Bayer matrix spreads its front.
@@ -204,8 +204,11 @@ nonisolated extension FieldRenderer {
         var reach = 0.0
         switch transition.seam {
         case .glow:
+            // Light as the 3rd macro of bolt.new's film had it: its palest stop at the heart, the brand's hue round it;
+            // in the brand's hue alone, the band read as a neon ring
+            let palest = palette.colors.max { OKLCH($0).lightness < OKLCH($1).lightness }.map(vector) ?? lead
             name = "glowSeam"
-            arguments = [noise, scenes.before, scenes.next, frame(look.speed), CIVector(x: progress, y: look.values.w, z: glowWidth, w: glowLevel), lead, deeper]
+            arguments = [noise, scenes.before, scenes.next, frame(look.speed), CIVector(x: progress, y: look.values.w, z: glowWidth, w: glowLevel), palest, lead]
         case .dither:
             name = "ditherSeam"
             reach = ditherSeamCell / reference

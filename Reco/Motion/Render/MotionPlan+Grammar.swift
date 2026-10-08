@@ -25,6 +25,9 @@ extension MotionPlan {
 
     /// Each seam's camera tracks on the scenes either side of it, and its transition.
     nonisolated static func addSeams(of document: MotionDocument, to scenes: inout [Scene]) {
+        if let first = scenes.first, document.scenes.first?.shot?.kind == .macro {
+            scenes[0].arrival = SeamExpansion.arrival(on: first.field).map { language($0, into: first.field, document: document) }
+        }
         for index in scenes.indices.dropFirst() {
             let (before, after) = (document.scenes[index - 1], document.scenes[index])
             let canvas = document.canvas.size

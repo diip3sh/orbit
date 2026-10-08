@@ -30,12 +30,14 @@ nonisolated enum SeamExpansion {
         var look = MotionField.plain
         var palette: FieldPalette?
 
-        /// How far it has gone at `time` into the next scene, eased. Dither steps on at 15 frames a second,
-        /// as pixel animation does (Nothing's Glyph Matrix).
+        /// How far it has gone at `time` into the next scene, eased. Light and smoke burst out of the middle and
+        /// settle (eased in and out, they showed nothing for a third of the seam, then crossed the frame in 0.2 s);
+        /// dither steps on at 15 frames a second, as pixel animation does (Nothing's Glyph Matrix).
         func progress(at time: Double) -> Double {
             let linear = min(max(time / duration, 0), 1)
             switch seam {
-            case .push, .glow, .ring: return MotionEasing.move.progress(linear, duration: duration)
+            case .glow, .ring: return MotionEasing.enter.progress(linear, duration: duration)
+            case .push: return MotionEasing.move.progress(linear, duration: duration)
             case .dither: return min((linear * duration * Self.ditherSteps).rounded(.down) / (duration * Self.ditherSteps), 1)
             default: return linear
             }
@@ -49,6 +51,17 @@ nonisolated enum SeamExpansion {
     static let glowDuration = 0.9
     static let ditherDuration = 0.8
     static let ringDuration = 1.0
+
+    /// How a light or dither film's opening control comes in: in its look's seam out of the ground alone, where
+    /// satin cuts it in as Raycast's bar did. Cut in, bolt.new's prompt box and its blob of light had nothing
+    /// joining them.
+    static func arrival(on field: MotionField) -> Transition? {
+        switch field.family {
+        case .light: Transition(seam: .glow, duration: glowDuration)
+        case .dither: Transition(seam: .dither, duration: ditherDuration)
+        default: nil
+        }
+    }
 
     /// The camera's speed where the scene before ends: canvas pixels a second each way, and its zoom's
     /// log a second.

@@ -1125,7 +1125,8 @@ opening from the middle, the next scene inside: into a closing).
 | `Motion/Render/FieldKernels.metal.txt` | `grainShape` (wave, corners, ripple, blob, sphere), `ditherShape` (warp, wave, swirl, sphere), the camera's view as an argument, `glowSeam`, `ditherSeam`, `ringSeam`; `glassPanel` in colour |
 | `Motion/Render/FieldRenderer.swift`, `FieldPalette.swift` | Each field's shape and settings (the picked look's for its shader's other shapes); `seam(_:between:progress:at:size:)` |
 | `Motion/Grammar/SeamExpansion.swift`, `Motion/Render/MotionPlan+Grammar.swift` | The seams' lengths and easing (dither steps at 15 fps); a seam takes the next scene's field when it's of its family, else the family's first pick |
-| `Motion/Grammar/MotionLint.swift` | `look`: one look a film, a seam only into its language; `busyField` only under type; `material` over any field |
+| `Motion/Grammar/MotionLint.swift` | `look`: one look a film, a seam only into its language, a cut keeps the ground; `busyField` only under type; `material` over any field |
+| `Motion/Render/MotionFrameRenderer.swift` (`ground`), `MotionPlan.Scene.arrival` | A light or dither opening: the ground swells in from black, the control arrives in the look's seam |
 | `AgentRecording/Skills/reco-launch-film.md`, `AgentBridge/Model/AgentToolCatalog+Motion.swift` | Which look for which brand, a field per scene, the seams |
 
 Key facts:
@@ -1138,11 +1139,34 @@ Key facts:
   over swirl, didn't read. The dithers that fill the frame (warp, swirl, tide) light their dots at 0.55 of the
   sphere's, the seam's dots at full strength.
 - The seams start exactly on the scene before and end on the next (within a level), their light gone at both ends.
+- **Glow** is a band of light ordered seven tenths by place (out of the middle for a blob, sphere or ripples, up from
+  below for a wave, in from the corners) and three tenths by the field's shape. Ordered by the shape, it crossed the
+  shape's flat stretches at once: ripples flooded bolt.new's frame cyan. Its front spans just the order's range
+  (further out, it crossed nothing for the first third), eased out-cubic as the ring is (eased in and out, both showed
+  nothing for a third of the seam, then crossed the frame in 0.2 s), the palette's palest stop at its heart and the
+  brand's hue at its edges (in the hue alone it read as a neon ring).
+- `bloom`, `orb` and `ripple` take sunlit's three hues (the lead, a violet 35° on, a pale grey), the ground the user
+  singled out in bolt.new's film; with ember's one hue their blob and rings were flat.
+- **The opening** of a light or dither film (`arrival`): the ground swells in from black over 0.6 s, and at 1 s the
+  control arrives in the look's seam (light out of the ground's own shape, 0.9 s; dots from the edges, 0.8 s); typing
+  starts 0.65 s after it. Satin's still cuts in, as Raycast's bar did.
+- A **cut keeps the ground** (lint): bolt.new's cut in closer on its prompt jumped from a blob of light to two corners.
+- Bare and glass lifts drop a **backdrop**: a descendant laid over the whole element (absolutely positioned, 90 % of
+  its area) with nothing to read, as they drop its fill. bolt.new's design card was a lime picture under its heading,
+  which glass turned to olive mud (`liftVersion` 5).
+- **The caret's line.** In a rich-text editor, an empty field's probe goes at the start of its last block: appended to
+  ProseMirror's field, after its paragraph, it opened a line of its own, and bolt.new's caret sat a line under the
+  text. A textarea's line is its first, at its top, not its middle (bolt.new's other hero prompt is two lines tall).
+  bolt.new serves either prompt.
+- **A typed field is marked once** (`data-reco-field`) and keys go to the mark. Joined to the element's selector, an
+  agent's field selector that named the element too ("X X .ProseMirror") found nothing, and bolt.new's prompt took no
+  typing while it measured fine. A field whose text never moves fails its capture (`notTyped`), so the agent hears it.
 - Look-dev from the Linear 9 film's lifts, re-grounded (1080p, M5, Debug): both 32 s films exported in 39 s together.
 - **From the app, no instructions** (Claude Code): supabase.com chose dither (5 min, 26 s 4K); bolt.new light in its
   blue (8 min, 27 s 4K); lovable.dev light in pink, but its UI is light: a white prompt box unglazed, a card's 7× lift
   without its animated list, and 4K failed (WebKit's GPU process quit lifting the prompt at 11×), so 1080p. Glass for
-  light UI is still to build.
+  light UI is still to build. After the opening, glow, backdrop and caret fixes, bolt.new again (four runs, 5–11 min
+  each): the last, `Bolt 5`, 29 s at 4K, typed on its line, a glow, a whip, the ring.
 
 ### Telemetry JSON (version 3)
 

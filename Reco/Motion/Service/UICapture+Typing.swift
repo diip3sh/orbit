@@ -52,7 +52,7 @@ extension UICapture {
     private static func typeAndLift(
         _ typing: MotionAsset.Typing, of asset: MotionAsset, at scale: Int, from webView: WKWebView, into bundle: URL
     ) async throws -> UILiftCache.Typing {
-        let selector = "\(asset.selector) \(typing.field)"
+        let selector = UILiftScript.typedField
         let mockup = try await webView.callAsyncJavaScript(
             UILiftScript.clearMockup, arguments: ["selector": asset.selector, "field": typing.field], contentWorld: .defaultClient
         ) as? Bool == true
@@ -88,6 +88,10 @@ extension UICapture {
                 lifted.heights.append(field.box.height)
             }
         }
+        // A field that took none of the keys: the agent hears it, rather than a film whose prompt is never typed
+        if !typing.text.isEmpty, lifted.ends.allSatisfy({ $0 == lifted.ends[0] }) {
+            throw UICaptureError.notTyped(asset.id, typing.field)
+        }
         if (typing.select ?? 0) > 0 {
             lifted.selections = try await select(in: asset, at: scale, from: webView, into: bundle)
         }
@@ -103,7 +107,7 @@ extension UICapture {
     /// element each time; where the selected result's centre is before and after each press.
     private static func select(in asset: MotionAsset, at scale: Int, from webView: WKWebView, into bundle: URL) async throws -> [Double] {
         guard let typing = asset.typing, let most = typing.select, most > 0 else { return [] }
-        let selector = "\(asset.selector) \(typing.field)"
+        let selector = UILiftScript.typedField
         var selections = [try await measure(typing, of: asset, in: webView).selected]
         for presses in 1...most {
             _ = try await webView.callAsyncJavaScript(UILiftScript.pressDown, arguments: ["selector": selector], contentWorld: .defaultClient)

@@ -112,11 +112,20 @@ enum UILiftScript {
     const start = place.x + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft) - (input.scrollLeft || 0);
     let end = start + ('value' in input ? context.measureText(input.value).width : 0);
     let line = place.y + place.height / 2;
+    // A text field's text is on its middle; a textarea's first line at its top (bolt.new's prompt is two lines tall,
+    // and the caret sat a line under its text)
+    if (input instanceof HTMLTextAreaElement) {
+      const height = parseFloat(style.lineHeight) || 1.2 * parseFloat(style.fontSize);
+      line = place.y + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop) + height / 2 - input.scrollTop;
+    }
     if (!('value' in input)) {
       // Laid-out text, not a font's guess: a mockup's computed font may not be what draws it (on linear.app the
       // caret fell a third behind the text). Empty, a zero-width space stands in, or the line is the empty
-      // inline box's top (13 px above linear.app's text)
-      const probe = input.textContent ? null : input.appendChild(document.createTextNode('\u200b'));
+      // inline box's top (13 px above linear.app's text); at the start of the field's last block, where typing
+      // goes: after ProseMirror's paragraph it opened a line of its own, and bolt.new's caret sat a line low
+      let host = input;
+      while (host.lastElementChild && getComputedStyle(host.lastElementChild).display === 'block') host = host.lastElementChild;
+      const probe = input.textContent ? null : host.insertBefore(document.createTextNode('\u200b'), host.firstChild);
       const range = document.createRange();
       range.selectNodeContents(input);
       const last = [...range.getClientRects()].filter(rect => rect.height > 0).pop();
@@ -129,13 +138,15 @@ enum UILiftScript {
              selected: chosen ? chosen.y + chosen.height / 2 - box.y : null, box: [box.x, box.y, box.width, box.height] };
     """#
 
-    /// Readies a mockup for typing: when the field `field` inside the element `selector` matches isn't one
-    /// a person types into (a marketing page's drawing of a prompt box), empties it, keeping its height and
-    /// laying its text out as a text field does, and marks it, so ``typeMockup`` adds the text a character at a time and ``restoreMockup`` puts it
-    /// back for the page's other lifts. `false` for a real field.
+    /// Readies the field `field` inside the element `selector` matches for typing: marks it (``typedField``), and
+    /// when it isn't one a person types into (a marketing page's drawing of a prompt box), empties it, keeping its
+    /// height and laying its text out as a text field does, and marks it a mockup, so ``typeMockup`` adds the text a
+    /// character at a time and ``restoreMockup`` puts it back for the page's other lifts. `false` for a real field.
     static let clearMockup = #"""
     const input = document.querySelector(selector)?.querySelector(field);
-    if (!input || input.matches('input, textarea') || input.isContentEditable) return false;
+    if (!input) return false;
+    input.setAttribute('data-reco-field', '');
+    if (input.matches('input, textarea') || input.isContentEditable) return false;
     input.__recoMockup = { html: input.innerHTML, style: input.getAttribute('style') };
     input.style.minHeight = `${input.getBoundingClientRect().height}px`;
     // Spaces kept as a field keeps them, so the caret moves on at a space
@@ -145,8 +156,13 @@ enum UILiftScript {
     return true;
     """#
 
-    /// Puts back what ``clearMockup`` emptied.
+    /// The field ``clearMockup`` marked, as keys and presses find it. Joined to the element's selector, a field's
+    /// selector that names the element too found nothing: bolt.new's prompt took no typing ("X X .ProseMirror").
+    static let typedField = "[data-reco-field]"
+
+    /// Puts back what ``clearMockup`` emptied, and takes its mark off the field.
     static let restoreMockup = #"""
+    document.querySelector('[data-reco-field]')?.removeAttribute('data-reco-field');
     const input = document.querySelector('[data-reco-mockup]');
     if (!input) return false;
     input.innerHTML = input.__recoMockup.html;
@@ -179,7 +195,8 @@ enum UILiftScript {
     /// corners read alpha 0); without, undoes that. With `fill` null, the element's own transparent
     /// background stays so: a live take's matte, its painted shape. With `bare`, the element's own
     /// background, border and shadow go too, for glass to stand in for them (Supabase's search dialog,
-    /// spec 0012, L0).
+    /// spec 0012, L0), and so does a backdrop laid over the whole element with nothing to read: bolt.new's
+    /// design card is a lime picture under its heading, which glass turned to mud.
     ///
     /// No ancestor is hidden: under `body * { visibility: hidden }` WebKit left out supabase.com's
     /// code card's own background though it computed as visible, so the elements beside the path
@@ -218,12 +235,14 @@ enum UILiftScript {
           element.style.setProperty(name, value, 'important');
         }
       }
+      const area = element.getBoundingClientRect().width * element.getBoundingClientRect().height;
       for (const node of element.querySelectorAll('*')) {
         const computed = getComputedStyle(node);
         const filter = computed.backdropFilter || computed.webkitBackdropFilter || 'none';
-        if (filter !== 'none' && !node.innerText?.trim() && !node.querySelector('img, svg, video, canvas, picture')) {
-          node.setAttribute('data-reco-lift-veil', '');
-        }
+        const veil = filter !== 'none' && !node.innerText?.trim() && !node.querySelector('img, svg, video, canvas, picture');
+        const box = node.getBoundingClientRect();
+        const backdrop = bare && computed.position === 'absolute' && !node.innerText?.trim() && box.width * box.height >= 0.9 * area;
+        if (veil || backdrop) node.setAttribute('data-reco-lift-veil', '');
       }
       for (let node = element.parentElement; node; node = node.parentElement) node.setAttribute('data-reco-lift-path', '');
       style.textContent = `[data-reco-lift-path] { background: transparent !important; border-color: transparent !important;
@@ -233,7 +252,7 @@ enum UILiftScript {
           visibility: hidden !important; }
         ${fill ? `[data-reco-lift] { background-color: ${fill} !important; }` : ''}
         [data-reco-lift], [data-reco-lift] * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-        [data-reco-lift-veil] { visibility: hidden !important; }`;
+        [data-reco-lift-veil], [data-reco-lift-veil] * { visibility: hidden !important; }`;
     }
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     return true;

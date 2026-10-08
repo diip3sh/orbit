@@ -79,6 +79,13 @@ nonisolated enum MotionFrameRenderer {
                 frame = previous.fading(to: 1 - progress).composited(over: frame)
             }
         }
+        // An opening's control coming in over its ground alone
+        if let arrival = plan.scenes[index].arrival, case let since = sceneTime - ShotLayout.macroBreath, since >= 0, since < arrival.duration {
+            frame = FieldRenderer.seam(
+                arrival, between: (ground(index, at: sceneTime, plan: plan).composited(over: background), frame.composited(over: background)),
+                progress: arrival.progress(at: since), at: time, size: bounds.size
+            )
+        }
         return frame.composited(over: background).cropped(to: bounds)
     }
 
@@ -92,11 +99,7 @@ nonisolated enum MotionFrameRenderer {
     /// A scene's layers at `time` in it, blurred as its camera is, over its field.
     private static func sceneImage(_ index: Int, at time: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage]) -> CIImage {
         let scene = plan.scenes[index]
-        // On the video's clock, so a field runs on across a cut to a scene with the same one
-        let field = FieldRenderer.image(
-            scene.field, palette: scene.palette, at: scene.start + time, size: plan.outputSize, preview: plan.isPreview,
-            shot: shot(of: scene, at: time, plan: plan)
-        )
+        let field = ground(index, at: time, plan: plan)
         var image = CIImage.empty()
         for placement in plan.placements(of: scene, at: time) {
             var layer = scene.layers[placement.layer]
@@ -137,6 +140,21 @@ nonisolated enum MotionFrameRenderer {
         guard blur >= 0.3 else { return image.composited(over: field) }
         return image.clampedToExtent().applyingGaussianBlur(sigma: blur).cropped(to: bounds).composited(over: field)
     }
+
+    /// A scene's field at `time` in it, on the video's clock, so a field runs on across a cut to a scene with the
+    /// same one. An opening whose control arrives in its look's seam swells in from black first.
+    private static func ground(_ index: Int, at time: Double, plan: MotionPlan) -> CIImage {
+        let scene = plan.scenes[index]
+        let field = FieldRenderer.image(
+            scene.field, palette: scene.palette, at: scene.start + time, size: plan.outputSize, preview: plan.isPreview,
+            shot: shot(of: scene, at: time, plan: plan)
+        )
+        guard scene.arrival != nil, time < groundSwell else { return field }
+        return field.fading(to: MotionEasing.enter.progress(max(time, 0) / groundSwell, duration: groundSwell))
+    }
+
+    /// How long an opening's ground takes to swell in from black.
+    static let groundSwell = 0.6
 
     /// `scene` as its field sees it at `time` in it: how its camera has moved since the scene began,
     /// so each shot opens on its field as set up, whatever the camera's zoom.

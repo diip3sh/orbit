@@ -104,6 +104,9 @@ marketing text.
   paragraphs) over satin only: over light or dither, page text goes on glass too, or the ground's light runs
   through its letters. An asset is always one or the other, except the logo: the glass shows the ground
   through it, tinted with the light or dither under it.
+- Glass stands in for an element's own back: its fill, and a picture laid over its whole back (a theme
+  preview, an illustration) are left out, so a marketing card shows only its heading and controls. Choose
+  elements whose content is the product's UI.
 - One element each: a dialog, a field, a card, a code block. A long article is cut with `region` (CSS px).
 - One element in several states (empty, typed, its results with a selection) is several assets with the same
   url, selector and `before`, and different `typing`. A field typed in one scene shows its text already
@@ -130,7 +133,9 @@ marketing text.
 Reco does the rest:
 
 - It frames each view, holds and creeps 3 % closer, and whips in 0.35 s to the next stop.
-- The first scene opens on 1 s of its ground alone before the control cuts in.
+- The first scene opens on 1 s of its ground alone before the control cuts in. In light and dither the
+  ground swells in from black, and the control arrives in the look's seam (0.9 s of light out of the
+  ground's shape, 0.8 s of dots) instead of cutting in; typing waits for it.
 - Typing starts 0.65 s after the control shows, at a person's pace: about 8 characters a second, slower
   into each word, with the results after each word.
 - A selection steps down from 0.55 s, 0.47 s apart, then back up.
@@ -149,7 +154,7 @@ Scene lengths:
 
 | Scene | Length |
 |---|---|
-| The opening macro | 3–3.5 s |
+| The opening macro | 3–3.5 s; 4–4.5 s in light and dither, where the control takes its seam to arrive |
 | Typing | 1.2 s plus the text's characters / 7 |
 | Results with a selection | 2.5–3 s |
 | A tour | 1.5–2.5 s a stop, plus 0.35 s a whip |
@@ -159,7 +164,8 @@ Scene lengths:
 
 Seams:
 
-- **`cut`** between macros of the same element, cutting in closer or out wider: that is the look.
+- **`cut`** between macros of the same element, cutting in closer or out wider: that is the look. A cut
+  keeps the ground: in light and dither the scene after it has the same field as the one before.
 - **`whip`** to another element or page: the camera streaks out of one scene and into the next.
 - **The look's own seam** to another element or page, in the light and dither looks, for one or two of the
   scene changes (whips for the rest, and inside a macro's tour):
@@ -182,8 +188,9 @@ Choose one look from inspect_page's brand and what the product is, and keep the 
 
 - Light and dither take their colour from `style.accent`: set it to the brand's colour, never a grey (a grey
   accent makes them grey: choose satin then).
-- In the light and dither looks, give each scene its own field from the look's list (`field` on the scene), so
-  the ground changes as the story moves on:
+- In the light and dither looks, give each scene after a whip or the look's seam its own field from the look's
+  list (`field` on the scene), so the ground changes as the story moves on; a scene after a cut keeps the field
+  before it:
   - the opening on one with its light in the middle, alone for its first second: `bloom`, `orb`, `matrix`;
   - the macros after it on ones that keep their light round the UI: `ember` (two corners), `sunlit` (rising
     from below), `ripple`, `warp`, `tide`, `swirl`.
@@ -196,8 +203,8 @@ Choose one look from inspect_page's brand and what the product is, and keep the 
 A light film's scenes, for example (a dither film the same with its fields and `dither`):
 
 ```json
-[{"id": "bar", "duration": 3.2, "field": "bloom", "shot": {"shot": "macro", "ui": "bar", "view": [[-40, -12], [140, 79]]}},
- {"id": "typed", "duration": 4.4, "field": "ember", "seam": "cut", "shot": {"shot": "macro", "ui": "search", "view": [[-40, -40], [256, 144]]}},
+[{"id": "bar", "duration": 4.1, "field": "bloom", "shot": {"shot": "macro", "ui": "bar", "view": [[-40, -12], [140, 79]]}},
+ {"id": "typed", "duration": 4.4, "field": "bloom", "seam": "cut", "shot": {"shot": "macro", "ui": "search", "view": [[-40, -40], [256, 144]]}},
  {"id": "page", "duration": 4.8, "field": "sunlit", "seam": "glow", "shot": {"shot": "macro", "items": [
    {"ui": "column", "view": [[-42, -69], [356, 200]]}, {"ui": "code", "view": [[-33, -32], [274, 154]]}]}},
  {"id": "closing", "duration": 9, "seam": "ring", "shot": {"shot": "closing", "text": "…", "items": [], "detail": "…", "ui": "logo"}}]

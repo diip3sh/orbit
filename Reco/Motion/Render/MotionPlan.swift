@@ -102,6 +102,10 @@ nonisolated struct MotionPlan: Sendable {
         /// How the scene comes in over the one before, drawn under it meanwhile.
         var transition: SeamExpansion.Transition?
 
+        /// How an opening macro's control comes in over its ground alone, a breath in
+        /// (``ShotLayout/macroBreath``): in a light or dither film, its look's seam.
+        var arrival: SeamExpansion.Transition?
+
         /// How long it's drawn past its end, under the next scene's transition.
         var overlap = 0.0
 

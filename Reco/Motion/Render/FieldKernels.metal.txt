@@ -582,10 +582,13 @@ inline float2 onPanel(float2 pixel, float3 rowX, float3 rowY, float3 rowW) {
 // launch-films.md). `frame` as the fields take it; colours from the brand as the field's.
 
 #ifdef glowSeam_ONLY
-/// A front of grainy light crossing the frame in the order the grain gradient's shape lights it (from
-/// two corners, a blob outwards, a wave from below), then on across the frame from the middle out; the
-/// next scene behind it. `seam`: progress, the shape (grainShape's kinds), the front's width in the
-/// order's units, how bright its light goes.
+/// A band of grainy light crossing the frame, the next scene behind it: out of the middle for a blob, a
+/// sphere or ripples, up from below for a wave, in from the corners for ember's, its edge drawn by the
+/// field's shape and grain. `seam`: progress, the shape (grainShape's kinds), the band's width in the
+/// order's units, how bright its light goes; `c0` the light's heart, `c1` its edges.
+///
+/// The order is mostly where in the frame (seven tenths): ordered by the shape alone, the front crossed
+/// the shape's flat stretches at once, and ripples flooded bolt.new's frame with light.
 [[stitchable]] float4 glowSeam(
     coreimage::sampler noise, coreimage::sampler from, coreimage::sampler to, float4 frame, float4 seam,
     float4 c0, float4 c1, coreimage::destination dest
@@ -593,18 +596,24 @@ inline float2 onPanel(float2 pixel, float3 rowX, float3 rowY, float3 rowW) {
     float2 size = frame.yz;
     float2 p = dest.coord() * frame.x - 0.5 * size;
     float t = 0.1 * (frame.w + 7.0);
-    float grainStep = seam.y > 3.5 ? 0.7 : 0.8;
+    float kind = seam.y;
+    float grainStep = kind > 3.5 ? 0.7 : 0.8;
     float2 g = grainStep * p;
     float2 grain = paper::grain(noise, g, paper::slowFbm(noise, 0.002 * g + 10.0, 0.003 * g, 0.001 * g));
-    float across = 1.0 - length(p / (0.5 * size)) / sqrt(2.0);
-    float order = mix(saturate(paper::grainShape(p, size, seam.y, t)), across, 0.4) + 0.12 * (grain.x + 0.5) + 0.18 * grain.y;
-    // From past the order's top (1 and the grain's 0.36) to below its bottom (the grain's −0.12)
+    // 1 where the light reaches first, 0 where last
+    float2 q = p / (0.5 * size);
+    float spread = length(q) / sqrt(2.0);
+    float place = kind < 1.5 ? 0.5 - 0.5 * q.y : (kind < 4.5 ? spread : 1.0 - spread);
+    float order = mix(saturate(paper::grainShape(p, size, kind, t)), place, 0.7) + 0.06 * (grain.x + 0.5) + 0.1 * grain.y;
+    // From just past the order's top (1 and the grain's 0.19) to just below its bottom (the grain's −0.06):
+    // a front starting further out crossed nothing for the seam's first third
     float width = seam.z;
-    float ahead = order - mix(1.45 + 2.0 * width, -0.25 - width, seam.x);
+    float ahead = order - mix(1.2, -0.07, seam.x);
     float next = smoothstep(-0.01, 0.01, ahead);
-    // Brightest at the front, a glow left behind it on the next scene, gone by the seam's end
-    float light = exp(-ahead * ahead / (width * width)) * smoothstep(-width, 0.0, ahead) + 0.35 * exp(-ahead / (2.0 * width)) * next;
+    // Brightest at the band, a little left behind it on the next scene, gone at both ends
+    float light = exp(-ahead * ahead / (width * width)) + 0.15 * exp(-ahead / width) * next;
     light *= sqrt(sin(paper::pi * saturate(seam.x)));
+    // Pale at the band's heart, the brand's hue at its edges
     float3 glow = mix(c0.rgb, c1.rgb, smoothstep(0.0, 2.0 * width, abs(ahead)));
     float3 color = mix(from.sample(from.coord()).rgb, to.sample(to.coord()).rgb, next);
     return float4(1.0 - (1.0 - color) * (1.0 - saturate(seam.w * light) * glow), 1.0);
