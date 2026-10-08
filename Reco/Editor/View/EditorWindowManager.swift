@@ -123,7 +123,8 @@ final class EditorWindowManager: NSObject {
         )
         let hostingController = NSHostingController(rootView: LibraryView(viewModel: viewModel).themed())
         hostingController.sizingOptions = .minSize
-        hostingController.sceneBridgingOptions = [.toolbars]
+        // The section's title and its count, which macOS 26 shows large in the toolbar
+        hostingController.sceneBridgingOptions = [.toolbars, .title]
         let window = makeWindow(hostingController, title: "Reco", size: NSSize(width: 1100, height: 720))
         library = Library(window: window, viewModel: viewModel, watcher: FolderWatcher(), accessesOutputDirectory: accessesOutputDirectory)
 
@@ -180,7 +181,10 @@ final class EditorWindowManager: NSObject {
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
         window.toolbarStyle = .unified
-        window.backgroundColor = NSColor(resource: .stage)
+        // See-through, so the inspectors and the Library's sidebar can show the desktop (`translucentColumn`); the
+        // content paints its own solid ground
+        window.isOpaque = false
+        window.backgroundColor = .clear
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         window.delegate = self

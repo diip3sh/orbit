@@ -140,4 +140,35 @@ struct LibraryTests {
         #expect(!FileManager.default.fileExists(atPath: recording.url.path))
         #expect(!FileManager.default.fileExists(atPath: movies.appending(path: "Reco_\(tag).telemetry.json").path))
     }
+
+    @Test func theViewModelReadsShapesFiltersByThemAndSortsOldestFirst() async throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let desktop = try folder("Desktop")
+        for (name, width, height, age) in [("wide", 32, 18, 0.0), ("tall", 18, 32, 60), ("square", 20, 20, 120)] {
+            let png = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8,
+                                                    samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                                    bytesPerRow: 0, bitsPerPixel: 0)?.representation(using: .png, properties: [:]))
+            let url = desktop.appending(path: "Reco_Screenshot_\(name).png")
+            try png.write(to: url)
+            try FileManager.default.setAttributes([.creationDate: Date.now.addingTimeInterval(-age)], ofItemAtPath: url.path)
+        }
+        let viewModel = LibraryViewModel(
+            folders: { LibraryFolders(recordings: self.root.appending(path: "none"), screenshots: desktop, history: self.root.appending(path: "none")) },
+            openMovie: { _ in }
+        )
+
+        await viewModel.reload()
+
+        let wide = try #require(viewModel.shown.first { $0.name == "Reco_Screenshot_wide" })
+        #expect(viewModel.aspectRatios[wide] == 32.0 / 18)
+        viewModel.orientation = .portrait
+        #expect(viewModel.shown.map(\.name) == ["Reco_Screenshot_tall"])
+        viewModel.orientation = .square
+        #expect(viewModel.shown.map(\.name) == ["Reco_Screenshot_square"])
+
+        viewModel.orientation = nil
+        viewModel.sort = .oldestFirst
+        #expect(viewModel.shown.map(\.name) == ["Reco_Screenshot_square", "Reco_Screenshot_tall", "Reco_Screenshot_wide"])
+        #expect(viewModel.shownGroups.flatMap(\.items) == viewModel.shown)
+    }
 }

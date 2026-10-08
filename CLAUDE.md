@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 854 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 861 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -627,8 +627,10 @@ hairlines, void `#0b0c0e` text, steel darkened to `#6b6b73` for dim text (steel 
 turned down: white on it is 3.7:1). Every colour is a colour set in `Assets.xcassets/Theme` (and `AccentColor`) with a
 dark, a light and an Increase Contrast variant of each, so the app still follows the user's appearance; no window forces
 one (the notch shelf excepted: it is black under the notch). The menu bar popover stays native, as before the theme: the
-system font, label colours and accent on `.ultraThinMaterial`. No Liquid Glass and no materials, with two exceptions the system draws: the Library's sidebar and the
-editor's and Web Recording's `.inspector` columns. Native controls (Settings' forms, switches, pickers, the shortcut
+system font, label colours and accent on `.ultraThinMaterial`. No Liquid Glass and no materials, except Raycast's
+see-through columns: the Library's sidebar and the editor's and Web Recording's inspectors show the desktop blurred
+(`translucentColumn()`: an `NSVisualEffectView` behind the window, tinted with `panel` at 45%, not yet checked by eye), which
+is why editor windows aren't opaque and have a clear background, and their content draws its own ground. Native controls (Settings' forms, switches, pickers, the shortcut
 recorder) stay native and take the accent through `.tint`; AppKit controls follow the user's own accent instead when it isn't
 Multicolor. This replaced the system colours and glass of 2026-09-28 to 2026-10-07. The preview sits on a dot grid; the inspector (toolbar toggle) holds every
 setting on the right, and the transport (cut, zoom, ⌫; frame steps and play; the time) sits in the timeline's header,
@@ -681,8 +683,9 @@ Key facts:
   own transition, `GlassEffectTransition` in SwiftUICore with `.matchedGeometry`, `.materialize` and `.identity`), so a
   surface with its own entrance gets a *second* motion on top: the capture toolbar's glass pills read as the controls
   sliding in diagonally until they set `.glassEffectTransition(.identity)` (2026-10-05).
-- The inspectors keep the system `.inspector`, which macOS 26 draws as glass, so it has no background; the Library's
-  sidebar likewise.
+- The inspectors keep the system `.inspector`; their content and the Library's sidebar list (`scrollContentBackground(.hidden)`)
+  take `translucentColumn()` (`Editor/View/BehindWindowBlur.swift`). The window's ground (`editorWindowBackground()`) is on the
+  main content only, never the root: anything opaque under a column hides the desktop.
 - Text is ink by default, so it doesn't dim when disabled: `InspectorSection` fades disabled content.
 - Editor windows take their minimum size from SwiftUI (`sizingOptions = .minSize`), so anything laid out in points of
   a measured width (filmstrip tiles, lane blocks) sits in a `frame(minWidth: 0, …)`: without it the timeline's last
@@ -1089,20 +1092,27 @@ and a white stop square, for any start (menu, shortcut, `reco://`); it goes once
 ### S7 — Library, the main window (`feat/ui-polish`, spec 0010)
 
 **Library…** in the menu bar, and clicking Reco in the Dock (`applicationShouldHandleReopen`), open Reco's
-main window, which stays open unlike the popover: a sidebar (All, Recordings, Web Recordings, Exports,
-Screenshots, with counts), a grid of pictures, search, and **New** (Capture Area/Window/Screen, Record
+main window, which stays open unlike the popover, laid out like Eagle (2026-10-08): a see-through sidebar (All,
+Recordings, Web Recordings, Exports, Screenshots, with counts), the title bar's "Library" and the shown count
+(`navigationTitle`/`navigationSubtitle`, bridged with `sceneBridgingOptions = [.toolbars, .title]`), a masonry grid of
+pictures, and in the toolbar search, **Filter** (Shape: Any, Landscape, Portrait, Square; Sort By: Newest First, Oldest
+First, Name; its icon fills while a shape is chosen) and **New** (Capture Area/Window/Screen, Record
 Area…, Record Window or Display…, New Web Recording…). A click opens a movie in the
 editor and a screenshot in Preview; the context menu shows in Finder, copies (a screenshot as PNG, a movie
 as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`. The grid is under date
-headers, newest first: Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
+headers, newest first (or oldest first; sorted by name it is one grid without headers): Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
 list the screenshot history folder (spec 0012). Down the right edge the dates repeat as a rail
 (`LibraryDateRail`), adapted from Chánh Đại's Line Nav: only a short line per date, 10 pt apart, that lengthens
 and brightens for the date at the top of the grid and for the one under the pointer, whose title shows to the
 line's left, over the grid, in large text with no background; a click scrolls the grid to it. The grid reserves only the lines'
 44 pt and hides the rail for a single date. The grid sits on the content colour (`controlBackgroundColor`): on the
-window's own colour it matched the sidebar within a few levels (55 against 57 in dark mode). Tiles are 16:10
-pictures that fill their frame (screenshots too, cropped), 10 pt continuous corners and a faint edge, with the
-name and, dimmed, the kind's symbol and the date under them. Which date is current is
+window's own colour it matched the sidebar within a few levels (55 against 57 in dark mode). Tiles are pictures only,
+at their own shape (`MasonryLayout`: columns at least 200 pt wide, each tile in the shortest column so far,
+`MasonryPlacement`), 16:10 until the shape is read; a movie has a play badge, the name shows on hover, VoiceOver reads
+name and date. Shapes are read once per item before the list shows (`LibraryStore.aspectRatios(of:)`: an image's header
+with its EXIF orientation, a movie's video track with its transform), and thumbnails are drawn at that shape, 640 px
+wide, up to 1280 tall. Square is within 5% (`LibraryOrientation`); with a shape chosen, an unreadable item is left out.
+Which date is current is
 `LibraryDateGroup.active(in:headerTops:topLine:)`, fed by each header's own offset — a lazy grid measures
 only the headers it has built, so an unmeasured date is one below the fold and is skipped.
 
@@ -1110,6 +1120,7 @@ only the headers it has built, so an unmeasured date is one below the fold and i
 |---|---|
 | `Library/Model/LibraryItem.swift` | Pure: kinds by name and type (`Reco_Web_` web, `-edited` export, `Reco_Screenshot_` PNG), companions, `LibrarySection` |
 | `Library/Model/LibraryDateGroup.swift` | Pure: `groups(of:now:calendar:)`, the date headers, and `active(in:headerTops:topLine:)`, which date the rail marks |
+| `Library/Model/LibraryOrientation.swift`, `LibrarySort.swift`, `MasonryPlacement.swift`, `Library/View/MasonryLayout.swift` | Pure: the Filter's shapes and orders, the grid's columns and slots (`LibraryGridTests`); the SwiftUI `Layout` on them |
 | `Library/Service/LibraryStore.swift` | Lists the recordings, screenshot and history folders (a folder read once when two are the same; a history name also saved is listed from the screenshot folder), thumbnails (movie frame or `CGImageSource`), trash |
 | `Library/Service/FolderWatcher.swift` | `DispatchSource` vnode writes on all three folders, 0.3 s settle, so new saves show at once (a folder that doesn't exist yet isn't watched until the window is reopened; the history folder is made at launch) |
 | `Library/ViewModel/LibraryViewModel.swift`, `Library/View/` | Sections, search, intents; `Actions` wired in `AppDelegate`; window in `EditorWindowManager.showLibrary()` |
@@ -1232,7 +1243,7 @@ should hold but need re-measuring.
 | S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
 | S1 editor phase 6: canvas and export polish | Done; the canvas, gradient presets, wallpapers (and one after relaunch), picture blur, the border, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags) and transparent exports still need a check in the app |
 | S1 editor design: system colors, glass transport, new timeline and inspector | Done; replaced by the Linear theme |
-| Linear theme (`feat/linear-theme`): tokens, light mode from Default's tokens, Inter + JetBrains Mono, solid surfaces app-wide | Done 2026-10-08; built, 854 tests; colours from `theme/theme.tokens.json`; needs a look in the app in light, dark and Increase Contrast |
+| Linear theme (`feat/linear-theme`): tokens, light mode from Default's tokens, Inter + JetBrains Mono, solid surfaces app-wide | Done 2026-10-08; built, 861 tests; colours from `theme/theme.tokens.json`; needs a look in the app in light, dark and Increase Contrast |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 | S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |
 | S3 agent bridge (spec 0006): MCP server for coding agents | Done; tested over the real socket (token, `initialize`, `tools/list`, error calls), the `--mcp` process (`AgentBridgeClientTests`), config editors and plans. Not yet tried: real agents connected by hand, a real `record_page` render, Gatekeeper on another Mac |

@@ -41,6 +41,8 @@ struct EditorView: View {
                 }
                 // The timeline leaves below the window's edge, not over it
                 .clipped()
+                // Solid under the stage and timeline only: the inspector shows the desktop
+                .editorWindowBackground()
                 // One inspector for both modes, so the column stays put and only its content changes: the
                 // editor's sections, or the export's options, which always show
                 .inspector(isPresented: export == nil ? $showsInspector : .constant(true)) {
@@ -52,6 +54,7 @@ struct EditorView: View {
                         }
                     }
                     .transition(.opacity)
+                    .translucentColumn()
                     .inspectorColumnWidth(min: 300, ideal: EditorInspector.idealWidth, max: 460)
                 }
                 .toolbar { toolbar }
@@ -78,7 +81,14 @@ struct EditorView: View {
         // with only a minimum, the "Opening…" spinner made that minimum the root's largest size too, and
         // SwiftUI shrank the window to it (900×592) as it opened, whatever size it was given
         .frame(minWidth: 900, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)
-        .editorWindowBackground()
+        .foregroundStyle(EditorTheme.ink)
+        .background {
+            // Opening, or the error: the whole window's ground
+            if viewModel.source == nil {
+                EditorTheme.stage
+                    .ignoresSafeArea()
+            }
+        }
         .editorMotion(.smooth, value: viewModel.source == nil)
         .task {
             await viewModel.load()

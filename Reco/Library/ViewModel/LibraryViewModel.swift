@@ -25,19 +25,30 @@ final class LibraryViewModel {
     var section = LibrarySection.all
     var search = ""
 
+    /// The Filter menu's shape, `nil` for any.
+    var orientation: LibraryOrientation?
+    var sort = LibrarySort.newestFirst
+
     /// Newest first, or `nil` until the folders have been read.
     private(set) var items: [LibraryItem]?
 
     /// The items' pictures, loaded as their tiles appear.
     private(set) var thumbnails: [URL: CGImage] = [:]
 
+    /// Each item's width over height, read once when it is first listed, for the masonry grid and the shape
+    /// filter. By item, not URL: an export written again under its name may have another shape.
+    private(set) var aspectRatios: [LibraryItem: Double] = [:]
+
     /// Why the folders couldn't be read, or an item couldn't be trashed.
     var error: String?
 
     let actions: Actions
 
-    /// A tile's picture at most, in pixels: 16:10 at twice a wide tile's width on screen (320 pt).
-    static let thumbnailSize = CGSize(width: 640, height: 400)
+    /// A tile's picture at most, in pixels: twice a wide column's 320 pt across, and as tall as the item's shape
+    /// needs, up to twice that.
+    static func thumbnailSize(aspectRatio: Double?) -> CGSize {
+        CGSize(width: 640, height: min(1280, 640 / (aspectRatio ?? 1.6)))
+    }
 
     @ObservationIgnored private let folders: () -> LibraryFolders
     @ObservationIgnored private let openMovie: (URL) -> Void
@@ -67,14 +78,21 @@ final class LibraryViewModel {
         self.trashItem = trashItem
     }
 
-    /// The items in the chosen section that match the search.
+    /// The items in the chosen section that match the search and the shape, in the chosen order. With a shape
+    /// chosen, an item whose shape couldn't be read is left out.
     var shown: [LibraryItem] {
-        (items ?? []).filter { section.contains($0) && (search.isEmpty || $0.name.localizedStandardContains(search)) }
+        sort.sorted((items ?? []).filter { item in
+            section.contains(item)
+                && (search.isEmpty || item.name.localizedStandardContains(search))
+                && (orientation == nil || aspectRatios[item].map(LibraryOrientation.init) == orientation)
+        })
     }
 
-    /// `shown` under date headers
+    /// `shown` under date headers, the oldest first when so sorted.
     var shownGroups: [LibraryDateGroup] {
-        LibraryDateGroup.groups(of: shown, now: .now, calendar: .current)
+        let groups = LibraryDateGroup.groups(of: shown, now: .now, calendar: .current)
+        guard sort == .oldestFirst else { return groups }
+        return groups.reversed().map { LibraryDateGroup(title: $0.title, items: $0.items.reversed()) }
     }
 
     func count(in section: LibrarySection) -> Int {
@@ -93,7 +111,11 @@ final class LibraryViewModel {
     func reload() async {
         let folders = folders()
         do {
-            items = try await LibraryStore.items(recordings: folders.recordings, screenshots: folders.screenshots, history: folders.history)
+            let listed = try await LibraryStore.items(recordings: folders.recordings, screenshots: folders.screenshots, history: folders.history)
+            // Before the items show, so the grid is laid out once in its final shape
+            let unread = listed.filter { aspectRatios[$0] == nil }
+            aspectRatios.merge(await LibraryStore.aspectRatios(of: unread)) { $1 }
+            items = listed
             error = nil
         } catch {
             logger.error("Couldn't list the library: \(error.localizedDescription)")
@@ -103,7 +125,7 @@ final class LibraryViewModel {
 
     func loadThumbnail(for item: LibraryItem) async {
         guard thumbnails[item.url] == nil else { return }
-        thumbnails[item.url] = await LibraryStore.thumbnail(of: item, maximumSize: Self.thumbnailSize)
+        thumbnails[item.url] = await LibraryStore.thumbnail(of: item, maximumSize: Self.thumbnailSize(aspectRatio: aspectRatios[item]))
     }
 
     /// A recording opens in the editor, a screenshot in the system's viewer.
