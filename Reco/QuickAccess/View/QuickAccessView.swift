@@ -20,10 +20,16 @@ struct QuickAccessView: View {
     @State private var isHovering = false
 
     var body: some View {
-        // The shot's shape, which a background changes; the controller refits the panel to the same size
-        let size = QuickAccessController.cardSize(for: model.screenshot.pointSize)
+        // The shot's shape, which a background changes, or the editor's; the controller sets the panel to the same size
+        let size = model.cardSize
 
-        QuickAccessPreview(model: model, showsControls: isHovering)
+        Group {
+            if model.isAnnotating, let editor = model.annotation {
+                QuickAccessAnnotation(model: model, editor: editor)
+            } else {
+                QuickAccessPreview(model: model, showsControls: isHovering)
+            }
+        }
             .padding(QuickAccessController.inset)
             .frame(width: size.width, height: size.height)
             .background {
@@ -40,9 +46,37 @@ struct QuickAccessView: View {
             .editorMotion(EditorTheme.quickMotion, value: isHovering)
             .panelPresentation(isPresented: model.isPresented, anchor: anchor)
             .allowsWindowActivationEvents(true)
-            // Esc closes the card, like the Close button and a flick. The panel is key while it shows, so
-            // this is the only way Esc reaches it: without it the key went nowhere.
-            .onExitCommand { model.close() }
+            // Esc closes the card, like the Close button and a flick, or leaves the editor first. The panel is key
+            // while it shows, so this is the only way Esc reaches it: without it the key went nowhere.
+            .onExitCommand {
+                if model.isAnnotating {
+                    Task { await model.finishAnnotating() }
+                } else {
+                    model.close()
+                }
+            }
+    }
+}
+
+/// The card grown into the editor (spec 0015): the tool strip, the shot with its marks, and Copy and Save under it.
+private struct QuickAccessAnnotation: View {
+
+    let model: QuickAccessViewModel
+    let editor: AnnotationEditor
+
+    var body: some View {
+        VStack(spacing: QuickAccessController.inset) {
+            AnnotationToolbar(editor: editor) {
+                Task { await model.finishAnnotating() }
+            }
+            .frame(height: QuickAccessController.annotationBarHeight)
+            AnnotationCanvas(editor: editor)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            QuickAccessActions(model: model)
+                .frame(height: QuickAccessController.annotationBarHeight)
+        }
+        .environment(\.colorScheme, .dark)
     }
 }
 
@@ -106,8 +140,8 @@ private struct QuickAccessControls: View {
             Button(action: model.close) { Label { Text("Close") } icon: { LineIcon(.hugeiconsCancel) } }
                 .help("Close")
             Spacer()
-            // Annotate goes first once annotation exists:
-            // Button("Annotate", systemImage: "pencil", action: model.annotate)
+            Button(action: model.annotate) { Label("Annotate", systemImage: "pencil.tip") }
+                .help("Draw arrows, shapes, text and more on the screenshot")
             Button { Task { await model.toggleBackground() } } label: {
                 Label { Text(model.hasBackground ? "Remove Background" : "Add Background") } icon: {
                     LineIcon(.hugeiconsBackground)
@@ -127,7 +161,7 @@ private struct QuickAccessControls: View {
             }
             .help("Recognize Text")
             .disabled(model.isRecognizingText)
-            Button(action: model.pin) { Label { Text("Pin") } icon: { LineIcon(.hugeiconsPin) } }
+            Button { Task { await model.pin() } } label: { Label { Text("Pin") } icon: { LineIcon(.hugeiconsPin) } }
                 .help("Pin")
         }
         .labelStyle(.iconOnly)

@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 948 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 965 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -303,15 +303,32 @@ it was only the way in, so Esc on an area selection closes that state and leaves
   shot), and the preview is redrawn at the size the first one was (`previewPixelSize`). The Settings section reuses the editor's
   controls (`CanvasStyleControls`, `BackgroundFillControls`, now bound to a `CanvasStyle` rather than the editor's view model;
   `CanvasStyle.apply(_:)` and `setImage(_:)` make a preset or a picture one write, so one edit).
+- **Annotate** (N13, spec 0015, 2026-10-08; `pencil.tip`, first of the top-right icons): grows the card into an editor at the
+  shot's size fitted to the screen (`QuickAccessController.annotationCardSize(for:in:)`, the refit keeps the corner it grew
+  from) with a tool strip (Select, Arrow, Line, Rectangle, Ellipse, Text, Highlighter, Step, Blur, Pixelate, Spotlight, Crop; V A L
+  R O T H N B P S C; eight colours, three widths, undo/redo, Done) over the shot and Copy and Save under it. Marks are vectors in
+  the shot's points (`Annotation`, pure); `AnnotationRenderer` draws them with Core Graphics for the canvas (scaled by the view)
+  and the output alike; blur, pixelate and spotlight are pixels through `MaskRenderer` (`AnnotationDocument.effects`), rendered
+  into the editor's `base` when they change. `AnnotationEditor` (`@MainActor @Observable`) holds the document, a history of
+  documents for undo, the tool, colour, width, the draft being dragged, the text being typed and the crop draft; the canvas
+  keys a press on its `startLocation`, since a gesture SwiftUI cancels never ends (instant synthetic drags, measured with
+  cliclick, left `onEnded` uncalled). Done shrinks the card back showing the marked shot (`compose()`: plain → flattened →
+  framed; `AnnotationFlattener.flatten` draws at the shot's pixels off the main actor, drops the HDR copy, cuts the crop) and the
+  marks stay editable until the card closes; Copy, Save, Pin and drag-out flatten first (`flattenIfAnnotating`). Checked by hand
+  2026-10-09: arrow, rectangle and two steps drawn on a card, Done, Save; the PNG shows them where they were drawn.
 
 | File | Role |
 |---|---|
+| `Annotation/Model/Annotation.swift`, `AnnotationDocument.swift`, `AnnotationTool.swift` | A mark's shape, colour and width, hit testing and moving; the list with its crop, step numbers and effects; the tools, what a drag makes with each, the strip's colours and widths |
+| `Annotation/Render/AnnotationRenderer.swift`, `AnnotationFlattener.swift` | Core Graphics drawing of marks, selection and the crop's dim; the shot with its effects, marks and crop as one `Screenshot` |
+| `Annotation/ViewModel/AnnotationEditor.swift`, `Annotation/View/AnnotationCanvas.swift`, `AnnotationToolbar.swift` | Gestures, history, text entry and styles; the canvas and the strip |
+| `QuickAccess/ViewModel/QuickAccessViewModel+Annotation.swift` | `annotate()`, `finishAnnotating()`, `compose()` |
 | `QuickAccess/View/QuickAccessController.swift`, `QuickAccessPanel.swift` | Non-activating borderless `.floating` dark panel (key on appearing, `hidesOnDeactivate = false`), enter/exit through `panelPresentation` (`exitDelay` before ordering out; leaving panels are tracked so `hide()` clears them too), placement (`panelFrame`), owns the card's view model and the pins |
 | `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin`/`onReshape` |
 | `Screenshot/Model/ScreenshotBackground.swift`, `UniformBorders.swift`, `Screenshot/Service/ScreenshotFramer.swift`, `Model/SettingsStore+ScreenshotBackground.swift`, `View/ScreenshotSettingsView.swift` | The background setting and Auto Balance's trim (pure); the shot drawn on the canvas; the Settings → Screenshots tab (HDR, history, background) |
 | `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius), hover scrim and controls (Copy and Save both `.editorPrimary`: secondary's accent text over the shot read as a disabled Copy; dark corner icons), a solid toast; icons are 1.5 pt line
 SVGs in `Assets.xcassets/LineIcons` as template vectors, drawn by `LineIcon` in `CornerButtonStyle`'s dark circles (both shared with pins): Hugeicons
-stroke-rounded (MIT) cancel, checkmark circle, scan text and pin, as in the capture toolbar (the app's icons are SF Symbols and Hugeicons only); a `DragGesture` on the edge drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the shot. Annotate goes first in the top-right corner once it exists (one line) |
+stroke-rounded (MIT) cancel, checkmark circle, scan text and pin, as in the capture toolbar (the app's icons are SF Symbols and Hugeicons only); a `DragGesture` on the edge drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the shot; in the editor, the strip, the canvas and the actions in one column |
 | `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, 8 pt rounded corners with a faint edge, the card's close button on hover; appears from and closes into its bottom-left corner (`panelPresentation`, a `PanelPresence` per pin); a right-click sets its opacity (100, 75, 50, 25%: the panel's `alphaValue`, shadow included) or makes it click-through (`ignoresMouseEvents`), and the menu bar's **Unlock Pins**, shown while any pin is click-through, takes clicks on all of them again |
 | `QuickAccess/Service/ImageDownsampler.swift` | Card preview drawn from the captured `CGImage` off the main actor |
 | `Screenshot/Service/TextRecognizer.swift` | Vision `RecognizeTextRequest` (accurate, automatic language) off the main actor; `joined(_:)` orders lines top to bottom |

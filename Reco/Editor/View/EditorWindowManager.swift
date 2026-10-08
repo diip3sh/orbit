@@ -110,7 +110,7 @@ final class EditorWindowManager: NSObject {
             editor.viewModel.importStyle(from: url)
             activate(editor.window)
         } else {
-            try? StylePresetStore.save(StylePresetStore.read(from: url))
+            _ = try? StylePresetStore.save(StylePresetStore.read(from: url))
         }
     }
 

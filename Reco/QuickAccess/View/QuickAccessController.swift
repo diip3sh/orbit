@@ -40,6 +40,34 @@ final class QuickAccessController {
 
     nonisolated static let margin: CGFloat = 16
 
+    /// The editor's tool strip, and the row of Copy and Save under the shot
+    nonisolated static let annotationBarHeight: CGFloat = 32
+
+    /// The narrowest editor: room for the tool strip
+    nonisolated static let minAnnotationWidth: CGFloat = 620
+
+    /// The card grown into the editor (spec 0015) for a shot of `pointSize`: the shot at its size on screen, shrunk to
+    /// fit `visibleFrame` less the margins, the edge, the strip and the actions, and at least `minAnnotationWidth`.
+    nonisolated static func annotationCardSize(for pointSize: CGSize, in visibleFrame: CGRect) -> CGSize {
+        let bars = 2 * annotationBarHeight + 2 * inset
+        let roomWidth = visibleFrame.width - 2 * margin - 2 * inset
+        let roomHeight = visibleFrame.height - 2 * margin - 2 * inset - bars
+        guard pointSize.width > 0, pointSize.height > 0, roomWidth > 0, roomHeight > 0 else { return maxCardSize }
+        let scale = min(1, roomWidth / pointSize.width, roomHeight / pointSize.height)
+        let width = (pointSize.width * scale).rounded() + 2 * inset
+        let height = (pointSize.height * scale).rounded() + 2 * inset + bars
+        return CGSize(width: max(width, min(minAnnotationWidth, visibleFrame.width - 2 * margin)), height: height)
+    }
+
+    /// `frame` moved the least that puts it inside `visibleFrame`
+    nonisolated static func onScreen(_ frame: CGRect, in visibleFrame: CGRect) -> CGRect {
+        CGRect(
+            x: min(max(frame.minX, visibleFrame.minX), max(visibleFrame.maxX - frame.width, visibleFrame.minX)),
+            y: min(max(frame.minY, visibleFrame.minY), max(visibleFrame.maxY - frame.height, visibleFrame.minY)),
+            width: frame.width, height: frame.height
+        )
+    }
+
     /// The screenshot of the last card that went away (closed, copied, saved, pinned or replaced), for `restoreClosed()`
     private(set) var closedScreenshot: Screenshot?
 
@@ -199,6 +227,7 @@ final class QuickAccessController {
         model.onReshape = { [weak self] in self?.refit() }
 
         let size = Self.cardSize(for: model.screenshot.pointSize)
+        model.cardSize = size
         let frame: CGRect
         var grownFrom: CGPoint?
         if let pointer, let region = model.screenshot.region {
@@ -244,10 +273,15 @@ final class QuickAccessController {
         )
     }
 
-    /// Fits the card to its shot's new shape (a background added or taken off), keeping the corner it grew from in place.
+    /// Fits the card to its shot's new shape (a background added or taken off) or to the editor, keeping the corner it
+    /// grew from in place, moved on screen where it wouldn't fit.
     private func refit() {
-        guard let model, let panel else { return }
-        let frame = Self.refitted(panel.frame, to: Self.cardSize(for: model.screenshot.pointSize), anchor: anchor)
+        guard let model, let panel, let screen = panel.screen ?? NSScreen.main else { return }
+        let size = model.isAnnotating
+            ? Self.annotationCardSize(for: model.annotation?.pointSize ?? model.screenshot.pointSize, in: screen.visibleFrame)
+            : Self.cardSize(for: model.screenshot.pointSize)
+        model.cardSize = size
+        let frame = Self.onScreen(Self.refitted(panel.frame, to: size, anchor: anchor), in: screen.visibleFrame)
         panel.setFrame(frame, display: true)
     }
 

@@ -10,7 +10,7 @@ Reference repos checked against the live GitHub API: `syi0808/screenize`, `imbha
 
 > **Status (2026-10-08).** This audit describes the app before the fork's work; the rest of this document is kept as
 > written. Since then: the app is no longer sandboxed (spec 0007), records input telemetry (F1, F2), and has an editor
-> (spec 0003), screenshots with the Quick Access card, and web recordings (spec 0005). Of the Screen Studio items in
+> (spec 0003), screenshots with the Quick Access card and its annotation editor (C3, spec 0015), and web recordings (spec 0005). Of the Screen Studio items in
 > section 4, S1–S10, S13 (N4), S15, S16, S18 and S19 are built; S11 is partial (canvas shapes, no auto reframing); S12
 > (N19), S14 (N5) and S17 are not started. Open work is tracked in `docs/specs/0004-next-features.md`.
 

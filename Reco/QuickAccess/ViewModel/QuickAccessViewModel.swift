@@ -27,6 +27,7 @@ final class QuickAccessViewModel {
         case hidden(Int)
         case nothingToHide
         case backgroundFailed
+        case annotationFailed
 
         var message: String {
             switch self {
@@ -40,6 +41,7 @@ final class QuickAccessViewModel {
             case .hidden(let count): count == 1 ? "Hid 1 Item" : "Hid \(count) Items"
             case .nothingToHide: "Nothing Sensitive Found"
             case .backgroundFailed: "Couldn't Add the Background"
+            case .annotationFailed: "Couldn't Draw the Marks"
             }
         }
 
@@ -64,8 +66,17 @@ final class QuickAccessViewModel {
     private(set) var isHidingSensitiveInfo = false
 
     /// Whether the shot is on the background from Settings; off for every new card
-    private(set) var hasBackground = false
+    var hasBackground = false
     private(set) var isChangingBackground = false
+
+    /// The marks made on this shot, once Annotate has been clicked; kept until the card closes
+    var annotation: AnnotationEditor?
+
+    /// Whether the card is grown into the annotation editor
+    var isAnnotating = false
+
+    /// The card's size on screen, which the controller sets as it fits the card to the shot or the editor
+    var cardSize = CGSize.zero
 
     /// Closes the card. Set by `QuickAccessController`, cleared when the card goes away.
     @ObservationIgnored var onClose: (@MainActor () -> Void)?
@@ -78,15 +89,15 @@ final class QuickAccessViewModel {
 
     /// The shot without its background, which Hide Sensitive Info works on, so the background goes over the
     /// hidden text and comes off without undoing it
-    @ObservationIgnored private var plainScreenshot: Screenshot
+    @ObservationIgnored var plainScreenshot: Screenshot
 
     private let previewPixelSize: CGFloat
     private let saveScreenshot: @MainActor (Screenshot) async -> Bool
-    private let background: @MainActor () -> ScreenshotBackground
+    let background: @MainActor () -> ScreenshotBackground
     private let pasteboard: NSPasteboard
     /// Holds the drag-out file under the save name; unique per card so two cards never share a file
     private let dragFolder = URL.temporaryDirectory.appending(path: UUID().uuidString)
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "QuickAccess")
+    let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "QuickAccess")
 
     @ObservationIgnored private var dragFile: URL?
     @ObservationIgnored private var dragFileTask: Task<Void, Never>?
@@ -116,6 +127,7 @@ final class QuickAccessViewModel {
 
     /// Copies the full image as PNG, confirms on the button, then closes
     func copy() async {
+        await flattenIfAnnotating()
         do {
             let png = try await ScreenshotService.pngData(of: screenshot.image)
             ImagePasteboard.copy(png: png, to: pasteboard)
@@ -128,6 +140,7 @@ final class QuickAccessViewModel {
 
     /// Saves into the output folder, confirms on the button, then closes; a failed save keeps the card open
     func save() async {
+        await flattenIfAnnotating()
         if await saveScreenshot(screenshot) {
             confirmThenClose(.saved)
         }
@@ -168,12 +181,9 @@ final class QuickAccessViewModel {
                 show(.nothingToHide)
                 return
             }
-            let shown = hasBackground ? try await ScreenshotFramer.framing(hidden, with: background()) : hidden
-            guard await display(shown) else {
-                show(.textFailed)
-                return
-            }
             plainScreenshot = hidden
+            annotation?.replaceScreenshot(hidden)
+            await compose()
             show(.hidden(count))
         } catch {
             logger.error("Couldn't hide sensitive text: \(error.localizedDescription)")
@@ -186,22 +196,19 @@ final class QuickAccessViewModel {
     func toggleBackground() async {
         isChangingBackground = true
         defer { isChangingBackground = false }
-        if hasBackground {
-            hasBackground = await !display(plainScreenshot)
-            return
-        }
-        do {
-            let framed = try await ScreenshotFramer.framing(plainScreenshot, with: background())
-            hasBackground = await display(framed)
-        } catch {
-            logger.error("Couldn't put the screenshot on a background: \(error.localizedDescription)")
-            show(.backgroundFailed)
-        }
+        hasBackground.toggle()
+        await compose()
+    }
+
+    /// Flattens the marks into the shot before it leaves the card from the editor: Copy and Save work there too
+    private func flattenIfAnnotating() async {
+        guard isAnnotating else { return }
+        await compose()
     }
 
     /// Shows `shot` in place of the current one, with a new preview and drag-out file; `false` when no preview
     /// could be drawn, in which case nothing changes.
-    private func display(_ shot: Screenshot) async -> Bool {
+    func display(_ shot: Screenshot) async -> Bool {
         guard let preview = await ImageDownsampler.thumbnail(of: shot.image, maxPixelSize: previewPixelSize) else { return false }
         let reshaped = shot.pointSize != screenshot.pointSize
         screenshot = shot
@@ -215,7 +222,8 @@ final class QuickAccessViewModel {
     }
 
     /// Pins the screenshot, then closes the card
-    func pin() {
+    func pin() async {
+        await flattenIfAnnotating()
         onPin?()
         onClose?()
     }
@@ -271,7 +279,7 @@ final class QuickAccessViewModel {
     }
 
     /// Shows `feedback` for 1.5 s and announces it to VoiceOver
-    private func show(_ feedback: Feedback) {
+    func show(_ feedback: Feedback) {
         self.feedback = feedback
         AccessibilityNotification.Announcement(feedback.message).post()
         feedbackTask?.cancel()

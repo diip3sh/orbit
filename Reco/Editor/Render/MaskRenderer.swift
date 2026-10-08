@@ -94,9 +94,11 @@ nonisolated enum MaskRenderer {
 
     /// One opaque grey per cell from 1 - ``noise`` to 1 + ``noise``, to multiply the cells by. Opaque, since
     /// Core Image premultiplies a filter's output: a grey with alpha 0 would be nothing. The generator is the same
-    /// every frame, so the noise holds still.
+    /// every frame, so the noise holds still. The grey is taken from the random alpha: the colour channels are
+    /// unpremultiplied by it before the matrix, so a random red over a small alpha came out far over 1 (a flat grey of
+    /// 95 pixelated to 89–255, measured 2026-10-08), while the alpha itself is the plain random value.
     private static func noise(cell: CGFloat, origin: CGPoint) -> CIImage {
-        let grey = CIVector(x: 2 * noise, y: 0, z: 0, w: 0)
+        let grey = CIVector(x: 0, y: 0, z: 0, w: 2 * noise)
         return CIFilter.randomGenerator().outputImage?
             .samplingNearest()
             .transformed(by: CGAffineTransform(scaleX: cell, y: cell).concatenating(CGAffineTransform(translationX: origin.x, y: origin.y)))

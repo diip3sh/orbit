@@ -74,8 +74,8 @@ own spec before any code.
 
 N20 and N21 are small and can land any time.
 
-**Status (2026-10-08):** built: N1, N2, N3, N4, N7, N8, N9, N10, N11, N12, N14, N15, N16, N17, N20, N21, N22, and style
-presets from Later (S19 in the roadmap). The rest is open.
+**Status (2026-10-08):** built: N1, N2, N3, N4, N7, N8, N9, N10, N11, N12, N13, N14, N15, N16, N17, N20, N21, N22, and
+style presets from Later (S19 in the roadmap). The rest is open.
 
 Every item follows spec 0003's standards: a pure core with tests, performance measured before a
 claim, docs updated, and the 8 ms frame budget kept.
@@ -316,6 +316,9 @@ automatic zooms are made again when a crop drag ends. Not yet checked in the run
   generated for the base view yet; one that doesn't fit is clamped into it. See CLAUDE.md, phase 6.
 
 ### N13 — Annotate screenshots (own spec)
+
+**Status (2026-10-08):** built as spec 0015: the card grows into the editor, with every tool below; marks stay editable
+until the card closes and are flattened into what Copy, Save, Pin and a drag give.
 
 - **What:** tools on the card:
   - arrow, line, rectangle, ellipse, text
