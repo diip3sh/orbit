@@ -1,5 +1,5 @@
 {
-  "$description": "Reco's theme, in the Design Tokens format (W3C DTCG, as Refero exports it). `color` is the source palette; `role` is what the app uses, each role's `$value` its dark colour (an alias like {color.void} or a hex) and `$extensions.com.reco.theme` its light and Increase Contrast colours. To change themes: replace `color` with the new palette, point the roles at it (and set their light and high-contrast values), then run `scripts/apply-theme.py`, which writes Reco/Assets.xcassets. ThemeContrastTests fails if a role misses WCAG AA contrast or the asset catalog no longer matches this file. `font` and `radius` are read by Typeface.swift and EditorTheme.swift; the tests check they match.",
+  "$description": "Reco's theme, in the Design Tokens format (W3C DTCG, as Refero exports it). `color` is the dark palette (Linear's) and `lightColor` the light one (Default's); `role` is what the app uses, each role's `$value` its dark colour (an alias like {color.void} or a hex) and `$extensions.com.reco.theme` its light and Increase Contrast colours (aliases like {lightColor.snow} too). To change themes: replace `color` or `lightColor` with the new palette, point the roles at it (and set their light and high-contrast values), then run `scripts/apply-theme.py`, which writes Reco/Assets.xcassets. ThemeContrastTests fails if a role misses WCAG AA contrast or the asset catalog no longer matches this file. `font` and `radius` are read by Typeface.swift and EditorTheme.swift; the tests check they match.",
   "color": {
     "void": {
       "$value": "#08090a",
@@ -82,84 +82,182 @@
       "$description": "Lavender — Secondary tag fills, category indicators"
     }
   },
+  "lightColor": {
+    "$description": "The light appearance's palette: Default's tokens (default.com, extracted by Refero 2026-07-03), a dark theme whose light end (snow, bone, chalk) and greys make the light roles, with iris as the accent",
+    "void": {
+      "$value": "#0b0c0e",
+      "$type": "color",
+      "$description": "Void — Deepest page canvas, terminal background, behind everything"
+    },
+    "graphite": {
+      "$value": "#131416",
+      "$type": "color",
+      "$description": "Graphite — Primary card surface, panels, elevated containers, table rows"
+    },
+    "charcoal": {
+      "$value": "#1f1f21",
+      "$type": "color",
+      "$description": "Charcoal — Secondary surface, borders, dividers, rail backgrounds"
+    },
+    "smoke": {
+      "$value": "#3c3d3e",
+      "$type": "color",
+      "$description": "Smoke — Button borders, subtle separators"
+    },
+    "steel": {
+      "$value": "#71717a",
+      "$type": "color",
+      "$description": "Steel — Muted body text, captions, helper text, dimmed labels"
+    },
+    "fog": {
+      "$value": "#858687",
+      "$type": "color",
+      "$description": "Fog — Secondary text, icon strokes, inactive nav items"
+    },
+    "ash": {
+      "$value": "#9d9e9f",
+      "$type": "color",
+      "$description": "Ash — Tertiary text, placeholder text, disabled states"
+    },
+    "chalk": {
+      "$value": "#cececf",
+      "$type": "color",
+      "$description": "Chalk — Body text secondary, table cell text"
+    },
+    "snow": {
+      "$value": "#ffffff",
+      "$type": "color",
+      "$description": "Snow — Primary headings, body text, icon fills, active states — the dominant ink at 413 occurrences"
+    },
+    "bone": {
+      "$value": "#f2f2f2",
+      "$type": "color",
+      "$description": "Bone — Primary action button fill — off-white pill against dark creates the highest-contrast CTA without introducing a chromatic brand color"
+    },
+    "ink": {
+      "$value": "#333333",
+      "$type": "color",
+      "$description": "Ink — Secondary body text, navigation labels, and subdued headings. Do not promote it to the primary CTA color"
+    },
+    "signal-blue": {
+      "$value": "#3b82f6",
+      "$type": "color",
+      "$description": "Signal Blue — Brand accent — active nav indicators, link highlights, icon fills, active card borders. The one true chromatic color; used 21 times as fills, borders, and background tints"
+    },
+    "arc-blue": {
+      "$value": "#60a5fa",
+      "$type": "color",
+      "$description": "Arc Blue — Light blue text accent, informational highlights, node icons in workflow diagrams"
+    },
+    "ring-blue": {
+      "$value": "#93c5fd",
+      "$type": "color",
+      "$description": "Ring Blue — Focus rings, active card outline borders, selection state outlines at low alpha"
+    },
+    "mint": {
+      "$value": "#4ade80",
+      "$type": "color",
+      "$description": "Mint — Green outline accent for tags, dividers, and focused UI edges. Use as a supporting accent, not as a status color"
+    },
+    "fern": {
+      "$value": "#22c55e",
+      "$type": "color",
+      "$description": "Fern — Green wash for highlight backgrounds, decorative bands, and soft emphasis behind content. Use as a supporting accent, not as a status color"
+    },
+    "coral": {
+      "$value": "#f87171",
+      "$type": "color",
+      "$description": "Coral — Red text accent for links, tags, and emphasized short phrases. Use as a supporting accent, not as a status color"
+    },
+    "ember": {
+      "$value": "#ea580c",
+      "$type": "color",
+      "$description": "Ember — Decorative icon accent — orange chromatic chip in product mockups"
+    },
+    "iris": {
+      "$value": "#314ef0",
+      "$type": "color",
+      "$description": "Iris — Brand chip background tint in embedded mockups and product screenshots"
+    }
+  },
   "role": {
     "stage": {
       "$value": "{color.void}",
       "$type": "color",
       "$description": "EditorTheme.stage — window grounds: the editor's preview, the Library's grid, Settings",
-      "$extensions": { "com.reco.theme": { "light": "#f7f7f8", "darkHighContrast": "#000000", "lightHighContrast": "#ffffff" } }
+      "$extensions": { "com.reco.theme": { "light": "{lightColor.bone}", "darkHighContrast": "#000000", "lightHighContrast": "{lightColor.snow}" } }
     },
     "panel": {
       "$value": "{color.carbon}",
       "$type": "color",
       "$description": "EditorTheme.panel — under the timeline",
-      "$extensions": { "com.reco.theme": { "light": "#fcfcfc", "darkHighContrast": "#0f1011", "lightHighContrast": "#ffffff" } }
+      "$extensions": { "com.reco.theme": { "light": "{lightColor.snow}", "darkHighContrast": "#0f1011", "lightHighContrast": "{lightColor.snow}" } }
     },
     "surface": {
       "$value": "{color.carbon}",
       "$type": "color",
       "$description": "EditorTheme.surface — cards and floating panels: the capture toolbar, the Quick Access card, the popover",
-      "$extensions": { "com.reco.theme": { "light": "#ffffff", "darkHighContrast": "#0f1011", "lightHighContrast": "#ffffff" } }
+      "$extensions": { "com.reco.theme": { "light": "{lightColor.snow}", "darkHighContrast": "#0f1011", "lightHighContrast": "{lightColor.snow}" } }
     },
     "raised": {
       "$value": "{color.obsidian}",
       "$type": "color",
       "$description": "EditorTheme.raised — what floats over a surface: tooltips, the source picker, chosen tabs",
-      "$extensions": { "com.reco.theme": { "light": "#ffffff", "darkHighContrast": "#161718", "lightHighContrast": "#ffffff" } }
+      "$extensions": { "com.reco.theme": { "light": "{lightColor.snow}", "darkHighContrast": "#161718", "lightHighContrast": "{lightColor.snow}" } }
     },
     "control": {
       "$value": "{color.graphite}",
       "$type": "color",
       "$description": "EditorTheme.control — controls' own fill: secondary buttons, tracks, chips, chosen tiles",
-      "$extensions": { "com.reco.theme": { "light": "#eeeff1", "darkHighContrast": "#2c2f35", "lightHighContrast": "#e4e5e8" } }
+      "$extensions": { "com.reco.theme": { "light": "{lightColor.bone}", "darkHighContrast": "#2c2f35", "lightHighContrast": "{lightColor.bone}" } }
     },
     "hairline": {
       "$value": "{color.graphite}",
       "$type": "color",
       "$description": "EditorTheme.hairline — lines between areas and around surfaces",
-      "$extensions": { "com.reco.theme": { "light": "#e4e5e8", "darkHighContrast": "#62666d", "lightHighContrast": "#8a8f98" } }
+      "$extensions": { "com.reco.theme": { "light": "{lightColor.chalk}", "darkHighContrast": "#62666d", "lightHighContrast": "{lightColor.steel}" } }
     },
     "softHairline": {
       "$value": "{color.obsidian}",
       "$type": "color",
       "$description": "EditorTheme.softHairline — lanes and quieter fills",
-      "$extensions": { "com.reco.theme": { "light": "#eeeff1", "darkHighContrast": "#383b3f", "lightHighContrast": "#d1d3d8" } }
+      "$extensions": { "com.reco.theme": { "light": "{lightColor.bone}", "darkHighContrast": "#383b3f", "lightHighContrast": "{lightColor.chalk}" } }
     },
     "ink": {
       "$value": "{color.bone}",
       "$type": "color",
       "$description": "EditorTheme.ink — text; at least 7:1 on every surface",
-      "$extensions": { "com.reco.theme": { "light": "#18191b", "darkHighContrast": "#ffffff", "lightHighContrast": "#000000" } }
+      "$extensions": { "com.reco.theme": { "light": "{lightColor.void}", "darkHighContrast": "#ffffff", "lightHighContrast": "#000000" } }
     },
     "dim": {
       "$value": "{color.fog}",
       "$type": "color",
       "$description": "EditorTheme.dim — values, notes and other secondary text; at least 4.5:1",
-      "$extensions": { "com.reco.theme": { "light": "#5d6169", "darkHighContrast": "#d0d6e0", "lightHighContrast": "#2f3237" } }
+      "$extensions": { "com.reco.theme": { "light": "#6b6b73", "darkHighContrast": "#d0d6e0", "lightHighContrast": "{lightColor.ink}" } }
     },
     "faint": {
       "$value": "#72767d",
       "$type": "color",
       "$description": "EditorTheme.faint — structure marks only (ruler ticks, chevrons), never text; at least 3:1. Ash a step lighter: ash itself is 2.66:1 on control",
-      "$extensions": { "com.reco.theme": { "light": "#7d8189", "darkHighContrast": "#8a8f98", "lightHighContrast": "#5d6169" } }
+      "$extensions": { "com.reco.theme": { "light": "{lightColor.fog}", "darkHighContrast": "#8a8f98", "lightHighContrast": "{lightColor.steel}" } }
     },
     "accent": {
       "$value": "{color.acid-lime}",
       "$type": "color",
-      "$description": "EditorTheme.accent (the AccentColor asset, Color.accentColor) — lines, text and marks in the accent: playhead, selection, chosen tab, native controls' tint; at least 3:1. Olive in light, where lime on white is 1.2:1",
-      "$extensions": { "com.reco.theme": { "light": "#6b7500", "darkHighContrast": "#eefa4d", "lightHighContrast": "#545c00" } }
+      "$description": "EditorTheme.accent (the AccentColor asset, Color.accentColor) — lines, text and marks in the accent: playhead, selection, chosen tab, native controls' tint; at least 3:1. Acid lime in dark, iris in light",
+      "$extensions": { "com.reco.theme": { "light": "{lightColor.iris}", "darkHighContrast": "#eefa4d", "lightHighContrast": "#2741d6" } }
     },
     "accentFill": {
       "$value": "{color.acid-lime}",
       "$type": "color",
       "$description": "EditorTheme.accentFill — the accent as a fill (primary buttons, what is on), always with onAccent on it",
-      "$extensions": { "com.reco.theme": { "light": "#e4f222", "darkHighContrast": "#eefa4d", "lightHighContrast": "#d4e20f" } }
+      "$extensions": { "com.reco.theme": { "light": "{lightColor.iris}", "darkHighContrast": "#eefa4d", "lightHighContrast": "#2741d6" } }
     },
     "onAccent": {
       "$value": "{color.void}",
       "$type": "color",
-      "$description": "EditorTheme.onAccent — text and icons on accentFill; at least 7:1 on it",
-      "$extensions": { "com.reco.theme": { "light": "#08090a", "darkHighContrast": "#000000", "lightHighContrast": "#000000" } }
+      "$description": "EditorTheme.onAccent — text and icons on accentFill; at least 4.5:1 on it, 7:1 with Increase Contrast (white on iris is 6:1)",
+      "$extensions": { "com.reco.theme": { "light": "{lightColor.snow}", "darkHighContrast": "#000000", "lightHighContrast": "{lightColor.snow}" } }
     }
   },
   "font": {

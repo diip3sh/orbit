@@ -6,7 +6,7 @@
 import SwiftUI
 
 /// The agent chat's small buttons: suggestion chips, round buttons (New Chat, Send, Stop) and the result
-/// card, on the control fill (the card on a surface) with a hairline edge; Send is the accent's lime. Hover is a
+/// card, on the control fill (the card on a surface) with a hairline edge; Send is the accent fill. Hover is a
 /// fill step; a press shows on the frame it lands, only the release eases.
 struct AgentChipButtonStyle: ButtonStyle {
     enum Kind {

@@ -620,13 +620,15 @@ Since 2026-10-08 the whole app wears Linear's design tokens (extracted from line
 surfaces one step apart (void `#08090a` for window grounds, carbon `#0f1011` for cards, floating panels and the popover,
 obsidian `#161718` for what floats over them, slate `#23252a` for control fills), text in three tones (ink, dim, faint),
 graphite hairlines instead of boxes, Inter for every label and JetBrains Mono for shortcuts, file names and code, and acid
-lime `#e4f222` as the one accent. Every colour is a colour set in `Assets.xcassets/Theme` (and `AccentColor`) with the
-token as its dark value, a light value derived from it, and an Increase Contrast variant of each, so the app still
-follows the user's appearance; no window forces one (the notch shelf excepted: it is black under the notch). In light
-mode the accent's lines and text are olive `#6b7500` (lime on white is 1.2:1), while the lime fill stays, since its dark
-text reads in both. No Liquid Glass and no materials, with two exceptions the system draws: the Library's sidebar and the
+lime `#e4f222` as the one accent. Light mode (2026-10-08) takes the light end of Default's tokens (default.com, also by
+Refero): bone `#f2f2f2` for window grounds and control fills, snow `#ffffff` for panels and cards, chalk `#cececf`
+hairlines, void `#0b0c0e` text, steel darkened to `#6b6b73` for dim text (steel `#71717a` is 4.3:1 on bone), fog
+`#858687` for faint marks, and iris `#314ef0` as the accent and its fill, with white on it (Signal Blue `#3b82f6` was
+turned down: white on it is 3.7:1). Every colour is a colour set in `Assets.xcassets/Theme` (and `AccentColor`) with a
+dark, a light and an Increase Contrast variant of each, so the app still follows the user's appearance; no window forces
+one (the notch shelf excepted: it is black under the notch). No Liquid Glass and no materials, with two exceptions the system draws: the Library's sidebar and the
 editor's and Web Recording's `.inspector` columns. Native controls (Settings' forms, switches, pickers, the shortcut
-recorder) stay native and take the lime through `.tint`; AppKit controls follow the user's own accent instead when it isn't
+recorder) stay native and take the accent through `.tint`; AppKit controls follow the user's own accent instead when it isn't
 Multicolor. This replaced the system colours and glass of 2026-09-28 to 2026-10-07. The preview sits on a dot grid; the inspector (toolbar toggle) holds every
 setting on the right, and the transport (cut, zoom, ⌫; frame steps and play; the time) sits in the timeline's header,
 without glass. A chip row under the preview in place of the inspector was tried on 2026-10-05 and turned down: the
@@ -639,7 +641,7 @@ slate gradient.
 | `Editor/View/View+EditorSurface.swift` | `editorSurface(in:fill:floats:)`, a solid fill with a hairline edge (`floats`: the token's xl shadow, which needs 20 pt of room in its window); `themed()`, the accent and typeface every window root applies; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on (`nil` skips it); `withMotion { }` is the same for code with no environment |
 | `Editor/View/Font+Theme.swift`, `Typeface.swift`, `Fonts/` | `Font.theme(_:weight:_:)` and `NSFont.theme`: a text style in Inter or JetBrains Mono, both variable fonts (SIL OFL 1.1, licences beside them) registered by `ATSApplicationFontsPath`. Sizes are macOS's own per style (so layouts keep their room) except title (20) and large title (24), from the token scale; medium and semibold are Linear's 510 and 590 on the `wght` axis. Rendered video overlays (keystroke chip) keep the system font |
 | `Editor/View/StageDotGrid.swift` | The dot grid behind the preview, fading out before the stage's edges |
-| `Editor/View/EditorButtonStyle.swift` | The two text buttons, solid with a 6 pt radius: `.editorPrimary`, the lime fill with dark text, only for the one action a place leads to (Export…, export's Export and then Share…, Render, the card's Copy and Save); `.editorSecondary`, the control fill with a hairline edge and ink text, for every other text button. Icons come from the button's `Label(_:image:)`: `Assets.xcassets/ButtonIcons`, Phosphor Bold (MIT) from Iconify as 14 pt template PNGs (`button-export`, `-share`, `-folder`, `-close`, `-retry`, `-agent`, `-settings`, `-render`); the press scales to 0.97 on the frame it lands, only hover and release ease |
+| `Editor/View/EditorButtonStyle.swift` | The two text buttons, solid with a 6 pt radius: `.editorPrimary`, the accent fill with `onAccent` text, only for the one action a place leads to (Export…, export's Export and then Share…, Render, the card's Copy and Save); `.editorSecondary`, the control fill with a hairline edge and ink text, for every other text button. Icons come from the button's `Label(_:image:)`: `Assets.xcassets/ButtonIcons`, Phosphor Bold (MIT) from Iconify as 14 pt template PNGs (`button-export`, `-share`, `-folder`, `-close`, `-retry`, `-agent`, `-settings`, `-render`); the press scales to 0.97 on the frame it lands, only hover and release ease |
 | `View/PanelPresentation.swift`, `PanelPresence.swift` | `panelPresentation(isPresented:anchor:motion:blur:)`: a floating panel fades and, with `blur`, pops in where it is from that many points out of focus — no direction, where a scale has one, since the corner furthest from the anchor travels the most and the eye reads the panel as growing from that corner (the capture toolbar and its picker use `blur`; the card, pins, agent bar and countdown use the scale). Only opacity, blur and scale are animated, so a window resize in the same update isn't. Opacity only with Reduce Motion; `exitDelay` is how long its window stays; `PanelPresence` carries the flag for controllers whose view model can't |
 | `View/MenuRowButtonStyle.swift` | `.menuRow` for the popover's rows, and `MenuRowHighlight`: Control Center's highlight (not on `MenuBarToggle` rows, whose switch is the only control), a 10 pt continuous rounded fill the row's full height, 6 pt in from the sides, 0.1 on hover, 0.16 the moment it's pressed, dimmed when disabled |
 | `Model/GesturePhysics.swift` | Pure: `project` (momentum), `rubberband`/`rubberbanded` (resistance past a boundary), `relativeVelocity`, `velocityMatchedDuration`, `flickExit`, and `VelocityTracker` (the last 0.1 s of a drag) |
@@ -651,7 +653,7 @@ slate gradient.
 | `Editor/View/ExportOptions.swift`, `ExportProgressBar.swift` | Export's inspector: format, size and frame rate as `SegmentedChoice` tabs (an option can be disabled), the quality as rows with their estimated sizes, Export and Copy to Clipboard (side by side, or stacked when the column is narrow) pinned under a line; progress |
 
 **Changing the theme:** `theme/theme.tokens.json` is the source of every colour, in the W3C design-token format the
-Linear tokens came in. Its `color` group is the palette as given; its `role` group gives each role above a dark `$value`
+Linear tokens came in. Its `color` group is the dark palette as given (Linear's), `lightColor` the light one (Default's); its `role` group gives each role above a dark `$value`
 (a hex or an alias such as `{color.void}`) and, in `$extensions.com.reco.theme`, its `light`, `darkHighContrast` and
 `lightHighContrast` values. Edit the file (or replace it with another theme's, keeping the `role` names), run
 `scripts/apply-theme.py`, which rewrites every colour set in `Assets.xcassets/Theme` and `AccentColor`, then run the
@@ -667,12 +669,12 @@ tests: `ThemeContrastTests` checks the new colours' contrast and `ThemeTokenFile
 Key facts:
 - Contrast is tested, not eyeballed (`ThemeContrastTests`): in dark, light and both Increase Contrast variants, ink is at
   least 7:1 on every surface, dim 4.5:1, faint (structure marks only, never text) and the accent 3:1, and `onAccent` on the
-  lime fill 7:1. Linear's own ash `#62666d` was 2.66:1 on slate, so faint is a step lighter (`#72767d`).
+  accent fill 4.5:1 (7:1 with Increase Contrast; white on iris is 6:1). Linear's own ash `#62666d` was 2.66:1 on slate, so faint is a step lighter (`#72767d`).
 - The tests read the colours from the token file, not from AppKit: the Increase Contrast variants are compiled into
   `Assets.car` (`assetutil` lists them), but `NSColor(named:)` resolved under `NSAppearance(named:
   .accessibilityHighContrastDarkAqua)` returns the normal value (2026-10-08, macOS 27), so a test through AppKit
   silently checked only dark and light.
-- **An accent fill carries `onAccent`, never white:** white on lime is 1.2:1. That includes system prominent buttons,
+- **An accent fill carries `onAccent`, never a fixed colour:** it is void on lime in dark (white on lime is 1.2:1) and white on iris in light. That includes system prominent buttons,
   which draw white titles: use `.editorPrimary` instead.
 - **If glass comes back, it animates itself unless told not to.** `glassEffect` grows its shape as it appears (Apple's
   own transition, `GlassEffectTransition` in SwiftUICore with `.matchedGeometry`, `.materialize` and `.identity`), so a
@@ -696,14 +698,14 @@ Key facts:
   scaling).
 - One visual family, one motion system: every window and floating panel (editor, Library, Web Recording, the agent
   bar, Quick Access card, pins, capture toolbar and its picker, countdown, popover, Settings) on the same surfaces, with
-  lime for what is chosen or the action; a take in progress is red, a status colour outside the tokens.
+  the accent for what is chosen or the action; a take in progress is red, a status colour outside the tokens.
 - Motion follows the apple-design skill: respond on press, move 1:1 from the grab point, springs that start
   from the current value, bounce only after a flick, symmetric enter and exit from the source. Timeline
   clip and trim-handle drags resist past the ends (`rubberbanded`) and release into `release(velocity:distance:)`,
   so what the timeline refuses springs home from where it was shown; the zoom focus pad keeps the offset
   from where its outline was grabbed.
 - Area selection fades its dim in over 0.12 s on the first drag (instant with Reduce Motion), and its
-  Confirm and Cancel are AppKit push buttons (Confirm's bezel the lime fill, its title `onAccent`) with Return
+  Confirm and Cancel are AppKit push buttons (Confirm's bezel the accent fill, its title `onAccent`) with Return
   and Esc as key equivalents. The dim, border and handles it draws over the screen stay black and white.
 - Skipped on purpose: Settings, the menu bar label, the export sheet, momentum on timeline edits, rubber-banding
   area selection, pin flick, scrubbing.
@@ -982,7 +984,7 @@ switches); and **Record ↩**, its key in its label. Each
 always opens on its area mode (`CaptureToolbarViewModel.open(records:)`, `CaptureToolbarMode.initial`), never the
 one it was left on; a selection made elsewhere opens the recording one on its mode. **Take Screenshot…** and
 **Record Screen…** open them, from the popover or their global shortcuts ⇧⌘1 / ⇧⌘2 (`showScreenshotToolbar`,
-`showRecordingToolbar`, Settings → Shortcuts → Capture Toolbar; idle only, like the rows). What is live, chosen or on is the lime fill (`CaptureToolbarView.live`, with `onAccent` content): the action's
+`showRecordingToolbar`, Settings → Shortcuts → Capture Toolbar; idle only, like the rows). What is live, chosen or on is the accent fill (`CaptureToolbarView.live`, with `onAccent` content): the action's
 pill, the mode's highlight (sliding to the one chosen), switches that are on (filled, dark icon); a switch that is
 off keeps a faint fill so it still reads as one.
 
@@ -1229,7 +1231,7 @@ should hold but need re-measuring.
 | S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
 | S1 editor phase 6: canvas and export polish | Done; the canvas, gradient presets, wallpapers (and one after relaunch), picture blur, the border, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags) and transparent exports still need a check in the app |
 | S1 editor design: system colors, glass transport, new timeline and inspector | Done; replaced by the Linear theme |
-| Linear theme (`feat/linear-theme`): tokens, light palette, Inter + JetBrains Mono, solid surfaces app-wide | Done 2026-10-08; built, 854 tests; colours from `theme/theme.tokens.json`; needs a look in the app in light, dark and Increase Contrast |
+| Linear theme (`feat/linear-theme`): tokens, light mode from Default's tokens, Inter + JetBrains Mono, solid surfaces app-wide | Done 2026-10-08; built, 854 tests; colours from `theme/theme.tokens.json`; needs a look in the app in light, dark and Increase Contrast |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 | S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |
 | S3 agent bridge (spec 0006): MCP server for coding agents | Done; tested over the real socket (token, `initialize`, `tools/list`, error calls), the `--mcp` process (`AgentBridgeClientTests`), config editors and plans. Not yet tried: real agents connected by hand, a real `record_page` render, Gatekeeper on another Mac |

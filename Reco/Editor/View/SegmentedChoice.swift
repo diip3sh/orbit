@@ -6,7 +6,7 @@
 import SwiftUI
 
 /// A choice among a few short options: a track in the control fill with a raised fill that slides to the
-/// chosen one. Replaces the system segmented control, whose accent fill would put lime on every choice in
+/// chosen one. Replaces the system segmented control, whose accent fill would put the accent on every choice in
 /// the inspectors (the accent is kept for the playhead, the selection and the chosen tab).
 struct SegmentedChoice<Value: Hashable>: View {
     @Binding var selection: Value

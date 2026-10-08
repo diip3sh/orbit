@@ -575,7 +575,7 @@ final class AreaSelectionView: NSView {
     }
 
     /// A solid system button. Return confirms and Esc cancels, as the keys always did.
-    /// Confirm is the accent fill with dark text, as the capture toolbar's action is.
+    /// Confirm is the accent fill with `onAccent` text, as the capture toolbar's action is.
     private func makeActionButton(title: String, keyEquivalent: String, isProminent: Bool = false, action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
         button.controlSize = .large

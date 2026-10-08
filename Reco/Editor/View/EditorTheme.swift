@@ -7,11 +7,12 @@
 
 import SwiftUI
 
-/// Reco's look, from Linear's tokens: near-black surfaces one step apart, text in three tones (ink, dim, faint),
-/// hairlines instead of boxes, and acid lime for the one action and what is chosen. Every colour is a colour set in
-/// `Assets.xcassets/Theme` with a dark value (the tokens), a light one derived from them, and an Increase Contrast
-/// variant of each, so the app follows the user's appearance. Ink, dim and the accent meet WCAG AA (4.5:1 for text,
-/// 3:1 for faint marks and the accent) on every surface in all four variants (`ThemeContrastTests`).
+/// Reco's look: surfaces one step apart, text in three tones (ink, dim, faint), hairlines instead of boxes, and one
+/// accent for the one action and what is chosen. Every colour is a colour set in `Assets.xcassets/Theme`, written from
+/// `theme/theme.tokens.json`: dark from Linear's tokens with acid lime, light from Default's (snow, bone, chalk) with
+/// iris, and an Increase Contrast variant of each, so the app follows the user's appearance. Ink, dim and the accent
+/// meet WCAG AA (4.5:1 for text, 3:1 for faint marks and the accent) on every surface in all four variants
+/// (`ThemeContrastTests`).
 enum EditorTheme {
 
     /// The window's ground (void `#08090a`).
@@ -45,10 +46,10 @@ enum EditorTheme {
     static let softHairline = Color(.softHairline)
 
     /// Lines, text and marks in the accent: the playhead, the selection, a chosen tab. Acid lime `#e4f222` in
-    /// dark; olive `#6b7500` in light, where lime on white is 1.2:1.
+    /// dark, iris `#314ef0` in light.
     static let accent = Color.accentColor
 
-    /// The accent as a fill, with `onAccent` on it: lime in both appearances, since dark text on it reads in both.
+    /// The accent as a fill, with `onAccent` on it: void on lime in dark, white on iris in light.
     static let accentFill = Color(.accentFill)
     static let onAccent = Color(.onAccent)
 

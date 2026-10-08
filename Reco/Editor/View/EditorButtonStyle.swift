@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// Reco's two text buttons, solid with a 6 pt radius. The primary one is the accent's lime with dark text, for the
+/// Reco's two text buttons, solid with a 6 pt radius. The primary one is the accent fill with `onAccent` text, for the
 /// one action a place leads to (Export, Render, Share, Save). The secondary one is the control fill with a hairline
 /// edge and ink text, for everything else. Icons come from a `Label`; the `ButtonIcons` set in the asset catalog
 /// draws them.
