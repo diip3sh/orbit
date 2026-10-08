@@ -203,6 +203,7 @@ private struct LibraryFilterMenu: View {
             // Filled while a shape narrows the grid, so a short grid says why
             Label("Filter", systemImage: orientation == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
         }
+        .menuIndicator(.hidden)
         .help("Show one shape, and choose the order")
     }
 }
@@ -241,6 +242,7 @@ private struct LibraryNewMenu: View {
         } label: {
             Label("New", systemImage: "plus")
         }
+        .menuIndicator(.hidden)
         .help("Take a screenshot or start a recording")
     }
 }
