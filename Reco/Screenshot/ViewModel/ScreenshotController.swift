@@ -35,6 +35,9 @@ final class ScreenshotController {
     /// History copies still being written, by file name, so Save can wait for one before deleting it
     private var historyWrites: [String: Task<Void, Never>] = [:]
 
+    /// The last area captured since launch, in screen points (bottom-left origin), and its display
+    private var previousArea: (rect: CGRect, displayID: CGDirectDisplayID)?
+
     init(settings: SettingsStore, notificationService: NotificationService) {
         self.settings = settings
         self.notificationService = notificationService
@@ -72,6 +75,26 @@ final class ScreenshotController {
             )
             var screenshot = display.cropped(to: sourceRect)
             screenshot?.region = selection.screenRect
+            previousArea = (selection.screenRect, displayID)
+            return screenshot
+        }
+    }
+
+    /// The last area captured, again, without selecting it; Capture Area when there is none yet. Live, not
+    /// frozen: nothing covers the screen first.
+    func capturePreviousArea(then followUp: ScreenshotFollowUp? = nil) async {
+        guard let previousArea else {
+            await captureArea(then: followUp)
+            return
+        }
+        await capture(then: followUp) {
+            guard let screen = NSScreen.screens.first(where: { $0.displayID == previousArea.displayID }) else {
+                throw CaptureError.selectedDisplayDisconnected
+            }
+            let sourceRect = CaptureSizeCalculator.sourceRect(for: previousArea.rect, in: screen.frame, scale: screen.backingScaleFactor)
+            let filter = try await service.screenFilter(for: screen, leavingPopover: false)
+            var screenshot = try await service.capture(filter, sourceRect: sourceRect, settings: settings)
+            screenshot.region = previousArea.rect
             return screenshot
         }
     }

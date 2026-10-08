@@ -18,6 +18,8 @@ extension KeyboardShortcuts.Name {
     static let selectArea = Self("selectArea", initial: .init(.five, modifiers: .command))
     static let toggleRecording = Self("toggleRecording", initial: .init(.six, modifiers: .command))
     static let pauseRecording = Self("pauseRecording", initial: .init(.seven, modifiers: .command))
+    // No default: ⌘1–⌘7 are taken, and every default takes its key from every app
+    static let capturePreviousArea = Self("capturePreviousArea")
     // No defaults: a global key that throws a take away is too easy to press by accident
     static let restartRecording = Self("restartRecording")
     static let cancelRecording = Self("cancelRecording")

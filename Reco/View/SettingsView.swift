@@ -72,6 +72,7 @@ struct ShortcutsSettingsView: View {
 
             Section("Screenshots") {
                 KeyboardShortcuts.Recorder("Capture Area", name: .captureArea)
+                KeyboardShortcuts.Recorder("Capture Previous Area", name: .capturePreviousArea)
                 KeyboardShortcuts.Recorder("Capture Window", name: .captureWindow)
                 KeyboardShortcuts.Recorder("Capture Screen", name: .captureScreen)
             }

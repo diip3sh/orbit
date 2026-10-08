@@ -199,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let captures: [(KeyboardShortcuts.Name, @MainActor (ScreenshotController) async -> Void)] = [
             (.captureArea, { await $0.captureArea() }),
+            (.capturePreviousArea, { await $0.capturePreviousArea() }),
             (.captureWindow, { await $0.captureWindow() }),
             (.captureScreen, { await $0.captureScreen() })
         ]
@@ -239,7 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await viewModel.cancelRecording() }
         case "restart":
             Task { await viewModel.restartRecording(countdown: false) }
-        case "capture-area", "capture-window", "capture-screen":
+        case "capture-area", "capture-previous-area", "capture-window", "capture-screen":
             captureScreenshot(from: url)
         case "edit-last":
             editLastRecording()
@@ -257,7 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// `reco://capture-area`, `capture-window` or `capture-screen`, with `?then=copy|save|pin` in place of the card.
+    /// `reco://capture-area`, `capture-previous-area`, `capture-window` or `capture-screen`, with `?then=copy|save|pin` in place of the card.
     /// Ignored, like the shortcuts, while recording, counting down or capturing.
     private func captureScreenshot(from url: URL) {
         let followUp = ScreenshotFollowUp(url: url)
@@ -271,6 +272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             switch url.host {
             case "capture-area": await screenshots.captureArea(then: followUp)
+            case "capture-previous-area": await screenshots.capturePreviousArea(then: followUp)
             case "capture-window": await screenshots.captureWindow(then: followUp)
             default: await screenshots.captureScreen(then: followUp)
             }
