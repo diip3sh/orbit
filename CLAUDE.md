@@ -1109,6 +1109,41 @@ Key facts:
 - **A later run** took 6.9 min and made a 32.3 s film. It opened on the empty prompt with its toolbar, typed with
   the caret on the text's end, then toured the board, an issue the agent took and its diff.
 
+### S7 — Looks: light and dither, seams in their language (`remotion`, spec 0012)
+
+Every launch film came out in the same black satin. A film now keeps to one of three looks, chosen by the agent
+from the brand: **satin** (Raycast's), **light** (Paper's grain gradient in the accent's hue: `ember`, `sunlit`,
+`bloom`, `orb`, `ripple`) or **dither** (Paper's dithering in the accent: `matrix`, `warp`, `swirl`, `tide`). The
+macro's glass shows the ground through it, tinted. Each look has its own seam, drawn over the whole frame, UI and
+all: `glow` (a front of grainy light out of the next scene's field's shape), `dither` (the frame turned to the
+brand's dots from its edges in, its UI drawn in them, then into the next scene) and `ring` (a ring of smoke
+opening from the middle, the next scene inside: into a closing).
+
+| File | Role |
+|---|---|
+| `Motion/Model/MotionField.swift`, `MotionSeam.swift` | The new fields, `Family` (satin, light, dither, smoke, plain), the seams and their family |
+| `Motion/Render/FieldKernels.metal.txt` | `grainShape` (wave, corners, ripple, blob, sphere), `ditherShape` (warp, wave, swirl, sphere), the camera's view as an argument, `glowSeam`, `ditherSeam`, `ringSeam`; `glassPanel` in colour |
+| `Motion/Render/FieldRenderer.swift`, `FieldPalette.swift` | Each field's shape and settings (the picked look's for its shader's other shapes); `seam(_:between:progress:at:size:)` |
+| `Motion/Grammar/SeamExpansion.swift`, `Motion/Render/MotionPlan+Grammar.swift` | The seams' lengths and easing (dither steps at 15 fps); a seam takes the next scene's field when it's of its family, else the family's first pick |
+| `Motion/Grammar/MotionLint.swift` | `look`: one look a film, a seam only into its language; `busyField` only under type; `material` over any field |
+| `AgentRecording/Skills/reco-launch-film.md`, `AgentBridge/Model/AgentToolCatalog+Motion.swift` | Which look for which brand, a field per scene, the seams |
+
+Key facts:
+- **Two images of one kernel moved differently in one frame** (motion blur's samples, a seam's two scenes) drew
+  one of them as streaks of the other's edge pixels (macOS 26.5, Core Image): a transform on a stitchable kernel's
+  output isn't kept per image. Fields take the camera's move as an argument; the preview's uniform scale is safe.
+  Drawn together, two instances round 1 level differently from each alone.
+- Glass samples the ground in colour now; over satin all three channels are equal, so its golden frames are unchanged.
+- Over light and dither, page text goes on glass too (`material` lints `bare` there): Supabase's docs heading, bare
+  over swirl, didn't read. The dithers that fill the frame (warp, swirl, tide) light their dots at 0.55 of the
+  sphere's, the seam's dots at full strength.
+- The seams start exactly on the scene before and end on the next (within a level), their light gone at both ends.
+- Look-dev from the Linear 9 film's lifts, re-grounded (1080p, M5, Debug): both 32 s films exported in 39 s together.
+- **From the app, no instructions** (Claude Code): supabase.com chose dither (5 min, 26 s 4K); bolt.new light in its
+  blue (8 min, 27 s 4K); lovable.dev light in pink, but its UI is light: a white prompt box unglazed, a card's 7× lift
+  without its animated list, and 4K failed (WebKit's GPU process quit lifting the prompt at 11×), so 1080p. Glass for
+  light UI is still to build.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -1181,7 +1216,7 @@ should hold but need re-measuring.
 
 | Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps, shown elements, playbook | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop); linear.app walkthroughs run from the app through `reco://record-agent`. Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
 | S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 done: moves, seams, shots, lint, scenes lane and inspector; the benchmark rebuilt in 10 lines and three sites rendered, awaiting the user's side-by-side. Phase 4 done: agent tools, Launch Video mode, chat with selection; three sites run from their address with clean lint and design check, three chat edits change only their targets; cost recorded for one run. The window seen in a window capture; editing by hand not yet tried |
-| S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields ported, then rejected by the user as pasted behind the old video; directions picked from launch films (Raycast, Nothing OS 5.0, 3D layers). L1a–c built (satin, coverage mattes, typing cursor rules, parallax, motion blur), but the user found the test shot "really bad" next to Raycast. L0: still frames matched to Raycast's (glass for lifted UI, hero scale, a better ground), then a 24 s Supabase docs film in that look rendered as a look-dev pass outside the engine. The user approved the film; its port into the engine has begun: phases 1 (satin, grain), 2 (glass, sharp macro) and 3 (typing, caret, results) done, matching the film at 47–64 dB; phase 4 captures UI behind a click and typing states live (Supabase's search, matching the film's lifts); phase 5 the selection, the camera following it, the whip's blur; phase 6 the `closing` shot; the whole film now made by the app from one document, matching the approved one where the site is the same. L4/Q4: the film's grammar named (`macro` views, `whip` move and seam, mockup typing) and its method shipped as the `reco-launch-film` skill; Launch Video runs on linear.app from the address make macro films on glass over satin. Next: the user's verdict on them |
+| S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields ported, then rejected by the user as pasted behind the old video; directions picked from launch films (Raycast, Nothing OS 5.0, 3D layers). L1a–c built (satin, coverage mattes, typing cursor rules, parallax, motion blur), but the user found the test shot "really bad" next to Raycast. L0: still frames matched to Raycast's (glass for lifted UI, hero scale, a better ground), then a 24 s Supabase docs film in that look rendered as a look-dev pass outside the engine. The user approved the film; its port into the engine has begun: phases 1 (satin, grain), 2 (glass, sharp macro) and 3 (typing, caret, results) done, matching the film at 47–64 dB; phase 4 captures UI behind a click and typing states live (Supabase's search, matching the film's lifts); phase 5 the selection, the camera following it, the whip's blur; phase 6 the `closing` shot; the whole film now made by the app from one document, matching the approved one where the site is the same. L4/Q4: the film's grammar named (`macro` views, `whip` move and seam, mockup typing) and its method shipped as the `reco-launch-film` skill; Launch Video runs on linear.app from the address make macro films on glass over satin. Looks: light and dither grounds (Paper's other shapes) and seams in their language (`glow`, `dither`, `ring`), the agent choosing the look from the brand. Next: the user's verdict on them |
 | S8 motion sound (spec 0013) | Planned: Raycast's soundtrack measured, the Supabase film's sound made by hand in six rounds (`~/Movies/Reco/quality/audio/`); the engine build (cue sheet, voices, mix, export, agent) todo |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier

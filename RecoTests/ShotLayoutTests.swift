@@ -91,7 +91,7 @@ struct ShotLayoutTests {
         }
         """#.utf8))
         let rules = MotionLint.findings(in: document).map(\.rule)
-        #expect(rules.contains(.endingLength) && rules.contains(.busyField))
+        #expect(rules.contains(.endingLength) && !rules.contains(.busyField))
         #expect(abs(ShotLayout.closingLength(words: 2, hasLogo: false) - (0.25 + 0.42 + 0.74 + 1.4 + 0.3 + 1.2)) < 1e-9)
         let plan = await MotionPlan.build(document, bundle: URL.temporaryDirectory)
         #expect(plan.scenes[0].field == .plain)

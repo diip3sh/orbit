@@ -25,14 +25,30 @@ nonisolated enum SeamExpansion {
         let seam: MotionSeam
         let duration: Double
 
-        /// How far it has gone at `time` into the next scene, eased.
+        /// The field whose shape and colours a seam drawn in a field's language takes: the next scene's when
+        /// it's of the seam's family, else the family's first pick (``MotionPlan/addSeams(of:to:)``).
+        var look = MotionField.plain
+        var palette: FieldPalette?
+
+        /// How far it has gone at `time` into the next scene, eased. Dither steps on at 15 frames a second,
+        /// as pixel animation does (Nothing's Glyph Matrix).
         func progress(at time: Double) -> Double {
+            let linear = min(max(time / duration, 0), 1)
             switch seam {
-            case .push: MotionEasing.move.progress(time / duration, duration: duration)
-            default: min(max(time / duration, 0), 1)
+            case .push, .glow, .ring: return MotionEasing.move.progress(linear, duration: duration)
+            case .dither: return min((linear * duration * Self.ditherSteps).rounded(.down) / (duration * Self.ditherSteps), 1)
+            default: return linear
             }
         }
+
+        static let ditherSteps = 15.0
     }
+
+    /// How long the seams drawn in a field's language take: long enough to see the language, as short as a
+    /// whip lets the eye follow.
+    static let glowDuration = 0.9
+    static let ditherDuration = 0.8
+    static let ringDuration = 1.0
 
     /// The camera's speed where the scene before ends: canvas pixels a second each way, and its zoom's
     /// log a second.
@@ -102,6 +118,12 @@ nonisolated enum SeamExpansion {
             effect.transition = Transition(seam: .push, duration: 0.5)
         case .fade:
             effect.transition = Transition(seam: .fade, duration: 0.5)
+        case .glow:
+            effect.transition = Transition(seam: .glow, duration: glowDuration)
+        case .dither:
+            effect.transition = Transition(seam: .dither, duration: ditherDuration)
+        case .ring:
+            effect.transition = Transition(seam: .ring, duration: ringDuration)
         }
         return effect
     }

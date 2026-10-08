@@ -28,4 +28,29 @@ nonisolated enum MotionSeam: String, Codable, CaseIterable, Sendable {
 
     /// A cross-fade: rare in the references.
     case fade
+
+    /// A front of grainy light in the brand's colour crosses the frame out of the light's shape, the next
+    /// scene behind it: the light looks' seam (``MotionField/Family/light``).
+    case glow
+
+    /// The frame turns to the brand's ordered dots from its edges in, its UI drawn in them, flips to the
+    /// next scene's and resolves into it: the dither looks' seam (Vercel Ship's dither eating its footage).
+    case dither
+
+    /// A ring of smoke opens from the middle past the frame's corners, the next scene inside it (Opera's
+    /// ring portal): into a closing or a logo, in any look but satin's.
+    case ring
+}
+
+nonisolated extension MotionSeam {
+
+    /// The field family whose language the seam is drawn in, if it has one.
+    var family: MotionField.Family? {
+        switch self {
+        case .glow: .light
+        case .dither: .dither
+        case .ring: .smoke
+        default: nil
+        }
+    }
 }

@@ -17,7 +17,7 @@ nonisolated struct FieldPalette: Equatable, Sendable {
     var colors: [RGBAColor]
 
     init(_ field: MotionField, accent: RGBAColor?, background: RGBAColor) {
-        guard let look = Self.looks[field] else {
+        guard let look = Self.look(for: field) else {
             back = background
             colors = []
             return
@@ -31,6 +31,15 @@ nonisolated struct FieldPalette: Equatable, Sendable {
         }
         back = color(look.back)
         colors = look.stops.map(color)
+    }
+
+    /// The picked palette `field` takes: Paper's other shapes take their shader's pick's.
+    static func look(for field: MotionField) -> Look? {
+        switch field {
+        case .bloom, .orb, .ripple: looks[.ember]
+        case .warp, .swirl, .tide: looks[.matrix]
+        default: looks[field]
+        }
     }
 
     /// Below this chroma an accent reads as white or grey (Linear's #e5e5e6 is 0.002).

@@ -35,9 +35,19 @@ extension MotionPlan {
             )
             scenes[index - 1].cameraMoves.merge(effect.outgoing) { $0 + $1 }
             scenes[index].cameraMoves.merge(effect.incoming) { $0 + $1 }
-            scenes[index].transition = effect.transition
+            scenes[index].transition = effect.transition.map { language($0, into: scenes[index].field, document: document) }
             scenes[index - 1].overlap = effect.transition?.duration ?? 0
         }
+    }
+
+    /// A seam drawn in a field's language takes the next scene's field when it's of the seam's family,
+    /// else the family's first pick, coloured from the brand as that field is.
+    nonisolated private static func language(_ transition: SeamExpansion.Transition, into field: MotionField, document: MotionDocument) -> SeamExpansion.Transition {
+        guard let family = transition.seam.family else { return transition }
+        var transition = transition
+        transition.look = field.family == family ? field : MotionField.allCases.first { $0.family == family } ?? .plain
+        transition.palette = FieldPalette(transition.look, accent: document.style.accent, background: document.canvas.background)
+        return transition
     }
 
     /// How many times larger than from rest the camera shows the canvas.

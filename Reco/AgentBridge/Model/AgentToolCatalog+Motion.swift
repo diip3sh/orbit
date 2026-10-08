@@ -19,9 +19,13 @@ nonisolated extension AgentToolCatalog {
         Video: canvas {size [1920,1080], frameRate 60, background "#rrggbb", field, pacing}, style {text, dim, accent: \
         "#rrggbb"; face sans|serif|mono; alignment leading|center} from inspect_page's brand, assets, scenes. Pacing \
         driftAndCut: 3–5 s shots, the camera drifting at constant speed, hard cuts (Linear). beats: 1–2 s beats, eased \
-        camera moves (Raycast). Field, what scenes are drawn over: plain (the background colour, the default: the product's UI \
-        crisp on its own ground, as Linear's films) or satin (black satin out of focus, lit afresh for each scene, a slab of \
-        matte glass across a wide one's corner, monochrome: dark UI in macro, as Raycast's).
+        camera moves (Raycast). Field, what scenes are drawn over, one look a film: plain (the background colour, the default: \
+        the product's UI crisp on its own ground, as Linear's films); satin (black satin out of focus, lit afresh for each \
+        scene, a slab of matte glass across a wide one's corner, monochrome: dark UI in macro, as Raycast's); the light \
+        look's grainy light in the accent's hue: ember (two corners), sunlit (a wave from below), bloom (a blob in the \
+        middle), orb (a lit sphere), ripple (rings from the middle); the dither look's ordered dots in the accent: matrix \
+        (a lit sphere), warp (liquid streaks), swirl (arms turning), tide (a wave from below); halo (a ring of smoke). Light, \
+        dither and halo go under a macro's glass, never under type.
 
         Asset: {id, url, selector, viewport [w,h] (default [1440,900]), hide [selectors], glass}: an element of a real page, \
         lifted alone with its rounded corners: a product screenshot, an app mockup, a card, a logo; never a whole section. \
@@ -57,7 +61,10 @@ nonisolated extension AgentToolCatalog {
         them), ui (the logo, shown alone last): New Raycast's ending in small mono caps, a word cut in every 0.42 s. Give it \
         0.42 s a word plus 4.5 s, 1.6 s more with ui; it's drawn on black.
         Seams, how a scene begins: cut (most), whip (the camera streaks out sideways and into the next scene, blurred), \
-        cutOnMotion (carries the camera's speed on), zoomThrough, blurCut, push, fade (rare).
+        cutOnMotion (carries the camera's speed on), zoomThrough, blurCut, push, fade (rare); in a look's language, over \
+        the whole frame: glow (light: a front of grainy light out of the next scene's field's shape, 0.9 s), dither \
+        (dither: the frame turned to the accent's dots from its edges in, then into the next scene, 0.8 s), ring (a ring \
+        of smoke opening from the middle, the next scene inside it, 1 s: into a closing).
         Moves {move, start, duration, intensity, direction, words, region, to}: text fadeUp, blurIn, blurWipe (letters sharpen \
         left to right), lineMask (lines rise out of a mask), wordByWord (words fade up one after another), type, roll (words: \
         the last word replaced in turn), exit; any layer rise, tilt, focus (region), detach, stateChange; a group cascade; \
@@ -84,9 +91,9 @@ nonisolated extension AgentToolCatalog {
         "target":{"type":"string","description":"set_moves, remove: a layer id from the reply, or camera"},
         "index":{"type":"integer","description":"add_scene, move_scene: position from 0"},
         "canvas":{"type":"object"},"style":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
-        "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade"]},
+        "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade","glow","dither","ring"]},
         "shot":{"type":"object","description":"{shot: macro|hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard|closing, text, detail, ui, items, region, view}"},
-        "field":{"type":"string","enum":["satin","plain"]},
+        "field":{"type":"string","enum":["satin","plain","ember","sunlit","bloom","orb","ripple","matrix","warp","swirl","tide","halo"]},
         "moves":{"type":"array","items":{"type":"object"}}},
         "required":["op"],"additionalProperties":false}}},
         "required":["operations"],"additionalProperties":false}

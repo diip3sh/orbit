@@ -484,6 +484,33 @@ re-run from their address and the frames compared with the previous round's (kep
   height, so the empty inline box sat at its top. A zero-width space now stands in while it's measured.
   The run after (Linear 9, 6.9 min, 32.3 s) is clean: it opens on the empty prompt with its toolbar,
   types with the caret on the text's end, and tours the board, an issue the agent took and its diff.
+- 2026-10-08: Looks. The user found every film the same (black satin, glass, whips) and asked for Paper's
+  shaders and more like them, animated, with transitions that animate into something else of the same
+  aesthetic, in the app and the skill. Their picks stay directions, not samples: the fields act
+  on the content under glass and in the seams, not pasted behind it. What was built:
+  - **Three looks, one a film.** Satin; light (the grain gradient: `ember`, `sunlit`, and its blob, sphere
+    and ripple as `bloom`, `orb`, `ripple`); dither (`matrix`, and its warp, swirl and wave as `warp`,
+    `swirl`, `tide`). The `look` lint keeps a film in one; the skill chooses from the brand.
+  - **Seams in a look's language**, over the whole frame: `glow` (a grainy front of light out of the next
+    scene's field's shape), `dither` (the frame turned to the brand's dots from its edges in, the UI drawn in
+    them, then into the next scene, stepping at 15 fps) and `ring` (a ring of smoke opening from the middle,
+    the closing inside). Designed in a lab on real film frames first (`scratchpad/lab2`).
+  - **Glass in colour**, so the ground tints it.
+  - A Core Image bug found on the way: two images of one kernel moved differently in one frame drew one as
+    streaks; fields take the camera's move as an argument now.
+
+  Look-dev: the Linear 9 film re-grounded in light and dither. Then two runs from the app, no instructions:
+  - **supabase.com** (5 min, 26 s at 4K): the agent chose dither, green on matrix, warp, tide, swirl, a
+    `dither` seam from the results to the docs page (its heading drawn in dots) and a `ring` into the closing.
+    Its bare page text didn't read over swirl, and the frame-filling dithers were too bright: `material` now
+    lints bare text over light and dither, and those dithers light their dots at 0.55.
+  - **lovable.dev** (light, pink, `bloom` → `ember` → `sunlit`, `glow`, `ring`): the look reads, but Lovable's
+    UI is light. The agent left the white prompt box unglazed, and a card's 7× lift lost its animated list (a
+    white panel on screen). Its 4K export failed: WebKit's GPU process quit lifting the prompt at 11×; it gave
+    1080p. Open: glass for light UI; lifts of animated content; that WebKit limit.
+  - **bolt.new** (8 min, 27 s at 4K): light in Bolt's blue, `bloom` → `ember` → `sunlit` → `ripple`, a whip
+    and a `glow`, `ring` into the closing. Its dark UI on glass with the blue light through it reads as its
+    own film: the prompt typed, the agent and model picker, the design-system and scale cards.
 
 ### Direction (picked 2026-10-07)
 

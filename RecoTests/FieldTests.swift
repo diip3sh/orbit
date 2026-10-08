@@ -85,7 +85,7 @@ struct FieldTests {
     // MARK: - Kernels
 
     /// Each look is drawn by its kernel, as a pure function of its time.
-    @Test(arguments: [MotionField.ember, .matrix, .halo, .sunlit, .satin])
+    @Test(arguments: MotionField.allCases.filter { $0 != .plain })
     func drawsTheFieldOnItsOwnClock(field: MotionField) throws {
         let first = try Self.pixels(field, at: 2)
 
@@ -130,6 +130,42 @@ struct FieldTests {
             for column in 10..<200 {
                 most = max(most, abs(Int(still[(row * 240 + column) * 4 + 1]) - Int(panned[(row * 240 + column + 15) * 4 + 1])))
             }
+        }
+        #expect(most <= 1)
+    }
+
+    /// Paper's soft looks follow the camera at 15 % of its move too, the shift an argument of their kernel.
+    @Test(arguments: [MotionField.ember, .orb])
+    func paperLooksFollowTheCamera(field: MotionField) throws {
+        let still = try Self.pixels(field, at: 1)
+        let panned = try Self.pixels(field, at: 1, shot: FieldRenderer.Shot(shift: CGVector(dx: 100, dy: 0)))
+
+        var most = 0
+        for row in 10..<125 {
+            for column in 10..<200 {
+                most = max(most, abs(Int(still[(row * 240 + column) * 4 + 1]) - Int(panned[(row * 240 + column + 15) * 4 + 1])))
+            }
+        }
+        #expect(most <= 1)
+        #expect(panned != still)
+    }
+
+    /// Two images of one kernel moved differently in one frame (a whip's motion blur, a seam's two scenes)
+    /// both draw: as transforms of the kernel's output, one of them came out as streaks (macOS 26.5).
+    @Test func drawsOneKernelTwiceInAFrameWithDifferentMoves() throws {
+        let size = CGSize(width: 240, height: 135)
+        let palette = FieldPalette(.ember, accent: RGBAColor(hex: "#3ecf8e"), background: Self.background)
+        let still = FieldRenderer.image(.ember, palette: palette, at: 1, size: size)
+        let panned = FieldRenderer.image(.ember, palette: palette, at: 1, size: size, shot: FieldRenderer.Shot(shift: CGVector(dx: 60, dy: 0), zoom: 1.2))
+        let half = CGRect(x: 0, y: 0, width: 120, height: 135)
+        let both = try Self.bytes(of: still.cropped(to: half).composited(over: panned))
+        let alone = (still: try Self.bytes(of: still), panned: try Self.bytes(of: panned))
+
+        // Within a level: drawn in one pass, the two are compiled together and round a little differently
+        var most = 0
+        for (index, value) in both.enumerated() {
+            let column = index / 4 % 240
+            most = max(most, abs(Int(value) - Int(column < 120 ? alone.still[index] : alone.panned[index])))
         }
         #expect(most <= 1)
     }

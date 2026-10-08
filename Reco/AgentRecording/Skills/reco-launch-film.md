@@ -1,6 +1,6 @@
 ---
 name: reco-launch-film
-description: Reco's method for a launch film in New Raycast's look, the bar the user approved. The product's real UI in macro on glass over satin, typed into and stepped through, whips between its parts, ending on the word-swap closing. Use it before making a motion video with edit_motion, and for any chat change beyond a small tweak (a new scene, a new look, "make it better").
+description: Reco's method for a launch film, after New Raycast's, the bar the user approved. The product's real UI in macro on glass, typed into and stepped through, whips between its parts, ending on the word-swap closing, over one of three looks chosen from the brand (black satin, grainy light, dither) with seams in that look's language. Use it before making a motion video with edit_motion, and for any chat change beyond a small tweak (a new scene, a new look, "make it better").
 ---
 
 # A launch film, Reco's way
@@ -60,6 +60,10 @@ The whole film is this document:
 
 The search dialog was 576 CSS px wide and 48 tall before anything was typed; the article column 706 wide.
 
+That film is the satin look. The light and dither looks below keep its shots, timing and closing, and change
+the ground under the glass and the seams between scenes. Choose the look from the brand (section 5): every
+product getting the same black satin is its own tell.
+
 ## What reads as generated: never
 
 - A headline alone in the middle of the frame as a shot, or a title between scenes. Words belong to the
@@ -69,6 +73,8 @@ The search dialog was 576 CSS px wide and 48 tall before anything was typed; the
   `uiCascade`, `featureSequence` and `title` belong to other looks, not this one.
 - A fade, `zoomThrough` or `push` between macro shots.
 - A shot where nothing happens: only a drift, no typing, no selection, no whip.
+- Two looks in one film, or a seam from another look (a dither seam in a light film); Paper's fields (light,
+  dither, halo) under type instead of under a macro's glass.
 - Hype copy: revolutionary, seamless, unlock, supercharge; exclamation marks; questions to the viewer.
 
 ## 1. Find the product's real moments
@@ -94,8 +100,10 @@ marketing text.
 
 ## 2. Assets
 
-- `glass: true` on every control, card and code block shown over satin; `bare: true` on page text (a heading
-  with its paragraphs). In this look an asset is always one or the other, except the logo.
+- `glass: true` on every control, card and code block; `bare: true` on page text (a heading with its
+  paragraphs) over satin only: over light or dither, page text goes on glass too, or the ground's light runs
+  through its letters. An asset is always one or the other, except the logo: the glass shows the ground
+  through it, tinted with the light or dither under it.
 - One element each: a dialog, a field, a card, a code block. A long article is cut with `region` (CSS px).
 - One element in several states (empty, typed, its results with a selection) is several assets with the same
   url, selector and `before`, and different `typing`. A field typed in one scene shows its text already
@@ -122,7 +130,7 @@ marketing text.
 Reco does the rest:
 
 - It frames each view, holds and creeps 3 % closer, and whips in 0.35 s to the next stop.
-- The first scene opens on 1 s of satin before the control cuts in.
+- The first scene opens on 1 s of its ground alone before the control cuts in.
 - Typing starts 0.65 s after the control shows, at a person's pace: about 8 characters a second, slower
   into each word, with the results after each word.
 - A selection steps down from 0.55 s, 0.47 s apart, then back up.
@@ -153,15 +161,47 @@ Seams:
 
 - **`cut`** between macros of the same element, cutting in closer or out wider: that is the look.
 - **`whip`** to another element or page: the camera streaks out of one scene and into the next.
-- The closing comes in on a cut.
+- **The look's own seam** to another element or page, in the light and dither looks, for one or two of the
+  scene changes (whips for the rest, and inside a macro's tour):
+  - `glow` (light): a front of grainy light crosses the frame out of the next scene's field's shape (from
+    `bloom`'s blob outwards, up from `sunlit`'s wave, in from `ember`'s corners), the next scene behind it; 0.9 s.
+  - `dither` (dither): the frame turns to the brand's dots from its edges in, its UI drawn in them for a
+    moment, then resolves into the next scene; 0.8 s.
+- The closing comes in on a cut (satin), or on `ring` (light and dither): a ring of smoke opening from the
+  middle, the closing inside it; 1 s.
 
-## 5. Style
+## 5. The look and style
 
-- canvas: `{"size": [1920, 1080], "frameRate": 30, "field": "satin", "background": "#000000", "pacing": "beats"}`.
+Choose one look from inspect_page's brand and what the product is, and keep the whole film in it:
+
+| Look | Fields | Seams | For |
+|---|---|---|---|
+| Satin | `satin` | cut, whip | A brand without a hue (black, white, grey accent), or a dark UI whose colour is all in the UI |
+| Light | `ember`, `sunlit`, `bloom`, `orb`, `ripple` | cut, whip, glow; ring into the closing | A brand with a clear hue: AI, design, creative and consumer products |
+| Dither | `matrix`, `warp`, `swirl`, `tide` | cut, whip, dither; ring into the closing | A technical product with a brand colour: databases, APIs, infrastructure, developer platforms |
+
+- Light and dither take their colour from `style.accent`: set it to the brand's colour, never a grey (a grey
+  accent makes them grey: choose satin then).
+- In the light and dither looks, give each scene its own field from the look's list (`field` on the scene), so
+  the ground changes as the story moves on:
+  - the opening on one with its light in the middle, alone for its first second: `bloom`, `orb`, `matrix`;
+  - the macros after it on ones that keep their light round the UI: `ember` (two corners), `sunlit` (rising
+    from below), `ripple`, `warp`, `tide`, `swirl`.
+- The closing is drawn on black in every look.
+- canvas: `{"size": [1920, 1080], "frameRate": 30, "field": <the opening's field>, "background": "#000000", "pacing": "beats"}`.
 - style:
   - `text` is a light grey such as `#ededed`, not white.
   - `dim`, `accent` and `face` come from inspect_page's brand.
-- Satin is monochrome: the colour comes from the product's own UI.
+
+A light film's scenes, for example (a dither film the same with its fields and `dither`):
+
+```json
+[{"id": "bar", "duration": 3.2, "field": "bloom", "shot": {"shot": "macro", "ui": "bar", "view": [[-40, -12], [140, 79]]}},
+ {"id": "typed", "duration": 4.4, "field": "ember", "seam": "cut", "shot": {"shot": "macro", "ui": "search", "view": [[-40, -40], [256, 144]]}},
+ {"id": "page", "duration": 4.8, "field": "sunlit", "seam": "glow", "shot": {"shot": "macro", "items": [
+   {"ui": "column", "view": [[-42, -69], [356, 200]]}, {"ui": "code", "view": [[-33, -32], [274, 154]]}]}},
+ {"id": "closing", "duration": 9, "seam": "ring", "shot": {"shot": "closing", "text": "…", "items": [], "detail": "…", "ui": "logo"}}]
+```
 
 ## 6. Check, then finish
 
@@ -185,6 +225,7 @@ export_recording with the bundle, format h264, resolution 2160.
    | "Closer" | A smaller view |
    | "Slower" | Durations × 1.5 |
    | "More motion" | Another stop in a macro, or a `whip` seam |
+   | "Another look", "more colour" | Another look from section 5: every scene's field and the seams with it |
    | "Another moment" | A new asset, then capture_ui |
 
 3. Preview once. Don't export unless asked.

@@ -2,15 +2,19 @@
 //  FieldKernels.metal.txt
 //  Reco
 //
-//  The fields of spec 0012, Q2: Paper Shaders 0.0.81's grain gradient (ember, sunlit), dithering
-//  (matrix) and smoke ring (halo), Copyright 2026 Paper, Apache-2.0, ported from their GLSL
-//  (docs/references/paper-shaders) to Core Image stitchable kernels; and Reco's own satin and its
-//  grain, after New Raycast's film.
+//  The fields of spec 0012, Q2: Paper Shaders 0.0.81's grain gradient (ember, sunlit, bloom, orb,
+//  ripple), dithering (matrix, warp, swirl, tide) and smoke ring (halo), Copyright 2026 Paper,
+//  Apache-2.0, ported from their GLSL (docs/references/paper-shaders) to Core Image stitchable kernels;
+//  seams drawn in their languages (a front of grainy light, ordered dither, a ring of smoke); and Reco's
+//  own satin and its grain, after New Raycast's film.
 //
 //  Each draws its frame as the 1280×720 gallery tile the look was picked from would, at a pixel
 //  ratio of 2: `frame` is (reference pixels per output pixel, the reference width and height, the
 //  look's time). Sizing is the library's defaults with the picked scale. GLSL's mod is
-//  x − y·floor(x / y), which Metal's fmod isn't for negative x.
+//  x − y·floor(x / y), which Metal's fmod isn't for negative x. `view` is how the camera has moved the
+//  field: its zoom and its shift in reference pixels (y up). It's an argument, never a transform of the
+//  kernel's output: two of one kernel's images moved differently in one frame (motion blur's samples, a
+//  seam's two scenes) drew one of them as streaks (macOS 26.5).
 //
 //  FieldRenderer compiles each kernel alone, defining `<name>_ONLY`: compiled together, Core Image
 //  drew only whichever sampling kernel it drew first and the other came out transparent (macOS
@@ -87,22 +91,45 @@ inline float4 vignetted(float3 color, float2 p, float2 size, float amount) {
 
 // MARK: - Grain gradient
 
-/// The shape before grain: a wave (`kind` 1) or two corners (4).
-inline float grainShape(float2 uv, float kind, float t) {
+/// The shape before grain at `p` (reference pixels from the frame's middle): a wave (`kind` 1), two
+/// corners (4), ripples (5), a blob (6) or a lit sphere (7). Objects are contained in the frame,
+/// patterns at a pixel ratio of 2.
+inline float grainShape(float2 p, float2 size, float kind, float t) {
+    float2 uv = kind > 3.5 ? p / min(size.x, size.y) : 0.0025 * p;
     if (kind < 1.5) {
         float wave = cos(0.5 * uv.x - 4.0 * t) * sin(1.5 * uv.x + 2.0 * t) * (0.75 + 0.25 * cos(6.0 * t));
         return 1.0 - smoothstep(-1.0, 1.0, uv.y + wave);
     }
-    uv *= 0.6;
-    float2 outer = float2(0.5);
-    float2 bl = smoothstep(float2(0.0), outer, uv + float2(0.1 + 0.1 * sin(3.0 * t), 0.2 - 0.1 * sin(5.25 * t)));
-    float2 tr = smoothstep(float2(0.0), outer, 1.0 - uv);
-    float shape = 1.0 - bl.x * bl.y * tr.x * tr.y;
-    uv = -uv;
-    bl = smoothstep(float2(0.0), outer, uv + float2(0.1 + 0.1 * sin(3.0 * t), 0.2 - 0.1 * cos(5.25 * t)));
-    tr = smoothstep(float2(0.0), outer, 1.0 - uv);
-    shape -= bl.x * bl.y * tr.x * tr.y;
-    return 1.0 - smoothstep(0.0, 1.0, shape);
+    if (kind < 4.5) {
+        uv *= 0.6;
+        float2 outer = float2(0.5);
+        float2 bl = smoothstep(float2(0.0), outer, uv + float2(0.1 + 0.1 * sin(3.0 * t), 0.2 - 0.1 * sin(5.25 * t)));
+        float2 tr = smoothstep(float2(0.0), outer, 1.0 - uv);
+        float shape = 1.0 - bl.x * bl.y * tr.x * tr.y;
+        uv = -uv;
+        bl = smoothstep(float2(0.0), outer, uv + float2(0.1 + 0.1 * sin(3.0 * t), 0.2 - 0.1 * cos(5.25 * t)));
+        tr = smoothstep(float2(0.0), outer, 1.0 - uv);
+        shape -= bl.x * bl.y * tr.x * tr.y;
+        return 1.0 - smoothstep(0.0, 1.0, shape);
+    }
+    if (kind < 5.5) {
+        float d = length(0.8 * uv);
+        return 0.5 + 0.5 * sin(pow(d, 1.2) * 5.0 - 3.0 * t);
+    }
+    if (kind < 6.5) {
+        float tt = 2.0 * t;
+        float shape = 0.5 * pow(1.0 - clamp(length(uv + 0.25 * float2(1.3 * sin(tt), 0.2 + 1.3 * cos(0.6 * tt + 4.0))), 0.0, 1.0), 5.0);
+        shape += 0.5 * pow(1.0 - clamp(length(uv + 0.2 * float2(1.2 * sin(-tt), 1.3 * sin(1.6 * tt))), 0.0, 1.0), 5.0);
+        shape += 0.5 * pow(1.0 - clamp(length(uv + 0.25 * float2(1.7 * cos(-0.6 * tt), cos(-1.6 * tt))), 0.0, 1.0), 5.0);
+        shape += 0.5 * pow(1.0 - clamp(length(uv + 0.3 * float2(1.4 * cos(0.8 * tt), 1.2 * sin(-0.6 * tt - 3.0))), 0.0, 1.0), 5.0);
+        shape = smoothstep(0.0, 0.9, shape);
+        return shape * smoothstep(0.25, 0.3, shape);
+    }
+    uv *= 2.0;
+    float d = 1.0 - dot(uv, uv);
+    float3 position = float3(uv, sqrt(max(d, 0.0)));
+    float3 light = normalize(float3(cos(1.5 * t), 0.8, sin(1.25 * t)));
+    return (0.5 + 0.5 * dot(light, position)) * step(0.0, d);
 }
 
 /// fbmR's three slow octave stacks, which don't change across a pixel.
@@ -146,24 +173,23 @@ inline float2 grain(coreimage::sampler noise, float2 g, float3 slow) {
 }
 
 #ifdef grainGradientField_ONLY
-/// `look` is (softness, intensity, noise, shape: 1 wave, 4 corners); three colours on `back`.
+/// `look` is (softness, intensity, noise, shape: grainShape's kinds); three colours on `back`.
 [[stitchable]] float4 grainGradientField(
-    coreimage::sampler noise, float4 frame, float4 look, float vignette, float4 back, float4 c0, float4 c1, float4 c2,
+    coreimage::sampler noise, float4 frame, float4 view, float4 look, float vignette, float4 back, float4 c0, float4 c1, float4 c2,
     coreimage::destination dest
 ) {
     float2 size = frame.yz;
-    float2 p = dest.coord() * frame.x - 0.5 * size;
+    float2 framed = dest.coord() * frame.x - 0.5 * size;
+    float2 p = (framed - view.yz) / view.x;
     float t = 0.1 * (frame.w + 7.0);
     float softness = look.x, kind = look.w;
-    // The vertex shader's UVs: an object contained in the frame, or a pattern at a pixel ratio of 2
-    float2 shapeUV = kind > 3.5 ? p / min(size.x, size.y) : 0.005 * p / 2.0;
     float grainStep = kind > 3.5 ? 0.7 : 0.8;
     float2 g = grainStep * p;
 
     float3 slow = paper::slowFbm(noise, 0.002 * g + 10.0, 0.003 * g, 0.001 * g);
     float distortion = look.y * 2.0 / 3.0, speckle = look.z * 10.0 / 3.0;
     float2 here = paper::grain(noise, g, slow);
-    float shape = paper::grainShape(shapeUV, kind, t) + distortion * (here.x + 0.5) + speckle * here.y;
+    float shape = paper::grainShape(p, size, kind, t) + distortion * (here.x + 0.5) + speckle * here.y;
     // fwidth(shape), which a Core Image kernel has no derivative for: its change to the other pixel
     // of its 2×2 quad across and down, as a GPU takes it. The shape barely changes over a pixel; the
     // grain does.
@@ -184,28 +210,62 @@ inline float2 grain(coreimage::sampler noise, float2 g, float3 slow) {
     }
     float opacity = gradient.a * total;
     float3 color = gradient.rgb * total + back.rgb * back.a * (1.0 - opacity);
-    return paper::vignetted(color, p, size, vignette);
+    return paper::vignetted(color, framed, size, vignette);
 }
 #endif
 
 // MARK: - Dithering
 
+namespace paper {
+
+/// Dithering's shape at the cell centre `p` (reference pixels from the frame's middle) at `scale`:
+/// warp (`kind` 2), a wave (4), a swirl (6) or a lit sphere (7). Patterns at a pixel ratio of 2,
+/// objects contained in the frame.
+inline float ditherShape(float2 p, float2 size, float kind, float scale, float t) {
+    float2 uv = kind > 3.5 ? p / min(size.x, size.y) / scale : p / 2.0 / scale + 0.5;
+    if (kind < 2.5) {
+        uv *= 0.003;
+        for (float i = 1.0; i < 6.0; i++) {
+            uv.x += 0.6 / i * cos(i * 2.5 * uv.y + t);
+            uv.y += 0.6 / i * cos(i * 1.5 * uv.x + t);
+        }
+        return smoothstep(0.02, 1.0, 0.15 / max(0.001, abs(sin(t - uv.y - uv.x))));
+    }
+    if (kind < 4.5) {
+        uv *= 4.0;
+        float wave = cos(0.5 * uv.x - 2.0 * t) * sin(1.5 * uv.x + t) * (0.75 + 0.25 * cos(3.0 * t));
+        return 1.0 - smoothstep(-1.0, 1.0, uv.y + wave);
+    }
+    if (kind < 6.5) {
+        float l = length(uv);
+        float offset = 1.0 / pow(max(l, 1e-6), 1.2) + (6.0 * atan2(uv.y, uv.x) + 4.0 * t) / twoPi;
+        return fract(offset) * smoothstep(0.0, 1.0, pow(l, 1.2));
+    }
+    uv *= 2.0;
+    float d = 1.0 - dot(uv, uv);
+    float3 position = float3(uv, sqrt(max(0.0, d)));
+    float3 light = normalize(float3(cos(1.5 * t), 0.8, sin(1.25 * t)));
+    return (0.5 + 0.5 * dot(light, position)) * step(0.0, d);
+}
+
+/// The 4×4 Bayer matrix's threshold for a cell, 0..15/16.
+inline float bayer(float2 cells) {
+    int2 index = int2(fract(cells / 4.0) * 4.0);
+    return float(bayer4x4[index.y * 4 + index.x]) / 16.0;
+}
+
+}
+
 #ifdef ditheringField_ONLY
-/// A sphere lit from a turning light, at scale 0.6, in 4×4 ordered dither of 2 px cells.
-[[stitchable]] float4 ditheringField(float4 frame, float vignette, float4 back, float4 front, coreimage::destination dest) {
+/// A dithering shape in 4×4 ordered dither: `look` is (shape: ditherShape's kinds, the cell in reference
+/// pixels, the scale, how strong its lit dots are). Its cells stay on the frame's pixels, as a screen's.
+[[stitchable]] float4 ditheringField(float4 frame, float4 look, float vignette, float4 back, float4 front, coreimage::destination dest) {
     float2 size = frame.yz;
     float2 p = dest.coord() * frame.x - 0.5 * size;
-    float t = 0.5 * frame.w;
-    float cell = 2.0 * 2.0;
-    float2 cells = p / cell;
-    float2 shapeUV = 2.0 * (floor(cells) + 0.5) * cell / min(size.x, size.y) / 0.6;
-    float d = 1.0 - dot(shapeUV, shapeUV);
-    float3 position = float3(shapeUV, sqrt(max(0.0, d)));
-    float3 light = normalize(float3(cos(1.5 * t), 0.8, sin(1.25 * t)));
-    float shape = (0.5 + 0.5 * dot(light, position)) * step(0.0, d);
-    int2 index = int2(fract(cells / 4.0) * 4.0);
-    float lit = step(0.5, shape + float(paper::bayer4x4[index.y * 4 + index.x]) / 16.0 - 0.5);
-    float3 color = front.rgb * lit + back.rgb * (1.0 - lit);
+    float2 cells = p / look.y;
+    float shape = paper::ditherShape((floor(cells) + 0.5) * look.y, size, look.x, look.z, 0.5 * frame.w);
+    float lit = step(0.5, shape + paper::bayer(cells) - 0.5);
+    float3 color = mix(back.rgb, front.rgb, lit * look.w);
     return paper::vignetted(color, p, size, vignette);
 }
 #endif
@@ -240,11 +300,12 @@ inline float smokeNoise(coreimage::sampler noise, float2 uv, float2 polar, float
 /// `ring` is (radius, thickness, inner shape, noise scale), at scale 0.8 and 8 noise iterations;
 /// `c0` at the ring's core, `c1` at its edge.
 [[stitchable]] float4 smokeRingField(
-    coreimage::sampler noise, float4 frame, float4 ring, float vignette, float4 back, float4 c0, float4 c1,
+    coreimage::sampler noise, float4 frame, float4 view, float4 ring, float vignette, float4 back, float4 c0, float4 c1,
     coreimage::destination dest
 ) {
     float2 size = frame.yz;
-    float2 p = dest.coord() * frame.x - 0.5 * size;
+    float2 framed = dest.coord() * frame.x - 0.5 * size;
+    float2 p = (framed - view.yz) / view.x;
     float2 uv = p / min(size.x, size.y) / 0.8;
     float t = frame.w;
     float cycle = 3.0, period = 2.0 * cycle;
@@ -264,7 +325,7 @@ inline float smokeNoise(coreimage::sampler noise, float2 uv, float2 polar, float
     float3 color = gradient.rgb * shape + back.rgb * back.a * (1.0 - opacity);
     // The shader's own dither against banding, in output pixels
     color += 1.0 / 256.0 * (fract(sin(dot(0.014 * dest.coord(), float2(12.9898, 78.233))) * 43758.5453123) - 0.5);
-    return paper::vignetted(color, p, size, vignette);
+    return paper::vignetted(color, framed, size, vignette);
 }
 #endif
 
@@ -492,7 +553,8 @@ inline float2 onPanel(float2 pixel, float3 rowX, float3 rowY, float3 rowW) {
     if (cover <= 0.0) {
         return float4(0.0);
     }
-    float level = max(255.0 * seen.sample(seen.transform(dest.coord())).r, body.x);
+    // In colour, so a coloured ground tints it; satin's is grey, so all three channels are the same
+    float3 level = max(255.0 * seen.sample(seen.transform(dest.coord())).rgb, float3(body.x));
     float2 fromPool = (pixel - pool.xy * size) / size.y;
     level += pool.w * exp(-dot(fromPool, fromPool) / glass::squared(pool.z));
     float across = (-(pixel.x - sheen.x * size.x) * sin(sheen.z) + (pixel.y - sheen.y * size.y) * cos(sheen.z)) * frame.z;
@@ -505,10 +567,103 @@ inline float2 onPanel(float2 pixel, float3 rowX, float3 rowY, float3 rowW) {
     float up = saturate(-normal.y);
     float depth = max(-d, 0.0) * frame.z;
     float fall = exp(-length(pixel - glint.zw * size) / size.x / body.w);
-    float lit = rim.x + rim.y * pow(left, 1.5) + rim.z * 255.0 * ground.sample(ground.transform(dest.coord())).r
+    float3 lit = rim.x + rim.y * pow(left, 1.5) + rim.z * 255.0 * ground.sample(ground.transform(dest.coord())).rgb
         + glint.x * pow(up, 0.7) * fall * exp(-glass::squared(depth / glint.y))
         + rim.w * left * left * exp(-glass::squared((width * frame.z - depth) / 1.2));
     level = mix(level, lit, band) / 255.0;
-    return float4(level * cover, level * cover, level * cover, cover);
+    return float4(level * cover, cover);
+}
+#endif
+
+// MARK: - Seams
+
+// A seam draws the scene before (`from`) into the next (`to`) in a field's language, over the whole
+// frame, its UI too: light and texture acting on the content, not behind it (docs/references/
+// launch-films.md). `frame` as the fields take it; colours from the brand as the field's.
+
+#ifdef glowSeam_ONLY
+/// A front of grainy light crossing the frame in the order the grain gradient's shape lights it (from
+/// two corners, a blob outwards, a wave from below), then on across the frame from the middle out; the
+/// next scene behind it. `seam`: progress, the shape (grainShape's kinds), the front's width in the
+/// order's units, how bright its light goes.
+[[stitchable]] float4 glowSeam(
+    coreimage::sampler noise, coreimage::sampler from, coreimage::sampler to, float4 frame, float4 seam,
+    float4 c0, float4 c1, coreimage::destination dest
+) {
+    float2 size = frame.yz;
+    float2 p = dest.coord() * frame.x - 0.5 * size;
+    float t = 0.1 * (frame.w + 7.0);
+    float grainStep = seam.y > 3.5 ? 0.7 : 0.8;
+    float2 g = grainStep * p;
+    float2 grain = paper::grain(noise, g, paper::slowFbm(noise, 0.002 * g + 10.0, 0.003 * g, 0.001 * g));
+    float across = 1.0 - length(p / (0.5 * size)) / sqrt(2.0);
+    float order = mix(saturate(paper::grainShape(p, size, seam.y, t)), across, 0.4) + 0.12 * (grain.x + 0.5) + 0.18 * grain.y;
+    // From past the order's top (1 and the grain's 0.36) to below its bottom (the grain's −0.12)
+    float width = seam.z;
+    float ahead = order - mix(1.45 + 2.0 * width, -0.25 - width, seam.x);
+    float next = smoothstep(-0.01, 0.01, ahead);
+    // Brightest at the front, a glow left behind it on the next scene, gone by the seam's end
+    float light = exp(-ahead * ahead / (width * width)) * smoothstep(-width, 0.0, ahead) + 0.35 * exp(-ahead / (2.0 * width)) * next;
+    light *= sqrt(sin(paper::pi * saturate(seam.x)));
+    float3 glow = mix(c0.rgb, c1.rgb, smoothstep(0.0, 2.0 * width, abs(ahead)));
+    float3 color = mix(from.sample(from.coord()).rgb, to.sample(to.coord()).rgb, next);
+    return float4(1.0 - (1.0 - color) * (1.0 - saturate(seam.w * light) * glow), 1.0);
+}
+#endif
+
+#ifdef ditherSeam_ONLY
+/// The scene before turned to ordered dither from the frame's edges in, flipped cell by cell to the
+/// next scene's dither half-way, which resolves into the next scene from the edges in: its UI drawn in
+/// the brand's dots for a moment. `seam`: progress, the dithering shape that roughens the front, the
+/// cell in reference pixels, the front's spread; `look`: the shape's scale and time.
+[[stitchable]] float4 ditherSeam(
+    coreimage::sampler from, coreimage::sampler to, float4 frame, float4 seam, float4 look, float4 back, float4 front,
+    coreimage::destination dest
+) {
+    float2 size = frame.yz;
+    float2 p = dest.coord() * frame.x - 0.5 * size;
+    float2 cells = p / seam.z;
+    float2 centre = (floor(cells) + 0.5) * seam.z;
+    // Near 0 at the frame's edges, up to 1.3 in its middle, roughened by the shape and the Bayer matrix
+    // (a spread of at most 0.3)
+    float2 edge = 1.0 - abs(centre) / (0.5 * size);
+    float d = paper::bayer(cells);
+    float order = 0.15 + 0.75 * saturate(min(edge.x * size.x / size.y, edge.y)) + 0.25 * paper::ditherShape(centre, size, seam.y, look.x, 0.5 * look.y)
+        + (d - 0.5) * seam.w;
+    float dithered = step(order, 2.62 * seam.x - 0.001);
+    float arrived = step(order, 2.62 * seam.x - 1.311);
+    float flipped = step(d, saturate((seam.x - 0.42) / 0.16));
+    // The cell's light from its centre, its contrast stretched so text reads in dots and panels don't
+    float2 sampled = (centre + 0.5 * size) / frame.x;
+    float3 a = from.sample(from.transform(sampled)).rgb;
+    float3 b = to.sample(to.transform(sampled)).rgb;
+    float lightness = dot(mix(a, b, flipped), float3(0.2126, 0.7152, 0.0722));
+    float lit = step(0.5, smoothstep(0.03, 0.42, lightness) + d - 0.5);
+    float3 color = mix(from.sample(from.coord()).rgb, mix(back.rgb, front.rgb, lit), dithered);
+    return float4(mix(color, to.sample(to.coord()).rgb, arrived), 1.0);
+}
+#endif
+
+#ifdef ringSeam_ONLY
+/// A ring of smoke opening from the frame's middle past its corners, the next scene inside it, the
+/// smoke lit brightest half-way. `seam`: progress, the ring's thickness in shorter sides, the noise's
+/// scale; `c0` at its core, `c1` at its edge.
+[[stitchable]] float4 ringSeam(
+    coreimage::sampler noise, coreimage::sampler from, coreimage::sampler to, float4 frame, float4 seam,
+    float4 c0, float4 c1, coreimage::destination dest
+) {
+    float2 size = frame.yz;
+    float2 uv = (dest.coord() * frame.x - 0.5 * size) / min(size.x, size.y);
+    // Past the corners however far the smoke pushes them out (up to 1.4 times)
+    float reach = 0.75 * length(size) / min(size.x, size.y) + seam.y;
+    float radius = seam.x * (reach + 0.2) - 0.1;
+    float l = length(uv);
+    float n = paper::smokeNoise(noise, uv, float2(atan2(uv.y, uv.x) + 0.001, 0.05 * frame.w - 0.5 * l + rsqrt(max(1e-4, l))) * seam.z, frame.w, seam.z);
+    float distorted = l * (0.8 + 0.5 * n);
+    float inside = 1.0 - smoothstep(radius - 0.5 * seam.y, radius, distorted);
+    float ring = (1.0 - smoothstep(radius, radius + seam.y, distorted)) * smoothstep(radius - 0.6 * seam.y, radius, distorted);
+    float3 color = mix(from.sample(from.coord()).rgb, to.sample(to.coord()).rgb, inside);
+    float3 smoke = mix(c1.rgb, c0.rgb, ring * ring) * ring * sin(paper::pi * saturate(seam.x));
+    return float4(1.0 - (1.0 - color) * (1.0 - smoke), 1.0);
 }
 #endif

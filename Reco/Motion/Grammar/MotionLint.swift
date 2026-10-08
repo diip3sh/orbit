@@ -12,7 +12,7 @@ nonisolated enum MotionLint {
 
     nonisolated enum Rule: String, Sendable {
         case readingTime, textSize, safeArea, contrast, firstMove, simultaneousMoves, exitLength
-        case sceneLengths, typingRate, stillness, hookLength, endingLength, rollLength, busyField, material
+        case sceneLengths, typingRate, stillness, hookLength, endingLength, rollLength, busyField, material, look
     }
 
     nonisolated struct Finding: Equatable, Sendable {
@@ -54,18 +54,18 @@ nonisolated enum MotionLint {
                 }
             }
             findings += rollFindings(scene.layers, scene: scene)
-            if let shot = source.shot, shot.kind == .macro, (source.field ?? document.canvas.field) == .satin {
-                findings += materialFindings(shot, scene: scene.id, assets: document.assets)
+            let field = source.field ?? document.canvas.field
+            if let shot = source.shot, shot.kind == .macro, field != .plain {
+                findings += materialFindings(shot, over: field, scene: scene.id, assets: document.assets)
             }
-            if let field = source.field, field.isBusy {
-                findings.append(Finding(rule: .busyField, scene: scene.id, message: "The \(field.rawValue) field competes with what's over it: use plain or satin."))
+            // A closing is drawn on black whatever the field
+            if field.isBusy, source.shot?.kind != .macro, source.shot?.kind != .closing {
+                findings.append(Finding(
+                    rule: .busyField, scene: scene.id, message: "The \(field.rawValue) field competes with what's over it: put it under a macro's glass, or use plain."
+                ))
             }
         }
-        if document.canvas.field.isBusy, let first = document.scenes.first {
-            findings.append(Finding(
-                rule: .busyField, scene: first.id, message: "The canvas's \(document.canvas.field.rawValue) field competes with what's over it: use plain or satin."
-            ))
-        }
+        findings += lookFindings(document)
         let lengths = document.scenes.map(\.duration)
         if lengths.count >= 4, let longest = lengths.max(), let shortest = lengths.min(), longest < 3 * shortest {
             findings.append(Finding(
@@ -76,13 +76,45 @@ nonisolated enum MotionLint {
         return findings
     }
 
-    /// UI in macro over satin is glass or bare: as the page paints it, its fill reads as a flat box cut out
-    /// of another picture (the L1 shot the user found "really bad" next to Raycast's).
-    private static func materialFindings(_ shot: MotionShot, scene: String, assets: [MotionAsset]) -> [Finding] {
+    /// UI in macro over a field is glass or bare: as the page paints it, its fill reads as a flat box cut
+    /// out of another picture (the L1 shot the user found "really bad" next to Raycast's). Bare only over
+    /// satin: Supabase's docs text, bare over swirl, didn't read.
+    private static func materialFindings(_ shot: MotionShot, over field: MotionField, scene: String, assets: [MotionAsset]) -> [Finding] {
         let shown = Set(shot.stops.compactMap(\.asset))
-        return assets.filter { shown.contains($0.id) && $0.steps == nil && !$0.isBare }.map { asset in
-            Finding(rule: .material, scene: scene, message: "\"\(asset.id)\" shows over satin as the page paints it: set glass (a control, card or code) or bare (page text).")
+        let onGround = { (asset: MotionAsset) in asset.bare == true && asset.glass != true }
+        return assets.filter { shown.contains($0.id) && $0.steps == nil && (onGround($0) ? field.isBusy : !$0.isBare) }.map { asset in
+            let message = onGround(asset)
+                ? "\"\(asset.id)\" is bare over \(field.rawValue), whose light competes with its text: set glass instead."
+                : "\"\(asset.id)\" shows over \(field.rawValue) as the page paints it: set glass (a control, card or code) or bare (page text, over satin)."
+            return Finding(rule: .material, scene: scene, message: message)
         }
+    }
+
+    /// One look a film: its scenes' fields from one family (satin, light or dither; plain and the halo go
+    /// with any), and a seam in a field's language only into a scene of that language. A new technique a
+    /// shot is a generated video's tell (`docs/references/style-guide.md`).
+    private static func lookFindings(_ document: MotionDocument) -> [Finding] {
+        var findings: [Finding] = []
+        let looks: Set<MotionField.Family> = [.satin, .light, .dither]
+        var first: (family: MotionField.Family, scene: String)?
+        for scene in document.scenes where scene.shot?.kind != .closing {
+            let field = scene.field ?? document.canvas.field
+            if let family = scene.seam.family, family != .smoke, looks.contains(field.family), field.family != family {
+                findings.append(Finding(
+                    rule: .look, scene: scene.id, message: "A \(scene.seam.rawValue) seam is drawn in the \(family.rawValue) looks' language; this scene is over \(field.rawValue)."
+                ))
+            }
+            guard looks.contains(field.family) else { continue }
+            if let first, first.family != field.family {
+                findings.append(Finding(
+                    rule: .look, scene: scene.id,
+                    message: "One look a film: \(first.scene) is over a \(first.family.rawValue) field, this scene over \(field.rawValue) (\(field.family.rawValue))."
+                ))
+            } else if first == nil {
+                first = (field.family, scene.id)
+            }
+        }
+        return findings
     }
 
     // MARK: - Timing

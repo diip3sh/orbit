@@ -49,22 +49,41 @@ nonisolated enum FieldRenderer {
         /// The darkening at the frame's corners, as the gallery laid it over.
         let vignette: Double
 
-        /// The kernel's look-specific values, after its noise and frame.
-        let values: CIVector?
+        /// The kernel's look-specific values: the grain gradient's softness, intensity, noise and shape;
+        /// dithering's shape, cell in reference pixels, scale and its dots' strength; the smoke ring's radius,
+        /// thickness, inner shape and noise scale.
+        let values: CIVector
     }
 
+    /// How strong the dots of a dither that fills the frame are, against the sphere's.
+    static let fillingDots = 0.55
+
+    private static let grain = "grainGradientField"
+    private static let dithering = "ditheringField"
+
+    /// The picked looks, and their shaders' other shapes with the picked look's settings. Shapes are the
+    /// kernels' kinds: grain 1 wave, 4 corners, 5 ripple, 6 blob, 7 sphere; dither 2 warp, 4 wave, 6 swirl,
+    /// 7 sphere.
     private static let looks: [MotionField: Look] = [
         // Softness 0.6, intensity 0.35, noise 0.3, corners
-        .ember: Look(kernel: "grainGradientField", speed: 0.4, vignette: 0.2, values: CIVector(x: 0.6, y: 0.35, z: 0.3, w: 4)),
-        .matrix: Look(kernel: "ditheringField", speed: 0.35, vignette: 0.5, values: nil),
-        // Radius 0.3, thickness 0.65, inner shape 0.7, noise scale 3
-        .halo: Look(kernel: "smokeRingField", speed: 0.3, vignette: 0, values: CIVector(x: 0.3, y: 0.65, z: 0.7, w: 3)),
+        .ember: Look(kernel: grain, speed: 0.4, vignette: 0.2, values: CIVector(x: 0.6, y: 0.35, z: 0.3, w: 4)),
         // Softness 0.7, intensity 0.15, noise 0.5, wave
-        .sunlit: Look(kernel: "grainGradientField", speed: 0.35, vignette: 0.3, values: CIVector(x: 0.7, y: 0.15, z: 0.5, w: 1))
+        .sunlit: Look(kernel: grain, speed: 0.35, vignette: 0.3, values: CIVector(x: 0.7, y: 0.15, z: 0.5, w: 1)),
+        .bloom: Look(kernel: grain, speed: 0.4, vignette: 0.2, values: CIVector(x: 0.6, y: 0.35, z: 0.3, w: 6)),
+        .orb: Look(kernel: grain, speed: 0.4, vignette: 0.2, values: CIVector(x: 0.6, y: 0.35, z: 0.3, w: 7)),
+        .ripple: Look(kernel: grain, speed: 0.4, vignette: 0.2, values: CIVector(x: 0.6, y: 0.35, z: 0.3, w: 5)),
+        // A sphere at scale 0.6 in 2 px cells at a pixel ratio of 2. The shapes that fill the frame light
+        // half of it: at the sphere's strength, Supabase's docs text over swirl didn't read
+        .matrix: Look(kernel: dithering, speed: 0.35, vignette: 0.5, values: CIVector(x: 7, y: 4, z: 0.6, w: 1)),
+        .warp: Look(kernel: dithering, speed: 0.35, vignette: 0.5, values: CIVector(x: 2, y: 4, z: 0.6, w: fillingDots)),
+        .swirl: Look(kernel: dithering, speed: 0.35, vignette: 0.5, values: CIVector(x: 6, y: 4, z: 0.6, w: fillingDots)),
+        .tide: Look(kernel: dithering, speed: 0.35, vignette: 0.5, values: CIVector(x: 4, y: 4, z: 0.6, w: fillingDots)),
+        // Radius 0.3, thickness 0.65, inner shape 0.7, noise scale 3
+        .halo: Look(kernel: "smokeRingField", speed: 0.3, vignette: 0, values: CIVector(x: 0.3, y: 0.65, z: 0.7, w: 3))
     ]
 
-    /// Reco's own, drawn in stages instead of as one look: satin, its grain, glass.
-    private static let ownKernels = ["satinGround", "satinFinish", "filmGrainNoise", "filmGrain", "glassPanel"]
+    /// Reco's own, drawn in stages instead of as one look: satin, its grain, glass, the seams.
+    private static let ownKernels = ["satinGround", "satinFinish", "filmGrainNoise", "filmGrain", "glassPanel", "glowSeam", "ditherSeam", "ringSeam"]
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "FieldRenderer")
 
@@ -103,9 +122,11 @@ nonisolated enum FieldRenderer {
     /// - Parameters:
     ///   - preview: Whether to draw the soft looks at most at their reference size, scaled up: ember
     ///     at 1080p took 4.1 ms p50 drawn whole, 1.5 ms at 720p (M5). An export draws them whole, for
-    ///     crisp grain.
+    ///     crisp grain. Every field in a frame is scaled alike: two images of one kernel moved
+    ///     differently in one frame drew one of them as streaks (macOS 26.5), so a camera's move is the
+    ///     kernel's argument.
     ///   - shot: The scene it's drawn for. Paper's looks run on the video's clock, so one runs on across
-    ///     a cut to a scene with the same one, and follow the camera at ``groundParallax``; the dither
+    ///     a cut to a scene with the same one, and follow the camera at ``groundParallax``; dither
     ///     doesn't, so its cells stay on the frame's pixels. Satin is lit afresh for each shot.
     static func image(
         _ field: MotionField, palette: FieldPalette, at time: Double, size: CGSize, preview: Bool = false, shot: Shot = Shot()
@@ -116,39 +137,28 @@ nonisolated enum FieldRenderer {
             return satin(SatinSetup.forShot(shot.index), palette: palette, at: time - shot.start, size: size, shot: shot) ?? plain
         }
         guard let look = looks[field], let kernel = kernels[look.kernel] else { return plain }
-        // Reference pixels per output pixel, and drawn pixels per output pixel. The dither stays
-        // whole: it's cheap, and its cells must stay sharp.
+        // Reference pixels per output pixel, and drawn pixels per output pixel. Dither stays whole:
+        // it's cheap, and its cells must stay sharp.
         let reference = referenceShorterSide / min(size.width, size.height)
-        let drawScale = preview && field != .matrix ? min(1, reference) : 1
-        let view = field == .matrix ? .identity : cameraView(of: shot, at: groundParallax, size: size)
-        // The part of the field the frame shows, in drawn pixels
-        let shown = extent.applying(view.inverted())
-        let drawn = CGRect(x: shown.minX * drawScale, y: shown.minY * drawScale, width: shown.width * drawScale, height: shown.height * drawScale).integral
+        let dithered = look.kernel == dithering
+        let drawScale = preview && !dithered ? min(1, reference) : 1
+        let drawn = CGRect(x: 0, y: 0, width: (size.width * drawScale).rounded(.up), height: (size.height * drawScale).rounded(.up))
         let frame = CIVector(x: reference / drawScale, y: size.width * reference, z: size.height * reference, w: time * look.speed)
+        // The camera's move as ground far behind the planes follows it, in reference pixels (y up)
+        let view = CIVector(
+            x: pow(shot.zoom, groundParallax), y: groundParallax * shot.shift.dx * reference, z: -groundParallax * shot.shift.dy * reference, w: 0
+        )
         let colors = [vector(palette.back)] + palette.colors.map(vector)
         let arguments: [Any]
-        switch field {
-        case .ember, .sunlit, .halo:
-            guard let noise, let values = look.values else { return plain }
-            arguments = [noise, frame, values, look.vignette] + colors
-        case .matrix:
-            arguments = [frame, look.vignette] + colors
-        case .satin, .plain:
-            return plain
+        if dithered {
+            arguments = [frame, look.values, look.vignette] + colors
+        } else {
+            guard let noise else { return plain }
+            arguments = [noise, frame, view, look.values, look.vignette] + colors
         }
         guard let image = kernel.apply(extent: drawn, roiCallback: { _, _ in noiseExtent }, arguments: arguments) else { return plain }
-        guard drawScale < 1 || view != .identity else { return image }
-        return image.clampedToExtent().transformed(by: CGAffineTransform(scaleX: 1 / drawScale, y: 1 / drawScale).concatenating(view)).cropped(to: extent)
-    }
-
-    /// Where the camera's move puts a field at `share` of it, in output pixels (y up): zoomed by that
-    /// share of the planes' zoom in log space about the frame's middle, and shifted by that share of
-    /// their shift.
-    private static func cameraView(of shot: Shot, at share: Double, size: CGSize) -> CGAffineTransform {
-        let middle = CGPoint(x: size.width / 2, y: size.height / 2)
-        let zoom = pow(shot.zoom, share)
-        return CGAffineTransform(translationX: middle.x + share * shot.shift.dx, y: middle.y - share * shot.shift.dy)
-            .scaledBy(x: zoom, y: zoom).translatedBy(x: -middle.x, y: -middle.y)
+        guard drawScale < 1 else { return image }
+        return image.clampedToExtent().transformed(by: CGAffineTransform(scaleX: 1 / drawScale, y: 1 / drawScale)).cropped(to: extent)
     }
 
     private static func vector(_ color: RGBAColor) -> CIVector {
@@ -157,6 +167,62 @@ nonisolated enum FieldRenderer {
 
     private static func ciColor(_ color: RGBAColor) -> CIColor {
         CIColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha)
+    }
+}
+
+// MARK: - Seams
+
+nonisolated extension FieldRenderer {
+
+    /// A seam's front: the order's units it spans, and how bright its light goes (screened over the frame).
+    static let glowWidth = 0.14
+    static let glowLevel = 1.2
+
+    /// Dither's cells in a seam, in reference pixels (12 px at 1080p: twice the field's, so the UI drawn in
+    /// them still reads as dots at a video's bitrate), and how far the Bayer matrix spreads its front.
+    static let ditherSeamCell = 8.0
+    static let ditherSeamSpread = 0.3
+
+    /// The ring's thickness in shorter sides, and its smoke's noise scale (the halo's).
+    static let ringThickness = 0.25
+    static let ringNoise = 3.0
+
+    /// The scene before going into the next by a seam drawn in a field's language, at `progress`, `time`
+    /// seconds into the video, over a frame of `size` output pixels. The next scene alone when the seam has
+    /// no language or its kernel didn't compile.
+    static func seam(
+        _ transition: SeamExpansion.Transition, between scenes: (before: CIImage, next: CIImage), progress: Double, at time: Double, size: CGSize
+    ) -> CIImage {
+        let extent = CGRect(origin: .zero, size: size)
+        let reference = referenceShorterSide / min(size.width, size.height)
+        guard let palette = transition.palette, let look = looks[transition.look], let noise else { return scenes.next }
+        let frame = { (speed: Double) in CIVector(x: reference, y: size.width * reference, z: size.height * reference, w: time * speed) }
+        let lead = palette.colors.first.map(vector) ?? vector(palette.back)
+        let deeper = palette.colors.dropFirst().first.map(vector) ?? lead
+        let name: String
+        let arguments: [Any]
+        var reach = 0.0
+        switch transition.seam {
+        case .glow:
+            name = "glowSeam"
+            arguments = [noise, scenes.before, scenes.next, frame(look.speed), CIVector(x: progress, y: look.values.w, z: glowWidth, w: glowLevel), lead, deeper]
+        case .dither:
+            name = "ditherSeam"
+            reach = ditherSeamCell / reference
+            arguments = [
+                scenes.before, scenes.next, frame(look.speed), CIVector(x: progress, y: look.values.x, z: ditherSeamCell, w: ditherSeamSpread),
+                CIVector(x: look.values.z, y: time * look.speed, z: 0, w: 0), vector(palette.back), lead
+            ]
+        case .ring:
+            name = "ringSeam"
+            arguments = [noise, scenes.before, scenes.next, frame(look.speed), CIVector(x: progress, y: ringThickness, z: ringNoise, w: 0), lead, deeper]
+        default:
+            return scenes.next
+        }
+        let samplesNoise = transition.seam != .dither
+        return kernels[name]?.apply(extent: extent, roiCallback: { index, rect in
+            samplesNoise && index == 0 ? noiseExtent : rect.insetBy(dx: -reach, dy: -reach)
+        }, arguments: arguments) ?? scenes.next
     }
 }
 

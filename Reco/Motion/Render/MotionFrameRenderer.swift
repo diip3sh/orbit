@@ -70,6 +70,11 @@ nonisolated enum MotionFrameRenderer {
                 let width = bounds.width
                 frame = frame.transformed(by: CGAffineTransform(translationX: width * (1 - progress), y: 0))
                     .composited(over: previous.transformed(by: CGAffineTransform(translationX: -width * progress, y: 0)))
+            case .glow, .dither, .ring:
+                frame = FieldRenderer.seam(
+                    transition, between: (previous.composited(over: background), frame.composited(over: background)), progress: progress, at: time,
+                    size: bounds.size
+                )
             default:
                 frame = previous.fading(to: 1 - progress).composited(over: frame)
             }
