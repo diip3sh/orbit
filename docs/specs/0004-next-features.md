@@ -74,7 +74,8 @@ own spec before any code.
 
 N20 and N21 are small and can land any time.
 
-**Status (2026-10-08):** built: N1, N2, N3, N4, N7, N8, N9, N10, N11, N12, N14, N15, N16, N17, N20, N21, N22. The rest is open.
+**Status (2026-10-08):** built: N1, N2, N3, N4, N7, N8, N9, N10, N11, N12, N14, N15, N16, N17, N20, N21, N22, and style
+presets from Later (S19 in the roadmap). The rest is open.
 
 Every item follows spec 0003's standards: a pure core with tests, performance measured before a
 claim, docs updated, and the 8 ms frame budget kept.
@@ -501,7 +502,10 @@ edges. Recording keeps the live selection.
   video's single transform.
 - **Also:**
   - A cursor-only ProRes 4444 export for other editors, as Cap has.
-  - Style presets.
+  - Style presets. **Built (2026-10-08, S19):** the toolbar's Style menu saves the project's look (canvas, cursor, clicks,
+    keystrokes, zoom motion and motion blur; not cuts, zooms, masks, the crop or audio) under a name as a `.recostyle`
+    JSON file in Application Support, lists the saved ones with the project's ticked, applies one in one undo step, and
+    shares the file (Share…); a `.recostyle` opened from Finder or dropped on the editor is kept and applied.
   - Text cards.
   - Music from the user's own file.
 

@@ -20,6 +20,8 @@ nonisolated enum EditorError: LocalizedError {
     case unreadableBackground
     case unreadableBackgroundAudio
     case renameFailed(any Error)
+    case styleNotSaved(any Error)
+    case unreadableStyle(any Error)
 
     var errorDescription: String? {
         switch self {
@@ -51,6 +53,10 @@ nonisolated enum EditorError: LocalizedError {
             "The background audio couldn't be opened, so it's left out."
         case .renameFailed(let error):
             "The recording couldn't be renamed. \(error.localizedDescription)"
+        case .styleNotSaved(let error):
+            "The style couldn't be saved. \(error.localizedDescription)"
+        case .unreadableStyle(let error):
+            "The style couldn't be read. \(error.localizedDescription)"
         }
     }
 }

@@ -84,6 +84,9 @@ final class EditorViewModel {
     /// The system's wallpapers the inspector offers, once ``loadWallpapers()`` has read them.
     var wallpapers: [SystemWallpaper] = []
 
+    /// The saved styles the Style menu offers, read when the recording opens and after each change to them.
+    var stylePresets: [StylePreset] = []
+
     /// Which edits share an undo step.
     @ObservationIgnored private var coalescedEdits = EditCoalescing()
 
@@ -136,6 +139,7 @@ final class EditorViewModel {
         self.source = source
         self.project = project
         savedProject = project
+        stylePresets = StylePresetStore.list()
         markers = source.telemetry.map(TimelineMarkers.init)
         updateTimeline()
         show(composition, plan: plan, atSource: time ?? 0)

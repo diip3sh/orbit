@@ -160,8 +160,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls where url.scheme == "reco" {
-            handle(url)
+        for url in urls {
+            if url.scheme == "reco" {
+                handle(url)
+            } else if url.pathExtension == StylePreset.fileExtension {
+                editorWindows.importStyle(from: url)
+            }
         }
     }
 

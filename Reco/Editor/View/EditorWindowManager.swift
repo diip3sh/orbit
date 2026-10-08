@@ -103,6 +103,17 @@ final class EditorWindowManager: NSObject {
         activate(window)
     }
 
+    /// A `.recostyle` file opened from Finder (spec 0004, S19): applied in the key editor window, or an open one;
+    /// with no editor open, only kept with the saved styles, where the next editor's Style menu lists it.
+    func importStyle(from url: URL) {
+        if let editor = editors.values.first(where: { $0.window.isKeyWindow }) ?? editors.values.first {
+            editor.viewModel.importStyle(from: url)
+            activate(editor.window)
+        } else {
+            try? StylePresetStore.save(StylePresetStore.read(from: url))
+        }
+    }
+
     /// Shows the Library, Reco's main window, or brings it forward (spec 0010).
     func showLibrary() {
         if let library {

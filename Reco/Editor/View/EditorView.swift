@@ -41,6 +41,12 @@ struct EditorView: View {
                 }
                 // The timeline leaves below the window's edge, not over it
                 .clipped()
+                // A `.recostyle` file dropped on the editor is kept with the saved styles and applied
+                .dropDestination(for: URL.self) { urls, _ in
+                    guard let url = urls.first(where: { $0.pathExtension == StylePreset.fileExtension }) else { return false }
+                    viewModel.importStyle(from: url)
+                    return true
+                }
                 // One inspector for both modes, so the column stays put and only its content changes: the
                 // editor's sections, or the export's options, which always show
                 .inspector(isPresented: export == nil ? $showsInspector : .constant(true)) {
@@ -122,6 +128,12 @@ struct EditorView: View {
             ToolbarItem(placement: .primaryAction) { Spacer() }
         }
         if export == nil {
+            ToolbarItem(placement: .primaryAction) {
+                StyleMenu(viewModel: viewModel)
+            }
+            if #available(macOS 26, *) {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button(action: openExport) {
                     Label("Export…", image: "button-export")

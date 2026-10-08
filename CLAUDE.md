@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 939 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 948 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -669,7 +669,8 @@ the recordings with pictures; a click opens one in the editor.
 | `Editor/Service/BackgroundImageLoader.swift` | Security-scoped bookmark to the chosen picture, read upright, in sRGB, at most 4096 px; returns the file it resolved to, so the inspector can ring the chosen wallpaper |
 | `Editor/Service/SystemWallpaper.swift` | The 13 desktop pictures macOS has on disk, with their thumbnails, listed off the main actor; chosen like any picture, through `setBackgroundImage` |
 | `Editor/View/SwatchGrid.swift`, `BackgroundFillControls.swift` | Five-column grid of 16:10 swatches with an accent ring on the chosen one (gradient presets, wallpapers); what each background kind is made of (presets and colors, color, wallpapers + Choose Image… + Blur) |
-| `Editor/ViewModel/EditorViewModel+Background.swift` | `applyGradient` (both colors, one undo step), `updateBackgroundImage(for:)` (the one place the picture is read, for load and every rebuild), the wallpaper list |
+| `Editor/ViewModel/EditorViewModel+Background.swift` | `updateBackgroundImage(for:)` (the one place the picture is read, for load and every rebuild), the wallpaper list |
+| `Editor/Model/StylePreset.swift`, `Editor/Service/StylePresetStore.swift`, `Editor/ViewModel/EditorViewModel+Styles.swift`, `Editor/View/StyleMenu.swift` | A saved look (S19): the preset and what it covers, its `.recostyle` files, the view model's apply/save/import/delete, the toolbar menu |
 | `Editor/Model/ExportSettings.swift`, `Editor/View/ExportOptions.swift` | Format, quality, size (a shorter side: 720, 1080, 2160, only those under the canvas's) and frame rate (15, 30, 60, not above the recording's; a GIF's at most 30: 60 fps delays are 1 or 2 cs, which browsers slow to 10 cs); the quality's estimated sizes |
 
 Key facts:
@@ -775,6 +776,18 @@ Key facts:
   a color-managed context; SDR took 3–3.5 in the same runs. Converting the backdrop costs 9–11 ms
   more per HDR plan (20 the first time), alongside the camera and cursor. The composition is
   tagged BT.2020 and the recording's PQ or HLG; GIF exports are SDR.
+- **Style presets** (S19, 2026-10-08; the toolbar's **Style** menu, before Export…): a `StylePreset` is a project's look
+  without its content, the canvas, cursor, clicks, keystrokes, zoom motion and motion blur (cuts, speeds, zooms, masks,
+  the crop and the audio mix belong to the recording and stay out), saved under a name as a `.recostyle` file (JSON, v1,
+  `UnsupportedVersionError` for others, missing settings take their defaults) in `Application Support/com.diip3sh.Reco/Styles/`
+  (`StylePresetStore`: one file per name, `/` and `:` replaced, listed by name). The menu ticks the style the project
+  looks like (`currentStyle`, `matches`), applies one in one undo step ("Apply Style", `preset.applied(to:)`; a picture
+  background's bookmark reloads through the normal rebuild), **Save Current Style…** (an alert with the name; the same
+  name replaces), **Import Style…** (a file picker), **Share "name"…** (`ShareLink` with the store's file: AirDrop, Mail…)
+  and **Delete Style**. The type `com.diip3sh.reco.style` is declared in `Info.plist`, so a `.recostyle` opened from Finder
+  reaches `application(_:open:)` → `EditorWindowManager.importStyle(from:)`: applied in the key editor, or only kept with
+  the saved styles when none is open; dropped on the editor (`dropDestination` for URLs) it's imported the same way.
+  Each editor reads the list when it opens and after its own changes; another window's save shows up in the next editor.
 
 ### S1 — Editor design (`feat/editor-shell`)
 

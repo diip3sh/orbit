@@ -11,8 +11,8 @@ Reference repos checked against the live GitHub API: `syi0808/screenize`, `imbha
 > **Status (2026-10-08).** This audit describes the app before the fork's work; the rest of this document is kept as
 > written. Since then: the app is no longer sandboxed (spec 0007), records input telemetry (F1, F2), and has an editor
 > (spec 0003), screenshots with the Quick Access card, and web recordings (spec 0005). Of the Screen Studio items in
-> section 4, S1–S10, S15, S16 and S18 are built; S11 is partial (canvas shapes, no auto reframing); S12 (N19), S13 (N4),
-> S14 (N5), S17 and S19 are not started. Open work is tracked in `docs/specs/0004-next-features.md`.
+> section 4, S1–S10, S13 (N4), S15, S16, S18 and S19 are built; S11 is partial (canvas shapes, no auto reframing); S12
+> (N19), S14 (N5) and S17 are not started. Open work is tracked in `docs/specs/0004-next-features.md`.
 
 - Reco at the time of the audit was a **very solid capture core** (ScreenCaptureKit + AVAssetWriter): pro codecs (ProRes 422/4444, HEVC alpha), HDR10, constant-frame-rate writer, separate audio tracks, area selection, Presenter Overlay, global shortcuts, URL scheme. It has **zero post-processing**: no editor, no zoom, no cursor effects, no screenshots, no annotation.
 - Screen Studio's value is the **automatic editor** (auto-zoom, cursor smoothing, backgrounds). CleanShot X's value is the **screenshot workflow** (quick-access overlay, annotate, scrolling capture, OCR, cloud links). Neither exists here yet.
