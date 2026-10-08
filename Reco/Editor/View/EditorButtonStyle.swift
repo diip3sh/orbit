@@ -7,9 +7,10 @@
 
 import SwiftUI
 
-/// Reco's two text buttons, solid with a 6 pt radius. The primary one is the accent fill with `onAccent` text, for the
-/// one action a place leads to (Export, Render, Share, Save). The secondary one is the control fill with a hairline
-/// edge and ink text, for everything else. Icons come from a `Label`; the `ButtonIcons` set in the asset catalog
+/// Reco's two text buttons. The primary one, for the one action a place leads to (Export, Render, Share, Save), is a
+/// capsule of Liquid Glass tinted with the accent fill and `onAccent` text on macOS 26, the solid accent fill before
+/// that and with Reduce Transparency. The secondary one is the control fill with a 6 pt radius, a hairline edge and
+/// ink text, for everything else. Icons come from a `Label`; the `ButtonIcons` set in the asset catalog
 /// draws them.
 struct EditorButtonStyle: ButtonStyle {
     enum Role {
@@ -33,9 +34,15 @@ private struct EditorButton: View {
     let role: EditorButtonStyle.Role
 
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceTransparency) private var reducesTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
     @State private var isHovered = false
 
-    private var shape: RoundedRectangle { .rect(cornerRadius: EditorTheme.smallRadius) }
+    private var secondaryShape: RoundedRectangle { .rect(cornerRadius: EditorTheme.smallRadius) }
+
+    private var shape: AnyShape {
+        role == .primary ? AnyShape(.capsule) : AnyShape(secondaryShape)
+    }
 
     var body: some View {
         configuration.label
@@ -60,11 +67,22 @@ private struct EditorButton: View {
         let isLit = isEnabled && (isHovered || configuration.isPressed)
         switch role {
         case .primary:
-            shape.fill(isLit ? EditorTheme.primaryHover : EditorTheme.primary)
+            if #available(macOS 26, *), !reducesTransparency {
+                // Interactive glass answers the pointer and the press itself
+                Color.clear
+                    .glassEffect(.regular.tint(EditorTheme.primary).interactive(isEnabled), in: .capsule)
+                    // Comes and goes with its panel, without glass's own grow on top
+                    .glassEffectTransition(.identity)
+                if contrast == .increased {
+                    Capsule().strokeBorder(EditorTheme.hairline)
+                }
+            } else {
+                Capsule().fill(isLit ? EditorTheme.primaryHover : EditorTheme.primary)
+            }
         case .secondary:
-            shape.fill(EditorTheme.control)
-            shape.fill(EditorTheme.ink.opacity(isLit ? 0.06 : 0))
-            shape.strokeBorder(EditorTheme.hairline)
+            secondaryShape.fill(EditorTheme.control)
+            secondaryShape.fill(EditorTheme.ink.opacity(isLit ? 0.06 : 0))
+            secondaryShape.strokeBorder(EditorTheme.hairline)
         }
     }
 }
