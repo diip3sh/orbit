@@ -382,7 +382,9 @@ extension AgentRecordingViewModelTests {
 
         let prompt = try #require(calls.arguments.first?[1])
         #expect(prompt.hasPrefix("Make a launch video of this product with Reco: https://linear.app"))
-        #expect(prompt.contains(AgentRecordingRequest.launchPlaybook))
+        #expect(prompt.contains("load the \(AgentSkill.launchFilmName) skill with the Skill tool"))
+        // Claude Code finds Reco's skill in its run's folder, and may use the Skill tool
+        #expect(calls.arguments.first?.contains("WebSearch,WebFetch,Skill") == true)
         #expect(model.phase == .idle)
         #expect(recorded?.movie.path() == "/tmp/Linear.motion")
         #expect(recorded?.conversation.map(\.text) == [AgentRecordingRequest.defaultLaunchInstructions, "A 30 s launch video of Linear."])

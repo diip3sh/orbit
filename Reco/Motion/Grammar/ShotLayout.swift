@@ -30,6 +30,11 @@ nonisolated enum ShotLayout {
         /// The UI assets' sizes in CSS pixels, for those already lifted or measured.
         let sizes: [String: CGSize]
 
+        /// The document's assets by id, and the shots of the scenes before this one: a macro whose field
+        /// was typed into earlier shows it typed.
+        var assets: [String: MotionAsset] = [:]
+        var earlierShots: [MotionShot] = []
+
         var size: CGSize {
             canvas.size
         }
@@ -41,6 +46,7 @@ nonisolated enum ShotLayout {
         case .title: title(shot, in: context)
         case .uiHero: uiHero(shot, in: context)
         case .uiFocus: uiFocus(shot, in: context)
+        case .macro: macro(shot, in: context)
         case .uiCascade: uiCascade(shot, in: context)
         case .featureSequence: featureSequence(shot, in: context)
         case .endCard: endCard(shot, in: context)
@@ -48,7 +54,8 @@ nonisolated enum ShotLayout {
         }
         // Drift and cut: every shot drifts, the cuts hiding its start and stop; but the ending, and a
         // feature sequence, whose captions hold still while its UI moves
-        if context.canvas.pacing == .driftAndCut, !shot.kind.isEnding, shot.kind != .featureSequence {
+        // A macro's camera is its own: it holds, creeps and whips
+        if context.canvas.pacing == .driftAndCut, !shot.kind.isEnding, ![.featureSequence, .macro].contains(shot.kind) {
             var drift = MotionMove(.drift)
             drift.direction = context.index.isMultiple(of: 2) ? .right : .left
             layout.camera.moves.insert(drift, at: 0)

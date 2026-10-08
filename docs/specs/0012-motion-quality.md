@@ -190,7 +190,7 @@ How studios derive the register:
   - Kenney SFX are CC0.
 
   So we bundle a small CC0 SFX set, take music from the user (a file) or a source whose licence
-  covers ads, decided in the Q5 open question.
+  covers ads, decided in the Q5 open question. (Superseded: spec 0013 generates every sound.)
 
 ### Agent wiring (verified 2026-10-07)
 
@@ -237,7 +237,7 @@ re-run from their address and the frames compared with the previous round's (kep
 | Q2 - Look: fields, light, grain, 10-bit | M | Fields picked; build todo |
 | Q3 - Motion: reel, rhythm, camera, blur, masks, registers, seams | L | Todo |
 | Q4 - Direction: skill files, storyboard, critic | M | Todo |
-| Q5 - Sound: SFX and music on the picture | M | Todo (absorbs 0011 phase 5) |
+| Q5 - Sound: SFX and music on the picture | M | Moved to spec 0013 |
 | Q6 - New shots and the blind test | M | Todo |
 
 **Order of work:**
@@ -442,6 +442,48 @@ re-run from their address and the frames compared with the previous round's (kep
   `~/Movies/Reco/quality/port/supabase-docs-film-engine.mp4` and `engine-over-film.mp4`. Next: the
   user's verdict on the engine's film; then the agent writing such documents (the grammar's names
   for these shots, the playbook) and the finish (10-bit, levels).
+- 2026-10-08: L4 and Q4 for the Raycast look. The user found the agent's Linear film (Linear 6:
+  plain black, cards sliding in, centred titles) "very basic" next to the Supabase film, and asked for
+  the app to make films like it, with the shader ground, motion that makes sense from shot to shot, and
+  a skill the in-app agent loads when it wants. What was built:
+  - **`macro`.** One control so close the frame cuts it off. Its `view`s are what the frame shows, in
+    CSS px from the element's top-left corner. The camera frames each, holds, creeps 3 % closer and
+    whips (0.35 s on (0.7, 0, 0.15, 1)) to the next.
+    - The video's first scene opens on 1 s of ground, then pulls back 4.5 %.
+    - A typing asset types 0.65 s after it shows, or is shown typed when an earlier macro typed the
+      same text.
+    - A `select` asset steps through its results and back, as the film did.
+  - **A `whip` seam**, the camera streaking across the cut; the `whip` camera move.
+  - **Typing into mockups.** Marketing pages draw prompt boxes that aren't fields: Reco empties one and
+    types into it, measuring the caret from the laid-out text.
+  - **The `material` lint.**
+  - **`inspect_page` `selectors`.**
+  - **The `reco-launch-film` skill.**
+    - What it holds: the bar, the never-list, finding the product's real moments, assets, shots, timing,
+      style, checking, and chat changes.
+    - How it reaches agents: copied into Claude Code's run folder with the Skill tool allowed, or put in
+      the prompt for other agents.
+    - The launch playbook it replaces is deleted.
+
+  The approved film rebuilt from four macro shots and its closing, without one camera keyframe, frames
+  as the film did; only the page's whip lands 0.6 s later, holds being even.
+
+  The first linear.app run from the address alone (Launch Video, no instructions, Claude Code) took
+  9.2 min and made a 31.5 s 4K film (`~/Movies/Reco/Linear 7-edited.mp4`):
+  - the homepage's prompt mockup typed "@Linear create issues and assign to me";
+  - whips across the issue board, an issue, and its diff;
+  - a nine-word closing.
+
+  Everything is on glass over satin, the type 4–8 % of the frame's height and sharp. Two flaws, fixed
+  after it:
+  - The caret fell a third behind the mockup's text: its computed font isn't what draws it.
+  - It opened on the empty mockup, a dark box with a caret: the skill now opens on an empty field only
+    when something in it reads.
+
+  The next run (Linear 8) put the caret 13 px above the text before the first key: an empty line has no
+  height, so the empty inline box sat at its top. A zero-width space now stands in while it's measured.
+  The run after (Linear 9, 6.9 min, 32.3 s) is clean: it opens on the empty prompt with its toolbar,
+  types with the caret on the text's end, and tours the board, an issue the agent took and its diff.
 
 ### Direction (picked 2026-10-07)
 
@@ -759,6 +801,11 @@ Built and checked one at a time against the films' frames, side by side, with a 
 
 ### Q4 - Direction (M)
 
+- **Built first (2026-10-08):** one skill, `reco-launch-film`, for the approved Raycast look
+  (`Reco/AgentRecording/Skills/`). It is copied to `AgentRun/.claude/skills/` for Launch Video runs and
+  motion chats, with `Skill` added to `--tools` and `--allowedTools`. `--setting-sources project` isn't
+  used: it hid the user's personal skills, but it would also drop their settings. The five skills below
+  wait for a second look to direct.
 - **Skills.** Shipped in the app (`Reco/AgentRecording/Skills/`) and copied into
   `AgentRun/.claude/skills/` before each run, like `reco-mcp.json`. The run gets
   `--tools WebSearch,WebFetch,Skill,Read`, `--allowedTools … Skill "Read(./.claude/skills/**)"`
@@ -784,18 +831,8 @@ Built and checked one at a time against the films' frames, side by side, with a 
 
 ### Q5 - Sound (M)
 
-- **SFX.** A bundled CC0 set (Kenney, about 40 files: whooshes, ticks, impacts, risers, keys),
-  placed by rule:
-  - whooshes peak at a move's speed peak;
-  - clicks land on the press frame;
-  - typing gets keys;
-  - repeats alternate between two samples and step down in volume;
-  - AAC priming is compensated.
-- **Music.** A file the user drops in, or none. Spec 0011 phase 5's onset and beat tracking moves
-  here. Snapping seams 1–2 frames before beats is per document.
-- **Mix.** Loudness to −14 LUFS integrated.
-- **Done when:** sounds land within 1 frame of their events in the exported file (measured), and
-  the mix measures −14 ± 1 LUFS.
+Moved to spec 0013 (motion sound), which replaces the bundled CC0 effects with sound generated on device from
+the plan's events, after Raycast's measured soundtrack and the Supabase film's six rounds with the user.
 
 ### Q6 - New shots and the blind test (M)
 

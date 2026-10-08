@@ -21,10 +21,10 @@ nonisolated struct MotionMove: Equatable, Sendable {
         // Groups: their layers one after another
         case cascade
         // Cameras
-        case hold, push, pan, pullBack, drift
+        case hold, push, pan, pullBack, drift, whip
 
         var isCamera: Bool {
-            [.hold, .push, .pan, .pullBack, .drift].contains(self)
+            [.hold, .push, .pan, .pullBack, .drift, .whip].contains(self)
         }
 
         var needsText: Bool {
@@ -44,7 +44,8 @@ nonisolated struct MotionMove: Equatable, Sendable {
 
     var duration: Double?
 
-    /// How far or how much, 1 for the grammar's own amount; for a pan, how much closer it ends.
+    /// How far or how much, 1 for the grammar's own amount; for a pan, how much closer it ends; for a
+    /// whip, how much closer than where it starts.
     var intensity: Double?
 
     /// Where a drift, a slide in or an exit goes.
@@ -56,7 +57,7 @@ nonisolated struct MotionMove: Equatable, Sendable {
     /// What a focus frames, in fractions of the layer from its top-left corner.
     var region: CGRect?
 
-    /// Where a pan ends, the point the camera looks at in canvas pixels; coded `to`.
+    /// Where a pan or a whip ends, the point the camera looks at in canvas pixels; coded `to`.
     var target: CGPoint?
 
     init(_ kind: Kind, start: Double? = nil, duration: Double? = nil) {
@@ -87,7 +88,7 @@ nonisolated extension MotionMove {
         case let kind where kind.needsText && !isText: return "\(kind.rawValue) needs a text layer."
         case .cascade where !isGroup: return "cascade needs a group: its layers enter one after another."
         case .roll where words?.isEmpty ?? true: return "roll needs words."
-        case .pan where target == nil: return "pan needs to: the point to look at."
+        case .pan where target == nil, .whip where target == nil: return "\(kind.rawValue) needs to: the point to look at."
         case .focus where !(region.map { CGRect(x: 0, y: 0, width: 1, height: 1).contains($0) && !$0.isEmpty } ?? false):
             return "focus needs a region inside the layer, in fractions of its size."
         default: return nil

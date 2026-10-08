@@ -93,7 +93,8 @@ enum UILiftScript {
     /// element's top-left corner: `{row: [x, y, width, height], end, line, fontSize, selected, box: [x,
     /// y, width, height]}`, or `null`. The row is the field's first ancestor across nine tenths of the
     /// element's width (or the element), as wide as the element: what typing changes, apart from results
-    /// under it. `end` is where its text ends now, `line` its centre line, `selected` the selected
+    /// under it. `end` is where its text ends now (laid out, in a mockup), `line` the centre line of the
+    /// field or of its last line of text, `selected` the selected
     /// result's centre line (`aria-selected` or cmdk's `data-selected`), if any; `box` the element in the
     /// viewport.
     static let field = #"""
@@ -108,12 +109,58 @@ enum UILiftScript {
     const context = document.createElement('canvas').getContext('2d');
     context.font = style.font;
     const place = input.getBoundingClientRect();
-    const text = 'value' in input ? input.value : input.textContent;
     const start = place.x + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft) - (input.scrollLeft || 0);
+    let end = start + ('value' in input ? context.measureText(input.value).width : 0);
+    let line = place.y + place.height / 2;
+    if (!('value' in input)) {
+      // Laid-out text, not a font's guess: a mockup's computed font may not be what draws it (on linear.app the
+      // caret fell a third behind the text). Empty, a zero-width space stands in, or the line is the empty
+      // inline box's top (13 px above linear.app's text)
+      const probe = input.textContent ? null : input.appendChild(document.createTextNode('\u200b'));
+      const range = document.createRange();
+      range.selectNodeContents(input);
+      const last = [...range.getClientRects()].filter(rect => rect.height > 0).pop();
+      if (last) [end, line] = [probe ? last.left : last.right, last.y + last.height / 2];
+      probe?.remove();
+    }
     const chosen = element.querySelector('[aria-selected="true"], [data-selected="true"]')?.getBoundingClientRect();
-    return { row: [0, band.y - box.y, box.width, band.height], end: start + context.measureText(text).width - box.x,
-             line: place.y + place.height / 2 - box.y, fontSize: parseFloat(style.fontSize),
+    return { row: [0, band.y - box.y, box.width, band.height], end: end - box.x,
+             line: line - box.y, fontSize: parseFloat(style.fontSize),
              selected: chosen ? chosen.y + chosen.height / 2 - box.y : null, box: [box.x, box.y, box.width, box.height] };
+    """#
+
+    /// Readies a mockup for typing: when the field `field` inside the element `selector` matches isn't one
+    /// a person types into (a marketing page's drawing of a prompt box), empties it, keeping its height and
+    /// laying its text out as a text field does, and marks it, so ``typeMockup`` adds the text a character at a time and ``restoreMockup`` puts it
+    /// back for the page's other lifts. `false` for a real field.
+    static let clearMockup = #"""
+    const input = document.querySelector(selector)?.querySelector(field);
+    if (!input || input.matches('input, textarea') || input.isContentEditable) return false;
+    input.__recoMockup = { html: input.innerHTML, style: input.getAttribute('style') };
+    input.style.minHeight = `${input.getBoundingClientRect().height}px`;
+    // Spaces kept as a field keeps them, so the caret moves on at a space
+    input.style.whiteSpace = 'pre-wrap';
+    input.textContent = '';
+    input.setAttribute('data-reco-mockup', '');
+    return true;
+    """#
+
+    /// Puts back what ``clearMockup`` emptied.
+    static let restoreMockup = #"""
+    const input = document.querySelector('[data-reco-mockup]');
+    if (!input) return false;
+    input.innerHTML = input.__recoMockup.html;
+    input.__recoMockup.style === null ? input.removeAttribute('style') : input.setAttribute('style', input.__recoMockup.style);
+    input.removeAttribute('data-reco-mockup');
+    return true;
+    """#
+
+    /// Adds `text` to the end of the mockup ``clearMockup`` readied.
+    static let typeMockup = #"""
+    const input = document.querySelector('[data-reco-mockup]');
+    if (!input) return false;
+    input.append(text);
+    return true;
     """#
 
     /// Presses the down arrow in the field `selector` matches, as cmdk's lists take it: a key down and up

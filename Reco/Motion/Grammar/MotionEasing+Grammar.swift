@@ -25,6 +25,9 @@ nonisolated extension MotionEasing {
     /// the way by mid-time (17 moves measured).
     static let move = MotionEasing.cubicBezier(0.5, 0, 0.2, 1)
 
+    /// A whip: slow off, a streak, slow in; the approved film's keyframes to its code block.
+    static let whip = MotionEasing.cubicBezier(0.7, 0, 0.15, 1)
+
     /// Framer's pull-back: from full speed on a cut, half done at 0.65 s, 90% at 2.55 s.
     static let longSettle = MotionEasing.settle(timeConstant: 0.9)
 }

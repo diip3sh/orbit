@@ -335,3 +335,32 @@ struct DebugShotTests {
         print("LAB WROTE \(url.lastPathComponent) \(cgImage.width)x\(cgImage.height)")
     }
 }
+
+@MainActor
+struct DebugMacroTests {
+
+    /// The approved film rebuilt from macro shots alone (`macro/document.json`), on the film's own lifts.
+    @Test func macroFilm() async throws {
+        let root = URL(filePath: DebugShotTests.scratch + "/macro")
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(contentsOf: root.appending(path: "document.json")))
+        try document.validate()
+        let bundle = root.appending(path: "Film.motion")
+        try Data(contentsOf: root.appending(path: "document.json")).write(to: MotionStore.documentURL(in: bundle))
+        let plan = await MotionPlan.build(document, bundle: bundle, shorterSide: 1080, frameRate: 30)
+        print("LAB MACRO lifts needed \(plan.liftsNeeded)")
+        let context = CIContext(options: [.workingColorSpace: NSNull()])
+        let srgb = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        for time in [0.5, 2.0, 3.0, 4.5, 6.0, 8.0, 9.5, 10.6, 11.9, 12.1, 13.6] {
+            let image = try #require(context.createCGImage(MotionFrameRenderer.image(at: time, plan: plan), from: CGRect(origin: .zero, size: plan.outputSize), format: .RGBA8, colorSpace: srgb))
+            try await ScreenshotService.writePNG(image, to: root.appending(path: "still-\(time).png"))
+        }
+        if ProcessInfo.processInfo.environment["LAB_EXPORT"] != nil {
+            var settings = ExportSettings()
+            settings.resolution = 1080
+            settings.frameRate = 30
+            let url = try await MotionExporter.export(document, bundle: bundle, settings: settings) { _ in }
+            print("LAB MACRO exported \(url.path())")
+        }
+        print("LAB MACRO done")
+    }
+}

@@ -142,3 +142,48 @@ struct AgentInvocationTests {
         }
     }
 }
+
+// MARK: - Reco's skill
+
+extension AgentInvocationTests {
+
+    /// A launch film's run gets Reco's method as a skill in its folder and the Skill tool to load it; a
+    /// walkthrough's run gets neither. Agents without skills read the method in their prompt.
+    @Test func aMotionRunGivesClaudeCodeRecosSkill() throws {
+        var launch = try request(.claudeCode)
+        launch.mode = .launch
+        let run = try #require(AgentInvocation.make(for: launch, in: directory, server: server))
+        #expect(run.files[AgentSkill.launchFilmPath] == AgentSkill.launchFilm)
+        #expect(run.arguments.contains("WebSearch,WebFetch,Skill"))
+        #expect(run.arguments.prefix { $0 != "--permission-mode" }.suffix(4) == ["mcp__reco__*", "WebSearch", "WebFetch", "Skill"])
+        #expect(launch.prompt.contains("load the reco-launch-film skill"))
+        #expect(!launch.prompt.contains(AgentSkill.launchFilmMethod))
+
+        let walkthrough = try invocation(.claudeCode)
+        #expect(walkthrough.files[AgentSkill.launchFilmPath] == nil)
+        #expect(!walkthrough.arguments.contains("Skill"))
+
+        var codex = try request(.codex)
+        codex.mode = .launch
+        #expect(codex.prompt.contains(AgentSkill.launchFilmMethod))
+        #expect(try #require(AgentInvocation.make(for: codex, in: directory, server: server)).files[AgentSkill.launchFilmPath] == nil)
+    }
+
+    /// The skill ships in the app: Claude Code's front matter, then the method.
+    @Test func theSkillIsBundledWithItsFrontMatter() {
+        #expect(AgentSkill.launchFilm.hasPrefix("---\nname: reco-launch-film\ndescription: "))
+        #expect(AgentSkill.launchFilmMethod.hasPrefix("# A launch film, Reco's way"))
+    }
+
+    /// The film the skill shows an agent is a document the grammar takes as it is, its colours as hex.
+    @Test func theSkillsFilmIsAValidDocument() throws {
+        let method = AgentSkill.launchFilmMethod
+        let start = try #require(method.range(of: "```json\n"))
+        let end = try #require(method.range(of: "\n```", range: start.upperBound..<method.endIndex))
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(method[start.upperBound..<end.lowerBound].utf8))
+        try document.validate()
+        #expect(document.canvas.field == .satin && document.canvas.frameRate == 30)
+        #expect(document.scenes.dropLast().allSatisfy { $0.shot?.kind == .macro })
+        #expect(MotionLint.findings(in: document).isEmpty)
+    }
+}

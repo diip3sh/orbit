@@ -37,6 +37,12 @@ nonisolated extension AgentToolCatalog {
         (a search dialog: before clicks its button, selector names the dialog).
 
         Scene: {id, duration, seam, shot, field (else the canvas's), layers, camera}. Shots and their slots (ui is an asset id):
+        - macro: ui and view, or items [{ui, view}] for several stops: one control so close the frame cuts it off (New \
+        Raycast; glass assets over satin). view [[x,y],[w,h]] is what the frame shows, in CSS px from the element's top-left \
+        corner (capture_ui gives sizes), roughly 16:9; smaller is closer, type 10–20% of the frame's height looks best; it may \
+        reach past the element. The camera frames each stop, creeps closer, and whips 0.35 s to the next; the video's first \
+        scene opens on 1 s of ground. A typing asset is typed 0.65 s after it shows (shown typed if an earlier macro typed \
+        it); one with select steps through its results and back, the camera following.
         - hook: text (6 words at most) over ui, the product dimmed.
         - title: text, detail (a line under it), items [{text}]: once the headline is in, its last word rolls through the \
         items' text, about 0.5 s each; each must complete the headline as its own phrase \
@@ -50,13 +56,13 @@ nonisolated extension AgentToolCatalog {
         - closing: text (the name), items [{text}] (the product's words, the last joining the name), detail (a line under \
         them), ui (the logo, shown alone last): New Raycast's ending in small mono caps, a word cut in every 0.42 s. Give it \
         0.42 s a word plus 4.5 s, 1.6 s more with ui; it's drawn on black.
-        Seams, how a scene begins: cut (most), cutOnMotion (carries the camera's speed on), zoomThrough, blurCut, push, fade \
-        (rare).
+        Seams, how a scene begins: cut (most), whip (the camera streaks out sideways and into the next scene, blurred), \
+        cutOnMotion (carries the camera's speed on), zoomThrough, blurCut, push, fade (rare).
         Moves {move, start, duration, intensity, direction, words, region, to}: text fadeUp, blurIn, blurWipe (letters sharpen \
         left to right), lineMask (lines rise out of a mask), wordByWord (words fade up one after another), type, roll (words: \
         the last word replaced in turn), exit; any layer rise, tilt, focus (region), detach, stateChange; a group cascade; \
-        the camera hold, push, pan (to [x,y] on the canvas, intensity the zoom it ends at), pullBack, drift (direction left, \
-        right, up, down). intensity 1 is the grammar's own amount.
+        the camera hold, push, pan (to [x,y] on the canvas, intensity the zoom it ends at), whip (to [x,y], intensity how much \
+        closer, 0.35 s), pullBack, drift (direction left, right, up, down). intensity 1 is the grammar's own amount.
 
         Operations: set_canvas {canvas}; set_style {style}; set_asset {asset} (adds, or replaces the same id); add_scene \
         {scene, index}; set_scene {id, duration, seam, shot, field} (shot replaces the shot); set_layer {id, layer} (a layer of the \
@@ -78,8 +84,8 @@ nonisolated extension AgentToolCatalog {
         "target":{"type":"string","description":"set_moves, remove: a layer id from the reply, or camera"},
         "index":{"type":"integer","description":"add_scene, move_scene: position from 0"},
         "canvas":{"type":"object"},"style":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
-        "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","cutOnMotion","zoomThrough","blurCut","push","fade"]},
-        "shot":{"type":"object","description":"{shot: hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard|closing, text, detail, ui, items, region}"},
+        "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade"]},
+        "shot":{"type":"object","description":"{shot: macro|hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard|closing, text, detail, ui, items, region, view}"},
         "field":{"type":"string","enum":["satin","plain"]},
         "moves":{"type":"array","items":{"type":"object"}}},
         "required":["op"],"additionalProperties":false}}},

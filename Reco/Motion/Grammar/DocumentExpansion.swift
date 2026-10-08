@@ -43,7 +43,11 @@ nonisolated enum DocumentExpansion {
         let scene = document.scenes[index]
         guard let shot = scene.shot else { return scene }
         var result = scene
-        let layout = ShotLayout.layout(shot, in: ShotLayout.Context(scene: scene, index: index, canvas: document.canvas, style: document.style, sizes: sizes))
+        let context = ShotLayout.Context(
+            scene: scene, index: index, canvas: document.canvas, style: document.style, sizes: sizes,
+            assets: Dictionary(document.assets.map { ($0.id, $0) }) { first, _ in first }, earlierShots: document.scenes[..<index].compactMap(\.shot)
+        )
+        let layout = ShotLayout.layout(shot, in: context)
         let shotLayers = layout.layers.map { layer in
             var layer = layer
             layer.moves = scene.shotMoves[layer.id] ?? layer.moves

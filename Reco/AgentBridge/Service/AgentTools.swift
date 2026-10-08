@@ -123,11 +123,12 @@ final class AgentTools {
     // MARK: - Tools
 
     private func inspect(_ arguments: Data) async throws -> PageInspection {
-        let script = try Self.decode(InspectPageRequest.self, from: arguments).validated()
+        let request = try Self.decode(InspectPageRequest.self, from: arguments)
+        let script = try request.validated()
         inspecting = script.url
         defer { inspecting = nil }
         return try await Self.withDeadline(Self.inspectLimit) {
-            try await WebPageRenderer(script: script).inspect(selectors: [])
+            try await WebPageRenderer(script: script).inspect(selectors: request.selectors ?? [])
         }
     }
 

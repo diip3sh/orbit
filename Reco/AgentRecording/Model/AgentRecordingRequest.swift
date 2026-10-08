@@ -91,31 +91,17 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         mode == .launch && take == nil ? Self.defaultLaunchInstructions : Self.defaultInstructions
     }
 
-    /// How a launch video is made (spec 0011, *Agent*): doctrine, not quotas. It says what good looks
-    /// like and forbids the tells; it never asks for a number of elements.
-    static let launchPlaybook = """
-        How to make it:
-        1. Research. Call inspect_page on the page and on one or two pages its product or features navigation links to (each \
-        call loads and measures a page: they're the slow part of research); if you have web search or fetch, read what the \
-        product says about itself. Write the pitch in one sentence: what it is, for \
-        whom, and what's new (the user's line first, if they gave one).
-        2. Script. A hook over the product in the first 3 s, six words at most, never a logo intro. Then four to six beats from the \
-        shot catalogue, each one idea: the product itself early (uiHero), its two or three strongest features shown on their real \
-        UI (uiFocus with a region, featureSequence, uiCascade), and an endCard with the name or logo and the address or call to \
-        action. At least half the time shows the product. 20 to 40 s in all. Copy is the product's own words, a few words a line: \
-        no hype words (revolutionary, seamless, unlock, supercharge), no exclamation marks, no questions to the viewer.
-        3. Style from inspect_page's brand: canvas background, style text, dim and accent, face. Pacing driftAndCut for calm, \
-        precise products; beats for playful, fast ones. Seams: cut most of the time, zoomThrough or cutOnMotion where the motion \
-        carries on, fade at most once.
-        4. UI. Assets from inspect_page's liftable on the pages you inspected: product screenshots, app mockups and feature \
-        cards, the largest that show the product; never a block of marketing text. Hide the page's overlays that cover them. \
-        At most one live asset (with steps), and none where inspect_page's render_cost at 2 is over 4: a take renders the page \
-        frame by frame, minutes on a heavy page. Write the whole video in one edit_motion call (a name, the style, the assets, \
-        the scenes), then capture_ui; fix an asset it can't capture with set_asset, or drop it.
-        5. Check. Call preview_motion and look at the picture: cut-off or overlapping text, an empty or wrong element, a frame \
-        that says nothing. Fix it and every finding in one edit_motion call, then preview again; stop after two previews.
-        6. Export with export_recording: the bundle, format h264, resolution 2160 (sharp 4K: the video is drawn, not scaled).
-        """
+    /// Whether the run makes or changes a motion video: it gets Reco's launch film skill.
+    var makesMotion: Bool {
+        motion != nil || (mode == .launch && take == nil)
+    }
+
+    /// How a launch film is made (``AgentSkill``): Claude Code loads the skill, other agents read it here.
+    private var launchMethod: String {
+        agent == .claudeCode
+            ? "Before anything else, load the \(AgentSkill.launchFilmName) skill with the Skill tool and follow it: it is how Reco makes a launch film."
+            : AgentSkill.launchFilmMethod
+    }
 
     /// How a motion video is changed from its window's chat.
     static let motionChangePlaybook = """
@@ -164,7 +150,7 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         return [
             "Make a launch video of this product with Reco: \(url.absoluteString)",
             "What the user said:\n" + (wanted.isEmpty ? Self.defaultLaunchInstructions : wanted),
-            Self.launchPlaybook,
+            launchMethod,
             """
             Use only the reco MCP tools (web search and fetch are for research). Don't ask questions; decide yourself. When it's \
             exported, reply in one or two short sentences with the pitch and what the video shows, without paths or selectors. \
@@ -185,6 +171,9 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         }
         parts.append("What the user asks now:\n" + wanted)
         parts.append(Self.motionChangePlaybook)
+        parts.append(agent == .claudeCode
+            ? "For anything beyond a small tweak (a new scene, a new look, making it better), load the \(AgentSkill.launchFilmName) skill with the Skill tool first."
+            : "For anything beyond a small tweak, this is how Reco makes a launch film:\n\n" + AgentSkill.launchFilmMethod)
         parts.append("""
             Use only the reco MCP tools. Don't ask questions; decide yourself. When it's done, reply in one or two short sentences \
             saying what changed, without paths. If it fails, reply with the error.

@@ -87,6 +87,14 @@ nonisolated enum MoveExpansion {
     /// Peak pan speed: 57% of the width a second (median of the reference films, 13–113).
     static let panSpeed = 0.57
 
+    /// How much closer a push ends, and a pull back starts, at intensity 1.
+    static let pushZoom = 0.12
+    static let pullBackZoom = 0.3
+
+    /// A whip: the approved film's camera to its code block, 0.35 s on a steep in-out, blurred by the
+    /// motion blur sampled across it.
+    static let whipDuration = 0.35
+
     static func timing(of move: MotionMove, in context: MoveContext) -> (start: Double, duration: Double) {
         let start = move.start ?? defaultStart(of: move.kind, in: context)
         return (start, move.duration ?? defaultDuration(of: move, start: start, in: context))
@@ -113,7 +121,7 @@ nonisolated enum MoveExpansion {
             add(.blur, 10 * unit * amount, 0, easing: .enter)
         case .exit:
             effect.tracks = exitTracks(of: move, start: start, duration: duration, in: context)
-        case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan:
+        case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan, .whip:
             // A roll and a cascade become other layers' moves (``DocumentExpansion``)
             break
         case .blurWipe, .lineMask, .wordByWord, .type:
@@ -174,9 +182,9 @@ nonisolated enum MoveExpansion {
         let amount = move.intensity ?? 1
         switch move.kind {
         case .push:
-            return [.scale: [ramp(.scale, (1, 1 + 0.12 * amount), start: start, duration: duration, easing: .move)]]
+            return [.scale: [ramp(.scale, (1, 1 + pushZoom * amount), start: start, duration: duration, easing: .move)]]
         case .pullBack:
-            return [.scale: [ramp(.scale, (1 + 0.3 * amount, 1), start: start, duration: duration, easing: .longSettle)]]
+            return [.scale: [ramp(.scale, (1 + pullBackZoom * amount, 1), start: start, duration: duration, easing: .longSettle)]]
         case .drift:
             // Constant speed: a steady pan and a slow push, in log space; slower in a long scene
             let slowing = min(1, longestDrift / (driftSpeed * max(context.sceneDuration, 1)))
@@ -188,6 +196,14 @@ nonisolated enum MoveExpansion {
             ]
         case .pan:
             return pan(to: move.target ?? context.lookAt, zoom: amount, start: start, duration: duration, in: context)
+        case .whip:
+            // Straight there, not along a zoom path: the frame streaks rather than pulling back to look
+            let target = move.target ?? context.lookAt
+            return [
+                .positionX: [ramp(.positionX, (0, target.x - context.lookAt.x), start: start, duration: duration, easing: .whip)],
+                .positionY: [ramp(.positionY, (0, target.y - context.lookAt.y), start: start, duration: duration, easing: .whip)],
+                .scale: [ramp(.scale, (1, amount), start: start, duration: duration, easing: .whip)]
+            ]
         default:
             return [:]
         }
@@ -232,6 +248,7 @@ nonisolated enum MoveExpansion {
         case .cascade: return 1.05
         case .push: return min(1.2, rest)
         case .pan: return panDuration(to: move.target ?? context.lookAt, zoom: move.intensity ?? 1, in: context)
+        case .whip: return whipDuration
         case .pullBack, .hold: return rest
         case .drift: return rest + driftOverrun
         }

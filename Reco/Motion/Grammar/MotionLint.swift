@@ -12,7 +12,7 @@ nonisolated enum MotionLint {
 
     nonisolated enum Rule: String, Sendable {
         case readingTime, textSize, safeArea, contrast, firstMove, simultaneousMoves, exitLength
-        case sceneLengths, typingRate, stillness, hookLength, endingLength, rollLength, busyField
+        case sceneLengths, typingRate, stillness, hookLength, endingLength, rollLength, busyField, material
     }
 
     nonisolated struct Finding: Equatable, Sendable {
@@ -54,6 +54,9 @@ nonisolated enum MotionLint {
                 }
             }
             findings += rollFindings(scene.layers, scene: scene)
+            if let shot = source.shot, shot.kind == .macro, (source.field ?? document.canvas.field) == .satin {
+                findings += materialFindings(shot, scene: scene.id, assets: document.assets)
+            }
             if let field = source.field, field.isBusy {
                 findings.append(Finding(rule: .busyField, scene: scene.id, message: "The \(field.rawValue) field competes with what's over it: use plain or satin."))
             }
@@ -71,6 +74,15 @@ nonisolated enum MotionLint {
             ))
         }
         return findings
+    }
+
+    /// UI in macro over satin is glass or bare: as the page paints it, its fill reads as a flat box cut out
+    /// of another picture (the L1 shot the user found "really bad" next to Raycast's).
+    private static func materialFindings(_ shot: MotionShot, scene: String, assets: [MotionAsset]) -> [Finding] {
+        let shown = Set(shot.stops.compactMap(\.asset))
+        return assets.filter { shown.contains($0.id) && $0.steps == nil && !$0.isBare }.map { asset in
+            Finding(rule: .material, scene: scene, message: "\"\(asset.id)\" shows over satin as the page paints it: set glass (a control, card or code) or bare (page text).")
+        }
     }
 
     // MARK: - Timing

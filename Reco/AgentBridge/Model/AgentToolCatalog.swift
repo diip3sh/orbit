@@ -45,11 +45,13 @@ nonisolated enum AgentToolCatalog {
                 through the page first, so content that loads on the way is listed too. Call it before record_page to get \
                 selectors to hover, click or scroll to, and on the page a click opens (its href) for the steps after that click. \
                 render_cost says how many seconds a second of video takes to render at scale 1 and 2 on this page: record at 2 \
-                (sharp when the video zooms in) unless that would take longer than the run allows.
+                (sharp when the video zooms in) unless that would take longer than the run allows. With selectors, boxes gives \
+                the box of the first element each matches: the parts of a panel a motion video frames.
                 """,
             schema: #"""
             {"type":"object","properties":{"url":{"type":"string","description":"Page address; https:// added if missing"},
-            "viewport":{"type":"string","enum":["desktop","laptop","tablet","phone"],"default":"desktop"}},
+            "viewport":{"type":"string","enum":["desktop","laptop","tablet","phone"],"default":"desktop"},
+            "selectors":{"type":"array","items":{"type":"string"},"description":"CSS selectors whose boxes to return"}},
             "required":["url"],"additionalProperties":false}
             """#
         ),

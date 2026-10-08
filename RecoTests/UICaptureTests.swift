@@ -148,6 +148,47 @@ struct UICaptureTests {
         #expect(!(0..<empty.height).contains { row in (0..<empty.width).contains { red($0, row) } })
     }
 
+    /// A marketing page's drawing of a prompt box: its text emptied and typed back a character at a time,
+    /// the caret's place measured each time, and the page left as it was for its other lifts.
+    @Test func typesIntoAMockupThatIsNoField() async throws {
+        let page = """
+        <!doctype html>
+        <html><body style="margin: 0; background: #fff">
+          <div id="box" style="width: 400px; padding: 16px; border-radius: 12px; background: rgb(34, 34, 34)">
+            <p style="margin: 0; color: #fff; font: 16px/40px sans-serif"><span id="prompt"><b>@Agent</b> plan the launch</span></p>
+          </div>
+        </body></html>
+        """
+        let pages = try await LocalPages.serving(["/": page])
+        let bundle = URL.temporaryDirectory.appending(path: "\(UUID().uuidString).motion")
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        var asset = MotionAsset(id: "box", url: pages.url("/"), selector: "#box", viewport: CGSize(width: 800, height: 600))
+        asset.typing = MotionAsset.Typing(field: "#prompt", text: "ship it")
+        var other = MotionAsset(id: "after", url: pages.url("/"), selector: "#prompt", viewport: CGSize(width: 800, height: 600))
+        other.bare = true
+        var document = MotionDocument()
+        document.assets = [asset, other]
+
+        try await UICapture.lift(["box": 2, "after": 2], of: document, into: bundle)
+
+        let typing = try #require(UILiftCache.typing(asset, in: bundle))
+        #expect(typing.ends.count == 8)
+        #expect(zip(typing.ends, typing.ends.dropFirst()).allSatisfy { $0 < $1 })
+        // Empty, the caret sits where the text starts, the box's padding; typed, where the laid-out text
+        // ends: "ship it" in 16 px sans-serif is about 50 px
+        #expect(abs(typing.ends[0] - 16) < 1)
+        #expect((40...70).contains(typing.ends[7] - 16))
+        // On the text's line, not the empty inline box's top (a line with nothing in it has no height): 16 px
+        // padding, then half the 40 px line
+        #expect((33...39).contains(typing.line))
+        for length in 1...7 {
+            #expect(FileManager.default.fileExists(atPath: UILiftCache.typedURL(of: asset, length: length, scale: 2, in: bundle).path(percentEncoded: false)))
+        }
+        // The page's own text came back for the next lift: wider than "ship it" alone
+        let after = try #require(UILiftCache.best(other, in: bundle))
+        #expect(after.size.width > typing.ends[7] - 16 + 40)
+    }
+
     /// A region lifts only that part of the element: the top of a long article.
     @Test func liftsARegionOfALongElement() async throws {
         let pages = try await LocalPages.serving(["/": Self.page])

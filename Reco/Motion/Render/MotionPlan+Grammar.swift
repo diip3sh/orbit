@@ -16,6 +16,10 @@ extension MotionPlan {
         context.lookAt = CGPoint(x: scene.cameraBase[.positionX] ?? 0, y: scene.cameraBase[.positionY] ?? 0)
         return moves.reduce(into: [:]) { tracks, move in
             tracks.merge(MoveExpansion.effect(of: move, in: context).tracks) { $0 + $1 }
+            // A move after a whip starts where it looks: a macro's whips go from stop to stop
+            if move.kind == .whip, let target = move.target {
+                context.lookAt = target
+            }
         }
     }
 
@@ -23,15 +27,24 @@ extension MotionPlan {
     nonisolated static func addSeams(of document: MotionDocument, to scenes: inout [Scene]) {
         for index in scenes.indices.dropFirst() {
             let (before, after) = (document.scenes[index - 1], document.scenes[index])
+            let canvas = document.canvas.size
             let effect = SeamExpansion.effect(
-                of: after.seam, outgoingDuration: before.duration, canvas: document.canvas.size,
-                hasText: hasText(before.layers) || hasText(after.layers), velocity: velocity(atEndOf: scenes[index - 1])
+                of: after.seam, outgoingDuration: before.duration, canvas: canvas,
+                hasText: hasText(before.layers) || hasText(after.layers), velocity: velocity(atEndOf: scenes[index - 1]),
+                zooms: (magnification(of: scenes[index - 1], at: before.duration, canvas: canvas), magnification(of: scenes[index], at: 0, canvas: canvas))
             )
             scenes[index - 1].cameraMoves.merge(effect.outgoing) { $0 + $1 }
             scenes[index].cameraMoves.merge(effect.incoming) { $0 + $1 }
             scenes[index].transition = effect.transition
             scenes[index - 1].overlap = effect.transition?.duration ?? 0
         }
+    }
+
+    /// How many times larger than from rest the camera shows the canvas.
+    nonisolated private static func magnification(of scene: Scene, at time: Double, canvas: CGSize) -> Double {
+        CameraProjection(
+            lookAt: .zero, dolly: scene.cameraValue(.positionZ, at: time), canvas: canvas, zoom: max(scene.cameraValue(.scale, at: time), 0.01)
+        ).magnification
     }
 
     /// The camera's speed over the scene's last 1/120 s.

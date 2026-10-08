@@ -41,6 +41,7 @@ extension UICapture {
         } catch {
             lifted = .failure(error)
         }
+        _ = try await webView.callAsyncJavaScript(UILiftScript.restoreMockup, arguments: [:], contentWorld: .defaultClient)
         _ = try await webView.callAsyncJavaScript(UILiftScript.isolate, arguments: arguments.merging(["on": false]) { $1 }, contentWorld: .defaultClient)
         try JSONEncoder().encode(try lifted.get()).write(to: UILiftCache.typingURL(of: asset, in: bundle), options: .atomic)
         try JSONEncoder().encode(UILiftCache.Shape(radius: placed.radius)).write(to: UILiftCache.shapeURL(of: asset, in: bundle), options: .atomic)
@@ -52,17 +53,21 @@ extension UICapture {
         _ typing: MotionAsset.Typing, of asset: MotionAsset, at scale: Int, from webView: WKWebView, into bundle: URL
     ) async throws -> UILiftCache.Typing {
         let selector = "\(asset.selector) \(typing.field)"
+        let mockup = try await webView.callAsyncJavaScript(
+            UILiftScript.clearMockup, arguments: ["selector": asset.selector, "field": typing.field], contentWorld: .defaultClient
+        ) as? Bool == true
         let empty = try await measure(typing, of: asset, in: webView)
         let base = try await snapshot(empty.box, at: scale, from: webView)
         var lifted = UILiftCache.Typing(row: empty.row, ends: [empty.end], line: empty.line, fontSize: empty.fontSize, settled: [], heights: [])
         let words = Set(HumanTyping.settledLengths(of: typing.text))
         for (index, character) in typing.text.enumerated() {
-            _ = try await webView.callAsyncJavaScript(WebTypeScript.source, arguments: ["selector": selector, "text": String(character)], contentWorld: .defaultClient)
+            let key = mockup ? UILiftScript.typeMockup : WebTypeScript.source
+            _ = try await webView.callAsyncJavaScript(key, arguments: ["selector": selector, "text": String(character)], contentWorld: .defaultClient)
             let length = index + 1
             // At the video's pace, so the page keeps up as it would with a person (typed faster, Supabase's
             // results kept an older selection); a word's results come from the network, so they're waited
-            // for: Supabase's took over 0.5 s with nothing changing on the page meanwhile
-            if words.contains(length) {
+            // for: Supabase's took over 0.5 s with nothing changing on the page meanwhile. A mockup has none
+            if words.contains(length), !mockup {
                 try await Task.sleep(for: .seconds(1.2))
                 try await settle(webView, quiet: 0.6, most: 6)
             } else {

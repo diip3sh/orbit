@@ -96,11 +96,17 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
             // --tools and --allowedTools take any number of values, so the prompt goes right after -p.
             // Reco's server from a file in the run's folder, not the command line, which other users see
             files[serversFile] = servers(server, for: .claudeCode)
-            // Web search and fetch too, for the research a walkthrough starts with; both only read
-            arguments = ["-p", prompt, "--tools", "WebSearch,WebFetch", "--allowedTools", "mcp__reco__*", "WebSearch", "WebFetch",
-                         "--permission-mode", "dontAsk",
-                         "--no-session-persistence", "--mcp-config", directory.appending(path: serversFile).path(percentEncoded: false),
-                         "--strict-mcp-config"] + option("--model") + ["--output-format", "text"]
+            // Web search and fetch too, for the research a walkthrough starts with; both only read. A motion
+            // video's run gets Reco's skill in its folder and the Skill tool, which --tools would otherwise hide
+            let skill = request.makesMotion ? ["Skill"] : []
+            if request.makesMotion {
+                files[AgentSkill.launchFilmPath] = AgentSkill.launchFilm
+            }
+            let tools = ["WebSearch", "WebFetch"] + skill
+            arguments = ["-p", prompt, "--tools", tools.joined(separator: ","), "--allowedTools", "mcp__reco__*"] + tools
+                + ["--permission-mode", "dontAsk", "--no-session-persistence",
+                   "--mcp-config", directory.appending(path: serversFile).path(percentEncoded: false), "--strict-mcp-config"]
+                + option("--model") + ["--output-format", "text"]
         case .codex:
             arguments = ["exec", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only",
                          "-c", #"mcp_servers.reco.default_tools_approval_mode="approve""#] + option("-m") + [prompt]

@@ -10,6 +10,9 @@ nonisolated struct InspectPageRequest: Codable, Equatable, Sendable {
     var url: String
     var viewport: String?
 
+    /// Elements whose boxes to return as `boxes`: the parts of a panel a motion video frames.
+    var selectors: [String]?
+
     /// A script for the page at the requested viewport, or why there is none.
     func validated() throws(AgentToolError) -> WebScript {
         var script = WebScript()

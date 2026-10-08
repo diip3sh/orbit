@@ -45,12 +45,21 @@ nonisolated enum SeamExpansion {
     /// How long a carried-over speed takes to settle.
     static let carryTimeConstant = 0.45
 
+    /// A whip leaves over the scene's last 0.15 s, half a frame's width, and arrives over 0.45 s from 0.8
+    /// of one: speeds that meet at the cut (about ten widths a second), each sampled into motion blur.
+    static let whipOut = (duration: 0.15, travel: 0.5)
+    static let whipIn = (duration: 0.45, travel: 0.8)
+
     /// - Parameters:
     ///   - outgoingDuration: The scene before's length.
     ///   - hasText: Whether either scene shows text: a blur across the cut stays within 10 px on
     ///     text, 18 on surfaces.
     ///   - velocity: The camera's at the end of the scene before.
-    static func effect(of seam: MotionSeam, outgoingDuration: Double, canvas: CGSize, hasText: Bool, velocity: Velocity) -> Effect {
+    ///   - zooms: How magnified each side's camera shows the canvas where they meet: a whip's travel is a
+    ///     share of the frame, whatever the zoom.
+    static func effect(
+        of seam: MotionSeam, outgoingDuration: Double, canvas: CGSize, hasText: Bool, velocity: Velocity, zooms: (outgoing: Double, incoming: Double) = (1, 1)
+    ) -> Effect {
         let unit = canvas.height / 1080
         let blur = (hasText ? 10 : 18) * unit
         var effect = Effect()
@@ -85,6 +94,10 @@ nonisolated enum SeamExpansion {
             incoming(.positionX, 0, velocity.horizontal * reach, over: settle, easing: .settle(timeConstant: tau))
             incoming(.positionY, 0, velocity.vertical * reach, over: settle, easing: .settle(timeConstant: tau))
             incoming(.scale, 1, exp(velocity.zoom * reach), over: settle, easing: .settle(timeConstant: tau))
+        case .whip:
+            let width = canvas.width
+            outgoing(.positionX, 0, whipOut.travel * width / zooms.outgoing, last: whipOut.duration, easing: .exit)
+            incoming(.positionX, -whipIn.travel * width / zooms.incoming, 0, over: whipIn.duration, easing: .enterFast)
         case .push:
             effect.transition = Transition(seam: .push, duration: 0.5)
         case .fade:

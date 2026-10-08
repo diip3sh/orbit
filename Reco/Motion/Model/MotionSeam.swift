@@ -16,6 +16,10 @@ nonisolated enum MotionSeam: String, Codable, CaseIterable, Sendable {
     /// The camera rushes in 0.2 s and lands from a pulled-back view in 0.5 s, blurred across the cut.
     case zoomThrough
 
+    /// The camera streaks sideways out of the scene and into the next from the same side: one whip
+    /// across the cut, its motion blur hiding it (Raycast's grid to its next state).
+    case whip
+
     /// The frame blurs out and the next blurs in.
     case blurCut
 

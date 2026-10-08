@@ -1059,6 +1059,56 @@ Key facts:
   inline `!important` (a stylesheet rule lost to the site's own and kept the dialog's border); a word's results wait at
   least 1.2 s and typing goes at the video's pace (faster, the results kept an older selection).
 
+### S7 — Launch films by the agent: macro, whip, skill (`remotion`, spec 0012 L4 and Q4)
+
+The approved film's grammar named for the agent, and the method shipped as a skill. A `macro` shot frames
+`view`s of real UI (CSS px from the element's top-left) one after another: the camera holds, creeps closer and
+whips to the next. A `whip` seam streaks the camera out of one scene and into the next. Agents no longer key
+cameras: the approved Supabase film is four macro shots and its closing. Launch Video runs and the motion chat
+give Claude Code the `reco-launch-film` skill in its run's folder; other agents read it in their prompt.
+
+| File | Role |
+|---|---|
+| `Motion/Grammar/ShotLayout+Macro.swift` | Views to camera position and dolly, creeps, whips; the opening's 1 s of ground; when typing starts; a selection's presses |
+| `Motion/Model/MotionShot.swift`, `ShotItem.swift` | `macro`, `view`, `stops` |
+| `Motion/Grammar/MoveExpansion.swift`, `SeamExpansion.swift`, `Motion/Render/MotionPlan+Grammar.swift` | The `whip` move and seam; a move after a whip looks from its target; a seam's travel by each side's magnification |
+| `Motion/Grammar/MotionLint.swift` | `material`: a macro over satin shows glass or bare UI |
+| `Motion/Service/UICapture+Typing.swift`, `UILiftScript.swift` | Typing into a mockup that isn't a field (`clearMockup`, `typeMockup`, `restoreMockup`); its caret from the laid-out text |
+| `AgentRecording/Skills/reco-launch-film.md`, `AgentRecording/Model/AgentSkill.swift` | The skill (bundled), its path in the run, its method without front matter |
+| `AgentRecording/Model/AgentInvocation.swift`, `AgentRecordingRequest.swift` | `makesMotion`: the skill file, `Skill` in `--tools` and `--allowedTools`; prompts load or inline it |
+| `AgentBridge/Model/InspectPageRequest.swift` | `selectors`: boxes of the parts of a panel |
+
+Key facts:
+- **Framing.** A view fills 92 % of the frame where it binds. The element is never wider than 8,192 px at
+  1080p (a lift's limit), so 4K is within 2× of its lift.
+- **Holds and moves.** Holds share the scene evenly. The camera creeps 3 % closer over each hold; the opening
+  instead pulls back 4.5 % after the cut-in. A whip is 0.35 s on (0.7, 0, 0.15, 1).
+- **Typing and selections.**
+  - Typing starts 0.65 s after the control shows.
+  - A field an earlier macro typed shows its text from the start (`typedBefore`).
+  - `select: n` steps down at 0.55 s, 0.47 s apart, then back up 0.58 s later, 0.14 s apart (the film's).
+- **Rebuilt from views alone,** the approved film's frames match it: the bar, typing, results, page and code.
+  Only the page's whip lands 0.6 s later, since holds are even.
+- **The whip seam** leaves over the last 0.15 s (half a frame's width) and arrives over 0.45 s (0.8 of one), on
+  the exit and out-expo easings; the speeds meet at the cut, about ten widths a second.
+- **Mockups.**
+  - A mockup's computed font isn't what draws it: on linear.app the caret, measured with a canvas, fell a third
+    behind the text. A mockup's caret is the laid-out text's last line box.
+  - Its text is `pre-wrap`, so a space moves the caret.
+  - Empty, its line has no height, so its inline box sat at the line's top, 13 px above linear.app's text: a
+    zero-width space stands in while it's measured.
+- **Running the skill.**
+  - `--tools WebSearch,WebFetch` hides the Skill tool; with `Skill` added, a headless run in a folder with
+    `.claude/skills/<name>/SKILL.md` loads it.
+  - `--setting-sources project` would hide the user's own skills, but it also drops their settings (login
+    helpers), so it isn't used.
+- **The first linear.app run from its address** (Claude Code, default model) took 9.2 min:
+  - It typed "@Linear create issues and assign to me" into the homepage's prompt mockup.
+  - It whipped across the issue board, an issue and its diff, then closed on 9 words.
+  - The film is 31.5 s at 4K, every frame sharp.
+- **A later run** took 6.9 min and made a 32.3 s film. It opened on the empty prompt with its toolbar, typed with
+  the caret on the text's end, then toured the board, an issue the agent took and its diff.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -1131,7 +1181,8 @@ should hold but need re-measuring.
 
 | Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps, shown elements, playbook | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop); linear.app walkthroughs run from the app through `reco://record-agent`. Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
 | S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 done: moves, seams, shots, lint, scenes lane and inspector; the benchmark rebuilt in 10 lines and three sites rendered, awaiting the user's side-by-side. Phase 4 done: agent tools, Launch Video mode, chat with selection; three sites run from their address with clean lint and design check, three chat edits change only their targets; cost recorded for one run. The window seen in a window capture; editing by hand not yet tried |
-| S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields ported, then rejected by the user as pasted behind the old video; directions picked from launch films (Raycast, Nothing OS 5.0, 3D layers). L1a–c built (satin, coverage mattes, typing cursor rules, parallax, motion blur), but the user found the test shot "really bad" next to Raycast. L0: still frames matched to Raycast's (glass for lifted UI, hero scale, a better ground), then a 24 s Supabase docs film in that look rendered as a look-dev pass outside the engine. The user approved the film; its port into the engine has begun: phases 1 (satin, grain), 2 (glass, sharp macro) and 3 (typing, caret, results) done, matching the film at 47–64 dB; phase 4 captures UI behind a click and typing states live (Supabase's search, matching the film's lifts); phase 5 the selection, the camera following it, the whip's blur; phase 6 the `closing` shot; the whole film now made by the app from one document, matching the approved one where the site is the same. Next: the user's look at it, then the agent writing such documents (grammar names, playbook) |
+| S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields ported, then rejected by the user as pasted behind the old video; directions picked from launch films (Raycast, Nothing OS 5.0, 3D layers). L1a–c built (satin, coverage mattes, typing cursor rules, parallax, motion blur), but the user found the test shot "really bad" next to Raycast. L0: still frames matched to Raycast's (glass for lifted UI, hero scale, a better ground), then a 24 s Supabase docs film in that look rendered as a look-dev pass outside the engine. The user approved the film; its port into the engine has begun: phases 1 (satin, grain), 2 (glass, sharp macro) and 3 (typing, caret, results) done, matching the film at 47–64 dB; phase 4 captures UI behind a click and typing states live (Supabase's search, matching the film's lifts); phase 5 the selection, the camera following it, the whip's blur; phase 6 the `closing` shot; the whole film now made by the app from one document, matching the approved one where the site is the same. L4/Q4: the film's grammar named (`macro` views, `whip` move and seam, mockup typing) and its method shipped as the `reco-launch-film` skill; Launch Video runs on linear.app from the address make macro films on glass over satin. Next: the user's verdict on them |
+| S8 motion sound (spec 0013) | Planned: Raycast's soundtrack measured, the Supabase film's sound made by hand in six rounds (`~/Movies/Reco/quality/audio/`); the engine build (cue sheet, voices, mix, export, agent) todo |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
