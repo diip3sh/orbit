@@ -20,6 +20,7 @@ final class QuickAccessViewModel {
         case copied
         case saved
         case textCopied
+        case codeCopied
         case noTextFound
         case copyFailed
         case textFailed
@@ -29,6 +30,7 @@ final class QuickAccessViewModel {
             case .copied: "Copied"
             case .saved: "Saved"
             case .textCopied: "Text Copied"
+            case .codeCopied: "Code Copied"
             case .noTextFound: "No Text Found"
             case .copyFailed: "Couldn't Copy"
             case .textFailed: "Couldn't Read the Text"
@@ -100,19 +102,24 @@ final class QuickAccessViewModel {
         }
     }
 
-    /// Copies the text in the image; the card stays open
+    /// Copies what a QR code or barcode in the image holds, or else its text; the card stays open
     func recognizeText() async {
         isRecognizingText = true
         defer { isRecognizingText = false }
         do {
-            let text = try await TextRecognizer.text(in: screenshot.image)
-            guard !text.isEmpty else {
+            async let codes = TextRecognizer.codes(in: screenshot.image)
+            async let text = TextRecognizer.text(in: screenshot.image)
+            // A shot with a code in it is taken for the code's sake: its link, not the words around it. Finding
+            // codes failing still leaves the text.
+            let found = (try? await codes) ?? ""
+            let copied = found.isEmpty ? try await text : found
+            guard !copied.isEmpty else {
                 show(.noTextFound)
                 return
             }
             pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
-            show(.textCopied)
+            pasteboard.setString(copied, forType: .string)
+            show(found.isEmpty ? .textCopied : .codeCopied)
         } catch {
             logger.error("Text recognition failed: \(error.localizedDescription)")
             show(.textFailed)

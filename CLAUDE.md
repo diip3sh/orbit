@@ -285,7 +285,8 @@ it was only the way in, so Esc on an area selection closes that state and leaves
 - **Copy** (C14): PNG data only; the button turns to ✓ Copied as the card starts closing, so it confirms during the
   fade. **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed
   notification is sent. **Recognize Text** (C7): the
-  image's text to the clipboard. **Pin** (C8): the image in its own panel, then closes. Recognize Text
+  image's text to the clipboard, or, when it holds QR codes or barcodes, their payloads (N16: `TextRecognizer.codes`, Vision's
+  `DetectBarcodesRequest` alongside the text request; Code Copied). **Pin** (C8): the image in its own panel, then closes. Recognize Text
   confirms on the card for 1.5 s.
 
 | File | Role |

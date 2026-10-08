@@ -325,7 +325,8 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N16 — Small capture wins
 
-**Status (2026-10-08):** shipped: screenshot URLs (a card showing stays; an area pins where it was taken). Not yet
+**Status (2026-10-08):** shipped: screenshot URLs (a card showing stays; an area pins where it was taken); QR codes (a shot with a code
+copies its payload in place of the text). Not yet
 checked in the running app.
 
 Each is S:
