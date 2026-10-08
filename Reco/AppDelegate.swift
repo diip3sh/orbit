@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var captureToolbar = CaptureToolbarController(viewModel: CaptureToolbarViewModel(recorder: viewModel, screenshots: screenshots))
 
     private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
-    private lazy var quickAccess = QuickAccessController { [screenshots] screenshot in await screenshots.save(screenshot) }
+    lazy var quickAccess = QuickAccessController { [screenshots] screenshot in await screenshots.save(screenshot) }
     private lazy var notchShelf = NotchShelfController(settings: viewModel.settings)
 
     /// Serves the tools coding agents record web pages with; a movie it renders opens in the editor.

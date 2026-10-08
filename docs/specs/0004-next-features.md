@@ -74,7 +74,7 @@ own spec before any code.
 
 N20 and N21 are small and can land any time.
 
-**Status (2026-10-08):** built: N1, N2, N3, N7, N10, N20, N21, N22; partly: N15 (history), N17 (freezing). The rest is open.
+**Status (2026-10-08):** built: N1, N2, N3, N7, N10, N15, N20, N21, N22; partly: N17 (freezing). The rest is open.
 
 Every item follows spec 0003's standards: a pure core with tests, performance measured before a
 claim, docs updated, and the 8 ms frame budget kept.
@@ -316,7 +316,8 @@ claim, docs updated, and the 8 ms frame budget kept.
 ### N15 — Restore a closed card; history
 
 - **Status (2026-10-08):** the history half shipped (spec 0012: every capture kept in the app's support folder for a
-  chosen time). Restore Last Screenshot is not built.
+  chosen time), and so has Restore Last Screenshot in the menu: the last card that went away, from memory, in the
+  screen's corner. Not yet checked in the running app.
 
 - **S:** Restore Last Screenshot in the menu brings back the last closed card from memory.
 - **M, opt-in:** keep screenshots for 30 days in the app's Caches folder and list them. This

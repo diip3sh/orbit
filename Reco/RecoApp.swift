@@ -25,6 +25,7 @@ struct RecoApp: App {
                 showScreenshotToolbar: { appDelegate.showCaptureToolbar(records: false) },
                 showRecordingToolbar: { appDelegate.showCaptureToolbar(records: true) },
                 editLastRecording: appDelegate.editLastRecording,
+                quickAccess: appDelegate.quickAccess,
                 showLibrary: appDelegate.showLibrary,
                 showWebRecording: appDelegate.showWebRecording,
                 agentRecording: appDelegate.agentRecording

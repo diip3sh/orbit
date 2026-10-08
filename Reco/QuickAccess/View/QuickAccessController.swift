@@ -11,8 +11,10 @@ import SwiftUI
 
 /// Shows the Quick Access card for the last screenshot in a floating panel, and owns the pins made from it.
 ///
-/// The card stays until it's closed, saved or pinned, or the next screenshot replaces it.
+/// The card stays until it's closed, saved or pinned, or the next screenshot replaces it. The last one to go
+/// stays in memory for Restore Last Screenshot.
 @MainActor
+@Observable
 final class QuickAccessController {
 
     /// The largest card. A card takes its screenshot's shape inside it (`cardSize(for:)`)
@@ -38,16 +40,21 @@ final class QuickAccessController {
 
     nonisolated static let margin: CGFloat = 16
 
-    private let save: @MainActor (Screenshot) async -> Bool
-    private let pins = PinController()
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "QuickAccess")
+    /// The screenshot of the last card that went away (closed, copied, saved, pinned or replaced), for `restoreClosed()`
+    private(set) var closedScreenshot: Screenshot?
 
-    private var panel: NSPanel?
-    private var model: QuickAccessViewModel?
-    private var loadTask: Task<Void, Never>?
+    @ObservationIgnored private let save: @MainActor (Screenshot) async -> Bool
+    @ObservationIgnored private let pins = PinController()
+    @ObservationIgnored private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "QuickAccess")
+
+    @ObservationIgnored private var panel: NSPanel?
+    @ObservationIgnored private var model: QuickAccessViewModel?
+    /// The screenshot shown, or about to be once its preview is drawn
+    @ObservationIgnored private var current: Screenshot?
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
 
     /// Panels playing their exit; `hide()` takes them off at once too, so none lands in a capture
-    private var leaving: [NSPanel] = []
+    @ObservationIgnored private var leaving: [NSPanel] = []
 
     /// - Parameter save: Saves a screenshot into the output folder, returning whether it did
     init(save: @escaping @MainActor (Screenshot) async -> Bool) {
@@ -55,8 +62,11 @@ final class QuickAccessController {
     }
 
     /// Replaces any card showing.
-    func show(_ screenshot: Screenshot) {
+    /// - Parameter besidePointer: Whether an area capture's card opens where the drag ended; otherwise it opens in the
+    ///   screen's corner.
+    func show(_ screenshot: Screenshot, besidePointer: Bool = true) {
         dismiss()
+        current = screenshot
 
         // After an area capture the pointer is still where the drag ended
         let pointer = NSEvent.mouseLocation
@@ -73,13 +83,23 @@ final class QuickAccessController {
                 logger.error("Couldn't draw a preview of the screenshot")
                 return
             }
-            present(QuickAccessViewModel(screenshot: screenshot, preview: preview, save: save), on: screen, pointer: pointer)
+            present(QuickAccessViewModel(screenshot: screenshot, preview: preview, save: save), on: screen, pointer: besidePointer ? pointer : nil)
         }
+    }
+
+    /// Brings back the last card that went away, in the screen's corner; a card showing takes its place in memory.
+    func restoreClosed() {
+        guard let closedScreenshot else { return }
+        show(closedScreenshot, besidePointer: false)
     }
 
     func dismiss() {
         loadTask?.cancel()
         loadTask = nil
+        if let current {
+            closedScreenshot = current
+            self.current = nil
+        }
 
         // A save finishing after its card went away must not close the next card
         model?.onClose = nil
@@ -139,15 +159,20 @@ final class QuickAccessController {
         return CGRect(origin: origin, size: size)
     }
 
-    private func present(_ model: QuickAccessViewModel, on screen: NSScreen, pointer: CGPoint) {
+    /// - Parameter pointer: Where an area capture's drag ended, to open beside; nil opens in the screen's corner
+    private func present(_ model: QuickAccessViewModel, on screen: NSScreen, pointer: CGPoint?) {
         model.onClose = { [weak self] in self?.dismiss() }
         model.onPin = { [weak self] in self?.pin() }
 
-        let visibleFrame = screen.visibleFrame
-        let region = model.screenshot.region
         let size = Self.cardSize(for: model.screenshot.pointSize)
-        let frame = region.map { Self.panelFrame(in: visibleFrame, size: size, pointer: pointer, awayFrom: $0) }
-            ?? Self.panelFrame(in: visibleFrame, size: size)
+        let frame: CGRect
+        var grownFrom: CGPoint?
+        if let pointer, let region = model.screenshot.region {
+            frame = Self.panelFrame(in: screen.visibleFrame, size: size, pointer: pointer, awayFrom: region)
+            grownFrom = pointer
+        } else {
+            frame = Self.panelFrame(in: screen.visibleFrame, size: size)
+        }
         let panel = QuickAccessPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -168,7 +193,7 @@ final class QuickAccessController {
         let dragger = PanelDragger()
         dragger.panel = panel
         dragger.onFlick = { [weak model] in model?.close() }
-        let anchor = Self.anchor(for: frame, pointer: region == nil ? nil : pointer)
+        let anchor = Self.anchor(for: frame, pointer: grownFrom)
         panel.contentView = NSHostingView(rootView: QuickAccessView(model: model, dragger: dragger, anchor: anchor, size: size))
         // Key, so ⌘C and ⌘S copy and save the new screenshot until another window is clicked
         panel.makeKeyAndOrderFront(nil)

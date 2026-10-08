@@ -301,8 +301,11 @@ stroke-rounded (MIT) cancel, checkmark circle, scan text and pin, as in the capt
 | `Service/ImagePasteboard.swift` | PNG data on the pasteboard (Slack, Messages, Figma, Preview) |
 
 Key facts:
-- The full-size `CGImage` is held only by the card and pins; the card shows a preview drawn at 2× of its
-  largest size.
+- The full-size `CGImage` is held only by the card, pins and `QuickAccessController.closedScreenshot`; the card shows a
+  preview drawn at 2× of its largest size.
+- **Restore Last Screenshot** (N15; menu bar, idle only, shown while there is one) brings back the last card that went
+  away (closed, copied, saved, pinned, flicked or replaced by the next screenshot) in the screen's corner, from memory; a
+  card showing takes its place. One screenshot is kept, until quit.
 - Drag-out offers the file URL and PNG data. The file is written in the background to
   `temporaryDirectory/<UUID>/<save name>` when the card appears (a drop reads the URL at once, so it must
   exist first) and deleted when the card closes.
@@ -1005,7 +1008,7 @@ Effects are properties of a web script's steps, previewed with Play and rendered
 
 288 pt wide. First the ways in: **Screenshot** and **Record** (with their shortcuts, ⇧⌘1 / ⇧⌘2) open the capture
 toolbar (below) for that kind (while a take is saved, Saving Recording… instead), then **Product Record** (the Web
-Recording window) and **Library**, and Edit Last Recording when there is one. Then Capture (system audio, microphone
+Recording window) and **Library**, and Edit Last Recording and Restore Last Screenshot when there is one. Then Capture (system audio, microphone
 and its device; camera), whose expanded rows sit on the popover itself, with no second background; then Settings… and
 Quit. The take's own controls are only on the toolbar. Frame rate, codecs, container, alpha, HDR and the content filter
 are in Settings → Video, the audio codec in Settings → Audio.

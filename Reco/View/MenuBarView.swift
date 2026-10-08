@@ -14,6 +14,7 @@ struct MenuBarView: View {
     let showScreenshotToolbar: () -> Void
     let showRecordingToolbar: () -> Void
     let editLastRecording: () -> Void
+    let quickAccess: QuickAccessController
     let showLibrary: () -> Void
     let showWebRecording: () -> Void
     let agentRecording: AgentRecordingViewModel
@@ -87,6 +88,14 @@ struct MenuBarView: View {
                     MenuBarActionButton(title: "Edit Last Recording", systemImage: "film") {
                         editLastRecording()
                         dismiss()
+                    }
+                }
+
+                // Idle only, like the screenshots themselves: a card shown mid-take could land in the video
+                if viewModel.state == .idle, quickAccess.closedScreenshot != nil {
+                    MenuBarActionButton(title: "Restore Last Screenshot", systemImage: "arrow.uturn.backward") {
+                        dismiss()
+                        quickAccess.restoreClosed()
                     }
                 }
 
@@ -243,6 +252,7 @@ struct PermissionRow: View {
         showScreenshotToolbar: {},
         showRecordingToolbar: {},
         editLastRecording: {},
+        quickAccess: QuickAccessController { _ in false },
         showLibrary: {},
         showWebRecording: {},
         agentRecording: AgentRecordingViewModel(
