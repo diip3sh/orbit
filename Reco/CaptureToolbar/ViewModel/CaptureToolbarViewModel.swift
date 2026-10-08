@@ -91,16 +91,17 @@ final class CaptureToolbarViewModel {
             sources.pickHighlighted()
             return
         }
+        // Screenshots wait for the self-timer with the bar already gone, so there's time to set up what's shot
         switch mode {
         case .captureScreen:
             onHide?(false)
-            await screenshots.captureScreen()
+            await screenshots.afterSelfTimer { [screenshots] in await screenshots.captureScreen() }
         case .captureWindow:
             onHide?(false)
-            await screenshots.captureWindow()
+            await screenshots.afterSelfTimer { [screenshots] in await screenshots.captureWindow() }
         case .captureArea:
             onHide?(false)
-            await screenshots.captureArea()
+            await screenshots.afterSelfTimer { [screenshots] in await screenshots.captureArea() }
         case .recordScreen, .recordWindow, .recordArea:
             if recorder.hasContentSelected {
                 await recorder.startRecordingWithCountdown()

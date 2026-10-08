@@ -38,9 +38,14 @@ final class ScreenshotController {
     /// The last area captured since launch, in screen points (bottom-left origin), and its display
     private var previousArea: (rect: CGRect, displayID: CGDirectDisplayID)?
 
-    init(settings: SettingsStore, notificationService: NotificationService) {
+    /// The self-timer (`SettingsStore.screenshotTimer`)
+    let timer: RecordingCountdown
+    private let timerOverlay = CountdownOverlay()
+
+    init(settings: SettingsStore, notificationService: NotificationService, timer: RecordingCountdown = RecordingCountdown()) {
         self.settings = settings
         self.notificationService = notificationService
+        self.timer = timer
         let retention = settings.screenshotHistoryRetention
         Task { await ScreenshotHistory.prune(retention: retention) }
     }
@@ -51,7 +56,32 @@ final class ScreenshotController {
     }
 
     func canCapture(alongside recorder: RecorderViewModel) -> Bool {
-        Self.canCapture(recorderState: recorder.state, isCountingDown: recorder.countdown.isRunning, isCapturing: isCapturing)
+        Self.canCapture(recorderState: recorder.state, isCountingDown: recorder.countdown.isRunning, isCapturing: isCapturing || timer.isRunning)
+    }
+
+    /// Runs `capture` once the self-timer has counted down, its number on the screen under the pointer, or at once
+    /// when it's off. Esc cancels, and nothing is captured. The timer is only on screen before the capture starts, so
+    /// it's never in the shot.
+    func afterSelfTimer(_ capture: @escaping @MainActor () async -> Void) async {
+        let seconds = settings.screenshotTimer.rawValue
+        guard seconds > 0 else {
+            await capture()
+            return
+        }
+        let pointer = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(pointer) } ?? NSScreen.main
+        timerOverlay.show(countdown: timer, center: screen.map { CGPoint(x: $0.frame.midX, y: $0.frame.midY) }) { [weak self] in
+            self?.cancelSelfTimer()
+        }
+        await timer.start(seconds: seconds) { [weak self] in
+            self?.timerOverlay.dismiss()
+            await capture()
+        }.value
+    }
+
+    func cancelSelfTimer() {
+        timer.cancel()
+        timerOverlay.dismiss()
     }
 
     /// Freezes every display first and cuts the area from that, so what the overlay would take away

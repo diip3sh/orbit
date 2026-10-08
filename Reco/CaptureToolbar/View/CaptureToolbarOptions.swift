@@ -13,28 +13,7 @@ struct CaptureToolbarOptions: View {
     private var settings: SettingsStore { viewModel.settings }
 
     var body: some View {
-        Menu {
-            Picker("Countdown", selection: Bindable(settings).countdownDuration) {
-                ForEach(CountdownDuration.allCases) { duration in
-                    Text(duration.displayName).tag(duration)
-                }
-            }
-            .pickerStyle(.inline)
-        } label: {
-            HStack(spacing: EditorTheme.tightSpacing) {
-                ToolbarIcon(.toolbarCountdown)
-                Text(settings.countdownDuration == .off ? "Off" : "\(settings.countdownDuration.rawValue)s")
-                    .monospacedDigit()
-                Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.semibold))
-                    .accessibilityHidden(true)
-            }
-        }
-        .menuStyle(.button)
-        .menuIndicator(.hidden)
-        .buttonStyle(.captureToolbar)
-        .fixedSize()
-        .captureToolbarTooltip("Countdown")
+        CaptureToolbarCountdownMenu(title: "Countdown", duration: Bindable(settings).countdownDuration)
 
         // Each tooltip says what a click does now
         CaptureToolbarSwitch(
@@ -52,6 +31,37 @@ struct CaptureToolbarOptions: View {
             tooltip: settings.presenterOverlayEnabled ? "Hide Camera" : "Show Camera", shortcut: .camera,
             action: viewModel.toggleCamera
         )
+    }
+}
+
+/// A countdown as a chip with its value, choosing from a menu: the take's, or a screenshot's self-timer
+struct CaptureToolbarCountdownMenu: View {
+    let title: String
+    @Binding var duration: CountdownDuration
+
+    var body: some View {
+        Menu {
+            Picker(title, selection: $duration) {
+                ForEach(CountdownDuration.allCases) { duration in
+                    Text(duration.displayName).tag(duration)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: EditorTheme.tightSpacing) {
+                ToolbarIcon(.toolbarCountdown)
+                Text(duration == .off ? "Off" : "\(duration.rawValue)s")
+                    .monospacedDigit()
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .accessibilityHidden(true)
+            }
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.captureToolbar)
+        .fixedSize()
+        .captureToolbarTooltip(title)
     }
 }
 
