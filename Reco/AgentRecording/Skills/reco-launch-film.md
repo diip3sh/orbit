@@ -1,6 +1,6 @@
 ---
 name: reco-launch-film
-description: Reco's method for a launch film, after New Raycast's, the bar the user approved. The product's real UI in macro on glass, typed into and stepped through, whips between its parts, ending on the word-swap closing, over one of three looks chosen from the brand (black satin, grainy light, dither) with seams in that look's language. Use it before making a motion video with edit_motion, and for any chat change beyond a small tweak (a new scene, a new look, "make it better").
+description: Reco's method for a launch film, after New Raycast's, the bar the user approved. The product's real UI in macro on glass, typed into and stepped through, whips between its parts, ending on the word-swap closing, over one of three looks chosen from the brand (black satin, grainy light, dither) with seams in that look's language. Use it before making a motion video with edit_motion, and for any chat change beyond a small tweak (a new scene, a new look, "make it better"). For motion design (UI rebuilt as shapes and type that morph) load reco-motion-design instead; for a film of 45 s or more, both.
 ---
 
 # A launch film, Reco's way

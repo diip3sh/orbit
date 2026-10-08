@@ -97,13 +97,17 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
             // Reco's server from a file in the run's folder, not the command line, which other users see
             files[serversFile] = servers(server, for: .claudeCode)
             // Web search and fetch too, for the research a walkthrough starts with; both only read. A motion
-            // video's run gets Reco's skill in its folder and the Skill tool, which --tools would otherwise hide
+            // video's run gets Reco's skills in its folder and the Skill tool, which --tools would otherwise hide, and
+            // Read allowed only inside the skills, for the references they load as they need them (spec 0014)
             let skill = request.makesMotion ? ["Skill"] : []
             if request.makesMotion {
-                files[AgentSkill.launchFilmPath] = AgentSkill.launchFilm
+                files.merge(AgentSkill.files) { $1 }
             }
-            let tools = ["WebSearch", "WebFetch"] + skill
-            arguments = ["-p", prompt, "--tools", tools.joined(separator: ","), "--allowedTools", "mcp__reco__*"] + tools
+            let tools: [String] = ["WebSearch", "WebFetch"] + skill
+            let reading: [String] = request.makesMotion ? ["Read(./\(AgentSkill.folder)/**)"] : []
+            let available: [String] = tools + (request.makesMotion ? ["Read"] : [])
+            let allowed: [String] = ["mcp__reco__*"] + tools + reading
+            arguments = ["-p", prompt, "--tools", available.joined(separator: ","), "--allowedTools"] + allowed
                 + ["--permission-mode", "dontAsk", "--no-session-persistence",
                    "--mcp-config", directory.appending(path: serversFile).path(percentEncoded: false), "--strict-mcp-config"]
                 + option("--model") + ["--output-format", "text"]

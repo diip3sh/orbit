@@ -6,7 +6,7 @@
 import Foundation
 
 /// The grammar's easings, the only ones its moves use (spec 0011, *Craft defaults* and *Measured
-/// references*). None overshoots.
+/// references*). Only motion design's (spec 0014) overshoot: Raycast's films never do, its reference always does.
 nonisolated extension MotionEasing {
 
     /// Out-cubic: what enters.
@@ -30,4 +30,14 @@ nonisolated extension MotionEasing {
 
     /// Framer's pull-back: from full speed on a cut, half done at 0.65 s, 90% at 2.55 s.
     static let longSettle = MotionEasing.settle(timeConstant: 0.9)
+
+    /// A change of state in motion design: the Spotify Jam film's pill growing out of a dot, fitted to its widths
+    /// frame by frame over 0.43 s (spec 0014).
+    static let morph = MotionEasing.cubicBezier(0.36, 0.2, 0.12, 1)
+
+    /// Past its end by 10% and back: letters springing in, pops and hovers in motion design. CSS's out-back.
+    static let overshoot = MotionEasing.cubicBezier(0.34, 1.56, 0.64, 1)
+
+    /// In-out cubic: a list scrolled fast, slow off and slow in, blurred in its middle.
+    static let scroll = MotionEasing.cubicBezier(0.65, 0, 0.35, 1)
 }

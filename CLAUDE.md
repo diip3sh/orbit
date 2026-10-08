@@ -1208,6 +1208,45 @@ Key facts:
   approved Supabase film exported at −16.0 LUFS like the hand-made one.
 - `vDSP.DFT` is deprecated on macOS 26: `vDSP.DiscreteFourierTransform` (macOS 12+).
 
+### S9 — Motion design films (`remotion`, spec 0014)
+
+A second kind of launch film, after LordyVisuals' Spotify Jam concept (`~/Movies/Reco/references/spotify-jam-lordyvisuals.mp4`):
+the UI rebuilt as shapes, type and lifted parts, one object morphing from state to state (list → pill → flood → chips → caret →
+type → check), letters springing in, a pointer clicking, bursts and ripples, on a 125 BPM beat. Agents get it as a second skill,
+`reco-motion-design`, whose references Claude Code reads one file at a time; launch prompts choose a skill, or both for a
+longer film.
+
+| File | Role |
+|---|---|
+| `Motion/Model/MotionMove.swift`, `ShapeContent.swift`, `LayerShadow.swift`, `MotionCanvas.swift` | The moves `morph`, `flood`, `pop`, `press`, `click`, `burst`, `ripple`, `letters`, `kinetic`, `scroll` and their fields (`size`, `radius`, `color`, `stroke`, `to`); shapes' `stroke` and `kind` (triangle and seven glyphs); a shadow's `color` (a glow); `fieldStrength` |
+| `Motion/Render/ShapeMorph.swift` | A rectangle's states from its morphs and floods, each from where the last left it, generated each frame |
+| `Motion/Grammar/MoveExpansion.swift` | Pop and press tracks, letters and kinetic reveals, `placeTracks` (morph and scroll `to`), the measured numbers |
+| `Motion/Grammar/BurstExpansion.swift`, `DocumentExpansion.swift` | Particles behind a layer, rings over it, seeded by its id; a cascade's rows rising as its group's scroll brings them in |
+| `Motion/Render/MotionPointer.swift`, `ShapeGlyph.swift` | The system's arrow and pointing hand on a click's target (a group too); triangles and glyphs drawn once |
+| `Motion/Render/MotionFrameRenderer.swift` | Morphing shapes and their glow per frame, pointers over a scene, letters and the kinetic caret and tint, the toned-down field |
+| `Motion/Sound/SoundCueList.swift` (`design`) | A blip a pop, a key a press or click, a riser and hit on a flood, glass on a burst, kinetic keys, a whoosh on a fast scroll |
+| `Motion/Grammar/MotionLint.swift` | A control's label is read against its control and at a glance; actions don't delay reading; a toned-down field isn't busy |
+| `AgentRecording/Skills/reco-motion-design*.md`, `Model/AgentSkill.swift` | The skill and its references (the film, moves, recipes, longer films, a whole example), installed as `.claude/skills/reco-motion-design/` |
+| `AgentRecording/Model/AgentInvocation.swift`, `AgentRecordingRequest.swift` | `Read` allowed only in `./.claude/skills/**`; the prompt's skill choice |
+
+Key facts:
+- **The reference, measured** (30 fps): the pill grows 340 → 590 px in 0.43 s (`MotionEasing.morph`, fitted); the flood dips to
+  0.6 in 0.17 s and fills past the corners in 0.4 s out-cubic; letters 0.036 s apart (11 in 0.4 s) and overshoot
+  (`MotionEasing.overshoot`, CSS's out-back, the first easing that does); kinetic type 13 characters a second; the hand 8 % of the
+  frame's height; the queue scrolls 1.83 heights in 1.5 s; one hard cut in 19 s, on a beat of its 125 BPM track (−14.3 LUFS).
+- At 1080p it reads at the reference's scale: rows 1070 px wide and 215 apart, the pill 560×184 with 64 px type, kinetic type
+  150 px. Ember at `fieldStrength` 0.45 sits behind the UI as the brand's light; at 1, and sunlit or bloom at any strength, it
+  swamped it.
+- `CIRoundedRectangleStrokeGenerator` draws its line inside the extent. A colour morph mixes premultiplied, so a fill drains to
+  clear without passing through black. A ripple's rings go over their layer (they show across a flood), a burst's particles
+  under it, in the shape's colour at the burst (a white disc turning green throws green).
+- The system cursor images carry clear margins for their shadow: the pointer is sized by the hand's drawn rows.
+- `--tools …,Read --allowedTools … "Read(./.claude/skills/**)" --permission-mode dontAsk`: a headless run read its skill's
+  reference and was denied a file outside it.
+- Look-dev in the app (`~/Movies/Reco/quality/design/`): the reference's beats rebuilt from Spotify's web player (signed out,
+  rows `div:nth-of-type(n) > [data-encore-id=listRow]` at a phone viewport) matched its frames beat for beat; that document is
+  the skill's example. Spotify's nav logo lifts with a grey box behind it even bare: open question.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -1282,6 +1321,7 @@ should hold but need re-measuring.
 | S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 done: moves, seams, shots, lint, scenes lane and inspector; the benchmark rebuilt in 10 lines and three sites rendered, awaiting the user's side-by-side. Phase 4 done: agent tools, Launch Video mode, chat with selection; three sites run from their address with clean lint and design check, three chat edits change only their targets; cost recorded for one run. The window seen in a window capture; editing by hand not yet tried |
 | S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields ported, then rejected by the user as pasted behind the old video; directions picked from launch films (Raycast, Nothing OS 5.0, 3D layers). L1a–c built (satin, coverage mattes, typing cursor rules, parallax, motion blur), but the user found the test shot "really bad" next to Raycast. L0: still frames matched to Raycast's (glass for lifted UI, hero scale, a better ground), then a 24 s Supabase docs film in that look rendered as a look-dev pass outside the engine. The user approved the film; its port into the engine has begun: phases 1 (satin, grain), 2 (glass, sharp macro) and 3 (typing, caret, results) done, matching the film at 47–64 dB; phase 4 captures UI behind a click and typing states live (Supabase's search, matching the film's lifts); phase 5 the selection, the camera following it, the whip's blur; phase 6 the `closing` shot; the whole film now made by the app from one document, matching the approved one where the site is the same. L4/Q4: the film's grammar named (`macro` views, `whip` move and seam, mockup typing) and its method shipped as the `reco-launch-film` skill; Launch Video runs on linear.app from the address make macro films on glass over satin. Looks: light and dither grounds (Paper's other shapes) and seams in their language (`glow`, `dither`, `ring`), the agent choosing the look from the brand. Next: the user's verdict on them |
 | S8 motion sound (spec 0013) | S1–S4 done: cue sheet from the plan, voices, room, finish, loudness, cache, preview and export, `set_sound`, the Sound section; the Supabase film's sheet matches the hand-made score. Next: the user's listening round (S5) |
+| S9 motion design (spec 0014) | D1–D5 done: morphs, floods, pops, clicks, bursts, ripples, letters, kinetic type, scrolls; their sounds; the `reco-motion-design` skill with references read on demand; look-dev matching the Spotify Jam reference. D6: a Spotify film made from the app (9 min, 30 s 4K, every named movement). Next: the user's verdict |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

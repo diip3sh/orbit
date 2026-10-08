@@ -11,6 +11,9 @@ nonisolated struct SoundCueList {
     private(set) var list: [SoundCue] = []
     var random = SeededRandom(seed: 2026)
 
+    /// Pops so far, each a step up the scale from the last.
+    private var pops = 0
+
     init(frameRate: Int) {
         self.frameRate = frameRate
     }
@@ -101,6 +104,87 @@ nonisolated extension SoundCueList {
         for press in field.presses where shown.contains(press.time) {
             add(.key(.arrow), .effects, at: start + press.time, level: SoundRules.keyLevel, pan: 0.05, send: SoundRules.keySend)
             add(.blip(note: blip.note, length: blip.length), .effects, at: start + press.time, level: blip.level, pan: 0.2, send: 0.3, offset: blip.delay)
+        }
+    }
+}
+
+// MARK: - Motion design
+
+nonisolated extension SoundCueList {
+
+    /// Motion design's events (spec 0014): pops, presses and clicks, floods, bursts, kinetic keys and fast scrolls.
+    mutating func design(in plan: MotionPlan, document: MotionDocument, before end: Double) {
+        for (index, scene) in plan.scenes.enumerated() where scene.start < end && document.scenes.indices.contains(index) {
+            let layers = Self.flattened(document.scenes[index].layers)
+            for (layer, planned) in zip(layers, scene.layers) {
+                let context = MoveContext(sceneDuration: scene.duration, canvas: plan.canvas, layer: layer)
+                for move in layer.moves {
+                    let timing = MoveExpansion.timing(of: move, in: context)
+                    guard timing.start < scene.duration, scene.start + timing.start < end else { continue }
+                    cue(move, at: scene.start + timing.start, lasting: timing.duration, in: context)
+                }
+                if let reveal = planned.reveal, reveal.style == .kinetic, case .text(let text) = layer.content {
+                    keys(text.text, revealed: reveal, from: scene.start, before: min(end, scene.start + scene.duration))
+                }
+            }
+        }
+    }
+
+    /// `move`'s sound, if it has one, starting at `time` in the video.
+    private mutating func cue(_ move: MotionMove, at time: Double, lasting duration: Double, in context: MoveContext) {
+        switch move.kind {
+        case .pop:
+            let notes = SoundRules.popNotes
+            add(.blip(note: notes[pops % notes.count], length: 0.3), .effects, at: time, level: SoundRules.popLevel, pan: 0.1, send: 0.3)
+            pops += 1
+        case .press, .click:
+            add(.key(.letter), .effects, at: time, level: SoundRules.pressLevel, send: SoundRules.keySend)
+        case .flood:
+            flood(at: time, filling: time + duration * ShapeMorph.floodDip / (ShapeMorph.floodDip + ShapeMorph.floodFill))
+        case .burst:
+            let glass = SoundRules.burstGlass
+            for note in glass.notes.indices {
+                add(.glass(note: glass.notes[note], length: glass.length, brightness: 1.2), .effects, at: time, level: glass.levels[note],
+                    pan: glass.pans[note], send: glass.send)
+            }
+        case .scroll:
+            let distance = move.target.map { hypot($0.x - context.position.x, $0.y - context.position.y) } ?? 0
+            if distance / duration / max(context.canvas.height, 1) > SoundRules.scrollWhoosh {
+                add(.whoosh, .effects, at: time + duration / 2, level: SoundRules.whooshLevel - 6, send: 0.2)
+            }
+        default:
+            break
+        }
+    }
+
+    /// A riser into a flood's fill and a hit once it covers the frame.
+    private mutating func flood(at start: Double, filling: Double) {
+        let riser = SoundRules.floodRiser
+        add(.riser(length: min(riser.length, filling - start + 0.2), low: riser.low, high: riser.high, power: riser.power), .effects, at: filling,
+            level: riser.level, send: 0.2)
+        let thump = SoundRules.floodThump
+        add(.thump(high: thump.high, low: thump.low, length: thump.length, decay: thump.decay), .effects, at: filling + thump.after,
+            level: thump.level, send: 0.15)
+    }
+
+    /// A key for each character a kinetic reveal types.
+    private mutating func keys(_ text: String, revealed reveal: TextReveal, from start: Double, before end: Double) {
+        for (index, character) in text.enumerated() where !character.isNewline {
+            let time = start + reveal.start(ofPart: index)
+            guard time < end else { break }
+            let space = character == " "
+            add(.key(space ? .space : .letter), .effects, at: time, level: space ? SoundRules.spaceLevel : SoundRules.keyLevel,
+                pan: random.uniform(SoundRules.keyPan), send: SoundRules.keySend)
+        }
+    }
+
+    /// Layers in the plan's order: each, then its group's.
+    private static func flattened(_ layers: [MotionLayer]) -> [MotionLayer] {
+        layers.flatMap { layer -> [MotionLayer] in
+            if case .group(let children) = layer.content {
+                return [layer] + flattened(children)
+            }
+            return [layer]
         }
     }
 }

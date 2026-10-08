@@ -28,6 +28,13 @@ nonisolated enum MotionLint {
     /// Typing faster than the fastest reference (25 characters a second) reads as a paste.
     static let fastestTyping = 25.0
 
+    /// A busy field at this strength or less is a glow behind the UI, not a picture competing with it.
+    static let busyStrength = 0.5
+
+    /// Moves that act on a layer already shown: they don't delay when it can be read. A burst and a ripple start
+    /// their own layers, which count for them.
+    private static let actions: Set<MotionMove.Kind> = [.exit, .click, .press, .morph, .flood, .scroll, .burst, .ripple]
+
     static func findings(in document: MotionDocument, sizes: [String: CGSize] = [:]) -> [Finding] {
         let expanded = DocumentExpansion.expanded(document, sizes: sizes)
         var findings: [Finding] = []
@@ -40,7 +47,7 @@ nonisolated enum MotionLint {
         for (scene, source) in zip(expanded.scenes, document.scenes) {
             let context = MoveContext(sceneDuration: scene.duration, canvas: document.canvas.size)
             let layers = timed(scene.layers, in: context, group: nil)
-            findings += textFindings(layers, scene: scene, canvas: document.canvas)
+            findings += textFindings(layers, scene: scene, canvas: document.canvas, context: context)
             findings += timingFindings(layers, scene: scene, isEndCard: source.shot?.kind.isEnding == true, live: live)
             if source.shot?.kind == .hook, let text = source.shot?.text, ReadingTime.words(in: text) > 6 {
                 findings.append(Finding(rule: .hookLength, scene: scene.id, message: "A hook is six words at most; this one has \(ReadingTime.words(in: text))."))
@@ -58,10 +65,11 @@ nonisolated enum MotionLint {
             if let shot = source.shot, shot.kind == .macro, field != .plain {
                 findings += materialFindings(shot, over: field, scene: scene.id, assets: document.assets)
             }
-            // A closing is drawn on black whatever the field
-            if field.isBusy, source.shot?.kind != .macro, source.shot?.kind != .closing {
+            // A closing is drawn on black whatever the field; a field toned down to half is a glow behind the UI
+            if field.isBusy, source.shot?.kind != .macro, source.shot?.kind != .closing, document.canvas.fieldStrength > busyStrength {
                 findings.append(Finding(
-                    rule: .busyField, scene: scene.id, message: "The \(field.rawValue) field competes with what's over it: put it under a macro's glass, or use plain."
+                    rule: .busyField, scene: scene.id,
+                    message: "The \(field.rawValue) field competes with what's over it: put it under a macro's glass, tone it down (fieldStrength 0.45), or use plain."
                 ))
             }
         }
@@ -184,7 +192,7 @@ nonisolated enum MotionLint {
             }
             var timed = TimedLayer(layer: layer, group: group, moves: moves)
             timed.characters = context.characters
-            timed.shown = moves.filter { $0.kind != .exit }.map(\.end).max() ?? 0
+            timed.shown = moves.filter { !actions.contains($0.kind) }.map(\.end).max() ?? 0
             // A group's layers (a cascade's rows, a roll's words) move as one staggered whole
             if case .group(let children) = layer.content {
                 return [timed] + self.timed(children, in: context, group: group ?? layer.id)
@@ -197,7 +205,10 @@ nonisolated enum MotionLint {
         var findings: [Finding] = []
         let cameraMoves = scene.camera.moves.map { MoveExpansion.timing(of: $0, in: MoveContext(sceneDuration: scene.duration, canvas: .zero)) }
         let cameraMovesAtCut = cameraMoves.contains { $0.start < 0.3 } || scene.seam == .cutOnMotion
-        let starts = layers.flatMap { layer in layer.moves.map { (start: $0.start, key: layer.group ?? layer.layer.id + "\($0.start)") } }.sorted { $0.start < $1.start }
+        // A burst's and a ripple's own layers carry their start
+        let starts = layers.flatMap { layer in
+            layer.moves.filter { $0.kind != .burst && $0.kind != .ripple }.map { (start: $0.start, key: layer.group ?? layer.layer.id + "\($0.start)") }
+        }.sorted { $0.start < $1.start }
 
         if let first = starts.first?.start {
             if first < 0.1 {
@@ -266,7 +277,7 @@ nonisolated enum MotionLint {
 
     // MARK: - Text
 
-    private static func textFindings(_ layers: [TimedLayer], scene: MotionScene, canvas: MotionCanvas) -> [Finding] {
+    private static func textFindings(_ layers: [TimedLayer], scene: MotionScene, canvas: MotionCanvas, context: MoveContext) -> [Finding] {
         var findings: [Finding] = []
         let safe = LayoutRules.safeArea(of: canvas.size)
         for timed in layers {
@@ -275,13 +286,15 @@ nonisolated enum MotionLint {
             if text.size < LayoutRules.minimumTextSize(of: canvas.size) {
                 findings.append(Finding(rule: .textSize, scene: scene.id, layer: id, message: "Text under 32 px at 1080p isn't read on a phone."))
             }
-            let contrast = LayoutRules.contrast(text.color, canvas.background)
+            // A control's label is read against the control and at a glance, with the click that changes it
+            let control = self.control(under: timed, at: timed.shown, in: layers, context: context)
+            let contrast = LayoutRules.contrast(text.color, control?.filled == true ? control?.color ?? canvas.background : canvas.background)
             if contrast < LayoutRules.minimumContrast(forSize: text.size, canvas: canvas.size) {
                 let ratio = contrast.formatted(.number.precision(.fractionLength(1)))
                 findings.append(Finding(rule: .contrast, scene: scene.id, layer: id, message: "Contrast \(ratio):1 against the background is too low."))
             }
             let leaves = timed.moves.first { $0.kind == .exit }?.start ?? scene.duration
-            if timed.group == nil, timed.shown > 0, leaves - timed.shown < ReadingTime.hold(for: text.text) - 1e-6 {
+            if timed.group == nil, control == nil, timed.shown > 0, leaves - timed.shown < ReadingTime.hold(for: text.text) - 1e-6 {
                 let held = (leaves - timed.shown).formatted(.number.precision(.fractionLength(1)))
                 let needed = ReadingTime.hold(for: text.text).formatted(.number.precision(.fractionLength(1)))
                 findings.append(Finding(rule: .readingTime, scene: scene.id, layer: id, message: "Held \(held) s once shown; \"\(text.text)\" needs \(needed) s."))
@@ -298,5 +311,42 @@ nonisolated enum MotionLint {
             }
         }
         return findings
+    }
+
+    /// The rectangle `text` sits in at `time`, where its morphs have taken it then, beside it in the same group or at the
+    /// top: a pill's label (spec 0014). Its colour then, and whether it's filled or an outline.
+    private static func control(under text: TimedLayer, at time: Double, in layers: [TimedLayer], context: MoveContext) -> Control? {
+        guard case .text(let content) = text.layer.content else { return nil }
+        let middle = centre(of: text.layer, size: TextImage(content, scale: 0).size, at: time, context: context)
+        let shapes = layers.filter { $0.group == text.group && $0.layer.id != text.layer.id }.compactMap { timed -> Control? in
+            // On screen then: come in, not gone
+            let entrance = timed.moves.filter { !actions.contains($0.kind) }.map(\.start).min() ?? 0
+            let exit = timed.moves.filter { $0.kind == .exit }.map(\.start).min() ?? .infinity
+            guard case .shape(let shape) = timed.layer.content, !shape.isGlyph, entrance <= time, time < exit else { return nil }
+            let state = ShapeMorph(shape, moves: timed.layer.moves, context: context)?.state(at: time)
+                ?? ShapeMorph.State(size: shape.size, radius: shape.cornerRadius, color: shape.color, stroke: shape.stroke ?? 0)
+            let place = centre(of: timed.layer, size: state.size, at: time, context: context)
+            let box = CGRect(x: place.x - state.size.width / 2, y: place.y - state.size.height / 2, width: state.size.width, height: state.size.height)
+            return Control(box: box, color: state.color, filled: state.stroke == 0 && state.color.alpha >= 0.5)
+        }
+        return shapes.last { $0.box.contains(middle) }
+    }
+
+    /// A rectangle as a label sees it: where it is, its colour, and whether that's a fill or only an outline.
+    nonisolated private struct Control {
+        let box: CGRect
+        let color: RGBAColor
+        let filled: Bool
+    }
+
+    /// A layer's middle at `time`, its morphs' and scrolls' places applied, in its parent's space.
+    private static func centre(of layer: MotionLayer, size: CGSize, at time: Double, context: MoveContext) -> CGPoint {
+        let base = CGPoint(x: layer.transform.position.x, y: layer.transform.position.y)
+        let place = MoveExpansion.placeTracks(of: layer.moves, from: base, in: context)
+        let anchor = layer.transform.anchor
+        return CGPoint(
+            x: base.x + (place[.positionX] ?? []).reduce(0) { $0 + $1.value(at: time) } + (0.5 - anchor.x) * size.width * layer.transform.scale,
+            y: base.y + (place[.positionY] ?? []).reduce(0) { $0 + $1.value(at: time) } + (0.5 - anchor.y) * size.height * layer.transform.scale
+        )
     }
 }

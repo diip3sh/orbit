@@ -29,7 +29,7 @@ nonisolated struct MotionDocument: Equatable, Sendable {
     /// Throws the first problem that would make the document draw wrong or not at all.
     func validate() throws(MotionDocumentError) {
         guard canvas.size.width >= 16, canvas.size.height >= 16 else { throw .invalidCanvas }
-        guard (1...120).contains(canvas.frameRate) else { throw .invalidCanvas }
+        guard (1...120).contains(canvas.frameRate), (0...1).contains(canvas.fieldStrength) else { throw .invalidCanvas }
         guard MotionSound.levels.contains(sound.scoreLevel), MotionSound.levels.contains(sound.effectsLevel) else { throw .invalidSound }
         guard !scenes.isEmpty else { throw .noScenes }
         let assetIDs = try validatedAssetIDs()

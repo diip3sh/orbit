@@ -17,6 +17,7 @@ extension MotionPlan {
                 isGroup = true
             }
             var context = context
+            context.position = CGPoint(x: layer.transform.position.x, y: layer.transform.position.y)
             var parts: [CGRect] = []
             let size: CGSize
             if case .text(let text) = layer.content {
@@ -40,6 +41,15 @@ extension MotionPlan {
                 planned.reveal = effect.reveal ?? planned.reveal
                 planned.region = effect.region.map { CGRect(x: $0.minX * size.width, y: $0.minY * size.height, width: $0.width * size.width, height: $0.height * size.height) }
                     ?? planned.region
+            }
+            planned.moves.merge(MoveExpansion.placeTracks(of: layer.moves, from: context.position, in: context)) { $0 + $1 }
+            if case .shape(let shape) = layer.content {
+                planned.morph = ShapeMorph(shape, moves: layer.moves, context: context)
+            }
+            planned.accent = layer.moves.first { $0.kind == .kinetic }?.color
+            planned.clicks = layer.moves.filter { $0.kind == .click }.map { move in
+                let timing = MoveExpansion.timing(of: move, in: context)
+                return Click(press: timing.start, leaves: timing.start + timing.duration)
             }
             list.append(planned)
             if case .group(let children) = layer.content {

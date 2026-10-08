@@ -79,6 +79,25 @@ nonisolated enum SoundRules {
     static let landingThump = (high: 68.0, low: 38.0, length: 0.9, decay: 0.22, level: -8.0)
     static let landingGlass = (note: 86.0, length: 1.4, brightness: 1.3, delay: 0.01, level: -19.0)
 
+    // MARK: - 3b. Motion design (spec 0014)
+
+    /// A pop: a blip a step up D major each time, from A5, so a row of them climbs.
+    static let popNotes = [81.0, 83, 85, 86, 88, 90]
+    static let popLevel = -20.0
+
+    /// A press, a click: a key.
+    static let pressLevel = -14.0
+
+    /// A flood: a riser into the fill, and a low hit as it covers the frame, this long into the fill.
+    static let floodRiser = (length: 0.45, low: 600.0, high: 5000.0, power: 2.0, level: -20.0)
+    static let floodThump = (high: 72.0, low: 40.0, length: 1.0, decay: 0.2, level: -12.0, after: 0.12)
+
+    /// A burst: a glass pair, D6 and A6.
+    static let burstGlass = (notes: [86.0, 93.0], levels: [-17.0, -22.0], pans: [-0.1, 0.15], length: 1.6, send: 0.5)
+
+    /// A scroll whose average speed passes this many canvas heights a second whooshes at its fastest, its middle.
+    static let scrollWhoosh = 0.4
+
     // MARK: - 4. The closing, Raycast's
 
     /// The last shot rises into the cut to black, which gets a deep hit.

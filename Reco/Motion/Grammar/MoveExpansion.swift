@@ -27,6 +27,9 @@ nonisolated struct MoveContext: Sendable {
     /// Where the camera looks before its moves; only pans use it.
     var lookAt = CGPoint.zero
 
+    /// Where the layer's anchor sits before its moves; only a scroll's length uses it.
+    var position = CGPoint.zero
+
     /// A text layer's characters, words and lines; 0 for any other layer.
     var characters = 0
     var words = 0
@@ -48,6 +51,7 @@ nonisolated extension MoveContext {
     /// The context of `layer`'s moves, its text counted.
     init(sceneDuration: Double, canvas: CGSize, layer: MotionLayer) {
         self.init(sceneDuration: sceneDuration, canvas: canvas)
+        position = CGPoint(x: layer.transform.position.x, y: layer.transform.position.y)
         if case .text(let text) = layer.content {
             measure(TextImage(text, scale: 0))
         }
@@ -95,6 +99,28 @@ nonisolated enum MoveExpansion {
     /// motion blur sampled across it.
     static let whipDuration = 0.35
 
+    // MARK: Motion design (spec 0014), measured on LordyVisuals' Spotify Jam film
+
+    /// A morph: the film's pill growing out of a dot in 0.43 s.
+    static let morphDuration = 0.43
+
+    /// Letters 0.036 s apart ("Start a Jam", 11 in 0.4 s), each rising 0.45 of its line over 0.32 s and overshooting.
+    static let letterStagger = 0.036
+    static let letterDuration = 0.32
+
+    /// Kinetic typing: "Black & Tan" at about 13 characters a second.
+    static let kineticRate = 13.0
+
+    /// A pop grows from 0.6 of its size, past it and back, in 0.4 s; a press dips to 0.92 in 0.1 s and springs back.
+    static let popFrom = 0.6
+    static let popDuration = 0.4
+    static let pressDepth = 0.92
+    static let pressDown = 0.1
+    static let pressDuration = 0.4
+
+    /// A scroll's fastest moment in canvas heights a second: the film's queue went 1.83 heights in 1.5 s, in and out.
+    static let scrollSpeed = 1.8
+
     static func timing(of move: MotionMove, in context: MoveContext) -> (start: Double, duration: Double) {
         let start = move.start ?? defaultStart(of: move.kind, in: context)
         return (start, move.duration ?? defaultDuration(of: move, start: start, in: context))
@@ -121,11 +147,17 @@ nonisolated enum MoveExpansion {
             add(.blur, 10 * unit * amount, 0, easing: .enter)
         case .exit:
             effect.tracks = exitTracks(of: move, start: start, duration: duration, in: context)
-        case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan, .whip:
-            // A roll and a cascade become other layers' moves (``DocumentExpansion``)
+        case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan, .whip, .burst, .ripple, .morph, .flood, .scroll:
+            // A roll, a cascade, a burst and a ripple become other layers' moves (``DocumentExpansion``); a morph, a
+            // flood and a scroll a shape's states and the layer's place, with the others before and after (``ShapeMorph``)
             break
-        case .blurWipe, .lineMask, .wordByWord, .type:
+        case .blurWipe, .lineMask, .wordByWord, .type, .letters, .kinetic:
             effect.reveal = reveal(move, start: start, duration: duration, in: context)
+        case .pop:
+            effect.tracks[.opacity] = [ramp(.opacity, (0, 1), start: start, duration: min(0.1, duration), easing: .enterFast)]
+            add(.scale, 1 - (1 - popFrom) * min(amount, 1.5), 1, easing: .overshoot)
+        case .press, .click:
+            effect.tracks[.scale] = pressTracks(depth: pow(pressDepth, amount), start: start, duration: duration)
         case .rise:
             effect.tracks[.opacity] = [ramp(.opacity, (0, 1), start: start, duration: min(uiAppearance, duration), easing: .enterFast)]
             // From 0.9–0.97 and at most 16 px (agentic-product-demo)
@@ -147,6 +179,37 @@ nonisolated enum MoveExpansion {
             add(.blur, 4 * unit * amount, 0, easing: .enterFast)
         }
         return effect
+    }
+
+    /// Where morphs and scrolls with `to` take a layer from `position`, as changes added to its place: each from
+    /// where the one before left it, so a document names only where it goes.
+    static func placeTracks(of moves: [MotionMove], from position: CGPoint, in context: MoveContext) -> [MotionProperty: [PropertyTrack]] {
+        let travels = moves.filter { [.morph, .scroll].contains($0.kind) && $0.target != nil }
+            .map { (move: $0, start: timing(of: $0, in: context).start) }
+            .sorted { $0.start < $1.start }
+        var tracks: [MotionProperty: [PropertyTrack]] = [:]
+        var place = position
+        for (move, start) in travels {
+            guard let target = move.target else { continue }
+            var from = context
+            from.position = place
+            let duration = timing(of: move, in: from).duration
+            let easing: MotionEasing = move.kind == .scroll ? .scroll : .morph
+            for (property, change) in [(MotionProperty.positionX, target.x - place.x), (.positionY, target.y - place.y)] where change != 0 {
+                tracks[property, default: []].append(ramp(property, (0, change), start: start, duration: duration, easing: easing))
+            }
+            place = target
+        }
+        return tracks
+    }
+
+    /// Down to `depth` of its size and springing back past it: a press, which a click's pointer makes too.
+    private static func pressTracks(depth: Double, start: Double, duration: Double) -> [PropertyTrack] {
+        let down = min(pressDown, duration / 2)
+        return [
+            ramp(.scale, (1, depth), start: start, duration: down, easing: .enter),
+            ramp(.scale, (1, 1 / depth), start: start + down, duration: duration - down, easing: .overshoot)
+        ]
     }
 
     /// An exit: it fades, rising a little and blurring; or with a direction, it goes that way, blurred
@@ -244,6 +307,21 @@ nonisolated enum MoveExpansion {
         case .tilt: return 1.2
         case .focus, .detach: return 0.6
         case .stateChange: return 0.2
+        case .letters: return letterStagger * Double(max(context.characters - 1, 0)) + letterDuration
+        case .kinetic: return Double(context.characters) / kineticRate
+        case .morph: return morphDuration
+        // The film's dip (0.17 s) and its fill past the frame (0.4 s)
+        case .flood: return ShapeMorph.floodDip + ShapeMorph.floodFill
+        case .pop: return popDuration
+        case .press: return pressDuration
+        // The pointer stays this long after its press
+        case .click: return 0.8
+        case .burst: return BurstExpansion.duration
+        case .ripple: return BurstExpansion.rippleDuration
+        case .scroll:
+            let distance = move.target.map { hypot($0.x - context.position.x, $0.y - context.position.y) } ?? 0
+            // In-out cubic peaks at 1.5 times its average speed
+            return max(0.6, 1.5 * distance / (scrollSpeed * max(context.canvas.height, 1)))
         // Rows 2–2.5 frames apart at 30 fps, each over 30–33 frames, the group within 0.5 s
         case .cascade: return 1.05
         case .push: return min(1.2, rest)
@@ -259,6 +337,11 @@ nonisolated enum MoveExpansion {
         switch move.kind {
         case .type:
             return TextReveal(style: .type, start: start, stagger: duration / characters, partDuration: 0)
+        case .kinetic:
+            return TextReveal(style: .kinetic, start: start, stagger: duration / characters, partDuration: 0)
+        case .letters:
+            let part = min(letterDuration, duration)
+            return TextReveal(style: .letter, start: start, stagger: (duration - part) / max(characters - 1, 1), partDuration: part)
         case .lineMask:
             let part = min(0.6, duration)
             return TextReveal(style: .rise, start: start, stagger: (duration - part) / Double(max(context.lines - 1, 1)), partDuration: part)

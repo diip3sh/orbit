@@ -16,7 +16,7 @@ nonisolated extension AgentToolCatalog {
         when it starts and ends in seconds into its scene, and the rules' findings to fix. Nothing renders here: then call \
         capture_ui and preview_motion.
 
-        Video: canvas {size [1920,1080], frameRate 60, background "#rrggbb", field, pacing}, style {text, dim, accent: \
+        Video: canvas {size [1920,1080], frameRate 60, background "#rrggbb", field, fieldStrength, pacing}, style {text, dim, accent: \
         "#rrggbb"; face sans|serif|mono; alignment leading|center} from inspect_page's brand, assets, scenes. Pacing \
         driftAndCut: 3–5 s shots, the camera drifting at constant speed, hard cuts (Linear). beats: 1–2 s beats, eased \
         camera moves (Raycast). Field, what scenes are drawn over, one look a film: plain (the background colour, the default: \
@@ -70,6 +70,13 @@ nonisolated extension AgentToolCatalog {
         the last word replaced in turn), exit; any layer rise, tilt, focus (region), detach, stateChange; a group cascade; \
         the camera hold, push, pan (to [x,y] on the canvas, intensity the zoom it ends at), whip (to [x,y], intensity how much \
         closer, 0.35 s), pullBack, drift (direction left, right, up, down). intensity 1 is the grammar's own amount.
+        Motion design (the reco-motion-design skill has recipes): shape layers {size, cornerRadius, color, stroke (an \
+        outline that wide), kind rectangle|triangle|plus|check|cross|arrow|search|play|pause}; a shadow {opacity, radius, \
+        offset 0, color} is a glow; canvas fieldStrength 0–1 tones the field down. Moves: morph {size, radius, color, \
+        stroke (0 fills), to [x,y]} from where the last left it; flood (a rectangle out past the frame); pop; press; click (a \
+        pointer comes in and presses it, a group too); burst {color} (particles); ripple {color, stroke for soft bands}; \
+        letters and kinetic (text: springing in; typed behind an accent caret); scroll {to} (with cascade, rows build as \
+        they come into view).
 
         Sound: every video gets a score and quiet effects made from its own timing: a chord a shot, a hit as the first UI \
         cuts in, keys as text is typed, a whoosh on a whip, Raycast's closing; mastered to -16 LUFS. Write nothing about \

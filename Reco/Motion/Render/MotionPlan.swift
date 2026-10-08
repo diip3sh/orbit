@@ -63,6 +63,15 @@ nonisolated struct MotionPlan: Sendable {
         /// The field typed into that it shows instead of an image.
         var typing: TypedField?
 
+        /// A rectangle's states as its morphs and floods change it, generated afresh each frame (spec 0014).
+        var morph: ShapeMorph?
+
+        /// A kinetic reveal's caret, and its newest letters' colour.
+        var accent: RGBAColor?
+
+        /// When a pointer clicks it.
+        var clicks: [Click] = []
+
         /// The shadow, blurred once at ``rasterScale`` in the layer's own space and projected with
         /// it: blurring it per frame cost most of a frame (a 40 px shadow at 1080p). It spans the
         /// layer and ``shadowPadding`` around it.
@@ -75,6 +84,11 @@ nonisolated struct MotionPlan: Sendable {
 
         func value(_ property: MotionProperty, at time: Double) -> Double {
             MotionPlan.value(property, base: base[property] ?? 0, track: tracks[property], moves: moves[property], at: time)
+        }
+
+        /// The content's size at `time`: a morphing shape's changes.
+        func size(at time: Double) -> CGSize {
+            morph?.state(at: time).size ?? size
         }
     }
 
@@ -157,6 +171,9 @@ nonisolated struct MotionPlan: Sendable {
     let frameRate: Int
     let background: CIColor
 
+    /// How strongly fields show over the background (``MotionCanvas/fieldStrength``).
+    var fieldStrength = 1.0
+
     /// Drawn for the editor's preview, which the window shows smaller: detail it can't show may be
     /// traded for speed.
     var isPreview = false
@@ -172,6 +189,9 @@ nonisolated struct MotionPlan: Sendable {
 
     /// What the video's sound is made from (spec 0013).
     private(set) var sound = SoundCueSheet()
+
+    /// The pointer clicks show, when a layer has one.
+    var pointer: MotionPointer?
 
     var duration: Double {
         scenes.last.map { $0.start + $0.duration } ?? 0
@@ -223,18 +243,20 @@ nonisolated struct MotionPlan: Sendable {
                 rotation: [layer.value(.rotationX, at: time), layer.value(.rotationY, at: time), layer.value(.rotationZ, at: time)]
             )
             let world = layer.parent.map { worlds[$0] } ?? matrix_identity_double4x4
-            let matrix = world * transform.matrix(size: layer.size)
+            // A morphing shape changes size about its anchor
+            let size = layer.size(at: time)
+            let matrix = world * transform.matrix(size: size)
             let opacity = (layer.parent.map { opacities[$0] } ?? 1) * min(max(layer.value(.opacity, at: time), 0), 1)
             worlds.append(matrix)
             opacities.append(opacity)
 
-            guard layer.isDrawn, opacity > 0 else { continue }
-            let local = [CGPoint.zero, CGPoint(x: layer.size.width, y: 0), CGPoint(x: layer.size.width, y: layer.size.height), CGPoint(x: 0, y: layer.size.height)]
+            guard layer.isDrawn, opacity > 0, size.width > 0, size.height > 0 else { continue }
+            let local = [CGPoint.zero, CGPoint(x: size.width, y: 0), CGPoint(x: size.width, y: size.height), CGPoint(x: 0, y: size.height)]
             let projected = local.compactMap { point in camera.project((matrix * SIMD4(point.x, point.y, 0, 1)).xyz) }
             guard projected.count == 4,
-                  let center = camera.project((matrix * SIMD4(layer.size.width / 2, layer.size.height / 2, 0, 1)).xyz) else { continue }
+                  let center = camera.project((matrix * SIMD4(size.width / 2, size.height / 2, 0, 1)).xyz) else { continue }
             let corners = projected.map(\.point)
-            let scale = Self.scale(of: corners, size: layer.size)
+            let scale = Self.scale(of: corners, size: size)
             var placement = Placement(
                 layer: index, corners: corners, depth: center.depth, opacity: opacity, blur: max(layer.value(.blur, at: time), 0) * scale, scale: scale
             )
@@ -244,8 +266,8 @@ nonisolated struct MotionPlan: Sendable {
             if layer.shadow != nil {
                 let padding = layer.shadowPadding
                 let padded = [
-                    CGPoint(x: -padding, y: -padding), CGPoint(x: layer.size.width + padding, y: -padding),
-                    CGPoint(x: layer.size.width + padding, y: layer.size.height + padding), CGPoint(x: -padding, y: layer.size.height + padding)
+                    CGPoint(x: -padding, y: -padding), CGPoint(x: size.width + padding, y: -padding),
+                    CGPoint(x: size.width + padding, y: size.height + padding), CGPoint(x: -padding, y: size.height + padding)
                 ].compactMap { point in camera.project((matrix * SIMD4(point.x, point.y, 0, 1)).xyz)?.point }
                 placement.shadowCorners = padded.count == 4 ? padded : nil
             }
@@ -334,14 +356,19 @@ extension MotionPlan {
         let color = document.canvas.background
         var plan = MotionPlan(
             canvas: canvas, outputScale: outputScale, frameRate: frameRate ?? document.canvas.frameRate,
-            background: CIColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha), scenes: scenes
+            background: CIColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha), fieldStrength: document.canvas.fieldStrength, scenes: scenes
         )
         plan.drawImages(for: expanded, bundle: bundle, lifts: lifts, takes: takes, measured: measured)
-        // A scene's camera follows the selection in its typed fields
-        for index in plan.scenes.indices {
-            plan.scenes[index].cameraMoves[.positionY, default: []] += plan.scenes[index].layers.flatMap { $0.typing?.follow() ?? [] }
-        }
+        plan.pointer = plan.hasClicks ? await MotionPointer.system() : nil
+        plan.followSelections()
         return plan.scored(by: expanded)
+    }
+
+    /// A scene's camera follows the selection in its typed fields.
+    nonisolated private mutating func followSelections() {
+        for index in scenes.indices {
+            scenes[index].cameraMoves[.positionY, default: []] += scenes[index].layers.flatMap { $0.typing?.follow() ?? [] }
+        }
     }
 
     /// Draws every layer's image at the largest scale it's shown in its scene, and lists the lifts
@@ -377,6 +404,8 @@ extension MotionPlan {
                    showStill(lifted, asset: stills[lifted.asset], on: MotionPlan.LayerKey(scene: sceneIndex, layer: index), lift: lifts[lifted.asset], bundle: bundle) {
                     continue
                 }
+                // A morphing shape is generated each frame, its glow with it
+                guard scenes[sceneIndex].layers[index].morph == nil else { continue }
                 let image = Self.image(of: contents[index], scale: rasterScale, size: scenes[sceneIndex].layers[index].size, bundle: bundle, lifts: lifts)
                 scenes[sceneIndex].layers[index].image = image
                 scenes[sceneIndex].layers[index].focusedImage = image.flatMap { Self.focusedImage(of: $0, layer: scenes[sceneIndex].layers[index]) }

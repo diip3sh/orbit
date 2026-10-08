@@ -31,7 +31,7 @@ nonisolated enum DocumentExpansion {
         for index in document.scenes.indices {
             var result = laidOut(document, scene: index, sizes: sizes)
             let context = MoveContext(sceneDuration: result.duration, canvas: document.canvas.size)
-            result.layers = result.layers.map { expanded($0, in: context) }
+            result.layers = expanded(result.layers, in: Expansion(context: context, style: document.style, sizes: sizes))
             output.scenes[index] = result
         }
         return output
@@ -67,34 +67,77 @@ nonisolated enum DocumentExpansion {
         return shotLayers.map { replacing[$0.id] ?? $0 } + own.filter { !shotIDs.contains($0.id) }
     }
 
-    private static func expanded(_ layer: MotionLayer, in context: MoveContext) -> MotionLayer {
+    /// What expanding a scene's layers needs besides them.
+    nonisolated private struct Expansion {
+        let context: MoveContext
+        let style: StyleTokens
+        let sizes: [String: CGSize]
+    }
+
+    /// Each layer expanded between its accents: a burst's particles come from behind it, a ripple's rings open over
+    /// it, so they show across a flood that covers the frame.
+    private static func expanded(_ layers: [MotionLayer], in expansion: Expansion) -> [MotionLayer] {
+        layers.flatMap { layer in
+            let accents = BurstExpansion.accents(of: .init(layer: layer, style: expansion.style, sizes: expansion.sizes, context: expansion.context))
+            return accents.behind + [expanded(layer, in: expansion)] + accents.over
+        }
+    }
+
+    private static func expanded(_ layer: MotionLayer, in expansion: Expansion) -> MotionLayer {
         var layer = layer
         if case .group(let children) = layer.content {
-            layer.content = .group(children.map { expanded($0, in: context) })
+            layer.content = .group(expanded(children, in: expansion))
+        }
+        // A kinetic caret is in the accent unless the move names a colour
+        layer.moves = layer.moves.map { move in
+            guard move.kind == .kinetic, move.color == nil else { return move }
+            var coloured = move
+            coloured.color = expansion.style.accent ?? expansion.style.text
+            return coloured
         }
         if let cascade = layer.moves.first(where: { $0.kind == .cascade }), case .group(let rows) = layer.content {
             layer.moves.removeAll { $0.kind == .cascade }
-            layer.content = .group(cascaded(rows, by: cascade))
+            layer.content = .group(cascaded(rows, by: cascade, in: layer, expansion: expansion))
         }
         if let roll = layer.moves.first(where: { $0.kind == .roll }), case .text(let text) = layer.content {
             layer.moves.removeAll { $0.kind == .roll }
-            return rolled(layer, text: text, roll: roll, in: context)
+            return rolled(layer, text: text, roll: roll, in: expansion.context)
         }
         return layer
     }
 
-    /// Each row rises in turn.
-    private static func cascaded(_ rows: [MotionLayer], by cascade: MotionMove) -> [MotionLayer] {
+    /// Each row rises in turn; in a group that scrolls, a row below the frame rises once the scroll brings it into
+    /// view, as the Spotify Jam film's queue builds (spec 0014).
+    private static func cascaded(_ rows: [MotionLayer], by cascade: MotionMove, in group: MotionLayer, expansion: Expansion) -> [MotionLayer] {
         let start = cascade.start ?? MoveExpansion.entranceStart
         let stagger = rows.count > 1 ? min(cascadeStagger, longestStagger / Double(rows.count - 1)) : 0
+        let place = MoveExpansion.placeTracks(of: group.moves, from: CGPoint(x: group.transform.position.x, y: group.transform.position.y), in: expansion.context)
+        let groupY = { (time: Double) in group.transform.position.y + (place[.positionY] ?? []).reduce(0) { $0 + $1.value(at: time) } }
         return rows.enumerated().map { index, row in
             var row = row
-            var rise = MotionMove(.rise, start: start + Double(index) * stagger, duration: cascade.duration ?? 1.05)
+            let height: Double = if case .text(let text) = row.content {
+                TextImage(text, scale: 0).size.height
+            } else {
+                MotionPlan.size(of: row.content, sizes: expansion.sizes).height
+            }
+            let top = row.transform.position.y - row.transform.anchor.y * height * row.transform.scale
+            var begins = start + Double(index) * stagger
+            if place[.positionY] != nil {
+                // The first moment its top is inside the frame, sampled at 60 Hz
+                let bottom = expansion.context.canvas.height * scrollEntry
+                while begins < expansion.context.sceneDuration, groupY(begins) + top > bottom {
+                    begins += 1 / 60
+                }
+            }
+            var rise = MotionMove(.rise, start: begins, duration: cascade.duration ?? 1.05)
             rise.intensity = cascade.intensity
             row.moves.insert(rise, at: 0)
             return row
         }
     }
+
+    /// How far down the frame a scrolled row's top comes before it rises.
+    static let scrollEntry = 0.95
 
     // MARK: - Roll
 

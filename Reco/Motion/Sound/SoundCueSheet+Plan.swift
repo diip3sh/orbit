@@ -24,6 +24,7 @@ nonisolated extension SoundCueSheet {
         }
         cues.cuts(of: plan, document: document, before: end, except: opening)
         cues.typing(in: plan, document: document, before: end)
+        cues.design(in: plan, document: document, before: end)
         cues.whips(whips)
         sheet.chords = bodyChords(of: plan, whips: whips, until: end, closes: closing != nil)
         sheet.air = end > 0 ? Air(start: 0, end: end, level: SoundRules.airLevel) : nil

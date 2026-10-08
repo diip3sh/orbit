@@ -67,6 +67,7 @@ nonisolated struct MotionEdit: Codable, Equatable, Sendable {
         var frameRate: Int?
         var background: RGBAColor?
         var field: MotionField?
+        var fieldStrength: Double?
         var pacing: MotionCanvas.Pacing?
     }
 
@@ -144,6 +145,7 @@ nonisolated extension MotionEdit {
             document.canvas.frameRate = change.frameRate ?? document.canvas.frameRate
             document.canvas.background = change.background ?? document.canvas.background
             document.canvas.field = change.field ?? document.canvas.field
+            document.canvas.fieldStrength = change.fieldStrength ?? document.canvas.fieldStrength
             document.canvas.pacing = change.pacing ?? document.canvas.pacing
         case .setStyle:
             let change = try required(style, "style")

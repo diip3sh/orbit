@@ -6,7 +6,8 @@
 import CoreGraphics
 
 /// How a value moves from one keyframe to the next. No bounce, back or elastic exists to choose:
-/// the reference videos never overshoot (spec 0011, *Craft defaults*).
+/// the reference videos never overshoot (spec 0011, *Craft defaults*); a cubic Bézier past 1 does, which only
+/// motion design's moves use (``MotionEasing/overshoot``, spec 0014).
 ///
 /// Coded the way a person or an agent writes it: `"linear"`, `"hold"`, `[x1, y1, x2, y2]` for a
 /// cubic Bézier as in CSS, `{"spring": response}` or `{"settle": timeConstant}`.

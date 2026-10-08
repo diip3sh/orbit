@@ -18,6 +18,10 @@ nonisolated struct MotionCanvas: Equatable, Sendable {
     /// What every scene is drawn over unless it names its own.
     var field = MotionField.plain
 
+    /// How strongly the field shows over the background, 0 to 1: motion design's small UI wants its light toned
+    /// down to a glow (spec 0014).
+    var fieldStrength = 1.0
+
     var pacing = Pacing.driftAndCut
 
     /// The two ways the reference films move (spec 0011, *Measured references*).
@@ -41,6 +45,7 @@ nonisolated extension MotionCanvas: Codable {
         frameRate = try container.decodeIfPresent(Int.self, forKey: .frameRate) ?? defaults.frameRate
         background = try container.decodeIfPresent(RGBAColor.self, forKey: .background) ?? defaults.background
         field = try container.decodeIfPresent(MotionField.self, forKey: .field) ?? defaults.field
+        fieldStrength = try container.decodeIfPresent(Double.self, forKey: .fieldStrength) ?? defaults.fieldStrength
         pacing = try container.decodeIfPresent(Pacing.self, forKey: .pacing) ?? defaults.pacing
     }
 }

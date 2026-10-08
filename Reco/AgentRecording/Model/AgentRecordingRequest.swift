@@ -96,12 +96,20 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         motion != nil || (mode == .launch && take == nil)
     }
 
-    /// How a launch film is made (``AgentSkill``): Claude Code loads the skill, other agents read it here.
+    /// How a launch film is made (``AgentSkill``): Claude Code loads the skill the film needs, other agents read the
+    /// launch film's here.
     private var launchMethod: String {
-        agent == .claudeCode
-            ? "Before anything else, load the \(AgentSkill.launchFilmName) skill with the Skill tool and follow it: it is how Reco makes a launch film."
-            : AgentSkill.launchFilmMethod
+        agent == .claudeCode ? Self.skillChoice : AgentSkill.launchFilmMethod
     }
+
+    /// Which of Reco's skills to load, by what the user asked for (spec 0014).
+    static let skillChoice = """
+        Before anything else, choose Reco's skill for this film and load it with the Skill tool, then follow it: \
+        \(AgentSkill.launchFilmName) for the product's real UI up close, typed into and toured (the default); \
+        \(AgentSkill.motionDesignName) when the user asks for motion design, a UI animation or a concept film, or names \
+        movements such as morphs, a flood, a burst or kinetic type, and for a consumer app whose story is one flow through \
+        its UI. For a film of 45 s or more, or when the user asks for both, load both.
+        """
 
     /// How a motion video is changed from its window's chat.
     static let motionChangePlaybook = """
@@ -172,7 +180,8 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         parts.append("What the user asks now:\n" + wanted)
         parts.append(Self.motionChangePlaybook)
         parts.append(agent == .claudeCode
-            ? "For anything beyond a small tweak (a new scene, a new look, making it better), load the \(AgentSkill.launchFilmName) skill with the Skill tool first."
+            ? "For anything beyond a small tweak (a new scene, a new look, making it better), first load the skill the video is made with: "
+                + "\(AgentSkill.motionDesignName) if its scenes are shapes and type that morph, else \(AgentSkill.launchFilmName)."
             : "For anything beyond a small tweak, this is how Reco makes a launch film:\n\n" + AgentSkill.launchFilmMethod)
         parts.append("""
             Use only the reco MCP tools. Don't ask questions; decide yourself. When it's done, reply in one or two short sentences \

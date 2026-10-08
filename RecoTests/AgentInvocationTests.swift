@@ -154,14 +154,17 @@ extension AgentInvocationTests {
         launch.mode = .launch
         let run = try #require(AgentInvocation.make(for: launch, in: directory, server: server))
         #expect(run.files[AgentSkill.launchFilmPath] == AgentSkill.launchFilm)
-        #expect(run.arguments.contains("WebSearch,WebFetch,Skill"))
-        #expect(run.arguments.prefix { $0 != "--permission-mode" }.suffix(4) == ["mcp__reco__*", "WebSearch", "WebFetch", "Skill"])
-        #expect(launch.prompt.contains("load the reco-launch-film skill"))
+        #expect(run.files[".claude/skills/reco-motion-design/SKILL.md"] == AgentSkill.motionDesign)
+        #expect(run.files.keys.filter { $0.hasPrefix(".claude/skills/reco-motion-design/reference/") }.count == AgentSkill.motionDesignReferences.count)
+        // Read, but only inside the skills: their references are loaded as they're needed
+        #expect(run.arguments.contains("WebSearch,WebFetch,Skill,Read"))
+        #expect(run.arguments.prefix { $0 != "--permission-mode" }.suffix(5) == ["mcp__reco__*", "WebSearch", "WebFetch", "Skill", "Read(./.claude/skills/**)"])
+        #expect(launch.prompt.contains("choose Reco's skill for this film") && launch.prompt.contains("reco-motion-design"))
         #expect(!launch.prompt.contains(AgentSkill.launchFilmMethod))
 
         let walkthrough = try invocation(.claudeCode)
-        #expect(walkthrough.files[AgentSkill.launchFilmPath] == nil)
-        #expect(!walkthrough.arguments.contains("Skill"))
+        #expect(walkthrough.files.isEmpty || walkthrough.files[AgentSkill.launchFilmPath] == nil)
+        #expect(!walkthrough.arguments.contains("Skill") && !walkthrough.arguments.contains { $0.contains("Read") })
 
         var codex = try request(.codex)
         codex.mode = .launch
@@ -169,10 +172,28 @@ extension AgentInvocationTests {
         #expect(try #require(AgentInvocation.make(for: codex, in: directory, server: server)).files[AgentSkill.launchFilmPath] == nil)
     }
 
-    /// The skill ships in the app: Claude Code's front matter, then the method.
-    @Test func theSkillIsBundledWithItsFrontMatter() {
+    /// The skills ship in the app: Claude Code's front matter, then the method; motion design's references beside it.
+    @Test func theSkillsAreBundledWithTheirFrontMatter() {
         #expect(AgentSkill.launchFilm.hasPrefix("---\nname: reco-launch-film\ndescription: "))
         #expect(AgentSkill.launchFilmMethod.hasPrefix("# A launch film, Reco's way"))
+        #expect(AgentSkill.motionDesign.hasPrefix("---\nname: reco-motion-design\ndescription: "))
+        #expect(AgentSkill.files.count == 2 + AgentSkill.motionDesignReferences.count)
+        #expect(AgentSkill.files.values.allSatisfy { !$0.isEmpty })
+        // Each reference the method names is there
+        for name in AgentSkill.motionDesignReferences {
+            #expect(AgentSkill.motionDesign.contains("reference/\(name).md"))
+        }
+    }
+
+    /// Motion design's whole example is a document the grammar takes as it is, with nothing for the lint to find.
+    @Test func theMotionDesignExampleIsAValidDocument() throws {
+        let example = try #require(AgentSkill.files[".claude/skills/reco-motion-design/reference/example.md"])
+        let start = try #require(example.range(of: "```json\n"))
+        let end = try #require(example.range(of: "\n```", range: start.upperBound..<example.endIndex))
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(example[start.upperBound..<end.lowerBound].utf8))
+        try document.validate()
+        #expect(document.canvas.fieldStrength == 0.45 && document.scenes.count == 5)
+        #expect(MotionLint.findings(in: document).isEmpty)
     }
 
     /// The film the skill shows an agent is a document the grammar takes as it is, its colours as hex.

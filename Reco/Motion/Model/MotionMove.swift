@@ -16,8 +16,15 @@ nonisolated struct MotionMove: Equatable, Sendable {
         case fadeUp, blurIn, exit
         // Text only
         case blurWipe, lineMask, wordByWord, type, roll
+        // Text only, motion design (spec 0014): letters springing in; typed behind a caret in the accent
+        case letters, kinetic
         // UI and any layer
         case rise, slideIn, tilt, focus, detach, stateChange
+        // Motion design, any layer: a pop in, a press, a pointer clicking it, particles out of it, rings out of it,
+        // a long travel to `to`, and a change of size, corners, colour, outline or place
+        case pop, press, click, burst, ripple, scroll, morph
+        // Motion design, a rectangle: out past the frame's corners
+        case flood
         // Groups: their layers one after another
         case cascade
         // Cameras
@@ -28,7 +35,7 @@ nonisolated struct MotionMove: Equatable, Sendable {
         }
 
         var needsText: Bool {
-            [.blurWipe, .lineMask, .wordByWord, .type, .roll].contains(self)
+            [.blurWipe, .lineMask, .wordByWord, .type, .roll, .letters, .kinetic].contains(self)
         }
     }
 
@@ -57,8 +64,16 @@ nonisolated struct MotionMove: Equatable, Sendable {
     /// What a focus frames, in fractions of the layer from its top-left corner.
     var region: CGRect?
 
-    /// Where a pan or a whip ends, the point the camera looks at in canvas pixels; coded `to`.
+    /// Where a pan or a whip ends, the point the camera looks at in canvas pixels; where a morph or a scroll
+    /// puts the layer's anchor. Coded `to`.
     var target: CGPoint?
+
+    /// What a morph changes a shape to: its size and corner radius in canvas pixels, its colour (also a burst's
+    /// particles' and a ripple's rings', and a kinetic caret's), and its outline's width (0 fills it).
+    var size: CGSize?
+    var radius: Double?
+    var color: RGBAColor?
+    var stroke: Double?
 
     init(_ kind: Kind, start: Double? = nil, duration: Double? = nil) {
         self.kind = kind
@@ -72,13 +87,14 @@ nonisolated struct MotionMove: Equatable, Sendable {
 nonisolated extension MotionMove {
 
     private var hasValidNumbers: Bool {
-        let isNegative = [start, duration, intensity].contains { $0.map { !$0.isFinite || $0 < 0 } ?? false }
-        return !isNegative && duration != 0 && intensity != 0
+        let isNegative = [start, duration, intensity, radius, stroke].contains { $0.map { !$0.isFinite || $0 < 0 } ?? false }
+        let isEmpty = size.map { !($0.width > 0 && $0.height > 0 && $0.width.isFinite && $0.height.isFinite) } ?? false
+        return !isNegative && !isEmpty && duration != 0 && intensity != 0
     }
 
     /// What's wrong with this move on a layer showing `content`, or on a camera when `nil`.
     func problem(on content: LayerContent?) -> String? {
-        guard hasValidNumbers else { return "start must be 0 or more, duration and intensity more than 0." }
+        guard hasValidNumbers else { return "start, radius and stroke must be 0 or more; duration, intensity and size more than 0." }
         let isText = if case .text = content { true } else { false }
         let isGroup = if case .group = content { true } else { false }
         if kind.isCamera != (content == nil) {
@@ -87,12 +103,35 @@ nonisolated extension MotionMove {
         switch kind {
         case let kind where kind.needsText && !isText: return "\(kind.rawValue) needs a text layer."
         case .cascade where !isGroup: return "cascade needs a group: its layers enter one after another."
-        case .roll where words?.isEmpty ?? true: return "roll needs words."
-        case .pan where target == nil, .whip where target == nil: return "\(kind.rawValue) needs to: the point to look at."
-        case .focus where !(region.map { CGRect(x: 0, y: 0, width: 1, height: 1).contains($0) && !$0.isEmpty } ?? false):
-            return "focus needs a region inside the layer, in fractions of its size."
-        default: return nil
+        case .morph, .flood: return shapeProblem(on: content)
+        default: return missingField
         }
+    }
+
+    /// A field the move can't do without.
+    private var missingField: String? {
+        switch kind {
+        case .roll where words?.isEmpty ?? true: "roll needs words."
+        case .pan where target == nil, .whip where target == nil: "\(kind.rawValue) needs to: the point to look at."
+        case .focus where !(region.map { CGRect(x: 0, y: 0, width: 1, height: 1).contains($0) && !$0.isEmpty } ?? false):
+            "focus needs a region inside the layer, in fractions of its size."
+        case .scroll where target == nil: "scroll needs to: where the layer's anchor ends, in canvas pixels."
+        default: nil
+        }
+    }
+
+    /// A morph changes something, and only a rectangle's size, corners, colour and outline; a flood fills the frame
+    /// from a rectangle.
+    private func shapeProblem(on content: LayerContent?) -> String? {
+        let rectangle = if case .shape(let shape) = content, !shape.isGlyph { true } else { false }
+        if kind == .flood {
+            return rectangle ? nil : "flood needs a rectangle shape: it grows out past the frame's corners."
+        }
+        guard size != nil || radius != nil || color != nil || stroke != nil || target != nil else {
+            return "morph needs size, radius, color, stroke or to: what it changes."
+        }
+        return rectangle || (size == nil && radius == nil && color == nil && stroke == nil)
+            ? nil : "morph changes a rectangle shape's size, radius, color and stroke; any layer's place (to)."
     }
 }
 
@@ -102,7 +141,7 @@ nonisolated extension MotionMove: Codable {
 
     private enum CodingKeys: String, CodingKey {
         case kind = "move"
-        case start, duration, intensity, direction, words, region
+        case start, duration, intensity, direction, words, region, size, radius, color, stroke
         case target = "to"
     }
 }

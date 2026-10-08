@@ -103,18 +103,7 @@ nonisolated enum MotionFrameRenderer {
         var image = CIImage.empty()
         for placement in plan.placements(of: scene, at: time) {
             var layer = scene.layers[placement.layer]
-            var content: CIImage
-            if let live = layer.live {
-                guard let take = frames[MotionPlan.LayerKey(scene: index, layer: placement.layer)] else { continue }
-                content = liveImage(take, live: live, at: time)
-            } else if let typing = layer.typing {
-                content = typed(typing, at: time, layer: layer)
-                // Its glass as tall as the field is now, growing with its results
-                layer.glass?.height = typing.height(at: time)
-            } else {
-                guard let layerImage = layer.image else { continue }
-                content = layerImage
-            }
+            guard var content = content(of: &layer, at: time, take: frames[MotionPlan.LayerKey(scene: index, layer: placement.layer)]) else { continue }
             if let reveal = layer.reveal {
                 content = revealed(content, of: layer, by: reveal, at: time)
             }
@@ -135,20 +124,44 @@ nonisolated enum MotionFrameRenderer {
             }
             image = layerImage.composited(over: image)
         }
+        image = pointers(of: scene, at: time, plan: plan).composited(over: image)
         let bounds = CGRect(origin: .zero, size: plan.outputSize)
         let blur = scene.cameraValue(.blur, at: time) * plan.outputScale
         guard blur >= 0.3 else { return image.composited(over: field) }
         return image.clampedToExtent().applyingGaussianBlur(sigma: blur).cropped(to: bounds).composited(over: field)
     }
 
+    /// A layer's own pixels at `time`: its live take's frame (`take`), its field as typed, its shape as morphed (with its
+    /// glow), or its image; `nil` when it has none.
+    private static func content(of layer: inout MotionPlan.Layer, at time: Double, take: CIImage?) -> CIImage? {
+        if let live = layer.live {
+            return take.map { liveImage($0, live: live, at: time) }
+        }
+        if let typing = layer.typing {
+            // Its glass as tall as the field is now, growing with its results
+            layer.glass?.height = typing.height(at: time)
+            return typed(typing, at: time, layer: layer)
+        }
+        if let morph = layer.morph {
+            let shape = morph.image(at: time, scale: layer.rasterScale)
+            // Its glow follows its shape: a recipe, blurred only where the frame needs it
+            layer.shadowImage = layer.shadow.map { MotionPlan.silhouette(of: shape, shadow: $0, padding: layer.shadowPadding, scale: layer.rasterScale) }
+            return shape
+        }
+        return layer.image
+    }
+
     /// A scene's field at `time` in it, on the video's clock, so a field runs on across a cut to a scene with the
     /// same one. An opening whose control arrives in its look's seam swells in from black first.
     private static func ground(_ index: Int, at time: Double, plan: MotionPlan) -> CIImage {
         let scene = plan.scenes[index]
-        let field = FieldRenderer.image(
+        var field = FieldRenderer.image(
             scene.field, palette: scene.palette, at: scene.start + time, size: plan.outputSize, preview: plan.isPreview,
             shot: shot(of: scene, at: time, plan: plan)
         )
+        if plan.fieldStrength < 1 {
+            field = field.fading(to: plan.fieldStrength).composited(over: CIImage(color: plan.background)).cropped(to: field.extent)
+        }
         guard scene.arrival != nil, time < groundSwell else { return field }
         return field.fading(to: MotionEasing.enter.progress(max(time, 0) / groundSwell, duration: groundSwell))
     }
@@ -291,20 +304,15 @@ nonisolated enum MotionFrameRenderer {
     /// A text layer's parts shown as far as `reveal` has got at `time`: each whole, or partly, by
     /// its style. Its image is drawn at its raster scale, rounded up to whole pixels.
     private static func revealed(_ image: CIImage, of layer: MotionPlan.Layer, by reveal: TextReveal, at time: Double) -> CIImage {
-        let (scale, height, parts) = (layer.rasterScale, layer.size.height, layer.parts)
-        let pixels = { (rect: CGRect) in
-            // Taller than the line, for accents and descenders that reach past it
-            let rect = rect.insetBy(dx: 0, dy: -rect.height * 0.15)
-            return CGRect(x: rect.minX * scale, y: (height - rect.maxY) * scale, width: rect.width * scale, height: rect.height * scale)
-        }
+        let pixels = { (rect: CGRect) in revealPixels(of: rect, in: layer) }
         // The layer's whole extent, clear where nothing shows yet: the projection maps the extent to the quad
         var shown = CIImage(color: .clear).cropped(to: image.extent)
         // Parts already shown in full, joined while they're on one line
         var whole: CGRect?
-        for (index, part) in parts.enumerated() {
-            let progress = reveal.progress(ofPart: index, at: time)
-            guard progress > 0 else { break }
-            if progress >= 1 {
+        for (index, part) in layer.parts.enumerated() {
+            let fraction = reveal.fraction(ofPart: index, at: time)
+            guard fraction > 0 else { break }
+            if fraction >= 1 {
                 if let run = whole, abs(run.minY - part.minY) < 0.5 {
                     whole = run.union(part)
                 } else {
@@ -315,27 +323,51 @@ nonisolated enum MotionFrameRenderer {
                 }
                 continue
             }
-            let piece = image.cropped(to: pixels(part))
-            switch reveal.style {
-            case .type:
-                break
-            case .wipe:
-                // Sharpens as it fades in: 8% of its line, 9.8 px for a 1080p headline (at most 10 on text)
-                shown = piece.applyingGaussianBlur(sigma: (1 - progress) * part.height * 0.08 * scale).fading(to: progress).composited(over: shown)
-            case .rise:
-                shown = piece.transformed(by: CGAffineTransform(translationX: 0, y: -(1 - progress) * part.height * scale))
-                    .cropped(to: pixels(part)).composited(over: shown)
-            case .word:
-                // Up a quarter of its line, sharpening from 4% of it, as it fades in
-                shown = piece.applyingGaussianBlur(sigma: (1 - progress) * part.height * 0.04 * scale)
-                    .transformed(by: CGAffineTransform(translationX: 0, y: -(1 - progress) * part.height * 0.25 * scale))
-                    .fading(to: progress).composited(over: shown)
+            let progress = reveal.progress(ofPart: index, at: time)
+            if let piece = partway(image.cropped(to: pixels(part)), part: part, of: layer, style: reveal.style, progress: (progress, fraction)) {
+                shown = piece.composited(over: shown)
             }
         }
         if let run = whole {
             shown = image.cropped(to: pixels(run)).composited(over: shown)
         }
+        if reveal.style == .kinetic, layer.accent != nil {
+            shown = kinetic(shown, image: image, of: layer, by: reveal, at: time)
+        }
         return shown.cropped(to: image.extent)
+    }
+
+    /// A part's rectangle (canvas pixels from the layer's top-left) in its image's pixels, taller than its line for
+    /// accents and descenders that reach past it.
+    static func revealPixels(of rect: CGRect, in layer: MotionPlan.Layer) -> CGRect {
+        let (scale, height) = (layer.rasterScale, layer.size.height)
+        let rect = rect.insetBy(dx: 0, dy: -rect.height * 0.15)
+        return CGRect(x: rect.minX * scale, y: (height - rect.maxY) * scale, width: rect.width * scale, height: rect.height * scale)
+    }
+
+    /// A part on its way in, `progress` of the way (eased, then not), as its style shows it; `nil` for a style that
+    /// shows a part only whole.
+    private static func partway(
+        _ piece: CIImage, part: CGRect, of layer: MotionPlan.Layer, style: TextReveal.Style, progress: (eased: Double, fraction: Double)
+    ) -> CIImage? {
+        let (eased, line, scale) = (progress.eased, part.height, layer.rasterScale)
+        switch style {
+        case .type, .kinetic:
+            return nil
+        case .wipe:
+            // Sharpens as it fades in: 8% of its line, 9.8 px for a 1080p headline (at most 10 on text)
+            return piece.applyingGaussianBlur(sigma: (1 - eased) * line * 0.08 * scale).fading(to: eased)
+        case .rise:
+            return piece.transformed(by: CGAffineTransform(translationX: 0, y: -(1 - eased) * line * scale)).cropped(to: revealPixels(of: part, in: layer))
+        case .word:
+            // Up a quarter of its line, sharpening from 4% of it, as it fades in
+            return piece.applyingGaussianBlur(sigma: (1 - eased) * line * 0.04 * scale)
+                .transformed(by: CGAffineTransform(translationX: 0, y: -(1 - eased) * line * 0.25 * scale)).fading(to: eased)
+        case .letter:
+            // Up 0.45 of its line past its place and back, sharpening from 6% of it, there within its first 40%
+            return piece.applyingGaussianBlur(sigma: max(1 - progress.fraction * 1.5, 0) * line * 0.06 * scale)
+                .transformed(by: CGAffineTransform(translationX: 0, y: -(1 - eased) * line * 0.45 * scale)).fading(to: min(progress.fraction / 0.4, 1))
+        }
     }
 
     /// `image` with its corners on `corners`, given in canvas points from the top-left.

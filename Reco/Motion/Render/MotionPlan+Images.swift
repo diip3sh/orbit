@@ -18,20 +18,29 @@ extension MotionPlan {
     /// The image's silhouette in black at the shadow's opacity, blurred, with `padding` canvas pixels
     /// around it, drawn into a bitmap.
     nonisolated static func shadow(of image: CIImage, shadow: LayerShadow, padding: Double, scale: Double) -> CIImage? {
+        let silhouette = silhouette(of: image, shadow: shadow, padding: padding, scale: scale)
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let bitmap = context.createCGImage(silhouette, from: silhouette.extent, format: .RGBA8, colorSpace: space) else { return nil }
+        return CIImage(cgImage: bitmap)
+    }
+
+    /// The image's silhouette in the shadow's colour (black without one) at its opacity, blurred, with `padding`
+    /// canvas pixels around it: a recipe, drawn when its frame is. A morphing shape's glow is made per frame from it.
+    nonisolated static func silhouette(of image: CIImage, shadow: LayerShadow, padding: Double, scale: Double) -> CIImage {
         let inset = padding * scale
+        let color = shadow.color ?? RGBAColor(red: 0, green: 0, blue: 0, alpha: 1)
         let silhouette = image
             .applyingFilter("CIColorMatrix", parameters: [
                 "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
                 "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
                 "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
-                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: min(max(shadow.opacity, 0), 1))
+                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: min(max(shadow.opacity * color.alpha, 0), 1)),
+                "inputBiasVector": CIVector(x: color.red, y: color.green, z: color.blue, w: 0)
             ])
             .transformed(by: CGAffineTransform(translationX: inset, y: inset))
             .applyingGaussianBlur(sigma: shadow.radius * scale)
         let bounds = CGRect(x: 0, y: 0, width: image.extent.width + 2 * inset, height: image.extent.height + 2 * inset).integral
-        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
-              let bitmap = context.createCGImage(silhouette, from: bounds, format: .RGBA8, colorSpace: space) else { return nil }
-        return CIImage(cgImage: bitmap)
+        return silhouette.cropped(to: bounds)
     }
 
     nonisolated static func image(
@@ -40,6 +49,10 @@ extension MotionPlan {
         switch content {
         case .text(let text):
             return TextImage(text, scale: scale).image.map { CIImage(cgImage: $0) }
+        case .shape(let shape) where shape.isGlyph:
+            return ShapeGlyph.image(of: shape, scale: scale)
+        case .shape(let shape) where (shape.stroke ?? 0) > 0:
+            return ShapeMorph.image(of: ShapeMorph.State(size: shape.size, radius: shape.cornerRadius, color: shape.color, stroke: shape.stroke ?? 0), scale: scale)
         case .shape(let shape):
             let color = shape.color
             return roundedRectangle(
