@@ -132,6 +132,65 @@ struct TimeMapTests {
         #expect(map.cuts(movingEndOf: 1, to: 0) == [0..<1, 4..<6, 6.25..<10])
     }
 
+    @Test func aFasterPartLastsItsLengthOverItsRate() {
+        let map = TimeMap(cuts: [], speeds: [SpeedRange(range: 2..<6, rate: 4)], sourceDuration: 10, frameRate: 4)
+
+        #expect(map.pieces == [SpeedRange(range: 0..<2, rate: 1), SpeedRange(range: 2..<6, rate: 4), SpeedRange(range: 6..<10, rate: 1)])
+        #expect(map.outputDuration == 7)
+        #expect(map.outputTime(atSource: 4) == 2.5)
+        #expect(map.outputTime(atSource: 8) == 5)
+        #expect(map.sourceTime(atOutput: 2.5) == 4)
+        #expect(map.sourceTime(atOutput: 3) == 6)
+    }
+
+    @Test func cutsAndSpeedsTogether() {
+        // Kept: 0..<3 and 5..<10; 2..<6 at 2×, so 2..<3 and 5..<6 play at 2×
+        let map = TimeMap(cuts: [3..<5], speeds: [SpeedRange(range: 2..<6, rate: 2)], sourceDuration: 10, frameRate: 4)
+
+        #expect(map.pieces.map(\.range) == [0..<2, 2..<3, 5..<6, 6..<10])
+        #expect(map.pieces.map(\.rate) == [1, 2, 2, 1])
+        #expect(map.outputDuration == 7)
+        // A cut part keeps its speed
+        #expect(map.speeds == [SpeedRange(range: 2..<6, rate: 2)])
+        #expect(map.outputTime(atSource: 5.5) == 2.75)
+        for output in [0, 1.75, 2.25, 2.5, 2.75, 3, 6.5] {
+            #expect(map.outputTime(atSource: map.sourceTime(atOutput: output)) == output)
+        }
+        for source in [0, 2.5, 5, 5.5, 6, 9.75] {
+            #expect(map.sourceTime(atOutput: map.outputTime(atSource: source)) == source)
+        }
+    }
+
+    @Test func normalizesSpeedsSnappedSortedApartAndNoneAt1x() {
+        let map = TimeMap(
+            cuts: [],
+            speeds: [SpeedRange(range: 6.1..<8, rate: 3), SpeedRange(range: 1..<4, rate: 2), SpeedRange(range: 3..<5, rate: 4), SpeedRange(range: 8..<9, rate: 1)],
+            sourceDuration: 10, frameRate: 4
+        )
+
+        // Where two overlap, the earlier wins
+        #expect(map.speeds == [SpeedRange(range: 1..<4, rate: 2), SpeedRange(range: 4..<5, rate: 4), SpeedRange(range: 6..<8, rate: 3)])
+    }
+
+    @Test func settingASpeedReplacesWhatTheRangeHad() {
+        let map = TimeMap(cuts: [], speeds: [SpeedRange(range: 2..<6, rate: 4)], sourceDuration: 10, frameRate: 4)
+
+        #expect(map.speeds(setting: 2, for: 4..<8) == [SpeedRange(range: 2..<4, rate: 4), SpeedRange(range: 4..<8, rate: 2)])
+        #expect(map.speeds(setting: 1, for: 3..<4) == [SpeedRange(range: 2..<3, rate: 4), SpeedRange(range: 4..<6, rate: 4)])
+        #expect(map.speeds(setting: 1, for: 0..<10).isEmpty)
+        #expect(map.speeds(adding: [SpeedRange(range: 7..<9, rate: 3)]) == [SpeedRange(range: 2..<6, rate: 4), SpeedRange(range: 7..<9, rate: 3)])
+    }
+
+    @Test func tellsTheRateAndWhetherATimeIsKept() {
+        let map = TimeMap(cuts: [3..<5], speeds: [SpeedRange(range: 2..<6, rate: 2)], sourceDuration: 10, frameRate: 4)
+
+        #expect(map.rate(atSource: 1) == 1)
+        #expect(map.rate(atSource: 4) == 2)
+        #expect(map.rate(atSource: 6) == 1)
+        #expect(map.outputTime(ifKept: 4) == nil)
+        #expect(map.outputTime(ifKept: 5.5) == 2.75)
+    }
+
     @Test func segmentsDivideKeptRangesAtSplitsInsideThem() {
         let map = map(cuts: [4..<6])
 

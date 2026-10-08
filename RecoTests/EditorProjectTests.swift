@@ -5,6 +5,7 @@
 //  Created by Diip3sh on 26.09.26.
 //
 
+import CoreGraphics
 import Foundation
 import Testing
 @testable import Reco
@@ -21,10 +22,24 @@ struct EditorProjectTests {
         project.keystrokes.showsAllKeys = true
         project.cursor.smoothing = .mellow
         project.cursor.hidesWhenIdle = true
+        project.cursor.appearance = .dot
+        project.cursor.alwaysUsesArrow = true
+        project.cursor.loops = true
+        project.clickHighlights.effect = .ripple
+        project.audio.clickVolume = 0.4
+        project.audio.background = BackgroundAudio(bookmark: Data([1, 2, 3]), name: "Song", track: .init(volume: 0.2, isMuted: true))
+        project.zoomMotion = .fast
+        project.motionBlur = 0.6
+        project.cursor.smoothing = .off
         project.canvas.aspect = .portrait
+        project.canvas.fillsFrame = true
         project.canvas.background = .image
         project.canvas.imageBookmark = Data([1, 2, 3])
+        project.canvas.backgroundBlur = 0.4
+        project.canvas.borderWidth = 0.01
+        project.canvas.borderColor = RGBAColor(red: 1, green: 0, blue: 0, alpha: 1)
         project.audio[track: 1].isMuted = true
+        project.masks = [MaskSegment(range: 1..<2, rects: [CGRect(x: 0.1, y: 0.2, width: 0.3, height: 0.4)], kind: .pixelate)]
 
         let data = try JSONEncoder().encode(project)
         let json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -39,6 +54,7 @@ struct EditorProjectTests {
         let project = try JSONDecoder().decode(EditorProject.self, from: Data(json.utf8))
 
         #expect(project == EditorProject(cuts: [1..<2]))
+        #expect(project.motionBlur == 0)
     }
 
     @Test func rejectsAnUnknownVersion() {
@@ -64,5 +80,58 @@ struct EditorProjectTests {
         #expect(try await ProjectStore.read(for: video) == nil)
         try await ProjectStore.write(project, for: video)
         #expect(try await ProjectStore.read(for: video) == project)
+    }
+
+    @Test func readsTheClickSwitchOfProjectsSavedBeforeEffects() throws {
+        func effect(_ json: String) throws -> ClickHighlightStyle.Effect {
+            try JSONDecoder().decode(ClickHighlightStyle.self, from: Data(json.utf8)).effect
+        }
+
+        #expect(try effect(#"{ "isEnabled": false, "size": 30 }"#) == .off)
+        #expect(try effect(#"{ "isEnabled": true }"#) == .circle)
+        #expect(try effect(#"{ "isEnabled": false, "effect": "ripple" }"#) == .ripple)
+        #expect(try JSONDecoder().decode(ClickHighlightStyle.self, from: Data(#"{ "isEnabled": false, "size": 30 }"#.utf8)).size == 30)
+    }
+
+    @Test func readsCursorAndAudioSettingsSavedBeforeTheNewOnesWithDefaults() throws {
+        let cursor = try JSONDecoder().decode(
+            CursorStyle.self, from: Data(#"{ "isEnabled": false, "size": 2, "smoothing": "fast", "animatesClicks": false, "hidesWhenIdle": true }"#.utf8)
+        )
+        var expected = CursorStyle()
+        expected.isEnabled = false
+        expected.size = 2
+        expected.smoothing = .fast
+        expected.animatesClicks = false
+        expected.hidesWhenIdle = true
+        #expect(cursor == expected)
+        #expect(cursor.appearance == .recorded && !cursor.alwaysUsesArrow && !cursor.loops)
+
+        let audio = try JSONDecoder().decode(AudioMixSettings.self, from: Data(#"{ "tracks": [{ "volume": 0.5, "isMuted": true }] }"#.utf8))
+        #expect(audio.tracks == [AudioMixSettings.Track(volume: 0.5, isMuted: true)])
+        #expect(!audio.tracks[0].enhancesVoice && audio.enhancedTracks.isEmpty)
+        #expect(audio.clickVolume == 0 && audio.background == nil && !audio.addsAudio)
+        #expect(AudioMixSettings(background: BackgroundAudio(bookmark: Data(), name: "Song")).addsAudio)
+    }
+
+    @Test func readsACanvasSavedBeforeBlurAndBorderWithDefaults() throws {
+        let canvas = try JSONDecoder().decode(CanvasStyle.self, from: Data(#"{ "aspect": "1:1", "padding": 0.1, "background": "color" }"#.utf8))
+        var expected = CanvasStyle()
+        expected.aspect = .square
+        expected.padding = 0.1
+        expected.background = .color
+
+        #expect(canvas == expected)
+        #expect(canvas.backgroundBlur == 0 && canvas.borderWidth == 0)
+        #expect(try JSONDecoder().decode(CanvasStyle.self, from: Data("{}".utf8)) == CanvasStyle())
+    }
+
+    @Test func theDefaultGradientIsSlateAndAPickedOneIsNoPreset() {
+        var canvas = CanvasStyle()
+        #expect(canvas.gradientPreset == .slate)
+
+        canvas.gradientStart.red = 0.5
+        #expect(canvas.gradientPreset == nil)
+        #expect(Set(GradientPreset.all.map(\.name)).count == GradientPreset.all.count)
+        #expect(GradientPreset.all.first == .slate)
     }
 }

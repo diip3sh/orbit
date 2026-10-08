@@ -7,15 +7,18 @@
 
 import SwiftUI
 
-/// An audio track's volume and mute button.
+/// An audio track's volume and mute button, and Enhance Voice for a track that may hold a voice.
 struct AudioTrackRow: View {
     let name: String
+    var mayHoldVoice = false
     @Binding var settings: AudioMixSettings.Track
 
     var body: some View {
         VStack(spacing: EditorTheme.tightSpacing) {
             HStack {
                 Text(name)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 Spacer()
                 Text(settings.isMuted ? 0 : settings.volume, format: .percent.precision(.fractionLength(0)))
                     .font(.caption)
@@ -38,6 +41,9 @@ struct AudioTrackRow: View {
                 valueLabel: Text(settings.volume, format: .percent.precision(.fractionLength(0)))
             )
             .disabled(settings.isMuted)
+            if mayHoldVoice {
+                Toggle("Enhance Voice", isOn: $settings.enhancesVoice)
+            }
         }
     }
 }

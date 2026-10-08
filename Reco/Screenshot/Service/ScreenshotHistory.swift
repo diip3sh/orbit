@@ -5,6 +5,7 @@
 
 import Foundation
 import OSLog
+import UniformTypeIdentifiers
 
 /// Every screenshot is kept here until it's saved or older than the retention (spec 0012). Files are
 /// deleted, not trashed: the point is to free the space.
@@ -28,7 +29,7 @@ nonisolated enum ScreenshotHistory {
         let urls = (try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles
         )) ?? []
-        for url in urls where url.pathExtension == "png" && url.lastPathComponent.hasPrefix(LibraryItem.screenshotPrefix) {
+        for url in urls where LibraryItem.isScreenshot(url, contentType: UTType(filenameExtension: url.pathExtension)) {
             let created = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
             if isExpired(created: created, now: now, retention: retention) {
                 delete(url)

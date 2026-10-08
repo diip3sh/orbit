@@ -7,16 +7,17 @@
 
 import SwiftUI
 
-/// A group of inspector controls under a quiet title that folds it away, with a note below them.
+/// A group of inspector controls under a quiet title that folds it away, with a note below them. Without a
+/// title there is no header and nothing to fold.
 struct InspectorSection<Content: View, Footer: View>: View {
-    let title: LocalizedStringKey
+    let title: LocalizedStringKey?
     let content: Content
     let footer: Footer
 
     @State private var isExpanded = true
     @Environment(\.isEnabled) private var isEnabled
 
-    init(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content, @ViewBuilder footer: () -> Footer) {
+    init(_ title: LocalizedStringKey?, @ViewBuilder content: () -> Content, @ViewBuilder footer: () -> Footer) {
         self.title = title
         self.content = content()
         self.footer = footer()
@@ -24,24 +25,26 @@ struct InspectorSection<Content: View, Footer: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: EditorTheme.mediumSpacing) {
-            Button {
-                isExpanded.toggle()
-            } label: {
-                HStack {
-                    Text(title)
-                        .foregroundStyle(EditorTheme.dim)
-                    Spacer()
-                    Image(systemName: "chevron.down")
-                        .imageScale(.small)
-                        .foregroundStyle(EditorTheme.faint)
-                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+            if let title {
+                Button {
+                    isExpanded.toggle()
+                } label: {
+                    HStack {
+                        Text(title)
+                            .foregroundStyle(EditorTheme.dim)
+                        Spacer()
+                        Image(systemName: "chevron.down")
+                            .imageScale(.small)
+                            .foregroundStyle(EditorTheme.faint)
+                            .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                    }
+                    .contentShape(.rect)
                 }
-                .contentShape(.rect)
+                .buttonStyle(.plain)
+                .accessibilityValue(isExpanded ? Text("Expanded") : Text("Collapsed"))
             }
-            .buttonStyle(.plain)
-            .accessibilityValue(isExpanded ? Text("Expanded") : Text("Collapsed"))
 
-            if isExpanded {
+            if isExpanded || title == nil {
                 VStack(alignment: .leading, spacing: EditorTheme.mediumSpacing) {
                     // Text in ink doesn't dim by itself when disabled
                     content
@@ -61,7 +64,7 @@ struct InspectorSection<Content: View, Footer: View>: View {
 }
 
 extension InspectorSection where Footer == EmptyView {
-    init(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) {
+    init(_ title: LocalizedStringKey?, @ViewBuilder content: () -> Content) {
         self.init(title, content: content) { EmptyView() }
     }
 }

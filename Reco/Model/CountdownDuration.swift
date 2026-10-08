@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// How long to count down before a user-started recording
+/// How long to count down before a user-started recording, or a screenshot's self-timer
 enum CountdownDuration: Int, CaseIterable, Identifiable {
     case off = 0
     case three = 3

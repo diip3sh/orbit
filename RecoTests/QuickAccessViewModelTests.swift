@@ -53,12 +53,12 @@ struct QuickAccessViewModelTests {
         #expect(probe.closed == 0)
     }
 
-    @Test func pinPinsThenCloses() throws {
+    @Test func pinPinsThenCloses() async throws {
         let probe = CardProbe()
         let model = try probe.makeModel()
         defer { model.removeDragFile() }
 
-        model.pin()
+        await model.pin()
 
         #expect(probe.pinned == 1)
         #expect(probe.closed == 1)
@@ -90,6 +90,102 @@ struct QuickAccessViewModelTests {
         #expect(pasteboard.string(forType: .string) == "previous")
         #expect(probe.closed == 0)
     }
+
+    @Test func hidingNothingSensitiveSaysSoAndKeepsTheShot() async throws {
+        let probe = CardProbe()
+        let model = try probe.makeModel(image: .filled(width: 400, height: 200))
+        defer { model.removeDragFile() }
+        let before = model.screenshot.image
+
+        await model.hideSensitiveInfo()
+
+        #expect(model.feedback == .nothingToHide)
+        #expect(!model.isHidingSensitiveInfo)
+        #expect(model.screenshot.image === before)
+        #expect(probe.closed == 0)
+    }
+
+    @Test func theBackgroundGoesOnAndComesOffAgain() async throws {
+        let probe = CardProbe()
+        var background = ScreenshotBackground()
+        background.canvas.padding = 0.1
+        background.autoBalances = false
+        probe.background = background
+        let model = try probe.makeModel(image: .filled(width: 400, height: 200))
+        defer { model.removeDragFile() }
+        let plain = model.screenshot.image
+        #expect(!model.hasBackground)
+
+        await model.toggleBackground()
+
+        #expect(model.hasBackground)
+        #expect(!model.isChangingBackground)
+        // The canvas an export at the original size would draw: 10% padding around the shot's own pixels
+        let shot = CGSize(width: 400, height: 200)
+        let canvas = CanvasLayout.size(
+            for: shot, aspect: .source, padding: 0.1, shorterSide: CanvasLayout.nativeShorterSide(for: shot, style: background.layoutStyle)
+        )
+        #expect(canvas == CGSize(width: 454, height: 252))
+        #expect(model.screenshot.image.width == Int(canvas.width))
+        #expect(model.screenshot.image.height == Int(canvas.height))
+        #expect(model.screenshot.pointSize == CGSize(width: canvas.width / 2, height: canvas.height / 2))
+        #expect(model.preview.width == Int(canvas.width))
+        #expect(probe.reshaped == 1)
+        #expect(model.feedback == nil)
+
+        await model.toggleBackground()
+
+        #expect(!model.hasBackground)
+        #expect(model.screenshot.image === plain)
+        #expect(probe.reshaped == 2)
+        #expect(probe.closed == 0)
+    }
+
+    @Test func aFramedShotThatHidesNothingKeepsItsBackground() async throws {
+        let probe = CardProbe()
+        let model = try probe.makeModel(image: .filled(width: 400, height: 200))
+        defer { model.removeDragFile() }
+        await model.toggleBackground()
+        let framed = model.screenshot.image
+
+        await model.hideSensitiveInfo()
+
+        #expect(model.feedback == .nothingToHide)
+        #expect(model.hasBackground)
+        #expect(model.screenshot.image === framed)
+    }
+
+    @Test func annotatingGrowsTheCardAndDoneShowsTheMarkedShotWhichSaveUses() async throws {
+        let probe = CardProbe()
+        let model = try probe.makeModel(image: .filled(width: 400, height: 200))
+        defer { model.removeDragFile() }
+        let plain = model.screenshot.image
+
+        model.annotate()
+        #expect(model.isAnnotating)
+        #expect(probe.reshaped == 1)
+        let editor = try #require(model.annotation)
+        editor.tool = .crop
+        editor.begin(at: CGPoint(x: 0, y: 0))
+        editor.drag(to: CGPoint(x: 100, y: 50))
+        editor.end(at: CGPoint(x: 100, y: 50))
+
+        await model.finishAnnotating()
+
+        #expect(!model.isAnnotating)
+        #expect(model.screenshot.image !== plain)
+        #expect(model.screenshot.pointSize == CGSize(width: 100, height: 50))
+        // The marks are kept for another visit
+        #expect(model.annotation === editor)
+        #expect(editor.document.crop != nil)
+
+        // Save from the editor flattens first
+        model.annotate()
+        editor.undo()
+        await model.save()
+        #expect(probe.saved.count == 1)
+        #expect(model.screenshot.image === plain)
+    }
 }
 
 /// Builds card models and records what they ask their owner to do
@@ -98,20 +194,25 @@ private final class CardProbe {
     var saved: [Date] = []
     var closed = 0
     var pinned = 0
+    var reshaped = 0
+    var background = ScreenshotBackground()
 
     func makeModel(image: CGImage? = nil, saveSucceeds: Bool = true, pasteboard: NSPasteboard = .general) throws -> QuickAccessViewModel {
         let image = try image ?? .filled(width: 40, height: 20)
         let model = QuickAccessViewModel(
             screenshot: Screenshot(image: image, scale: 2, date: .now),
             preview: image,
+            previewPixelSize: 520,
             save: { [unowned self] screenshot in
                 saved.append(screenshot.date)
                 return saveSucceeds
             },
+            background: { [unowned self] in background },
             pasteboard: pasteboard
         )
         model.onClose = { [unowned self] in closed += 1 }
         model.onPin = { [unowned self] in pinned += 1 }
+        model.onReshape = { [unowned self] in reshaped += 1 }
         return model
     }
 }

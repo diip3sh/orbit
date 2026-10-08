@@ -88,7 +88,13 @@ struct EditorTimelineView: View {
             }
 
             ZoomLane(viewModel: viewModel, width: width)
+
+            if !viewModel.project.masks.isEmpty {
+                MaskLane(viewModel: viewModel, width: width)
+                    .transition(.opacity)
+            }
         }
+        .editorMotion(value: viewModel.project.masks.isEmpty)
         .editorMotion(.smooth, value: viewModel.thumbnails.count { $0 != nil })
         .overlay {
             // Cuts dimmed and hatched, and splits across the filmstrip (handles cover the kept parts' starts)
@@ -123,6 +129,27 @@ struct EditorTimelineView: View {
             }
         }
         .editorMotion(value: viewModel.selection)
+        .overlay(alignment: .topLeading) {
+            // Each part that isn't at 1× says its speed in its top-left corner
+            if duration > 0 {
+                ForEach(viewModel.segments, id: \.lowerBound) { segment in
+                    let rate = timeMap.rate(atSource: (segment.lowerBound + segment.upperBound) / 2)
+                    if rate != 1 {
+                        Text(SpeedRange.label(for: rate))
+                            .font(.caption2.bold())
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, EditorTheme.tightSpacing)
+                            .background(.black.opacity(0.6), in: .capsule)
+                            .padding(EditorTheme.tightSpacing)
+                            .frame(width: (segment.upperBound - segment.lowerBound) / duration * width, alignment: .leading)
+                            .clipped()
+                            .offset(x: segment.lowerBound / duration * width, y: Self.filmstripTop)
+                            .allowsHitTesting(false)
+                    }
+                }
+            }
+        }
         .overlay(alignment: .topLeading) {
             if duration > 0 {
                 ZStack(alignment: .leading) {

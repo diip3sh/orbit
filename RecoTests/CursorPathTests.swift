@@ -65,15 +65,31 @@ struct CursorPathTests {
         }
     }
 
+    @Test func withoutSmoothingTheCursorIsWhereItWasRecordedJitterIncluded() throws {
+        // A zig-zag with a 1 pt move back, which smoothing would drop as jitter
+        let moves: [(time: Double, point: CGPoint)] = [(0, CGPoint(x: 100, y: 100)), (0.1, CGPoint(x: 300, y: 150)), (0.2, CGPoint(x: 299, y: 150)), (0.3, CGPoint(x: 500, y: 400))]
+        var style = CursorStyle()
+        style.smoothing = .off
+        let path = try path(telemetry(cursor: moves), style: style)
+
+        // Core Image's y is 800 minus the screen's; a position is held until the next, like the recording's
+        for (time, point) in moves {
+            let position = path.position(at: time + 0.001)
+            #expect(abs(position.x - point.x) < 1e-9 && abs(position.y - (800 - point.y)) < 1e-9)
+        }
+        #expect(abs(path.position(at: 0.15).x - 300) < 1e-9)
+    }
+
     @Test func trailsASteadyMoveByTwoOverTheFrequency() throws {
-        for smoothing in CursorStyle.Smoothing.allCases {
+        for smoothing in CursorStyle.Smoothing.allCases where smoothing.frequency != nil {
             var style = CursorStyle()
             style.smoothing = smoothing
             let path = try path(telemetry(cursor: sweep(speed: 600, until: 2)), style: style)
 
             // Settled by 1.5 s. Positions are held until the next, which trails by up to a 60 Hz sample more
+            let frequency = try #require(smoothing.frequency)
             let lag = 100 + 600 * 1.5 - path.position(at: 1.5).x
-            #expect(lag > 600 * 2 / smoothing.frequency && lag < 600 * (2 / smoothing.frequency + 1.0 / 60))
+            #expect(lag > 600 * 2 / frequency && lag < 600 * (2 / frequency + 1.0 / 60))
             // And comes to rest where the cursor did
             #expect(abs(path.position(at: 4).x - 1300) < 0.01)
         }
@@ -136,5 +152,70 @@ struct CursorPathTests {
         #expect(zip(opacities, expected).allSatisfy { abs($0 - $1) < 1e-9 })
 
         #expect(try self.path(telemetry).opacity(at: 4) == 1)
+    }
+
+    @Test func glidesOntoTheFirstFramesPositionOverTheLoop() throws {
+        let cursor = sweep(speed: 100, until: 9.5)
+        let telemetry = telemetry(cursor: cursor, clicks: [click(at: 8.5, CGPoint(x: 900, y: 400))])
+        let plain = try path(telemetry)
+
+        let looping = try #require(CursorPath(
+            telemetry: telemetry, style: CursorStyle(), duration: 10, videoHeight: 800, loop: .init(start: 0.5, glide: 8..<9.5)
+        ))
+
+        // Before the glide it is the plain path
+        #expect(looping.position(at: 3) == plain.position(at: 3))
+        #expect(looping.position(at: 8) == plain.position(at: 8))
+        // At its end, and after, where the first frame is, which the glide doesn't change
+        for time in [9.5, 9.9] {
+            #expect(looping.position(at: time) == plain.position(at: 0.5))
+        }
+        // Half way there it is between, on the way
+        let middle = looping.position(at: 8.75)
+        #expect(middle.x > plain.position(at: 0.5).x && middle.x < plain.position(at: 8.75).x)
+    }
+
+    @Test func aGlideOfNoLengthMovesTheCursorAtOnce() throws {
+        let telemetry = telemetry(cursor: sweep(speed: 100, until: 5))
+
+        let looping = try #require(CursorPath(
+            telemetry: telemetry, style: CursorStyle(), duration: 10, videoHeight: 800, loop: .init(start: 0, glide: 4..<4)
+        ))
+
+        #expect(looping.position(at: 3.9).x > 400)
+        #expect(looping.position(at: 4) == looping.position(at: 0))
+    }
+
+    @Test func holdsStillFromTheStop() throws {
+        // Still moving, and with a button held, when it stops at 7 s
+        let telemetry = telemetry(
+            cursor: sweep(speed: 100, until: 9.5),
+            clicks: [click(at: 6.9, CGPoint(x: 790, y: 400)), click(at: 7.5, CGPoint(x: 850, y: 400), isDown: false)]
+        )
+        let plain = try path(telemetry)
+        let stopping = try #require(CursorPath(telemetry: telemetry, style: CursorStyle(), duration: 10, videoHeight: 800, stop: 7))
+
+        #expect(stopping.position(at: 5) == plain.position(at: 5))
+        for time in [7.5, 8, 9.9] {
+            #expect(stopping.position(at: time) == plain.position(at: 7))
+            #expect(stopping.scale(at: time) == plain.scale(at: 7))
+        }
+        #expect(plain.position(at: 8).x > plain.position(at: 7).x + 50)
+        #expect(plain.scale(at: 7) < 1)
+    }
+
+    @Test func leansAgainstTheMoveAndStraightensAtRest() throws {
+        var style = CursorStyle()
+        let still = try path(telemetry(cursor: sweep(speed: 800, until: 1)), style: style)
+        #expect(still.tilt(at: 0.5) == 0)
+
+        style.tilts = true
+        let right = try path(telemetry(cursor: sweep(speed: 800, until: 1)), style: style)
+        // Clockwise moving right, by most of the maximum at the tilt speed, and upright once settled
+        #expect(right.tilt(at: 0.8) < -CursorPath.maximumTilt * 0.6 && right.tilt(at: 0.8) > -CursorPath.maximumTilt)
+        #expect(abs(right.tilt(at: 4)) < 1e-3)
+
+        let left = try path(telemetry(cursor: sweep(speed: -400, until: 0.2)), style: style)
+        #expect(left.tilt(at: 0.2) > 0)
     }
 }

@@ -10,7 +10,7 @@ import ImageIO
 @preconcurrency import ScreenCaptureKit
 import UniformTypeIdentifiers
 
-/// Captures one still with ScreenCaptureKit, and writes screenshots as PNG
+/// Captures one still with ScreenCaptureKit, and writes screenshots as PNG, or HEIC for HDR
 @MainActor
 final class ScreenshotService {
 
@@ -69,16 +69,54 @@ final class ScreenshotService {
             isWindowCapture: filter.style == .window,
             settings: settings
         )
+        // ponytail: windows stay SDR; the HDR configuration has no `scalesToFit`, which window captures need
+        if #available(macOS 26.0, *), settings.capturesHDRScreenshots, filter.style == .display {
+            let output = try await SCScreenshotManager.captureScreenshot(
+                contentFilter: filter,
+                configuration: Self.hdrConfiguration(pixelSize: pixelSize, sourceRect: sourceRect, settings: settings)
+            )
+            // macOS 27.0 hands the HDR picture over as `sdrImage`, and no `hdrImage` even for `.bothSDRAndHDR`
+            // (measured 2026-10-08), so one HDR capture is asked for and the SDR one is drawn from it
+            guard let hdrImage = output.hdrImage ?? output.sdrImage, let image = Self.standardRange(of: hdrImage) else {
+                throw CocoaError(.fileReadUnknown)
+            }
+            return Screenshot(image: image, scale: scale, date: .now, hdrImage: hdrImage)
+        }
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
         return Screenshot(image: image, scale: scale, date: .now)
     }
 
     /// Writes the screenshot into `directory` (`SettingsStore.screenshotDirectory`)
-    /// - Returns: The saved file, `Reco_Screenshot_<capture time>.png`
+    /// - Returns: The saved file, `Reco_Screenshot_<capture time>.png` (`.heic` for HDR)
     func save(_ screenshot: Screenshot, in directory: URL) async throws -> URL {
         let url = directory.appending(path: screenshot.filename)
-        try await Self.writePNG(screenshot.image, to: url)
+        try await Self.write(screenshot, to: url)
         return url
+    }
+
+    /// The same as `configuration(…)` for a display, plus both SDR and HDR images
+    @available(macOS 26.0, *)
+    static func hdrConfiguration(pixelSize: CGSize, sourceRect: CGRect?, settings: SettingsStore) -> SCScreenshotConfiguration {
+        let config = SCScreenshotConfiguration()
+        config.width = Int(pixelSize.width)
+        config.height = Int(pixelSize.height)
+        if let sourceRect {
+            config.sourceRect = sourceRect
+        }
+        config.showsCursor = settings.showCursor
+        config.ignoreShadows = !settings.showWindowShadows
+        config.dynamicRange = .hdr
+        return config
+    }
+
+    /// The picture in 8-bit sRGB, what is brighter than white clipped to white, as an SDR capture has it
+    nonisolated static func standardRange(of image: CGImage) -> CGImage? {
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB), let context = CGContext(
+            data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return context.makeImage()
     }
 
     /// Native pixels; cursor and window shadows as the user set them for recordings
@@ -98,25 +136,31 @@ final class ScreenshotService {
         return config
     }
 
-    /// Encodes and writes off the main actor, creating the folder
+    /// Encodes and writes off the main actor, creating the folder: a PNG, or with an HDR image an HEIC whose SDR
+    /// base and ISO gain map show it as bright as captured where the screen allows, and as the SDR image elsewhere
     @concurrent
-    nonisolated static func writePNG(_ image: CGImage, to url: URL) async throws {
+    nonisolated static func write(_ screenshot: Screenshot, to url: URL) async throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try encodePNG(image, into: CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
+        if let hdrImage = screenshot.hdrImage {
+            let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.heic.identifier as CFString, 1, nil)
+            try encode(hdrImage, into: destination, options: [kCGImageDestinationEncodeRequest: kCGImageDestinationEncodeToISOGainmap])
+        } else {
+            try encode(screenshot.image, into: CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
+        }
     }
 
     /// Encodes off the main actor, for the clipboard
     @concurrent
     nonisolated static func pngData(of image: CGImage) async throws -> Data {
         let data = NSMutableData()
-        try encodePNG(image, into: CGImageDestinationCreateWithData(data as CFMutableData, UTType.png.identifier as CFString, 1, nil))
+        try encode(image, into: CGImageDestinationCreateWithData(data as CFMutableData, UTType.png.identifier as CFString, 1, nil))
         return data as Data
     }
 
     /// ImageIO embeds the image's colour space as an ICC profile
-    nonisolated private static func encodePNG(_ image: CGImage, into destination: CGImageDestination?) throws {
+    nonisolated private static func encode(_ image: CGImage, into destination: CGImageDestination?, options: [CFString: Any] = [:]) throws {
         guard let destination else { throw CocoaError(.fileWriteUnknown) }
-        CGImageDestinationAddImage(destination, image, nil)
+        CGImageDestinationAddImage(destination, image, options as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { throw CocoaError(.fileWriteUnknown) }
     }
 }

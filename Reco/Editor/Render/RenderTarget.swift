@@ -13,6 +13,9 @@ nonisolated struct RenderTarget: Equatable, Sendable {
     /// The output's shorter side in pixels, or `nil` for the canvas's own: the video's.
     var shorterSide: CGFloat?
 
+    /// The output's frame rate, which sets how long the shutter is open, or `nil` for the recording's.
+    var frameRate: Double?
+
     /// Whether an HDR recording is drawn in HDR; otherwise AVFoundation converts its frames to SDR.
     var keepsHDR = true
 

@@ -8,16 +8,16 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The canvas's shape, background, padding, corners and shadow.
+/// The canvas's shape, background, padding, corners, shadow and border, in one section with no title.
 struct CanvasInspectorSection: View {
     @Bindable var viewModel: EditorViewModel
 
     @State private var choosesBackgroundImage = false
 
     var body: some View {
-        let videoSize = viewModel.source?.naturalSize ?? CGSize(width: 16, height: 9)
+        let videoSize = viewModel.videoSize ?? CGSize(width: 16, height: 9)
 
-        InspectorSection("Canvas") {
+        InspectorSection(nil) {
             InspectorField("Aspect Ratio") {
                 TilePicker(selection: $viewModel.canvas.aspect, values: CanvasStyle.Aspect.allCases) { aspect in
                     aspect == .source ? "Original" : LocalizedStringKey(aspect.rawValue)
@@ -27,62 +27,64 @@ struct CanvasInspectorSection: View {
                         .aspectRatio(aspect.ratio ?? videoSize.width / max(videoSize.height, 1), contentMode: .fit)
                 }
             }
-
-            InspectorField("Background") {
-                TilePicker(selection: $viewModel.canvas.background, values: CanvasStyle.Background.allCases) { background in
-                    switch background {
-                    case .gradient: "Gradient"
-                    case .color: "Color"
-                    case .image: "Image"
-                    case .transparent: "Clear"
-                    }
-                } picture: { background in
-                    BackgroundSwatch(background: background, canvas: viewModel.canvas)
+            // In the recording's own shape the video fills the frame either way
+            if viewModel.canvas.aspect != .source {
+                InspectorField("Video") {
+                    SegmentedChoice(selection: $viewModel.canvas.fillsFrame, options: [(false, "Fit"), (true, "Fill")])
                 }
+                .transition(.opacity)
             }
 
-            Group {
-                switch viewModel.canvas.background {
-                case .gradient:
-                    HStack {
-                        ColorPicker("Start", selection: $viewModel.canvas.gradientStart.cgColor, supportsOpacity: false)
-                        Spacer()
-                        ColorPicker("End", selection: $viewModel.canvas.gradientEnd.cgColor, supportsOpacity: false)
-                    }
-                case .color:
-                    ColorPicker("Color", selection: $viewModel.canvas.color.cgColor, supportsOpacity: false)
-                case .image:
-                    Button {
-                        choosesBackgroundImage = true
-                    } label: {
-                        Label("Choose Image…", systemImage: "photo")
-                            .frame(maxWidth: .infinity)
-                    }
-                case .transparent:
-                    EmptyView()
-                }
-            }
-            .transition(.opacity)
+            CropField(viewModel: viewModel)
 
-            InspectorSlider("Padding", value: $viewModel.canvas.padding, in: 0...0.25) {
-                Text($0, format: .percent.precision(.fractionLength(0)))
-            }
-            InspectorSlider("Corners", value: $viewModel.canvas.cornerRadius, in: 0...0.05) {
-                Text($0, format: .percent.precision(.fractionLength(1)))
-            }
-            InspectorSlider("Shadow", value: $viewModel.canvas.shadow, in: 0...1) {
-                Text($0, format: .percent.precision(.fractionLength(0)))
-            }
+            CanvasStyleControls(
+                canvas: $viewModel.canvas, wallpapers: viewModel.wallpapers, imageURL: viewModel.backgroundImageURL,
+                setImage: viewModel.setBackgroundImage, choosesImage: $choosesBackgroundImage
+            )
         } footer: {
             if viewModel.canvas.background == .transparent {
                 Text("Only ProRes 4444 exports keep the background transparent; other formats make it black.")
             }
         }
         .editorMotion(value: viewModel.canvas.background)
+        .editorMotion(value: viewModel.canvas.aspect == .source)
+        .task { await viewModel.loadWallpapers() }
         .fileImporter(isPresented: $choosesBackgroundImage, allowedContentTypes: [.image]) { result in
             if case .success(let url) = result {
                 viewModel.setBackgroundImage(url)
             }
         }
+    }
+}
+
+/// The canvas's crop: the pad on the frame at the playhead, and Reset once something is cropped.
+struct CropField: View {
+    @Bindable var viewModel: EditorViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
+            HStack {
+                Text("Crop")
+                Spacer()
+                if viewModel.crop != VideoCrop.full {
+                    Button("Reset", action: viewModel.resetCrop)
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                        .transition(.opacity)
+                }
+            }
+            if let videoSize = viewModel.source?.naturalSize {
+                RegionPad(
+                    image: viewModel.thumbnail(at: viewModel.playheadSourceTime),
+                    videoSize: videoSize,
+                    regions: Binding { [viewModel.crop] } set: { viewModel.crop = $0[0] },
+                    selection: .constant(0),
+                    minimumSize: VideoCrop.minimumSize,
+                    label: "Crop",
+                    onEnd: viewModel.cropDidSettle
+                )
+            }
+        }
+        .editorMotion(value: viewModel.crop == VideoCrop.full)
     }
 }

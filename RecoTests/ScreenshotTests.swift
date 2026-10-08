@@ -9,6 +9,7 @@ import Foundation
 import ImageIO
 @preconcurrency import ScreenCaptureKit
 import Testing
+import UniformTypeIdentifiers
 @testable import Reco
 
 @MainActor
@@ -64,6 +65,66 @@ struct ScreenshotTests {
         let decoded = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
         #expect(decoded.width == 30)
         #expect(decoded.height == 20)
+    }
+
+    // MARK: - HDR
+
+    /// Extended linear sRGB at twice SDR white, as an HDR capture holds where the screen showed HDR
+    private func brighterThanWhite(width: Int, height: Int) throws -> CGImage {
+        let colorSpace = try #require(CGColorSpace(name: CGColorSpace.extendedLinearSRGB))
+        let context = try #require(CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 16, bytesPerRow: 0, space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.floatComponents.rawValue
+                | CGImageByteOrderInfo.order16Little.rawValue
+        ))
+        context.setFillColor(try #require(CGColor(colorSpace: colorSpace, components: [2, 2, 2, 1])))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return try #require(context.makeImage())
+    }
+
+    @Test func anHDRScreenshotIsNamedHEICAndCropsBothImages() throws {
+        let date = Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 28, hour: 14, minute: 5, second: 9))!
+        let display = try Screenshot(image: .filled(width: 600, height: 400), scale: 2, date: date, hdrImage: brighterThanWhite(width: 600, height: 400))
+        #expect(display.filename == "Reco_Screenshot_2026-09-28-14.05.09.heic")
+
+        let area = try #require(display.cropped(to: CGRect(x: 10, y: 20, width: 100, height: 50)))
+        #expect(area.hdrImage?.width == 200)
+        #expect(area.hdrImage?.height == 100)
+    }
+
+    @Test func anHDRScreenshotIsWrittenAsHEICWithAGainMap() async throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let screenshot = try Screenshot(image: .filled(width: 64, height: 48), scale: 2, date: .now, hdrImage: brighterThanWhite(width: 64, height: 48))
+        let url = folder.appending(path: screenshot.filename)
+
+        try await ScreenshotService.write(screenshot, to: url)
+
+        let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+        #expect(CGImageSourceGetType(source) as String? == UTType.heic.identifier)
+        let gainMap = CGImageSourceCopyAuxiliaryDataInfoAtIndex(source, 0, kCGImageAuxiliaryDataTypeISOGainMap)
+        #expect(gainMap != nil)
+    }
+
+    @Test func theSDRPictureClipsWhatIsBrighterThanWhite() throws {
+        let sdr = try #require(ScreenshotService.standardRange(of: brighterThanWhite(width: 4, height: 2)))
+        #expect(sdr.bitsPerComponent == 8)
+        #expect(sdr.colorSpace?.name == CGColorSpace.sRGB)
+
+        let bytes = try #require(sdr.dataProvider?.data as Data?)
+        #expect(bytes.prefix(4) == Data([255, 255, 255, 255]))
+    }
+
+    @Test func anSDRScreenshotIsWrittenAsPNG() async throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let screenshot = try Screenshot(image: .filled(width: 30, height: 20), scale: 2, date: .now)
+        let url = folder.appending(path: screenshot.filename)
+
+        try await ScreenshotService.write(screenshot, to: url)
+
+        let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+        #expect(CGImageSourceGetType(source) as String? == UTType.png.identifier)
     }
 
     // MARK: - canCapture

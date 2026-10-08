@@ -7,12 +7,12 @@
 
 import Foundation
 
-/// Maps between output time (the edited video, after cuts) and source time (the recording's), and
-/// edits cuts.
+/// Maps between output time (the edited video, after cuts and speed changes) and source time (the
+/// recording's), and edits cuts and speeds.
 ///
-/// The only type that knows about cuts: everything else in a project is timed on the source, so
-/// adding or moving a cut never invalidates an effect. Cuts are normalized here: clamped to the
-/// recording, snapped to frame boundaries, sorted and merged.
+/// The only type that knows about cuts and speeds: everything else in a project is timed on the source,
+/// so adding or moving a cut never invalidates an effect. Cuts and speeds are normalized here: clamped
+/// to the recording, snapped to frame boundaries, sorted, and cuts merged.
 nonisolated struct TimeMap: Equatable, Sendable {
 
     /// Source ranges left out, normalized.
@@ -21,9 +21,15 @@ nonisolated struct TimeMap: Equatable, Sendable {
     /// The source ranges that are kept, in order.
     let keptRanges: [Range<Double>]
 
+    /// Source ranges played at another speed, normalized: sorted, apart, none at 1×. Cut parts keep theirs.
+    let speeds: [SpeedRange]
+
+    /// The kept ranges divided where a speed starts or ends, each with its rate, in order.
+    let pieces: [SpeedRange]
+
     let outputDuration: Double
 
-    /// The output time at which each kept range starts.
+    /// The output time at which each piece starts.
     private let outputStarts: [Double]
 
     /// Cuts are normalized as frame boundaries, so they're compared as integers.
@@ -31,9 +37,10 @@ nonisolated struct TimeMap: Equatable, Sendable {
 
     /// - Parameters:
     ///   - cuts: Source ranges left out, in any order.
+    ///   - speeds: Source ranges played at another speed, in any order; where two overlap, the earlier wins.
     ///   - sourceDuration: The recording's length in seconds.
     ///   - frameRate: The recording's frame rate, whose frames cuts snap to.
-    init(cuts: [Range<Double>], sourceDuration: Double, frameRate: Double) {
+    init(cuts: [Range<Double>], speeds: [SpeedRange] = [], sourceDuration: Double, frameRate: Double) {
         let boundaries = FrameBoundaries(
             frameRate: frameRate, sourceDuration: sourceDuration, last: FrameGrid(frameRate: frameRate, duration: sourceDuration).frameCount
         )
@@ -61,16 +68,53 @@ nonisolated struct TimeMap: Equatable, Sendable {
             kept.append(start..<boundaries.last)
         }
 
-        self.cuts = merged.map { boundaries.time(of: $0.lowerBound)..<boundaries.time(of: $0.upperBound) }
-        keptRanges = kept.map { boundaries.time(of: $0.lowerBound)..<boundaries.time(of: $0.upperBound) }
+        var faster: [(range: Range<Int>, rate: Double)] = []
+        for speed in speeds.sorted(by: { $0.range.lowerBound < $1.range.lowerBound }) where speed.rate > 0 && speed.rate != 1 {
+            let lower = max(boundaries.nearest(speed.range.lowerBound), faster.last?.range.upperBound ?? 0)
+            let upper = boundaries.nearest(speed.range.upperBound)
+            if lower < upper {
+                faster.append((lower..<upper, speed.rate))
+            }
+        }
+
+        let time = { (range: Range<Int>) in boundaries.time(of: range.lowerBound)..<boundaries.time(of: range.upperBound) }
+        self.cuts = merged.map(time)
+        keptRanges = kept.map(time)
+        self.speeds = faster.map { SpeedRange(range: time($0.range), rate: $0.rate) }
+        pieces = Self.pieces(of: kept, at: faster).map { SpeedRange(range: time($0.range), rate: $0.rate) }
         var outputStarts: [Double] = []
         var output = 0.0
-        for range in keptRanges {
+        for piece in pieces {
             outputStarts.append(output)
-            output += range.upperBound - range.lowerBound
+            output += (piece.range.upperBound - piece.range.lowerBound) / piece.rate
         }
         self.outputStarts = outputStarts
         outputDuration = output
+    }
+
+    /// `kept` divided where a speed in `faster` starts or ends, each part with its rate. Both are sorted and apart.
+    private static func pieces(of kept: [Range<Int>], at faster: [(range: Range<Int>, rate: Double)]) -> [(range: Range<Int>, rate: Double)] {
+        var pieces: [(range: Range<Int>, rate: Double)] = []
+        var next = 0
+        for range in kept {
+            var start = range.lowerBound
+            while start < range.upperBound {
+                while next < faster.count, faster[next].range.upperBound <= start {
+                    next += 1
+                }
+                let speed = next < faster.count ? faster[next] : nil
+                if let speed, speed.range.lowerBound <= start {
+                    let end = min(speed.range.upperBound, range.upperBound)
+                    pieces.append((start..<end, speed.rate))
+                    start = end
+                } else {
+                    let end = min(speed?.range.lowerBound ?? range.upperBound, range.upperBound)
+                    pieces.append((start..<end, 1))
+                    start = end
+                }
+            }
+        }
+        return pieces
     }
 
     var sourceDuration: Double {
@@ -84,17 +128,30 @@ nonisolated struct TimeMap: Equatable, Sendable {
     /// The output time showing source time `time`. Inside a cut, it's where the content after the
     /// cut starts, or the end of the output.
     func outputTime(atSource time: Double) -> Double {
+        let index = pieces.partitioningIndex { $0.range.upperBound > time }
+        guard index < pieces.count else { return outputDuration }
+        return outputStarts[index] + max(time - pieces[index].range.lowerBound, 0) / pieces[index].rate
+    }
+
+    /// The output time showing source time `time`, or `nil` inside a cut.
+    func outputTime(ifKept time: Double) -> Double? {
         let index = keptRanges.partitioningIndex { $0.upperBound > time }
-        guard index < keptRanges.count else { return outputDuration }
-        return outputStarts[index] + max(time - keptRanges[index].lowerBound, 0)
+        guard index < keptRanges.count, keptRanges[index].contains(time) else { return nil }
+        return outputTime(atSource: time)
     }
 
     /// The source time shown at output time `time`, clamped to the output.
     func sourceTime(atOutput time: Double) -> Double {
-        guard !keptRanges.isEmpty else { return 0 }
+        guard !pieces.isEmpty else { return 0 }
         let index = max(outputStarts.partitioningIndex { $0 > time } - 1, 0)
-        let range = keptRanges[index]
-        return min(range.lowerBound + max(time - outputStarts[index], 0), range.upperBound)
+        let piece = pieces[index]
+        return min(piece.range.lowerBound + max(time - outputStarts[index], 0) * piece.rate, piece.range.upperBound)
+    }
+
+    /// How fast source time `time` plays, whether or not it's cut.
+    func rate(atSource time: Double) -> Double {
+        let index = speeds.partitioningIndex { $0.range.upperBound > time }
+        return index < speeds.count && speeds[index].range.contains(time) ? speeds[index].rate : 1
     }
 
     /// The source time of the frame boundary nearest `time`.
@@ -152,10 +209,31 @@ nonisolated extension TimeMap {
         }
     }
 
+    /// The speeds with `range` played at `rate`, replacing whatever speed it had.
+    func speeds(setting rate: Double, for range: Range<Double>) -> [SpeedRange] {
+        let range = snapped(range.lowerBound)..<snapped(range.upperBound)
+        let others = speeds.flatMap { speed in
+            let (lower, upper) = (speed.range.lowerBound, speed.range.upperBound)
+            return [lower..<max(min(upper, range.lowerBound), lower), min(max(lower, range.upperBound), upper)..<upper]
+                .filter { !$0.isEmpty }
+                .map { SpeedRange(range: $0, rate: speed.rate) }
+        }
+        return normalized(speeds: others + [SpeedRange(range: range, rate: rate)])
+    }
+
+    /// The speeds with `added` too, which mustn't overlap them.
+    func speeds(adding added: [SpeedRange]) -> [SpeedRange] {
+        normalized(speeds: speeds + added)
+    }
+
     // MARK: Private
 
     private func normalized(_ cuts: [Range<Double>]) -> [Range<Double>] {
         TimeMap(cuts: cuts, sourceDuration: sourceDuration, frameRate: frameRate).cuts
+    }
+
+    private func normalized(speeds: [SpeedRange]) -> [SpeedRange] {
+        TimeMap(cuts: [], speeds: speeds, sourceDuration: sourceDuration, frameRate: frameRate).speeds
     }
 
     /// Boundary `n` is where frame `n` starts, and the last is the source's end, wherever that falls.

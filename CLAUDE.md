@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 721 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 965 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -218,6 +218,23 @@ indicator stays on); every sample is dropped and the paused time is cut from the
 
 Audio buffers straddling a pause edge are dropped whole (gap ≤ ~21 ms per edge, marked `ponytail:`).
 
+### N21 — Hide desktop icons (spec 0004)
+
+**Settings → Video → Display Elements → Show Desktop Icons** (on by default). Off, display and area recordings leave out
+Finder's one display-sized window at `kCGDesktopIconWindowLevel` (`ContentFilterRules.desktopIconLevel`, matched with
+Finder's bundle ID: WindowManager has an empty window at that level while macOS hides desktop items), so the icons are
+missing from the video while the desktop stays as it is. Verified on macOS 27.0.1 by capturing that window alone and the
+display without it.
+
+### N20 — Cancel and restart (spec 0004)
+
+The capture toolbar's live pill has **Cancel** (trash) and **Restart** beside Pause; global shortcuts **Cancel
+Recording** and **Restart Recording** (Settings → Shortcuts, no defaults: a stray global key would throw a take away),
+`reco://cancel` and `reco://restart`. `RecorderViewModel.cancelRecording()` stops what feeds the take (`endCapture()`,
+shared with `stopRecording`), drops the buffered telemetry (`InputTelemetryRecorder.discard()`) and cancels the writer,
+which deletes the movie: nothing is saved, notified or opened. It also cancels a countdown. `restartRecording()` cancels,
+then starts again on the same selection, through the countdown unless it came from `reco://restart`.
+
 ### F5 — Countdown (`feat/countdown`)
 
 **Settings → General → Recording → Countdown**: Off / 3 / 5 / 10 s (default 3). Every user start (the capture
@@ -249,7 +266,7 @@ ended, on the pointer's sides facing away from the captured area (`Screenshot.re
 mouse (clear of notifications and the menu bar popover, top-right). The card takes the screenshot's shape
 (`cardSize(for:)`: fitted in 260×220, never enlarged, at least 200×120) on an 8 pt glass edge. **Copy ⌘C** and
 **Save ⌘S** (the shortcut shown dimmed in the button) always sit along its bottom edge; under the pointer the shot
-dims and shows Close, **Recognize Text** and **Pin** as small icons in its corners. The card takes key when it appears, without
+dims and shows Close, **Add Background** (N14), **Hide Sensitive Info** (N9), **Recognize Text** and **Pin** as small icons in its corners. The card takes key when it appears, without
 activating the app, so the shortcuts work until another window is clicked; typing goes to the card meanwhile.
 It grows from the card's corner nearest the pointer (`QuickAccessController.anchor(for:pointer:)`, the
 bottom-left without a region) and shrinks back there when closed, copied, saved or pinned; `hide()` and
@@ -268,24 +285,61 @@ it was only the way in, so Esc on an area selection closes that state and leaves
 - **Copy** (C14): PNG data only; the button turns to ✓ Copied as the card starts closing, so it confirms during the
   fade. **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed
   notification is sent. **Recognize Text** (C7): the
-  image's text to the clipboard. **Pin** (C8): the image in its own panel, then closes. Recognize Text
-  confirms on the card for 1.5 s.
+  image's text to the clipboard, or, when it holds QR codes or barcodes, their payloads (N16: `TextRecognizer.codes`, Vision's
+  `DetectBarcodesRequest` alongside the text request; Code Copied). **Hide Sensitive Info** (N9): pixelates emails, phone numbers,
+  card numbers and API keys into the shot, which the card then shows and every other action uses. **Pin** (C8): the image in its
+  own panel, then closes. Recognize Text and Hide Sensitive Info confirm on the card for 1.5 s.
+- **Add Background** (N14, 2026-10-08; `hugeicons-background`, first of the top-right icons, the accent colour while on): puts
+  the shot on the background from **Settings → Screenshots → Background** (`ScreenshotBackground`: a `CanvasStyle` whose shape is
+  always the shot's own, plus Auto Balance; kept as JSON in `SettingsStore.screenshotBackground`), and a second click takes it
+  off. Always off for a new card: a background is a choice per shot, not a default. `ScreenshotFramer` draws it off the main
+  actor like `ScreenshotRedactor`: Auto Balance trims rows and columns within 2 per channel of the top-left pixel's colour
+  (`UniformBorders`, pure; a window shot's desktop, a page's margins), then `CanvasLayout` at `nativeShorterSide`, so the shot
+  keeps its own pixels inside the padding as an Original export does, and `FrameRenderer.framed` blends it over the backdrop
+  through the rounded mask. The HDR copy is dropped, so a framed shot saves as PNG; a clear background keeps its alpha. The
+  view model keeps the shot without the background (`plainScreenshot`): Hide Sensitive Info works on that and frames the result
+  again, so the background goes over the hidden text and comes off without undoing it. The card refits to the new shape
+  (`onReshape` → `QuickAccessController.refit()`, keeping the corner it grew from; `QuickAccessView` reads `cardSize` from the
+  shot), and the preview is redrawn at the size the first one was (`previewPixelSize`). The Settings section reuses the editor's
+  controls (`CanvasStyleControls`, `BackgroundFillControls`, now bound to a `CanvasStyle` rather than the editor's view model;
+  `CanvasStyle.apply(_:)` and `setImage(_:)` make a preset or a picture one write, so one edit).
+- **Annotate** (N13, spec 0015, 2026-10-08; `pencil.tip`, first of the top-right icons): grows the card into an editor at the
+  shot's size fitted to the screen (`QuickAccessController.annotationCardSize(for:in:)`, the refit keeps the corner it grew
+  from) with a tool strip (Select, Arrow, Line, Rectangle, Ellipse, Text, Highlighter, Step, Blur, Pixelate, Spotlight, Crop; V A L
+  R O T H N B P S C; eight colours, three widths, undo/redo, Done) over the shot and Copy and Save under it. Marks are vectors in
+  the shot's points (`Annotation`, pure); `AnnotationRenderer` draws them with Core Graphics for the canvas (scaled by the view)
+  and the output alike; blur, pixelate and spotlight are pixels through `MaskRenderer` (`AnnotationDocument.effects`), rendered
+  into the editor's `base` when they change. `AnnotationEditor` (`@MainActor @Observable`) holds the document, a history of
+  documents for undo, the tool, colour, width, the draft being dragged, the text being typed and the crop draft; the canvas
+  keys a press on its `startLocation`, since a gesture SwiftUI cancels never ends (instant synthetic drags, measured with
+  cliclick, left `onEnded` uncalled). Done shrinks the card back showing the marked shot (`compose()`: plain → flattened →
+  framed; `AnnotationFlattener.flatten` draws at the shot's pixels off the main actor, drops the HDR copy, cuts the crop) and the
+  marks stay editable until the card closes; Copy, Save, Pin and drag-out flatten first (`flattenIfAnnotating`). Checked by hand
+  2026-10-09: arrow, rectangle and two steps drawn on a card, Done, Save; the PNG shows them where they were drawn.
 
 | File | Role |
 |---|---|
+| `Annotation/Model/Annotation.swift`, `AnnotationDocument.swift`, `AnnotationTool.swift` | A mark's shape, colour and width, hit testing and moving; the list with its crop, step numbers and effects; the tools, what a drag makes with each, the strip's colours and widths |
+| `Annotation/Render/AnnotationRenderer.swift`, `AnnotationFlattener.swift` | Core Graphics drawing of marks, selection and the crop's dim; the shot with its effects, marks and crop as one `Screenshot` |
+| `Annotation/ViewModel/AnnotationEditor.swift`, `Annotation/View/AnnotationCanvas.swift`, `AnnotationToolbar.swift` | Gestures, history, text entry and styles; the canvas and the strip |
+| `QuickAccess/ViewModel/QuickAccessViewModel+Annotation.swift` | `annotate()`, `finishAnnotating()`, `compose()` |
 | `QuickAccess/View/QuickAccessController.swift`, `QuickAccessPanel.swift` | Non-activating borderless `.floating` dark panel (key on appearing, `hidesOnDeactivate = false`), enter/exit through `panelPresentation` (`exitDelay` before ordering out; leaving panels are tracked so `hide()` clears them too), placement (`panelFrame`), owns the card's view model and the pins |
-| `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin` |
+| `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin`/`onReshape` |
+| `Screenshot/Model/ScreenshotBackground.swift`, `UniformBorders.swift`, `Screenshot/Service/ScreenshotFramer.swift`, `Model/SettingsStore+ScreenshotBackground.swift`, `View/ScreenshotSettingsView.swift` | The background setting and Auto Balance's trim (pure); the shot drawn on the canvas; the Settings → Screenshots tab (HDR, history, background) |
 | `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius), hover scrim and controls (Copy and Save both `.editorPrimary`: secondary's accent text over the shot read as a disabled Copy; dark corner icons), a solid toast; icons are 1.5 pt line
 SVGs in `Assets.xcassets/LineIcons` as template vectors, drawn by `LineIcon` in `CornerButtonStyle`'s dark circles (both shared with pins): Hugeicons
-stroke-rounded (MIT) cancel, checkmark circle, scan text and pin, as in the capture toolbar (the app's icons are SF Symbols and Hugeicons only); a `DragGesture` on the edge drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the shot. Annotate goes first in the top-right corner once it exists (one line) |
-| `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, 8 pt rounded corners with a faint edge, the card's close button on hover; appears from and closes into its bottom-left corner (`panelPresentation`, a `PanelPresence` per pin) |
+stroke-rounded (MIT) cancel, checkmark circle, scan text and pin, as in the capture toolbar (the app's icons are SF Symbols and Hugeicons only); a `DragGesture` on the edge drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the shot; in the editor, the strip, the canvas and the actions in one column |
+| `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, 8 pt rounded corners with a faint edge, the card's close button on hover; appears from and closes into its bottom-left corner (`panelPresentation`, a `PanelPresence` per pin); a right-click sets its opacity (100, 75, 50, 25%: the panel's `alphaValue`, shadow included) or makes it click-through (`ignoresMouseEvents`), and the menu bar's **Unlock Pins**, shown while any pin is click-through, takes clicks on all of them again |
 | `QuickAccess/Service/ImageDownsampler.swift` | Card preview drawn from the captured `CGImage` off the main actor |
 | `Screenshot/Service/TextRecognizer.swift` | Vision `RecognizeTextRequest` (accurate, automatic language) off the main actor; `joined(_:)` orders lines top to bottom |
 | `Service/ImagePasteboard.swift` | PNG data on the pasteboard (Slack, Messages, Figma, Preview) |
 
 Key facts:
-- The full-size `CGImage` is held only by the card and pins; the card shows a preview drawn at 2× of its
-  largest size.
+- The full-size `CGImage` is held only by the card, pins and `QuickAccessController.closedScreenshot`; the card shows a
+  preview drawn at 2× of its largest size.
+- **Restore Last Screenshot** (N15; menu bar, idle only, shown while there is one) brings back the last card that went
+  away (closed, copied, saved, pinned, flicked or replaced by the next screenshot) in the screen's corner, from memory; a
+  card showing takes its place. One screenshot is kept, until quit.
 - Drag-out offers the file URL and PNG data. The file is written in the background to
   `temporaryDirectory/<UUID>/<save name>` when the card appears (a drop reads the URL at once, so it must
   exist first) and deleted when the card closes.
@@ -378,7 +432,7 @@ Key facts:
 The timeline always spans the whole recording: cut parts are dimmed and the playhead skips them.
 Each kept part has a handle on both edges; dragging one trims or restores. **S** splits at
 the playhead, clicking selects the part between splits and cuts, **⌫** cuts it. The inspector's
-Audio section sets each track's volume and mute.
+Audio tab sets each track's volume and mute, and holds the background audio (below).
 
 | File | Role |
 |---|---|
@@ -389,19 +443,55 @@ Audio section sets each track's volume and mute.
 | `Editor/Model/AudioMixSettings.swift` | Volume and mute per audio track, by the recording's track order |
 
 Key facts:
-- Everything in the project and on the timeline is source time; only the player, the transport's
-  time label and the compositor's requests are output time. `TimeMap` is the only converter.
+- Everything in the project and on the timeline is source time; the player, the transport's time
+  label, the compositor's requests and the plan's click markers, keystroke chips and camera are
+  output time (speed, below). `TimeMap` is the only converter.
 - Cuts are normalized as frame boundaries (integers); the last boundary is the recording's end
   wherever it falls, so a trailing cut never leaves a sliver. Something must stay: trims keep a
   frame per kept part, and the last part can't be cut.
 - `splits` are saved in the project, so a split is an undoable edit. Splits inside cuts are kept
   and come back if the cut is restored.
-- A new player item is made only when the cuts change (the playhead stays on its content); other
+- A new player item is made only when the cuts or speeds change (the playhead stays on its content); other
   edits swap the video composition, volumes only the mix.
 - Audio fades 25 ms at every cut. The mix lags its ramps by ~10 ms: at a cut, 10 ms ramps still
   left 57% of the volume, 20 ms 20%, 25 ms 2%.
 - Audio tracks are named by the writer's order: two tracks are system audio then microphone; one
   track is just "Audio" since it could be either.
+
+### S2 — Speed per part, Speed Up Typing (spec 0014, N7)
+
+Select a part, then the transport's **Speed** menu sets it to 1×, 1.5×, 2×, 3×, 4× or 8× (one undo step; its
+ends become splits); the timeline labels each part that isn't at 1×. **Motion → Speed → Speed Up Typing** speeds
+every stretch of typing still at 1× in one undo step: 2× under 6 s, 3× under 12 s, 4× beyond.
+
+| File | Role |
+|---|---|
+| `Editor/Model/SpeedRange.swift` | A source range and its rate; `EditorProject.speeds` (cut parts keep theirs) |
+| `Editor/Render/TimeMap.swift` | Kept ranges divided at speed edges into `pieces`, each lasting length / rate in the output; `rate(atSource:)`, `outputTime(ifKept:)`, `speeds(setting:for:)`, `speeds(adding:)` |
+| `Editor/Service/TypingStretches.swift` | Pure: presses that aren't auto-repeats, gaps under 1 s, at least 3 s; ⌃/⌥/⌘ ends a stretch |
+| `Editor/Render/CompositionBuilder.swift` | Each piece inserted at its output length (to the nanosecond): video scaled with `scaleTimeRange`, audio at another speed from its sped-up file (`ExtraAudio.fastParts`, silent without one); music fills the output |
+| `Editor/Service/SpeedAudio.swift`, `OfflineAudioEffect.swift`, `EditorViewModel+Audio.swift` | Each audio track's (and the click sounds') part at another speed, run through `AVAudioUnitTimePitch` in an offline `AVAudioEngine` (`OfflineAudioEffect`, shared with `VoiceEnhancer`: a source node feeding one effect a chunk at a time, the latency and context dropped on the way out) with 0.25 s of context read on each side, to an Apple Lossless CAF in `temporaryDirectory/Reco Speed Audio/`; rendered once per part and rate (`fastPartAudio`), deleted when the window closes |
+| `Editor/ViewModel/EditorViewModel+Speed.swift`, `Editor/View/SpeedInspectorSection.swift` | `selectedSpeed`, `setSpeed`, `typingSpeedUps`, `speedUpTyping()`; the Motion tab's Speed section |
+
+Key facts:
+- Click rings, keystroke chips and the camera are timed on the output, so a ring lasts its duration and a zoom
+  eases at its pace in a 4× part; the camera also eases across a cut now instead of jumping. Presses inside cuts
+  are dropped from the plan. The cursor (position, shape, press shrink, idle fade) stays on source time, since it
+  is content; the loop's glide is the last second of output. Motion blur's shutter is in output seconds, so a
+  fast part blurs the cursor more.
+- **Audio is never scaled in the composition.** `AVAssetReaderAudioMixOutput` (the export's audio) applies a scaled
+  edit's rate change only after it has converted past it (`AppendRateChange: scheduling rate change at unscaled t=9600,
+  but we previously did a conversion for t=13056`): a 1 s test recording with 0.2–0.6 s at 4× (0.7 s of output) mixed to
+  0.709–0.808 s across runs with every pitch algorithm, and exported at 0.775 s. So fast parts' audio is pre-rendered
+  (`SpeedAudio`) and inserted unscaled; the mix and the export now come out at exactly 0.7 s. The time-pitch keeps the
+  pitch (440 Hz stays within 10 Hz) and puts a part's sound where it belongs: a tone starting 75 ms into a 4× part reaches
+  half its level at 73 ms, spread over about 23 ms (60–83 ms from 2% to 80%). Measured on an M2, Debug, load average 12:
+  2 min of stereo AAC renders in 1.18 s at 2×, 0.67 s at 4×, 0.43 s at 8×; a rebuild waits for new parts, once.
+- A fast part shows the source frame under each output frame (every 4th at 4×), no blending. A 1× project builds
+  the same composition as before.
+- `ponytail:` click sounds are on the source timeline, so a fast part time-stretches them too.
+- Not measured yet: the plan's extra mapping (one binary search per press, zoom and cursor sample) and the
+  compositor's extra `sourceTime(atOutput:)` lookups per frame.
 
 ### S1 — Editor, phase 4: zoom (`feat/editor-shell`, spec 0003)
 
@@ -419,7 +509,7 @@ the automatic zooms.
 | `Editor/Render/CameraPath.swift` | The view over time, sampled at 120 Hz: a critically damped spring per axis, scale in log space, follow-cursor with a dead zone |
 | `Editor/Render/FrameRenderer.swift` | Draws clicks, magnifies the frame to the view, then draws the keystroke chip unmagnified |
 | `Editor/View/ZoomLane.swift`, `ZoomFocusPad.swift` | The timeline's zoom lane; the inspector's fixed-focus picker |
-| `Editor/ViewModel/EditorViewModel.swift` | `// MARK: - Zooming` extension; `selection` is an `EditorSelection` (a segment or a zoom), and ⌫ removes either |
+| `Editor/ViewModel/EditorViewModel+Zooming.swift` | The zooming extension (moved out of `EditorViewModel.swift`, which was at the 500-line limit); `selection` is an `EditorSelection` (a segment or a zoom), and ⌫ removes either |
 
 Key facts:
 - A new project (no `.edit.json`) gets the automatic zooms; they're saved with the first edit.
@@ -443,6 +533,25 @@ Key facts:
   455 zooms (half following the cursor): the plan builds in ~45 ms (camera 36 ms, cursor 9 ms);
   0.1 ms without zooms. A zoomed 4K frame with a ring and a chip renders in 4.7 ms p50 / 8.1 ms p95
   (4.2 / 7.4 unzoomed).
+- **Motion blur** (2026-10-08; Motion tab, `EditorProject.motionBlur`, 0 to 1, 0 = off): the shutter is
+  `motionBlur / output frame rate` seconds (`RenderPlan.shutter`; 1 = open the whole frame; the export's rate comes
+  through `RenderTarget.frameRate`, the preview uses the recording's). While the video's corners travel 0.5 px or more
+  across the shutter, `FrameRenderer.placements(at:plan:)` returns one placement per 2 px of travel, 2 to `RenderPlan.maximumBlurSamples` (8 in exports, 2 in the preview: 8 cost 12.4–14 ms p95 at 4K mid-zoom on an M2 in Debug, 2 cost 5.6), evenly
+  spaced and centred on the frame's time, and the frame is drawn at each, scaled to its share of the alpha
+  (`fading(to:)`; `CIColorMatrix` on all four channels would divide the colour twice, since Core Image unpremultiplies
+  first) and added (`CIAdditionCompositing`). Under 0.5 px, and with blur off, it draws once with the same graph as
+  before, so frames without camera motion (the spring stops within 0.04 px of its target) are byte-identical to today's
+  (tested with the buffers' bytes). The cursor blurs the same way when it moves 1 px or more on screen, including the
+  camera's move: its image is placed at each sample, the samples summed, and the sum composited over the frame once.
+  Measured 2026-10-08 on a MacBook Air (Mac14,2, M2), Debug, load average ~5.5 (WindowServer and two Chrome GPU
+  processes), 4K frame on the default canvas with a ring and a chip, blur 1 at 60 fps, 300 renders alternating with
+  blur 0 so load hits both: at the peak of a 2× zoom (8 samples) 9.5–11 ms p50 / 12.4–14 p95, against 4.2–4.5 / 5.2–6.8
+  without blur; over the 1 s a zoom's frames blur (60 of 90 at 60 fps, 8 samples for the first 0.6 s) 11.0 p50 / 13.8 p95.
+  Each sample costs about 0.7–0.9 ms, so **a fast 4K zoom with blur on doesn't hold the 8 ms budget** (the preview
+  drops frames over that stretch; an export isn't real time); blur is off by default and costs nothing off. Fewer
+  samples (4: 6.0 p50 / 9.5 p95; 2: 4.3 / 5.6) trade ghosting for time. Sharing the clamped frame between the samples
+  made no difference. The cursor's blur is cheap: moving 30 px a frame with no camera motion, 3.7–3.9 ms p50 /
+  5.3–5.6 p95 with 8 samples against 3.7–3.9 / 5.0–5.2 without.
 - The soft-zoom hint shows when the recording has under 2 video pixels per screen point
   (`InputTelemetry.pixelsPerPoint`); telemetry doesn't record the Native Resolution setting itself.
 
@@ -450,8 +559,9 @@ Key facts:
 
 A recording made without the cursor gets it back in the editor: drawn from its recorded images at a
 smoothed position, sharp when zoomed, with its hot spot on every click highlight. The inspector's
-Cursor section shows or hides it and sets its size, movement (Mellow, Smooth, Fast), shrinking on
-click and hiding when idle.
+Cursor tab (2026-10-07) holds the Cursor section (show or hide, style, size with Reset, "Always Use Pointer",
+shrinking on click, hiding when idle, "Tilt While Moving", "Loop Position", "Stop Before End") and the Clicks section (effect, color, size, duration,
+buttons, click sound). Movement (Mellow, Smooth, Fast, None) is in the Motion tab.
 
 | File | Role |
 |---|---|
@@ -459,7 +569,11 @@ click and hiding when idle.
 | `Editor/Render/CursorShapeTrack.swift` | Shape changes without the brief ones, each image decoded once per plan; an arrow when the telemetry has none |
 | `Editor/Render/Spring.swift` | The critically damped spring the camera and the cursor share |
 | `Editor/Render/FrameRenderer.swift` | Draws the cursor after zooming, scaled in one step from its recorded resolution |
-| `Editor/Model/CursorStyle.swift` | The inspector's settings; `Smoothing.frequency` holds the presets' springs |
+| `Editor/Model/CursorStyle.swift` | The inspector's settings (`Appearance`, `alwaysUsesArrow`, `loops`); `Smoothing.frequency` holds the presets' springs; `init(from:)` takes defaults for missing keys |
+| `Editor/Render/OverlayImages.swift` | `whiteArrow()` and `dot()`, the cursor styles' images, drawn once per plan; `ring(diameter:color:filled:)` |
+| `Editor/Model/ClickHighlightStyle.swift` | `Effect` (off, circle, ripple) with the rings' count, start size and timing; an old project's `isEnabled` decodes into it |
+| `Editor/Render/ClickSound.swift`, `Service/ClickSoundWriter.swift`, `Render/ExtraAudio.swift`, `Model/BackgroundAudio.swift`, `Service/BackgroundAudioLoader.swift` | The click sound's samples, press onsets and mixing (pure); the file written from them; the extra files a composition holds (clicks, background music); the chosen music (bookmark, name, volume and mute) and its opening |
+| `Editor/ViewModel/EditorViewModel+Audio.swift` | Writes the click file the first time it's wanted, deletes it on close |
 | `Service/StandardCursors.swift` | `png(of:)`, shared with the recorder, and `arrowSprite`, the fallback read when the editor opens |
 
 Key facts:
@@ -469,7 +583,9 @@ Key facts:
   neighbouring clicks, and is added at lookup, so it's exact between samples too.
 - Presets are critically damped springs at 7, 12.5 and 25 rad/s, trailing a steady move by 290, 160
   and 80 ms. Smooth is Cap's default (tension 470, mass 3) without its 0.03% overshoot. A move back
-  by less than 2 pt is jitter and dropped.
+  by less than 2 pt is jitter and dropped. **None** (`Smoothing.off`, `frequency` is `nil`) follows the recorded positions
+  as they are: no spring and no jitter filter, each position held until the next (sampled at 120 Hz like the others);
+  clicks and the loop's glide still ease on.
 - Shapes shown for under 150 ms are dropped. A press shrinks the cursor to 0.8× over 130 ms while
   held. Idle hiding fades out over 0.3 s after 2 s without a move or click, and back in before the
   next one.
@@ -480,42 +596,195 @@ Key facts:
   frame, so its image's size doesn't matter (34×46 px costs the same as the 280×400 px arrow);
   `highQualityDownsample` adds at most 0.2 ms. These were measured under load (load average 3),
   where a frame without the cursor took 7.5 ms p50, 10.7 ms p95, against 4.2 and 7.4 in phase 4.
+- **Styles** (`CursorStyle.appearance`): macOS (the recorded images; "Always Use Pointer" draws the recorded arrow, or the
+  system's `arrowSprite`, in place of every shape), White (the macOS arrow outline in white with a 1.25 pt black
+  stroke and a soft shadow, hot spot on the tip) and Dot (a 16 pt translucent grey disc with a white edge, hot spot
+  at the centre). White and Dot are drawn once per plan at 8 pixels per point, so they stay sharp at the 10× zoom
+  the recorded arrow is sized for; `style.size` scales them like any cursor. HDR plans convert them with
+  `encoded(in:)` like the recorded ones.
+- **Loop Position** (`CursorStyle.loops`): over the last second of output (less when the last kept range is shorter: the
+  glide stays inside it) the path eases onto where the first frame has the cursor, so the last frame's position equals
+  the first's exactly (`CursorPath.Loop`, `RenderPlan.cursorLoop(for:)`; the target is the path without the glide,
+  so it is set last in the init). Only the position loops: the cursor's size, shape and idle fade don't.
+- **Stop Before End** (`CursorStyle.stopDuration`, 0–3 s of output, 0 off; N2): from `RenderPlan.cursorStop(before:for:)`, that
+  long before the last frame, `CursorPath` clamps the time its position, size and opacity are read at, so the reach for
+  Stop doesn't show. With Loop Position on too, the cursor holds still and then glides back in the last second.
+- **Tilt While Moving** (`CursorStyle.tilts`; N2): the arrow leans against its horizontal motion, clockwise moving right,
+  up to `CursorPath.maximumTilt` (12°), 76% of it (tanh 1) at `tiltSpeed` (800 pt/s), eased by the Smooth spring
+  (12.5 rad/s); computed once per plan at 120 Hz from the finished path, so it straightens at rest, at the stop and into
+  the loop's glide. `FrameRenderer` rotates the image about its hot spot (a 0 angle is the identity, so frames without
+  it are unchanged). Picked 2026-10-08, not yet checked by eye.
+- **Copy Frame** (transport, ⇧⌘C; N10): the frame at the playhead as a PNG at Original export size in SDR, on the
+  pasteboard (`EditorViewModel.copyFrame()`): an export-target plan in the composition, one frame read by
+  `FrameGrabber` (`AVAssetImageGenerator`, zero tolerance), `ScreenshotService.pngData`, `ImagePasteboard`. A check
+  shows on the button for 1.5 s.
+- **Click effects** (`ClickHighlightStyle.effect`): None; Circle, the old ring (faint fill, grows from 40%); Ripple, two
+  unfilled rings that grow from 20% with the same cubic ease-out, each fading as it grows, each lasting 70% of the
+  duration, the second starting 30% after the first, so the effect ends with the duration and
+  `ClickMarker.active` is unchanged. One ring image per plan either way. Measured on an M2 (Mac14,2), Debug, load average
+  5.5, a 3840×2160 frame on the default canvas (3572×2160), three clicks 0.1 s apart all showing, 300 frames each:
+  no effect 2.6 ms p50 / 3.4 ms p95, Circle (3 rings) 3.6 / 4.1, Ripple (6 rings) 3.8 / 4.2.
+- **Click sound** (`AudioMixSettings.clickVolume`, 0 is off, Clicks section): a synthesised 20 ms click (2.4 kHz body, 5.2 kHz
+  edge, chosen on 2026-10-07, not yet checked by ear; no licensed asset) at every press of every button, on the source timeline.
+  Written once per editor window as Apple Lossless CAF (48 kHz mono, a second of samples at a time) in
+  `temporaryDirectory/Reco Click Sounds/<UUID>.caf` the first time the volume is above 0, inserted per kept range
+  like the recording's tracks (so cuts leave out the clicks inside them) as a track above the recording's IDs and mixed
+  at the volume with the same 25 ms cut fades; deleted when the window closes. Lowering the volume to 0 only changes
+  the mix: the file and the player item stay. Exports read every audio track through the mix, so they include it
+  (and `ExportSession` counts it for the size estimate). ALAC keeps each onset to the sample (the first non-zero sample
+  is the onset or the one after it, since the click starts at a zero crossing); AAC would shift it by its priming.
+  Measured on an M2, Debug: 10 minutes with 3,000 presses writes in 0.97 s to 3.3 MB (the silent 10 minutes alone: 146 KB).
+- **Background audio** (`AudioMixSettings.background`, Audio tab → Background Audio, 2026-10-08): one chosen audio file, kept as a
+  security-scoped bookmark (`BackgroundImageLoader.bookmark(for:)`) with its name, volume (30% when added) and mute; replacing it
+  keeps the volume. Looped (`CompositionBuilder.loopRanges`, in `CMTime` so the copies meet exactly) at output times from 0 to
+  exactly the video's end, never longer, since the compositor draws black past the video's last frame. It runs through cuts (no
+  cut fades) and fades in over 1 s and out over 2 s, each at most a quarter of the output (`backgroundFades`, picked by
+  ear). Its own track above the click sounds' (`extraTrackID(2, …)`), so exports include it like the clicks. The file is opened
+  once per bookmark (`EditorViewModel.backgroundAudio`, access kept on while the window is open and ended when it closes or
+  the file is replaced); adding, removing or changing it makes a new player item (`needsNewAudioFiles`), volume and mute only
+  the mix. An unreadable file shows `unreadableBackgroundAudio` and is left out. The Audio tab is always available (a silent
+  recording can get music); the per-track section shows only when the recording has tracks. No music is bundled (licensing).
+  `ponytail:` a file that doesn't loop cleanly clicks at the seam; a crossfade needs two alternating tracks.
+- **Enhance Voice** (N4, 2026-10-08; `AudioMixSettings.Track.enhancesVoice`, a switch on the microphone track's row, or the one
+  track's, which may be it: `EditorSource.voiceTrackIndex`): the track with its voice isolated, played in its place. `VoiceEnhancer`
+  runs the system's `AUSoundIsolation` (`kAUSoundIsolationSoundType_HighQualityVoice`; the plain Voice type takes more noise and
+  more voice: noise alone went from RMS 0.0162 to 0.0038 with it against 0.0005, measured for spec 0004) over the whole track once,
+  in the offline engine `SpeedAudio` uses (`OfflineAudioEffect`, one loop for both), to an Apple Lossless CAF in
+  `temporaryDirectory/Reco Enhanced Voice/`, on the source timeline from 0 and exactly the track's length, so `CompositionBuilder`
+  inserts the track's pieces from it (`ExtraAudio.enhanced`; `nil` inside for a track that couldn't be rendered, which plays as it
+  is and isn't tried again on every edit) and a fast part of that track is sped up from it (`fastPartAudio` keeps the file each part
+  was rendered from and replaces one rendered from another). Rendered once per track per window (`enhancedVoice`), deleted when
+  the window closes; switching it makes a new player item (`needsNewAudioFiles`). Measured 2026-10-08 (macOS 27.0.1, M2, Debug):
+  **the unit reports a latency of 0 but delays the audio by 92.5 ms in mono (4440 frames at 48 kHz, 4083 at 44.1) and 132.5 ms in
+  stereo**, the same through a file and across runs, so `VoiceEnhancer.latency(channels:)` holds those and the test checks the
+  speech lands within 15 ms. And **`AVAudioPlayerNode` is not deterministic in manual rendering**: its schedules reach the render
+  through a queue, and in 3 of 9 runs the first render came before the first buffer, so the whole file was one render chunk late
+  (exactly 4096, 1024 or 512 frames, whatever the chunk); the engine is fed by an `AVAudioSourceNode` reading a queue
+  synchronously instead, which fixed it (lag 0 in 9 of 9) for the time-pitch too. 7 s of 48 kHz speech renders in 0.13 s,
+  35 s in 0.57 s (about 60× real time), once. The test speaks with `/usr/bin/say` under white noise: the noise-only RMS falls to
+  under a quarter, the voice keeps over half its RMS, the length is unchanged.
+- A track holds its asset weakly: inserting from a click file whose `AVURLAsset` was already released failed with -12780, so
+  `CompositionBuilder` keeps it alive (`withExtendedLifetime`) until the insert is done.
+- Projects saved before these settings decode with defaults (`init(from:)` in extensions, like `EditorProject`): the
+  synthesised `Decodable` throws on a missing key.
 
 ### S1 — Editor, phase 6: canvas and export polish (`feat/editor-shell`, spec 0003)
 
 The recording sits on a canvas: a shape (original, 16:9, 9:16, 1:1, 4:3), a gradient, color,
-picture or transparent background, padding, rounded corners and a shadow. New projects get the
-styled default. Export picks a format (MP4, ProRes, GIF), size, frame rate and quality, and ProRes becomes 4444, which keeps a
+picture or transparent background, padding, rounded corners, a shadow and a border. The Background tab offers ten gradient
+presets, the system's wallpapers and a blur for pictures. New projects get the styled default. Export picks a format (MP4, ProRes, GIF), size, frame rate and quality, and ProRes becomes 4444, which keeps a
 transparent background; HDR recordings stay HDR in MP4 and ProRes. The Library (S7) lists
 the recordings with pictures; a click opens one in the editor.
 
 | File | Role |
 |---|---|
-| `Editor/Model/CanvasStyle.swift` | The inspector's canvas settings; `plain` is the recording as it is |
-| `Editor/Render/CanvasLayout.swift` | Output size, the video's frame and rounded mask, the backdrop (background and shadow) drawn once into an IOSurface, and the regions frames are drawn in |
+| `Editor/Model/CanvasStyle.swift`, `GradientPreset.swift` | The inspector's canvas settings (gradient colors, picture blur, border); `plain` is the recording as it is; `init(from:)` in an extension reads projects saved before the blur and border. A preset is stored as its two colors, so `gradientPreset` finds which one the colors are (Slate, the default, first) |
+| `Editor/Render/CanvasLayout.swift` | Output size, the video's frame and rounded mask, the backdrop (background with its blur, the border and the shadow) drawn once into an IOSurface, and the regions frames are drawn in |
 | `Editor/Render/FrameRenderer.swift` | `draw(_:at:plan:into:context:)`: the frame region by region, for the compositor and the tests alike |
 | `Editor/Render/RenderResources.swift`, `RenderTarget.swift` | What plans draw with from the system (key labels, arrow, background picture); what a plan is for (the preview, or an export's size and dynamic range) |
 | `Editor/Render/HDREditorCompositor.swift`, `Editor/Model/DynamicRange.swift` | 10-bit or half-float frames in, half-float out; SDR, PQ or HLG from the track's transfer function |
-| `Editor/Service/BackgroundImageLoader.swift` | Security-scoped bookmark to the chosen picture, read upright, in sRGB, at most 4096 px |
+| `Editor/Service/BackgroundImageLoader.swift` | Security-scoped bookmark to the chosen picture, read upright, in sRGB, at most 4096 px; returns the file it resolved to, so the inspector can ring the chosen wallpaper |
+| `Editor/Service/SystemWallpaper.swift` | The 13 desktop pictures macOS has on disk, with their thumbnails, listed off the main actor; chosen like any picture, through `setBackgroundImage` |
+| `Editor/View/SwatchGrid.swift`, `BackgroundFillControls.swift` | Five-column grid of 16:10 swatches with an accent ring on the chosen one (gradient presets, wallpapers); what each background kind is made of (presets and colors, color, wallpapers + Choose Image… + Blur) |
+| `Editor/ViewModel/EditorViewModel+Background.swift` | `updateBackgroundImage(for:)` (the one place the picture is read, for load and every rebuild), the wallpaper list |
+| `Editor/Model/StylePreset.swift`, `Editor/Service/StylePresetStore.swift`, `Editor/ViewModel/EditorViewModel+Styles.swift`, `Editor/View/StyleMenu.swift` | A saved look (S19): the preset and what it covers, its `.recostyle` files, the view model's apply/save/import/delete, the toolbar menu |
 | `Editor/Model/ExportSettings.swift`, `Editor/View/ExportOptions.swift` | Format, quality, size (a shorter side: 720, 1080, 2160, only those under the canvas's) and frame rate (15, 30, 60, not above the recording's; a GIF's at most 30: 60 fps delays are 1 or 2 cs, which browsers slow to 10 cs); the quality's estimated sizes |
 
 Key facts:
 - The canvas keeps the video's shorter side (9:16 from 4K is 2160×3840), and padding (8%), corner
-  radius (1.5%) and the shadow's blur (3%) are shares of it. An export at another size is drawn at
+  radius (1.5%), the shadow's blur (3%), the border (up to 2%) and the picture's blur (up to 3%) are shares of it. An export at another size is drawn at
   that size, not scaled afterwards. Zoom and canvas placement are one transform, so the video is
   resampled once; the cursor is drawn at its final scale.
 - Exporting at the original size uses `CanvasLayout.nativeShorterSide`: a canvas just big enough that the
   unzoomed video keeps its own pixels inside the padding (the preview keeps the video's shorter side, for
   its frame budget). Exports shrink frames with `highQualityDownsample` (`RenderPlan.downsamplesSmoothly`);
   linear sampling blurred a Retina recording's text at 1080p. Its export cost isn't measured yet.
+- Wallpapers (measured on macOS 27.0.1, M2): `/System/Library/Desktop Pictures` has 63 `.madesktop` plists, which are
+  MobileAsset references downloaded on demand (`/System/Library/AssetsV2/com_apple_MobileAsset_DesktopPicture/` held only
+  the catalog: none were on disk), 13 full-size `.heic` files of 6016×6016 px and 8.7–25 MB (iMac in 7 colors, Mac in 4,
+  Radial Sky Blue, Sonoma) and `.thumbnails/` with 138 HEICs of 214×130 px. Only the 13 are offered: a thumbnail stretched
+  to a 2160 px canvas would be 16.6× enlarged, so thumbnails are tiles only. Solid Colors (128×128 PNGs) duplicate the Color
+  background, the aerials and Sonoma videos are video, and `.wallpapers/Sonoma Horizon.heic` (3840×2160) is skipped.
+  A picked one is read once, off the main actor, at the 4096 px cap (`sips -Z 4096` took 0.49 s with re-encoding; 64 MB held).
+  `ponytail:` downloaded `.madesktop` assets aren't offered.
+- Blur (`CanvasStyle.backgroundBlur`, picture backgrounds only): sigma up to 3% of the frame's shorter side
+  (`CanvasLayout.maximumBackgroundBlur`), applied after the picture is placed: clamped to its extent so the edges stay
+  opaque, blurred, cropped to the frame. Part of the backdrop, so once per plan. Measured on an M2, Debug, load average 3–6,
+  3840×2160 video with a 4096×4096 picture, 30 builds: backdrop 8.5 ms p50 / 8.9 p95 sharp (56 ms the first time), 15.2 / 15.7
+  blurred (16 / 28 in a busier run). Slider drags rebuild the plan, so that is per drag step, never per frame.
+- Border (`borderWidth` 0–2% of the shorter side, any opaque color): drawn outward from the video into the backdrop, a rounded
+  rectangle of the video's frame grown by the width with radius = corner radius + width (concentric; square stays square),
+  under the video, so its color shows around the rounded corners. The shadow is cast by video and border together. Width is
+  whole pixels, capped by the gap to the canvas edge (`CanvasLayout.borderWidth(_:around:)`), so with no padding there is no
+  border and the slider is disabled. Nothing per frame; the video's frame, transform and native size don't change. An inset
+  border was left out: it looks like a border with less padding and would resample the video.
 - With padding, Original grows by it (`CanvasLayout.paddedRatio`), so the padding is equal on every side; a
   fixed shape whose ratio differs from the video's puts the rest on one axis.
+- **Fill** (N12, 2026-10-08; the Background tab's Video: Fit / Fill, shown in any shape but the recording's;
+  `CanvasStyle.fillsFrame`): the video covers the space inside the padding instead of fitting in it. `CanvasLayout.videoFrame`
+  is that space (`filledFrame`) and `baseView` the largest part of the video in its shape, as fractions of the video (a 16:9
+  recording in 9:16 shows 0.29 of its width); `CameraPath` takes the base view as what 1× shows: it follows the cursor
+  with it between zooms with the zooms' dead zone (`RenderPlan.camera` places every cursor sample then, not only the
+  followed zooms'), starts on the cursor instead of easing there from the centre, and clamps and scales zooms from it
+  (`ZoomSegment.clamped(_:scale:in:)`, `CameraPath.following(_:from:scale:in:)`; the zoom focus pad outlines the base view
+  at the zoom's scale). `FrameRenderer.transform(to:of:size:)` stretches the view to the video's size and `videoTransform`
+  the video onto the frame, so the two scale evenly. Original export: `nativeShorterSide` sizes the canvas for the part
+  shown, and since the canvas's even sides leave the padded space up to 10 px off that part's own size, `filledFrame` takes
+  the part's size when within `ownPixelsSlack` (12 px) of the space and lets the padding absorb the difference, and
+  `FrameRenderer.placement` moves a 1× video by whole pixels, so the export is the video's pixels panning. Automatic
+  zooms are still made for the whole video, so one may not fit the base view; it's clamped into it. Measured 2026-10-08
+  on an M2 (Mac14,2), Debug, load average 5–6 (noisy), a 3840×2160 frame on the 9:16 preview canvas (2160×3840), no
+  overlays, the cursor crossing the frame so the view pans, 180 frames, three runs: fit 3.2–5.6 ms p50, fill 3.8–7.2 ms p50
+  (a filling frame is always resampled, like a zoomed one; a fitted 1× frame isn't); p95 13–16 for both, load spikes.
 - Frames are drawn region by region (`CanvasLayout.regions`): the padding from the backdrop alone,
   the video in 8 bands, its rounded corners with the mask. Core Image evaluates every overlay
   across the whole region it renders; in bands it skips them where they aren't. Measured on an M1,
   Debug, 4K with a ring and a chip, load average 4–6: 3 ms p50 plain (7 drawn whole), 3.7–5 ms on
   the default canvas (9 whole), p95 under 7.5 ms. The backdrop takes 4 ms to draw (17 the first time).
 - A transparent background keeps its alpha only in ProRes 4444 (the ProRes tab's 4444 when the canvas is transparent); other formats export it black.
+- **Crop** (N11, 2026-10-08; Background tab, `CropField` on a `RegionPad`: the frame at the playhead with the crop outlined, edges and
+  corners dragged within 10 pt, inside moves it (`RegionDrag`, shared with masks), Reset): `EditorProject.crop`, fractions of the video from its top-left corner,
+  at least 10% a side (`VideoCrop`). `VideoCrop.pixels(of:in:)` puts it on whole pixels with even sides (the whole video exactly
+  when nothing is cropped), and from there **the crop is the video**: `RenderPlan.videoSize` is its size, so the canvas, export
+  sizes and the stage's shape follow; the plan reads `InputTelemetry.cropped(to:)`, which moves every geometry entry's
+  `contentRect` by the crop's origin and sets `capture.videoSize` to it, so clicks, the cursor, the camera's cursor points and
+  automatic zooms (presses outside the crop are outside the video, which the generator already ignores) are all in the crop
+  with no other change. `FrameRenderer` cuts the frame to `RenderPlan.crop` and moves it to the origin by whole pixels before
+  anything is drawn, so nothing is resampled. Zoom focus is a fraction of the crop: when a crop drag ends, automatic zooms are
+  generated again in the same undo step (not per drag step: ~34 ms for 10 minutes); manual fixed zooms keep their fractions,
+  so they shift with a new crop. The filmstrip and the timeline show the whole frame.
+- **Masks** (N8, 2026-10-08; **M** or the transport's Add Mask, a mask lane under the zoom lane once there is one, the Background
+  tab's Mask section for the selected one: Blur, Pixelate or Spotlight, a `RegionPad` on the cropped frame where it starts with
+  every rectangle outlined and the selected one's handles, Add Area and Remove Area): `EditorProject.masks` (`MaskSegment`:
+  source range, one or more rectangles as fractions of the crop from its top-left, kind; 3 s and 30% of each side when added,
+  at least 2% a side and 0.25 s), a `TimelineClip` list like the zooms, so masks are sorted and apart: **one mask at a time**,
+  which is why a mask holds several rectangles (a frame often shows two things to hide at once). `RenderPlan.masks` holds
+  them in the crop's Core Image pixels on whole pixels (`PlannedMask`); `FrameRenderer.masked(_:at:plan:)` applies the one
+  showing at the frame's source time right after the crop, before zoom and overlays, so a mask stays on the content and the
+  cursor and click rings stay over it; `MaskRenderer.apply(_:to:of:)` does the pixels, for the screenshot card too. Blur: the
+  clamped frame blurred at sigma 1.2% of the shorter side, cut to each rectangle. Pixelate: `CIPixellate` cells of 2% of the
+  shorter side (at least 4 px) from each rectangle's corner, each cell one pixel's colour (not an average: 8 px cells over 4 px
+  strokes came out solid black) multiplied by a random grey of 0.94–1.06 (`CIRandomGenerator`, the same every frame), so cells
+  can't be matched against rendered candidates. Spotlight: everything else at 40%. Measured 2026-10-08 on an M2 (Mac14,2),
+  Debug, load average 5, a 3840×2160 frame on the default canvas, one rectangle, 180 frames: no mask 2.6 ms p50 / 3.2 p95,
+  blur 3.7 / 4.0, pixelate 4.5 / 4.9, spotlight 3.0 / 3.1.
+- **Find Sensitive Info** (N9, 2026-10-08; the Mask section's button, with progress and Cancel while it runs): reads a frame
+  a second of the kept parts (`SensitiveInfoScanner`: `AVAssetImageGenerator` with half a second's tolerance, each sample at
+  the frame's own time, cut to the crop), finds text with Vision (`SensitiveTextFinder`: `RecognizeTextRequest` `.fast` with
+  `minimumTextHeightFraction` 0.008, since at the default `.fast` read nothing at 26 px on 4K, measured for spec 0004; about
+  150 ms a 4K frame, so 10 minutes take ~90 s off the main actor) and what in it is private (`SensitiveText`, pure:
+  `NSDataDetector` phone numbers and `mailto:` links, so plain links aren't masked; 13–19 digits passing Luhn for cards, which
+  the detectors don't find; `sk-`, `sk_live_`, `gh*_`, `github_pat_`, `AKIA`, `xox*-` keys; `NSRegularExpression`, since Swift's
+  `Regex` has no lookbehind and isn't `Sendable`). `RecognizedText.boundingBox(for:)` turns each match into a box, padded by a
+  quarter of its height, at least a mask's minimum size. `SensitiveMasks.masks(from:interval:duration:)` (pure) joins a box
+  with the overlapping one in the sample before into one rectangle covering everywhere it was, hidden from the sample before
+  it was seen to the one after (text can come or go any time between), so only text showing under a second can be missed;
+  rectangles overlapping in time share a mask. `merging(_:into:)` adds them to the project's masks in one undo step: a found
+  mask overlapping one made by hand joins it, which keeps its id and kind and grows to cover both. Found masks are Pixelate.
+  The footer says how many were masked and never that everything was found. On the **screenshot card**, Hide Sensitive Info
+  (`hugeicons-view-off-slash`, first of the top-right icons) runs the same finder at `.accurate` (one still) and pixelates the
+  boxes into the shot (`ScreenshotRedactor`, through `MaskRenderer`); the card then shows and copies, saves, pins and drags
+  the hidden shot, and a toast says how many items were hidden. The HDR copy is dropped, so a hidden shot saves as PNG.
 - HDR frames are drawn without color management too: the plan draws its overlays once in the
   recording's encoding (`OverlayImages.encoded`), SDR white at 203 nits (BT.2408). Their
   semi-transparent parts (the chip's backing, the cursor's shadow, a fading ring) blend in PQ's
@@ -524,6 +793,18 @@ Key facts:
   a color-managed context; SDR took 3–3.5 in the same runs. Converting the backdrop costs 9–11 ms
   more per HDR plan (20 the first time), alongside the camera and cursor. The composition is
   tagged BT.2020 and the recording's PQ or HLG; GIF exports are SDR.
+- **Style presets** (S19, 2026-10-08; the toolbar's **Style** menu, before Export…): a `StylePreset` is a project's look
+  without its content, the canvas, cursor, clicks, keystrokes, zoom motion and motion blur (cuts, speeds, zooms, masks,
+  the crop and the audio mix belong to the recording and stay out), saved under a name as a `.recostyle` file (JSON, v1,
+  `UnsupportedVersionError` for others, missing settings take their defaults) in `Application Support/com.diip3sh.Reco/Styles/`
+  (`StylePresetStore`: one file per name, `/` and `:` replaced, listed by name). The menu ticks the style the project
+  looks like (`currentStyle`, `matches`), applies one in one undo step ("Apply Style", `preset.applied(to:)`; a picture
+  background's bookmark reloads through the normal rebuild), **Save Current Style…** (an alert with the name; the same
+  name replaces), **Import Style…** (a file picker), **Share "name"…** (`ShareLink` with the store's file: AirDrop, Mail…)
+  and **Delete Style**. The type `com.diip3sh.reco.style` is declared in `Info.plist`, so a `.recostyle` opened from Finder
+  reaches `application(_:open:)` → `EditorWindowManager.importStyle(from:)`: applied in the key editor, or only kept with
+  the saved styles when none is open; dropped on the editor (`dropDestination` for URLs) it's imported the same way.
+  Each editor reads the list when it opens and after its own changes; another window's save shows up in the next editor.
 
 ### S1 — Editor design (`feat/editor-shell`)
 
@@ -550,7 +831,8 @@ slate gradient.
 | `Editor/View/EditorWindowManager.swift` | `makeWindow`: content under a transparent title bar, centred, never larger than the screen less 40 pt; the editor and Web Recording open at 1533×943 (the size picked by hand on 2026-10-05) |
 | `Editor/View/EditorStage.swift`, `TransportBar.swift`, `EditorIconButtonStyle.swift` | The preview in the canvas's shape with a checkerboard behind transparent canvases; the transport in the timeline's header |
 | `Editor/View/TimelineRuler.swift`, `Playhead.swift`, `ZoomBlock.swift` | The ruler (the finest scale whose labels stay 72 pt apart; a line at each label, dots between; labels carry their units, "0.5s", "1m 30s", "1h", since a clock's "0:00.5" didn't say what it counted), the playhead's knob, the zoom blocks |
-| `Editor/View/Inspector*.swift`, `EditorInspectorSections.swift`, `TickSlider.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | `EditorInspector` and its sections, which fold away under a dim title, sliders with their values, switches, and tiles whose highlight slides. Every slider is a `TickSlider`: a track with ticks, accent fill up to a bar at the value, dragged 1:1 from the grab (a press away from the bar takes it there first), VoiceOver adjustable in 20 steps, without a focus ring |
+| `Editor/Model/InspectorTab.swift`, `Editor/View/InspectorTabBar.swift` | The inspector's tabs (2026-10-07): Background · Camera ‖ Audio ‖ Cursor · Keyboard ‖ Captions ‖ Motion, as icons on one capsule track with a line between groups and a sliding fill; only the chosen tab's sections show (Background's one untitled section: aspect, background, padding, corners, shadow, border; Audio; Cursor and Clicks; Keystrokes; Zoom). Camera and Captions stay disabled until the camera is its own track and a transcript exists (spec 0004, N19, N5); Audio is always available. The tab is `EditorView` state, so it survives export; selecting a zoom turns to Motion. Motion holds the zoom's and the cursor's movement (Mellow, Smooth, Fast; the cursor's also None) and Motion Blur (a slider, Off at 0): `ZoomMotion` sets the camera spring at 6, 10 or 16 rad/s (96% of a move in 0.83, 0.5 or 0.31 s), saved in the project as `zoomMotion`, blur as `motionBlur` |
+| `Editor/View/Inspector*.swift`, `EditorInspectorSections.swift`, `TickSlider.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | `EditorInspector` and its sections, which fold away under a dim title (Background's has none, so it never folds), `SwatchGrid` (preset and wallpaper tiles, the chosen one ringed in the accent colour), sliders with their values, switches, and tiles whose highlight slides. Every slider is a `TickSlider`: a track with ticks, accent fill up to a bar at the value, dragged 1:1 from the grab (a press away from the bar takes it there first), VoiceOver adjustable in 20 steps, without a focus ring |
 | `Editor/View/ExportOptions.swift`, `ExportProgressBar.swift` | Export's inspector: format, size and frame rate as `SegmentedChoice` tabs (an option can be disabled), the quality as rows with their estimated sizes, Export and Copy to Clipboard (side by side, or stacked when the column is narrow) pinned under a line; progress |
 
 Key facts:
@@ -603,12 +885,18 @@ Key facts:
 ### C1 — Screenshots
 
 Menu bar **Capture Area / Capture Window / Capture Screen** and global shortcuts of the same names
-(Settings → Shortcuts → Screenshots, ⌘1 / ⌘2 / ⌘3; no URLs yet). Defaults are ⌘1–⌘7: capture area, window, screen, select content, select area, toggle and pause recording (`KeyboardShortcutNames.swift`); global, so they take ⌘1–⌘7 from every app until changed. The popover shows each row's shortcut dimmed (`MenuBarActionButton.shortcut`). Both follow `canCapture(alongside:)`: idle only,
+(Settings → Shortcuts → Screenshots, ⌘1 / ⌘2 / ⌘3) and `reco://capture-area`, `capture-window`, `capture-screen` (N16); **Capture Previous Area** (N16, a shortcut with no default and `reco://capture-previous-area`) shoots the last area captured since launch again on its display, live and without selecting (Capture Area when there is none; `selectedDisplayDisconnected` when its display is gone). All four links take `?then=copy|save|pin` in place of the card (`ScreenshotFollowUp`, `QuickAccessController.follow`: a card showing stays; a failed copy or save opens the card; an area pins where it was taken, anything else in the card's corner; the shot becomes the one Restore Last Screenshot brings back). The capture toolbar's **Self-Timer** (screenshot mode; Off, 3, 5, 10 s, `SettingsStore.screenshotTimer`, default Off) counts down with the countdown's disc on the pointer's screen before its capture starts (`ScreenshotController.afterSelfTimer`; Esc cancels and nothing is captured); shortcuts and links don't wait. Defaults are ⌘1–⌘7: capture area, window, screen, select content, select area, toggle and pause recording (`KeyboardShortcutNames.swift`); global, so they take ⌘1–⌘7 from every app until changed. The popover shows each row's shortcut dimmed (`MenuBarActionButton.shortcut`). Both follow `canCapture(alongside:)`: idle only,
 so a shortcut pressed while recording, counting down or capturing is ignored and logged.
 Capture Area freezes the screen first: every display is captured when it starts (`ScreenshotService.captureDisplays`),
-the overlay shows that picture (`AreaSelectionPanel.show(_:over:)`), and the area is cut from it
+the overlay shows that picture (`AreaSelectionView.frozenScreen`, `AreaSelectionPanel.show(_:)`), and the area is cut from it
 (`Screenshot.cropped(to:)`), so hover states, tooltips and open menus the overlay takes away from the apps
-under it are still in the shot. Capture Area shoots as soon as the drag ends (`AreaSelectionOverlay.present(confirmsOnRelease:)`); a click, a
+under it are still in the shot. A **loupe** (N17; `LoupeView`, placed and fed by `LoupeGeometry`, pure) sits 20 pt below and
+right of the pointer (the other side at the screen's edges), 120 pt square: the frozen screen's pixels around the
+pointer at 4 pt each (30 across, drawn with no interpolation, a grid on their edges) with the pointer's pixel outlined
+in white with a dark halo. It shows before anything is drawn, while drawing or resizing, and over a handle; not while
+moving the selection or resting on it, where the buttons are (`AreaSelectionView.wantsLoupe(at:)`), and never over the
+live screen (a recording's selection), which has no still pixels. Not yet seen in the app; the orientation is tested by
+rendering the view. Capture Area shoots as soon as the drag ends (`AreaSelectionOverlay.present(confirmsOnRelease:)`); a click, a
 drag under 24 pt (`AreaSelectionView.drawingRelease`) or Esc cancels. Its overlay never activates the app or
 takes key, so a menu or dropdown open in another app stays open and lands in the shot; Esc is a temporary
 global hotkey, as in the countdown. macOS ignores cursor changes from an app that isn't frontmost, so
@@ -623,8 +911,8 @@ macOS asks once for Desktop access the first time a screenshot is saved there.
 
 **History** (spec 0012): every capture is also written, in the background (the card doesn't wait), to
 `URL.recoSupport/Screenshots/` under the same name. Save deletes that copy (after awaiting its write, if still
-running), so nothing is stored or listed twice; Copy, Pin, Recognize Text and Close leave it. **Settings → General →
-Screenshot History**: Keep Screenshots Off / 1 Week / 1 Month (default) / 3 Months, and Clear History…. Expired
+running), so nothing is stored or listed twice; Copy, Pin, Recognize Text and Close leave it. **Settings → Screenshots →
+History** (in General until N14 gave screenshots their own tab): Keep Screenshots Off / 1 Week / 1 Month (default) / 3 Months, and Clear History…. Expired
 files (creation date older than the retention; Off expires all) are deleted with `removeItem`, not trashed, to free
 space: at launch and after each history write, by `ScreenshotHistory.isExpired`, the one rule. The screenshot folder
 is never pruned.
@@ -648,6 +936,16 @@ Key facts:
 - Window shots use the window recording config: SCK fits window + shadow into the window's frame, so
   shadow padding is uneven (same as recordings).
 - Verified on an M2 (1710×1112 pt, 2×): screen 3420×2224, window and area at 2×, sRGB, no Reco UI.
+- **HDR screenshots** (N16; Settings → Screenshots → Capture → Capture HDR Screenshots, macOS 26 and later, off by default,
+  `SettingsStore.capturesHDRScreenshots`): screen and area shots are taken with `SCScreenshotManager.captureScreenshot` and
+  `dynamicRange = .hdr` (`ScreenshotService.hdrConfiguration`) and keep the picture as `Screenshot.hdrImage` (16-bit extended
+  sRGB); `image` is drawn from it in 8-bit sRGB, highlights clipped (`standardRange(of:)`), for the card, pins, Copy (still a
+  PNG) and Recognize Text. Files (Save, history, drag-out) go through `ScreenshotService.write`: an HDR shot is a `.heic`
+  with an SDR base and an ISO gain map (`kCGImageDestinationEncodeToISOGainmap`), anything else a PNG; the Library and history
+  pruning take both (`Screenshot.contentTypes`, `LibraryItem.isScreenshot`). Window shots stay SDR: the HDR configuration has
+  no `scalesToFit`. Measured 2026-10-08 on macOS 27.0, M2: the HDR picture comes back as `sdrImage`, and `hdrImage` is nil
+  even for `.bothSDRAndHDR`, hence one `.hdr` capture (and both images from the same frame); a 3420×2224 capture took
+  100–126 ms, drawing its SDR picture 4–6 ms. Not yet checked with HDR content on screen.
 
 ### S2 — Web recordings (`feat/web-recordings`, spec 0005)
 
@@ -850,7 +1148,7 @@ Effects are properties of a web script's steps, previewed with Play and rendered
 
 288 pt wide. First the ways in: **Screenshot** and **Record** (with their shortcuts, ⇧⌘1 / ⇧⌘2) open the capture
 toolbar (below) for that kind (while a take is saved, Saving Recording… instead), then **Product Record** (the Web
-Recording window) and **Library**, and Edit Last Recording when there is one. Then Capture (system audio, microphone
+Recording window) and **Library**, and Edit Last Recording and Restore Last Screenshot when there is one. Then Capture (system audio, microphone
 and its device; camera), whose expanded rows sit on the popover itself, with no second background; then Settings… and
 Quit. The take's own controls are only on the toolbar. Frame rate, codecs, container, alpha, HDR and the content filter
 are in Settings → Video, the audio codec in Settings → Audio.
@@ -1022,7 +1320,7 @@ text sent to the agent never includes a password's value.
 A black shape over the notch of every screen (a 120×8 pt pill at the top centre where there is none). The pointer
 on it makes it peek (+7.5 pt each side, +5 down, shadow); staying 300 ms opens it into a 560 pt panel with the
 newest 20 screenshots (saved and history): click copies the PNG (tile says Copied for 1.2 s), drag drops the file.
-Collapses 500 ms after the pointer leaves. **Settings → General → Screenshot History → Show Screenshots in the Notch** (default off).
+Collapses 500 ms after the pointer leaves. **Settings → Screenshots → History → Show Screenshots in the Notch** (default off).
 Hidden while a take records or saves (`AppDelegate.hideNotchShelfWhileRecording`), so a display recording never shows it as a bar over the notch, Show Reco or not. Hover rings a tile in the accent; a press dims and shrinks it on the frame it lands and lets go after 4 pt, so the file drag still starts.
 
 | File | Role |
@@ -1111,7 +1409,7 @@ should hold but need re-measuring.
 | S1 editor phase 3: trim, split and cut, audio volume | Done; trimming, cutting and clicks at cuts still need a check in the app on a real recording |
 | S1 editor phase 4: auto-zoom, zoom lane, camera | Done; auto-zoom placement, full-frame-rate transitions and editing zooms on the timeline still need a check in the app on real recordings |
 | S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
-| S1 editor phase 6: canvas and export polish | Done; the canvas, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags) and transparent exports still need a check in the app |
+| S1 editor phase 6: canvas and export polish | Done; the canvas, gradient presets, wallpapers (and one after relaunch), picture blur, the border, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags) and transparent exports still need a check in the app |
 | S1 editor design: system colors, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 | S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |
@@ -1135,7 +1433,7 @@ Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorde
 
 Recordings can be scripted: select content once in the menu, then drive the running build with
 `open -g -a /tmp/bc-build/dd/Build/Products/Debug/Reco.app "reco://toggle"` (starts
-when content is selected, stops when recording; no countdown), `reco://pause` and
+when content is selected, stops when recording; no countdown), `reco://pause`, `reco://cancel`, `reco://restart` and
 `reco://edit-last` (opens the editor). Use `-a` with the path:
 a plain `open` may launch another copy (e.g. Xcode's DerivedData build). Play `afplay` ticks at
 logged wall times, then check each tick lands where expected in the audio, shifted by the paused time.

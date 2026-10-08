@@ -5,6 +5,7 @@
 //  Created by Diip3sh on 26.09.26.
 //
 
+import AVFoundation
 import CoreGraphics
 import Foundation
 import Testing
@@ -89,6 +90,11 @@ struct EditorViewModelTests {
         #expect(viewModel.project.cursor.smoothing == .fast)
         #expect(viewModel.undoManager.undoActionName == "Cursor")
 
+        viewModel.motionBlur = 0.5
+
+        #expect(viewModel.project.motionBlur == 0.5)
+        #expect(viewModel.undoManager.undoActionName == "Motion Blur")
+
         viewModel.canvas.aspect = .square
 
         #expect(viewModel.project.canvas.aspect == .square)
@@ -112,9 +118,10 @@ struct EditorViewModelTests {
         #expect(viewModel.project.canvas.background == .image)
         #expect(viewModel.undoManager.undoActionName == "Background Image")
         let bookmark = try #require(viewModel.project.canvas.imageBookmark)
-        let image = try #require(await BackgroundImageLoader.image(from: bookmark))
-        #expect(image.width == BackgroundImageLoader.maximumSize && image.height < 10)
-        #expect(image.colorSpace?.name == CGColorSpace.sRGB)
+        let loaded = try #require(await BackgroundImageLoader.image(from: bookmark))
+        #expect(loaded.image.width == BackgroundImageLoader.maximumSize && loaded.image.height < 10)
+        #expect(loaded.image.colorSpace?.name == CGColorSpace.sRGB)
+        #expect(loaded.url == picture.resolvingSymlinksInPath())
     }
 
     @Test func splittingThenCuttingTheSelectionLeavesItOut() async throws {
@@ -228,6 +235,102 @@ struct EditorViewModelTests {
         let video = folder.appending(path: "recording.mov")
         try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30)
         return video
+    }
+
+    @Test func turningTheClickSoundUpAddsATrackAndTurningItDownKeepsThePlayerItem() async throws {
+        let video = try await writeRecording()
+        defer { try? FileManager.default.removeItem(at: video.deletingLastPathComponent()) }
+        var telemetry = InputTelemetry(capture: .init(kind: .display, videoSize: CGSize(width: 64, height: 48)), keystrokesAvailable: false)
+        telemetry.geometry = [
+            .init(time: 0, screenRect: CGRect(x: 0, y: 0, width: 32, height: 24), contentRect: CGRect(x: 0, y: 0, width: 32, height: 24), contentScale: 1, scaleFactor: 2)
+        ]
+        telemetry.clicks = [.init(time: 0.3, location: CGPoint(x: 16, y: 12), button: .left, isDown: true, clickCount: 1)]
+        try JSONEncoder().encode(telemetry).write(to: InputTelemetry.sidecarURL(for: video))
+        let viewModel = EditorViewModel(videoURL: video)
+        await viewModel.load()
+        let item = try #require(viewModel.playback.player.currentItem)
+        #expect(try await item.asset.loadTracks(withMediaType: .audio).isEmpty)
+        #expect(viewModel.clickSoundFile == nil)
+
+        viewModel.edit("Audio") { $0.audio.clickVolume = 0.5 }
+
+        // The file is written first, then the player item is rebuilt with it
+        var turnedUp: AVPlayerItem?
+        for _ in 0..<500 where turnedUp == nil {
+            try await Task.sleep(for: .milliseconds(10))
+            if let current = viewModel.playback.player.currentItem, current !== item {
+                turnedUp = current
+            }
+        }
+        let rebuilt = try #require(turnedUp)
+        #expect(try await rebuilt.asset.loadTracks(withMediaType: .audio).count == 1)
+        let file = try #require(await viewModel.clickSoundFile?.value)
+        #expect(FileManager.default.fileExists(atPath: file.path(percentEncoded: false)))
+
+        // The file stays, silent, so the item does too
+        viewModel.edit("Audio") { $0.audio.clickVolume = 0 }
+        #expect(viewModel.playback.player.currentItem === rebuilt)
+        viewModel.edit("Audio") { $0.audio.clickVolume = 0.8 }
+        #expect(viewModel.playback.player.currentItem === rebuilt)
+
+        await viewModel.close()
+        #expect(!FileManager.default.fileExists(atPath: file.path(percentEncoded: false)))
+    }
+
+    @Test func backgroundMusicAddsATrackRemovingItTakesItAwayAndUndoBringsItBack() async throws {
+        let video = try await writeRecording()
+        defer { try? FileManager.default.removeItem(at: video.deletingLastPathComponent()) }
+        let music = video.deletingLastPathComponent().appending(path: "Song.mov")
+        try await TestRecording.write(to: music, size: CGSize(width: 64, height: 48), frameCount: 15, frameRate: 30, withTone: true)
+        let viewModel = EditorViewModel(videoURL: video)
+        let undoManager = viewModel.undoManager
+        undoManager.groupsByEvent = false
+        /// Each in its own undo step, as each event is in the app.
+        func step(_ change: () -> Void) {
+            undoManager.beginUndoGrouping()
+            change()
+            undoManager.endUndoGrouping()
+        }
+        await viewModel.load()
+        let silent = try #require(viewModel.playback.player.currentItem)
+        #expect(try await silent.asset.loadTracks(withMediaType: .audio).isEmpty)
+
+        step { viewModel.setBackgroundAudio(music) }
+
+        #expect(viewModel.project.audio.background?.name == "Song")
+        #expect(undoManager.undoActionName == "Background Audio")
+        let withMusic = try await nextItem(after: silent, of: viewModel)
+        #expect(try await withMusic.asset.loadTracks(withMediaType: .audio).count == 1)
+
+        // Volume and mute change the mix, not the player item
+        step {
+            viewModel.audio.background?.track.volume = 0.6
+            viewModel.audio.background?.track.isMuted = true
+        }
+        #expect(viewModel.project.audio.background?.track == .init(volume: 0.6, isMuted: true))
+        #expect(viewModel.playback.player.currentItem === withMusic)
+
+        step { viewModel.removeBackgroundAudio() }
+        let removed = try await nextItem(after: withMusic, of: viewModel)
+        #expect(try await removed.asset.loadTracks(withMediaType: .audio).isEmpty)
+
+        undoManager.undo()
+        let restored = try await nextItem(after: removed, of: viewModel)
+        #expect(try await restored.asset.loadTracks(withMediaType: .audio).count == 1)
+        #expect(viewModel.project.audio.background?.track == .init(volume: 0.6, isMuted: true))
+        await viewModel.close()
+    }
+
+    /// The player item that replaces `item` once the rebuild that follows an edit has finished.
+    private func nextItem(after item: AVPlayerItem, of viewModel: EditorViewModel) async throws -> AVPlayerItem {
+        for _ in 0..<500 {
+            try await Task.sleep(for: .milliseconds(10))
+            if let current = viewModel.playback.player.currentItem, current !== item {
+                return current
+            }
+        }
+        Issue.record("No new player item")
+        throw CancellationError()
     }
 
     @Test func anEditThatChangesNothingIsNotAnUndoStep() {

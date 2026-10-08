@@ -19,6 +19,10 @@ struct FrameRendererTests {
 
     /// Draws the frame as the compositor does, into a buffer the canvas's size, with half floats for HDR.
     private func render(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CIImage {
+        drawn(frame, at: time, plan: plan).map { CIImage(cvPixelBuffer: $0) } ?? .empty()
+    }
+
+    private func drawn(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CVPixelBuffer? {
         var buffer: CVPixelBuffer?
         CVPixelBufferCreate(
             nil, Int(plan.canvas.size.width), Int(plan.canvas.size.height),
@@ -26,9 +30,18 @@ struct FrameRendererTests {
             [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer
         )
         guard let buffer, (try? FrameRenderer.draw(frame, at: time, plan: plan, into: buffer, context: Self.context)) != nil else {
-            return .empty()
+            return nil
         }
-        return CIImage(cvPixelBuffer: buffer)
+        return buffer
+    }
+
+    /// The buffer's bytes, row padding included.
+    private func bytes(of buffer: CVPixelBuffer?) -> [UInt8] {
+        guard let buffer else { return [] }
+        CVPixelBufferLockBaseAddress(buffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddress(buffer) else { return [] }
+        return Array(UnsafeRawBufferPointer(start: base, count: CVPixelBufferGetBytesPerRow(buffer) * CVPixelBufferGetHeight(buffer)))
     }
 
     private var plan: RenderPlan {
@@ -40,22 +53,51 @@ struct FrameRendererTests {
     /// otherwise. The overlays are drawn in `dynamicRange`, as plans draw them.
     private func plan(
         at time: Double, zooms: [ZoomSegment] = [], cursor: InputTelemetry.CursorSprite? = nil, canvas: CanvasStyle = .plain,
-        dynamicRange: DynamicRange = .sdr
+        dynamicRange: DynamicRange = .sdr, cursorStyle: CursorStyle? = nil, clickEffect: ClickHighlightStyle.Effect = .circle,
+        shutter: Double = 0, telemetry: InputTelemetry? = nil
     ) -> RenderPlan {
-        RenderPlan(
+        let drawn = cursorStyle.flatMap {
+            RenderPlan.drawnCursor(for: telemetry ?? cursorTelemetry, style: $0, duration: 10, videoHeight: bounds.height, arrow: nil)
+        }
+        let layout = CanvasLayout(style: canvas, videoSize: bounds.size, shorterSide: nil, background: nil)
+        return RenderPlan(
             timeMap: TimeMap(cuts: [], sourceDuration: 10, frameRate: 60),
             videoSize: bounds.size,
-            camera: CameraPath(zooms: zooms, cursor: [], duration: 10),
-            cursor: cursor.flatMap { _ in CursorPath(telemetry: cursorTelemetry, style: CursorStyle(), duration: 10, videoHeight: bounds.height) },
-            cursorShapes: cursor.map { CursorShapeTrack(telemetry: cursorTelemetry, duration: 10, arrow: $0).encoded(in: dynamicRange) } ?? .none,
+            camera: CameraPath(zooms: zooms, cursor: [], duration: 10, baseView: layout.baseView),
+            cursor: drawn?.path ?? cursor.flatMap { _ in CursorPath(telemetry: cursorTelemetry, style: CursorStyle(), duration: 10, videoHeight: bounds.height) },
+            cursorShapes: drawn?.shapes.encoded(in: dynamicRange)
+                ?? cursor.map { CursorShapeTrack(telemetry: cursorTelemetry, duration: 10, arrow: $0).encoded(in: dynamicRange) } ?? .none,
             clicks: [ClickMarker(time: time, position: CGPoint(x: 100, y: 200), diameter: 100)],
             clickDuration: 0.5,
-            clickRing: OverlayImages.encoded(OverlayImages.ring(diameter: 100, color: CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)), in: dynamicRange),
+            clickRing: OverlayImages.encoded(
+                OverlayImages.ring(diameter: 100, color: CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1), filled: clickEffect == .circle), in: dynamicRange
+            ),
+            clickEffect: clickEffect,
             keystrokes: [KeystrokeChip(time: time, image: 0)],
             chipImages: [OverlayImages.encoded(OverlayImages.chip(label: "⌘C", height: 30), in: dynamicRange)],
-            canvas: CanvasLayout(style: canvas, videoSize: bounds.size, shorterSide: nil, background: nil).encoded(in: dynamicRange),
-            dynamicRange: dynamicRange
+            canvas: layout.encoded(in: dynamicRange),
+            dynamicRange: dynamicRange,
+            shutter: shutter
         )
+    }
+
+    @Test func fillingShowsTheMiddleOfTheFrameInTheCanvassShapeUnstretched() {
+        // 400×300 filling a square: 300×300 of the frame's middle, from x = 50, at 1×
+        let square = CanvasStyle(aspect: .square, fillsFrame: true, padding: 0, cornerRadius: 0, shadow: 0)
+        let red = CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: CGRect(x: 0, y: 0, width: 100, height: 300))
+        let striped = red.composited(over: CIImage(color: .black).cropped(to: bounds))
+        let plan = plan(at: 5, canvas: square)
+        #expect(plan.canvas.size == CGSize(width: 300, height: 300))
+
+        let image = render(striped, at: 5, plan: plan)
+
+        #expect(image.extent == CGRect(x: 0, y: 0, width: 300, height: 300))
+        // The red ends at the frame's x = 100, the output's 50; a stretch to the square would put it at 75
+        #expect(image.pixel(at: CGPoint(x: 48, y: 150)) == [255, 0, 0, 255])
+        #expect(image.pixel(at: CGPoint(x: 52, y: 150)) == [0, 0, 0, 255])
+        #expect(image.pixel(at: CGPoint(x: 74, y: 150)) == [0, 0, 0, 255])
+        // The click's ring at the frame's (100, 200) is at the output's (50, 200), its stroke 16 to 20 px out
+        #expect(image.pixel(at: CGPoint(x: 50, y: 181))[0] > 240)
     }
 
     /// A 200×150 pt display recorded at 2 px per point, with the cursor at (50, 50) pt: (100, 200)
@@ -87,6 +129,52 @@ struct FrameRendererTests {
         #expect((60...200).contains(image.pixel(at: CGPoint(x: 100, y: 200))[0]))
         #expect(image.pixel(at: CGPoint(x: 125, y: 200)) == [0, 0, 0, 255])
         #expect(image.pixel(at: CGPoint(x: 300, y: 100)) == [0, 0, 0, 255])
+    }
+
+    @Test func aRippleDrawsTwoEmptyRingsThatEndWithTheDuration() {
+        let frame = CIImage(color: .black).cropped(to: bounds)
+
+        // Halfway through, the first ring has come 71% of the way: 98 px wide, stroke 39 to 49 px out, 29% opaque. The
+        // second, 30% later, 29% of the way: 71 px wide, stroke 28 to 35 px out, 71% opaque
+        let image = render(frame, at: 1.25, plan: plan(at: 1, clickEffect: .ripple))
+        #expect((60...90).contains(image.pixel(at: CGPoint(x: 144, y: 200))[0]))
+        #expect((165...200).contains(image.pixel(at: CGPoint(x: 132, y: 200))[0]))
+        // Empty inside the rings and between them, unlike a circle
+        #expect(image.pixel(at: CGPoint(x: 120, y: 200))[0] == 0)
+        #expect(image.pixel(at: CGPoint(x: 137, y: 200))[0] == 0)
+        #expect(image.pixel(at: CGPoint(x: 155, y: 200))[0] == 0)
+
+        #expect(render(frame, at: 1.5, plan: plan(at: 1, clickEffect: .ripple)).pixel(at: CGPoint(x: 132, y: 200))[0] == 0)
+    }
+
+    @Test func noEffectDrawsNoRing() {
+        let frame = CIImage(color: .black).cropped(to: bounds)
+
+        #expect(render(frame, at: 1, plan: plan(at: 1, clickEffect: .off)).pixel(at: CGPoint(x: 118, y: 200)) == [0, 0, 0, 255])
+    }
+
+    @Test func theDotCursorIsCentredOnThePoint() {
+        let frame = CIImage(color: .black).cropped(to: bounds)
+
+        // 16 pt at 2 px per point: 32 px wide, a 3 px white edge, and a grey (white at 45%, 90% opaque, so about half) inside
+        let image = render(frame, at: 5, plan: plan(at: 1, cursorStyle: CursorStyle(appearance: .dot)))
+        for offset in [CGPoint(x: 14, y: 0), CGPoint(x: -15, y: 0), CGPoint(x: 0, y: 14), CGPoint(x: 0, y: -15)] {
+            #expect(image.pixel(at: CGPoint(x: 100 + offset.x, y: 200 + offset.y))[0] > 240)
+        }
+        #expect((100...140).contains(image.pixel(at: CGPoint(x: 100, y: 200))[0]))
+        #expect(image.pixel(at: CGPoint(x: 100 + 18, y: 200)) == [0, 0, 0, 255])
+    }
+
+    @Test func theWhiteArrowsTipIsOnThePoint() {
+        let frame = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5)).cropped(to: bounds)
+
+        // The arrow's left edge runs down from the tip at 2 px per point: a black outline 2.5 px wide on it, white inside
+        let image = render(frame, at: 5, plan: plan(at: 1, cursorStyle: CursorStyle(appearance: .white)))
+        #expect(image.pixel(at: CGPoint(x: 99, y: 190))[0] < 60)
+        #expect(image.pixel(at: CGPoint(x: 103, y: 190)) == [255, 255, 255, 255])
+        // Nothing left of it or above its tip but the faint shadow
+        #expect(abs(Int(image.pixel(at: CGPoint(x: 85, y: 190))[0]) - 128) < 6)
+        #expect(abs(Int(image.pixel(at: CGPoint(x: 100, y: 215))[0]) - 128) < 6)
     }
 
     @Test func theRingGrowsAndFades() {
@@ -227,5 +315,98 @@ struct FrameRendererTests {
         // The shadow, below the video
         #expect(image.pixel(at: CGPoint(x: 200, y: 26))[3] > 40)
         #expect(image.pixel(at: CGPoint(x: 200, y: 150)) == [0, 0, 0, 255])
+    }
+
+    // MARK: - Motion blur
+
+    /// Left half black, right half white, with a vertical edge at x = 150.
+    private var edge: CIImage {
+        CIImage(color: .black).cropped(to: CGRect(x: 0, y: 0, width: 150, height: 300)).composited(over: CIImage(color: .white).cropped(to: bounds))
+    }
+
+    /// Squares of two greys, so a frame drawn from other pixels, or blended, differs in many bytes.
+    private var checkers: CIImage {
+        CIFilter(name: "CICheckerboardGenerator", parameters: [
+            "inputWidth": 7, "inputColor0": CIColor(red: 0.2, green: 0.4, blue: 0.9), "inputColor1": CIColor(red: 0.9, green: 0.8, blue: 0.1), "inputCenter": CIVector(x: 3, y: 5)
+        ])?.outputImage?.cropped(to: bounds) ?? .empty()
+    }
+
+    /// One 60 fps frame's worth of shutter.
+    private let frame = 1.0 / 60
+
+    @Test func aStillCameraDrawsExactlyWhatWithoutBlurDoes() {
+        // No zooms, and a zoom that has long settled (the spring is within 0.04 px of it by 1.4 s)
+        for zooms in [[], [zoomOnClick]] {
+            let sharp = bytes(of: drawn(checkers, at: 5, plan: plan(at: 5, zooms: zooms)))
+            let blurred = bytes(of: drawn(checkers, at: 5, plan: plan(at: 5, zooms: zooms, shutter: frame)))
+            #expect(!sharp.isEmpty && sharp == blurred)
+            #expect(FrameRenderer.placements(at: 5, plan: plan(at: 5, zooms: zooms, shutter: frame)).count == 1)
+        }
+    }
+
+    @Test func aMovingCameraSpreadsAnEdgeAcrossMorePixels() {
+        // 0.1 s into a 2× zoom the view is magnifying by about 4 per second
+        func width(of image: CIImage) -> Int {
+            (0..<Int(bounds.width)).filter { (10...245).contains(image.pixel(at: CGPoint(x: $0, y: 150))[0]) }.count
+        }
+        let sharp = width(of: render(edge, at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick])))
+        let blurred = width(of: render(edge, at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick], shutter: frame)))
+
+        #expect(sharp <= 3)
+        #expect(blurred > sharp + 3)
+        // And the blurred frame is still opaque and keeps the edge's sides
+        let image = render(edge, at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick], shutter: frame))
+        #expect(image.pixel(at: CGPoint(x: 5, y: 150)) == [0, 0, 0, 255])
+        #expect(image.pixel(at: CGPoint(x: 395, y: 150)) == [255, 255, 255, 255])
+    }
+
+    @Test func averagingKeepsAFlatFramesColorAndAlpha() {
+        let flat = CIImage(color: CIColor(red: 0.2, green: 0.5, blue: 0.8)).cropped(to: bounds)
+        let sharp = render(flat, at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick])).pixel(at: CGPoint(x: 200, y: 150))
+        let blurred = render(flat, at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick], shutter: frame)).pixel(at: CGPoint(x: 200, y: 150))
+
+        #expect(zip(sharp, blurred).allSatisfy { abs(Int($0) - Int($1)) <= 1 })
+    }
+
+    @Test func aMovingCursorSpreadsAlongItsPathAndAStillOneDoesNot() {
+        // Moves right at 100 pt (200 px) a second from (20, 50) pt: at 1 s, 240 px from the left and 200 up
+        var moving = cursorTelemetry
+        moving.cursor = (0...120).map { .init(time: Double($0) / 60, location: CGPoint(x: 20 + 100 * Double($0) / 60, y: 50)) }
+        let style = CursorStyle(appearance: .dot, smoothing: .off)
+        let black = CIImage(color: .black).cropped(to: bounds)
+
+        // A shutter of 0.1 s covers 20 px: the 32 px dot reaches 10 px further ahead, where it's sharp without
+        let sharp = render(black, at: 1, plan: plan(at: 5, cursorStyle: style, telemetry: moving))
+        let blurred = render(black, at: 1, plan: plan(at: 5, cursorStyle: style, shutter: 0.1, telemetry: moving))
+        #expect(sharp.pixel(at: CGPoint(x: 260, y: 200)) == [0, 0, 0, 255])
+        #expect(blurred.pixel(at: CGPoint(x: 260, y: 200))[0] > 20)
+        // And it's the same dot, less bright where the movement leaves it
+        #expect(blurred.pixel(at: CGPoint(x: 240, y: 200))[0] > 60)
+
+        // At rest, the same bytes
+        let still = plan(at: 5, cursorStyle: style)
+        let stillBlurred = plan(at: 5, cursorStyle: style, shutter: 0.1)
+        #expect(bytes(of: drawn(black, at: 1, plan: still)) == bytes(of: drawn(black, at: 1, plan: stillBlurred)))
+    }
+
+    @Test func placementsAreOneWhenTheShutterIsClosedOrTheCameraStillAndMoreAcrossAMove() {
+        #expect(FrameRenderer.placements(at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick])).count == 1)
+        #expect(FrameRenderer.placements(at: 5, plan: plan(at: 0, zooms: [zoomOnClick], shutter: frame)).count == 1)
+
+        let moving = FrameRenderer.placements(at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick], shutter: frame))
+        #expect(moving.count == 8)
+        // Zooming in, so each is a bigger magnification than the one before, and the middle is the frame's own
+        #expect(zip(moving, moving.dropFirst()).allSatisfy { $0.a < $1.a })
+        let centred = plan(at: 0, zooms: [zoomOnClick]).camera.viewport(at: 0.1).scale
+        #expect(moving[0].a < centred && centred < moving[7].a)
+
+        // A move of a few pixels is covered by fewer: this shutter is a fifth as long
+        let slow = FrameRenderer.placements(at: 0.1, plan: plan(at: 0, zooms: [zoomOnClick], shutter: frame / 5))
+        #expect((2..<8).contains(slow.count))
+
+        // The preview's cap
+        var preview = plan(at: 0, zooms: [zoomOnClick], shutter: frame)
+        preview.maximumBlurSamples = 2
+        #expect(FrameRenderer.placements(at: 0.1, plan: preview).count == 2)
     }
 }

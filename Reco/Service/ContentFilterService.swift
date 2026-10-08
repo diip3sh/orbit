@@ -222,7 +222,8 @@ private extension CapturableWindow {
         self.init(
             id: window.windowID,
             bundleID: window.owningApplication?.bundleIdentifier ?? "",
-            title: window.title ?? ""
+            title: window.title ?? "",
+            layer: window.windowLayer
         )
     }
 }

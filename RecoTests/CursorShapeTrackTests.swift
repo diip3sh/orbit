@@ -26,6 +26,16 @@ struct CursorShapeTrackTests {
         }
     }
 
+    /// An I-beam of 40×60 px for 10×15 pt, a different picture from ``sprite(id:)`` with its hot spot at (4, 56) px.
+    private var iBeam: InputTelemetry.CursorSprite {
+        var iBeam = InputTelemetry.CursorSprite.drawn(pixels: CGSize(width: 40, height: 60), size: CGSize(width: 10, height: 15), hotspot: CGPoint(x: 1, y: 1), id: 1) { context in
+            context.setFillColor(gray: 0, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: 40, height: 60))
+        }
+        iBeam.kind = .iBeam
+        return iBeam
+    }
+
     @Test func dropsShapesShownOnlyBriefly() {
         // An I-beam for 50 ms while crossing a text field, then a hand, and one for 100 ms at the end
         let shapes = shapes([(0, 0), (1, 1), (1.05, 0), (2, 2), (4.9, 3)])
@@ -71,5 +81,33 @@ struct CursorShapeTrackTests {
         let telemetry = try JSONDecoder().decode(InputTelemetry.self, from: Fixture.data("telemetry-v3"))
 
         #expect(CursorShapeTrack(telemetry: telemetry, duration: 5, arrow: sprite(id: 0)).sprite(at: 1)?.hotspot == CGPoint(x: 4, y: 24))
+    }
+
+    @Test func arrowOnlyDrawsTheRecordedArrowWhereAnotherShapeWas() throws {
+        var arrow = sprite(id: 0)
+        arrow.kind = .arrow
+        var telemetry = InputTelemetry(capture: .init(kind: .display, videoSize: CGSize(width: 100, height: 100), cursorInVideo: false), keystrokesAvailable: false)
+        telemetry.cursorSprites = [iBeam, arrow]
+        telemetry.cursorShapes = shapes([(0, 1), (2, 0), (4, 1)])
+
+        let plain = CursorShapeTrack(telemetry: telemetry, duration: 6, arrow: nil)
+        let track = CursorShapeTrack(telemetry: telemetry, duration: 6, arrow: nil, arrowOnly: true)
+
+        #expect(plain.sprite(at: 1)?.hotspot == CGPoint(x: 4, y: 56))
+        #expect(track.sprite(at: 1)?.hotspot == CGPoint(x: 4, y: 24))
+        #expect(track.sprite(at: 3)?.hotspot == CGPoint(x: 4, y: 24))
+        #expect(track.sprite(at: 5)?.hotspot == CGPoint(x: 4, y: 24))
+    }
+
+    @Test func arrowOnlyDrawsTheGivenArrowWhenNoneWasRecorded() {
+        var telemetry = InputTelemetry(capture: .init(kind: .display, videoSize: CGSize(width: 100, height: 100), cursorInVideo: false), keystrokesAvailable: false)
+        telemetry.cursorSprites = [iBeam]
+        telemetry.cursorShapes = shapes([(0, 1)])
+        let arrow = StandardCursors.arrowSprite
+
+        let sprite = CursorShapeTrack(telemetry: telemetry, duration: 6, arrow: arrow, arrowOnly: true).sprite(at: 1)
+
+        #expect(sprite?.pointsPerPixel == arrow.size.width / (sprite?.image.extent.width ?? 1))
+        #expect(CursorShapeTrack(telemetry: telemetry, duration: 6, arrow: nil, arrowOnly: true).sprite(at: 1) == nil)
     }
 }

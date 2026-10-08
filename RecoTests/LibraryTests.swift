@@ -38,6 +38,7 @@ struct LibraryTests {
         #expect(LibraryItem.recordingKind(of: URL(filePath: "/r/Reco_2026.gif"), contentType: .gif) == nil)
         #expect(LibraryItem.recordingKind(of: URL(filePath: "/r/Reco.telemetry.json"), contentType: .json) == nil)
         #expect(LibraryItem.isScreenshot(URL(filePath: "/d/Reco_Screenshot_2026.png"), contentType: .png))
+        #expect(LibraryItem.isScreenshot(URL(filePath: "/d/Reco_Screenshot_2026.heic"), contentType: .heic))
         #expect(!LibraryItem.isScreenshot(URL(filePath: "/d/Screenshot 2026.png"), contentType: .png))
         #expect(!LibraryItem.isScreenshot(URL(filePath: "/d/Reco_Screenshot_notes.txt"), contentType: .plainText))
     }

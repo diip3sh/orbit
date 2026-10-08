@@ -20,4 +20,7 @@ nonisolated struct EditorComposition: @unchecked Sendable {
 
     var videoComposition: AVVideoComposition
     var audioMix: AVAudioMix
+
+    /// The files the asset holds besides the recording's. A new one is a new asset.
+    let extraAudio: ExtraAudio
 }

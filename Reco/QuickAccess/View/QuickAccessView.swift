@@ -16,12 +16,20 @@ struct QuickAccessView: View {
     let model: QuickAccessViewModel
     let dragger: PanelDragger
     let anchor: UnitPoint
-    let size: CGSize
 
     @State private var isHovering = false
 
     var body: some View {
-        QuickAccessPreview(model: model, showsControls: isHovering)
+        // The shot's shape, which a background changes, or the editor's; the controller sets the panel to the same size
+        let size = model.cardSize
+
+        Group {
+            if model.isAnnotating, let editor = model.annotation {
+                QuickAccessAnnotation(model: model, editor: editor)
+            } else {
+                QuickAccessPreview(model: model, showsControls: isHovering)
+            }
+        }
             .padding(QuickAccessController.inset)
             .frame(width: size.width, height: size.height)
             .background {
@@ -38,9 +46,37 @@ struct QuickAccessView: View {
             .editorMotion(EditorTheme.quickMotion, value: isHovering)
             .panelPresentation(isPresented: model.isPresented, anchor: anchor)
             .allowsWindowActivationEvents(true)
-            // Esc closes the card, like the Close button and a flick. The panel is key while it shows, so
-            // this is the only way Esc reaches it: without it the key went nowhere.
-            .onExitCommand { model.close() }
+            // Esc closes the card, like the Close button and a flick, or leaves the editor first. The panel is key
+            // while it shows, so this is the only way Esc reaches it: without it the key went nowhere.
+            .onExitCommand {
+                if model.isAnnotating {
+                    Task { await model.finishAnnotating() }
+                } else {
+                    model.close()
+                }
+            }
+    }
+}
+
+/// The card grown into the editor (spec 0015): the tool strip, the shot with its marks, and Copy and Save under it.
+private struct QuickAccessAnnotation: View {
+
+    let model: QuickAccessViewModel
+    let editor: AnnotationEditor
+
+    var body: some View {
+        VStack(spacing: QuickAccessController.inset) {
+            AnnotationToolbar(editor: editor) {
+                Task { await model.finishAnnotating() }
+            }
+            .frame(height: QuickAccessController.annotationBarHeight)
+            AnnotationCanvas(editor: editor)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            QuickAccessActions(model: model)
+                .frame(height: QuickAccessController.annotationBarHeight)
+        }
+        .environment(\.colorScheme, .dark)
     }
 }
 
@@ -93,8 +129,8 @@ private struct QuickAccessPreview: View {
     }
 }
 
-/// Close top-left, Recognize Text and Pin top-right. Space between them isn't hit-tested, so a drag
-/// there starts on the screenshot.
+/// Close top-left; Background, Hide Sensitive Info, Recognize Text and Pin top-right. Space between them isn't
+/// hit-tested, so a drag there starts on the screenshot.
 private struct QuickAccessControls: View {
 
     let model: QuickAccessViewModel
@@ -104,14 +140,28 @@ private struct QuickAccessControls: View {
             Button(action: model.close) { Label { Text("Close") } icon: { LineIcon(.hugeiconsCancel) } }
                 .help("Close")
             Spacer()
-            // Annotate goes first once annotation exists:
-            // Button("Annotate", systemImage: "pencil", action: model.annotate)
+            Button(action: model.annotate) { Label("Annotate", systemImage: "pencil.tip") }
+                .help("Draw arrows, shapes, text and more on the screenshot")
+            Button { Task { await model.toggleBackground() } } label: {
+                Label { Text(model.hasBackground ? "Remove Background" : "Add Background") } icon: {
+                    LineIcon(.hugeiconsBackground)
+                        // The one control on the card that stays on: the accent says so
+                        .foregroundStyle(model.hasBackground ? AnyShapeStyle(EditorTheme.accent) : AnyShapeStyle(.white))
+                }
+            }
+            .help(model.hasBackground ? "Remove the background" : "Put the screenshot on the background from Settings")
+            .disabled(model.isChangingBackground)
+            Button { Task { await model.hideSensitiveInfo() } } label: {
+                Label { Text("Hide Sensitive Info") } icon: { LineIcon(.hugeiconsViewOffSlash) }
+            }
+            .help("Pixelate emails, phone numbers, card numbers and API keys")
+            .disabled(model.isHidingSensitiveInfo)
             Button { Task { await model.recognizeText() } } label: {
                 Label { Text("Recognize Text") } icon: { LineIcon(.hugeiconsScanText) }
             }
             .help("Recognize Text")
             .disabled(model.isRecognizingText)
-            Button(action: model.pin) { Label { Text("Pin") } icon: { LineIcon(.hugeiconsPin) } }
+            Button { Task { await model.pin() } } label: { Label { Text("Pin") } icon: { LineIcon(.hugeiconsPin) } }
                 .help("Pin")
         }
         .labelStyle(.iconOnly)

@@ -36,6 +36,9 @@ nonisolated struct RenderPlan: Sendable {
     /// The ring at the largest marker's diameter; the others scale it down.
     let clickRing: CIImage
 
+    /// How many rings a click draws, and when.
+    var clickEffect = ClickHighlightStyle.Effect.circle
+
     /// Key presses to show, sorted by time. Empty when the overlay is off.
     let keystrokes: [KeystrokeChip]
 
@@ -52,6 +55,23 @@ nonisolated struct RenderPlan: Sendable {
     /// Shrinks frames with Core Image's high-quality downsampling, as exports do: a 1080p export of a
     /// Retina recording halves it, and plain linear sampling blurs its text. The preview skips it.
     var downsamplesSmoothly = false
+
+    /// How long the shutter is open over a frame, in seconds: the project's motion blur over the output's
+    /// frame rate. 0 draws every frame sharp.
+    var shutter = 0.0
+
+    /// The most samples a blurred frame averages. Measured on an M2, Debug, 4K at the peak of a 2× zoom (load
+    /// average 5.5): 8 samples took 12.4–14 ms p95, 4 took 9.5 and 2 took 5.6, against 5.2–6.8 unblurred. So the
+    /// preview takes 2 to stay in the 8 ms budget and exports, which aren't real time, take 8.
+    /// ponytail: fuse the samples into one Metal kernel if the preview's blur should match the export's.
+    var maximumBlurSamples = 8
+
+    /// The part of the recording's frames drawn, in their Core Image pixels, or `nil` for all of it. Everything
+    /// else in the plan (``videoSize``, positions, the camera) is already of the crop.
+    var crop: CGRect?
+
+    /// The masks, sorted and apart.
+    var masks: [PlannedMask] = []
 }
 
 // MARK: - Building
@@ -69,51 +89,71 @@ extension RenderPlan {
         let signpost = signposter.beginInterval("Build")
         defer { signposter.endInterval("Build", signpost) }
 
-        let videoSize = source.naturalSize
+        let cropPixels = VideoCrop.pixels(of: project.crop, in: source.naturalSize)
+        let videoSize = cropPixels.size
+        let telemetry = source.telemetry?.cropped(to: cropPixels)
         let dynamicRange = target.keepsHDR ? source.dynamicRange : .sdr
+        let timeMap = TimeMap(cuts: project.cuts, speeds: project.speeds, sourceDuration: source.duration, frameRate: source.frameRate)
+        let canvas = CanvasLayout(style: project.canvas, videoSize: videoSize, shorterSide: target.shorterSide, background: resources.background)
+            .encoded(in: dynamicRange)
         // The costliest parts, and independent, so they're built alongside the rest. For 10 minutes
         // with 455 zooms, 3,000 clicks and 12,000 keys (M1, Debug), the camera takes 38 ms and the
         // cursor 35; the plan builds in 42 ms instead of 105
-        async let camera = CameraPath(
-            zooms: project.zooms, cursor: source.telemetry.map { cursorPoints(for: $0, during: project.zooms) } ?? [], duration: source.duration
-        )
-        async let cursor = source.telemetry.flatMap {
-            drawnCursor(for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: resources.arrow)
+        async let camera = camera(for: project, telemetry: telemetry, timeMap: timeMap, baseView: canvas.baseView)
+        async let cursor = telemetry.flatMap {
+            drawnCursor(
+                for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: resources.arrow,
+                loop: project.cursor.loops ? cursorLoop(for: timeMap) : nil, stop: cursorStop(before: project.cursor.stopDuration, for: timeMap)
+            )
         }
-        let canvas = CanvasLayout(style: project.canvas, videoSize: videoSize, shorterSide: target.shorterSide, background: resources.background)
-            .encoded(in: dynamicRange)
 
         var clicks: [ClickMarker] = []
         var keystrokes: [KeystrokeChip] = []
         var labels: [String] = []
-        if let telemetry = source.telemetry {
-            if project.clickHighlights.isEnabled {
-                clicks = clickMarkers(for: telemetry, style: project.clickHighlights, videoHeight: videoSize.height)
-            }
+        // Rings and chips last their duration on screen whatever the speed, so they're timed on the output
+        if let telemetry {
+            clicks = outputClickMarkers(for: telemetry, style: project.clickHighlights, videoHeight: videoSize.height, timeMap: timeMap)
             if project.keystrokes.isEnabled, let keyLabels = resources.keyLabels {
                 (keystrokes, labels) = keystrokeChips(for: telemetry, style: project.keystrokes, keyLabels: keyLabels)
+                keystrokes = keystrokes.compactMap { chip in timeMap.outputTime(ifKept: chip.time).map { KeystrokeChip(time: $0, image: chip.image) } }
             }
         }
 
         let ringDiameter = clicks.map(\.diameter).max() ?? 0
         let chipHeight = min(canvas.videoFrame.width, canvas.videoFrame.height) * chipHeightFraction
         return RenderPlan(
-            timeMap: TimeMap(cuts: project.cuts, sourceDuration: source.duration, frameRate: source.frameRate),
+            timeMap: timeMap,
             videoSize: videoSize,
             camera: await camera,
             cursor: await cursor?.path,
             cursorShapes: await cursor?.shapes.encoded(in: dynamicRange) ?? .none,
             clicks: clicks,
             clickDuration: project.clickHighlights.duration,
-            clickRing: clicks.isEmpty
-                ? .empty()
-                : OverlayImages.encoded(OverlayImages.ring(diameter: ringDiameter, color: project.clickHighlights.color.cgColor), in: dynamicRange),
+            clickRing: clicks.isEmpty ? .empty() : OverlayImages.encoded(
+                OverlayImages.ring(diameter: ringDiameter, color: project.clickHighlights.color.cgColor, filled: project.clickHighlights.effect == .circle),
+                in: dynamicRange
+            ),
+            clickEffect: project.clickHighlights.effect,
             keystrokes: keystrokes,
             chipImages: labels.map { OverlayImages.encoded(OverlayImages.chip(label: $0, height: chipHeight), in: dynamicRange) },
             canvas: canvas,
             dynamicRange: dynamicRange,
-            downsamplesSmoothly: target.shorterSide != nil
+            downsamplesSmoothly: target.shorterSide != nil,
+            shutter: project.motionBlur / (target.frameRate ?? source.frameRate), maximumBlurSamples: target.shorterSide == nil ? 2 : 8,
+            crop: videoSize == source.naturalSize ? nil : VideoCrop.coreImageRect(cropPixels, videoHeight: source.naturalSize.height),
+            masks: PlannedMask.planned(project.masks, videoSize: videoSize)
         )
+    }
+
+    /// The presses to highlight at their output times, none when highlights are off: rings last their duration on
+    /// screen whatever the speed.
+    nonisolated static func outputClickMarkers(
+        for telemetry: InputTelemetry, style: ClickHighlightStyle, videoHeight: CGFloat, timeMap: TimeMap
+    ) -> [ClickMarker] {
+        guard style.effect != .off else { return [] }
+        return clickMarkers(for: telemetry, style: style, videoHeight: videoHeight).compactMap { marker in
+            timeMap.outputTime(ifKept: marker.time).map { ClickMarker(time: $0, position: marker.position, diameter: marker.diameter) }
+        }
     }
 
     /// The presses to highlight, each placed with the capture geometry in effect at its time.
@@ -152,12 +192,63 @@ extension RenderPlan {
 
     /// The cursor to draw and its images, or `nil` when the video shows the system's or it's off.
     nonisolated static func drawnCursor(
-        for telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, arrow: InputTelemetry.CursorSprite?
+        for telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, arrow: InputTelemetry.CursorSprite?,
+        loop: CursorPath.Loop? = nil, stop: Double? = nil
     ) -> (path: CursorPath, shapes: CursorShapeTrack)? {
         guard !telemetry.capture.cursorInVideo, style.isEnabled,
-              let path = CursorPath(telemetry: telemetry, style: style, duration: duration, videoHeight: videoHeight)
+              let path = CursorPath(telemetry: telemetry, style: style, duration: duration, videoHeight: videoHeight, loop: loop, stop: stop)
         else { return nil }
-        return (path, CursorShapeTrack(telemetry: telemetry, duration: duration, arrow: arrow))
+        // The images are drawn once, here, whatever the appearance
+        let shapes = switch style.appearance {
+        case .recorded: CursorShapeTrack(telemetry: telemetry, duration: duration, arrow: arrow, arrowOnly: style.alwaysUsesArrow)
+        case .white: CursorShapeTrack(sprite: OverlayImages.whiteArrow())
+        case .dot: CursorShapeTrack(sprite: OverlayImages.dot())
+        }
+        return (path, shapes)
+    }
+
+    /// What makes the cursor loop: it ends the last frame where the first one has it, gliding there over the last
+    /// second of output (less when the last kept range is shorter, since the glide stays inside it).
+    nonisolated static func cursorLoop(for timeMap: TimeMap) -> CursorPath.Loop {
+        let frames = FrameGrid(frameRate: timeMap.frameRate, duration: timeMap.outputDuration)
+        let last = frames.time(ofFrame: frames.lastFrame)
+        let end = timeMap.sourceTime(atOutput: last)
+        let rangeStart = timeMap.keptRanges.last?.lowerBound ?? 0
+        let glideStart = max(timeMap.sourceTime(atOutput: last - CursorPath.loopDuration), rangeStart)
+        return CursorPath.Loop(start: timeMap.sourceTime(atOutput: 0), glide: glideStart..<end)
+    }
+
+    /// The source time from which the cursor holds still: `duration` seconds of output before the last frame, or
+    /// `nil` when it never stops. With Loop Position on as well, the cursor glides back in the last second after it.
+    nonisolated static func cursorStop(before duration: Double, for timeMap: TimeMap) -> Double? {
+        guard duration > 0 else { return nil }
+        let frames = FrameGrid(frameRate: timeMap.frameRate, duration: timeMap.outputDuration)
+        return timeMap.sourceTime(atOutput: max(frames.time(ofFrame: frames.lastFrame) - duration, 0))
+    }
+
+    /// The camera, moving on output time, so a zoom eases in at the same pace in a fast part, and across a cut
+    /// instead of jumping. A base view smaller than the video (``CanvasLayout/baseView``) follows the cursor
+    /// throughout, so every cursor sample is placed for it.
+    nonisolated static func camera(
+        for project: EditorProject, telemetry: InputTelemetry?, timeMap: TimeMap, baseView: CGSize = CameraPath.wholeVideo
+    ) -> CameraPath {
+        let followed = baseView == CameraPath.wholeVideo ? project.zooms : [ZoomSegment(range: 0..<timeMap.sourceDuration, focus: .followCursor)]
+        return CameraPath(
+            zooms: outputZooms(project.zooms, timeMap: timeMap),
+            cursor: telemetry.map { cursorPoints(for: $0, during: followed).map { (timeMap.outputTime(atSource: $0.time), $0.point) } } ?? [],
+            duration: timeMap.outputDuration,
+            stiffness: project.zoomMotion.frequency,
+            baseView: baseView
+        )
+    }
+
+    /// The zooms on output time, for the camera; a zoom entirely cut is left out.
+    nonisolated static func outputZooms(_ zooms: [ZoomSegment], timeMap: TimeMap) -> [ZoomSegment] {
+        zooms.compactMap { zoom in
+            var output = zoom
+            output.range = timeMap.outputTime(atSource: zoom.range.lowerBound)..<timeMap.outputTime(atSource: zoom.range.upperBound)
+            return output.range.isEmpty ? nil : output
+        }
     }
 
     /// The cursor's positions in the video while a zoom follows it, from the one in effect at the
