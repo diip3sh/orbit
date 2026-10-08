@@ -198,6 +198,7 @@ struct VideoSettingsView: View {
                 Toggle("Show Wallpaper", isOn: $settings.showWallpaper)
                 Toggle("Show Menu Bar", isOn: $settings.showMenuBar)
                 Toggle("Show Dock", isOn: $settings.showDock)
+                Toggle("Show Desktop Icons", isOn: $settings.showDesktopIcons)
                 Toggle("Show Orbit", isOn: $settings.showReco)
             }
 

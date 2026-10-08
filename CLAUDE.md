@@ -218,6 +218,14 @@ indicator stays on); every sample is dropped and the paused time is cut from the
 
 Audio buffers straddling a pause edge are dropped whole (gap ≤ ~21 ms per edge, marked `ponytail:`).
 
+### N21 — Hide desktop icons (spec 0004)
+
+**Settings → Video → Display Elements → Show Desktop Icons** (on by default). Off, display and area recordings leave out
+Finder's one display-sized window at `kCGDesktopIconWindowLevel` (`ContentFilterRules.desktopIconLevel`, matched with
+Finder's bundle ID: WindowManager has an empty window at that level while macOS hides desktop items), so the icons are
+missing from the video while the desktop stays as it is. Verified on macOS 27.0.1 by capturing that window alone and the
+display without it.
+
 ### N20 — Cancel and restart (spec 0004)
 
 The capture toolbar's live pill has **Cancel** (trash) and **Restart** beside Pause; global shortcuts **Cancel

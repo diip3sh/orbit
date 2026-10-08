@@ -74,7 +74,7 @@ own spec before any code.
 
 N20 and N21 are small and can land any time.
 
-**Status (2026-10-08):** built: N1, N2, N3, N7, N10, N20, N22; partly: N15 (history), N17 (freezing). The rest is open.
+**Status (2026-10-08):** built: N1, N2, N3, N7, N10, N20, N21, N22; partly: N15 (history), N17 (freezing). The rest is open.
 
 Every item follows spec 0003's standards: a pure core with tests, performance measured before a
 claim, docs updated, and the 8 ms frame budget kept.
@@ -382,6 +382,13 @@ edges. Recording keeps the live selection.
 - **Verify:** after a cancel, the output folder has no new file.
 
 ### N21 — Hide desktop icons in recordings (check first)
+
+- **Status (2026-10-08): shipped** as **Settings → Video → Display Elements → Show Desktop Icons** (on by default).
+  Checked on macOS 27.0.1 (M2): Finder draws every icon into one display-sized window at the desktop-icon level, which
+  `SCShareableContent` lists; captured alone it held the icon (13,669 opaque pixels at the top right), and a display
+  capture excluding it lost exactly those pixels. With macOS's own "Show Desktop Items" off, WindowManager adds an empty
+  window at the same level; only Finder's is excluded. Display and area recordings only: an application capture of
+  Finder is left as chosen, and screenshots keep what is on screen. Not checked on macOS 15 or 26.
 
 - **What:** leave Finder's desktop-icon windows (`kCGDesktopIconWindowLevel`) out of the display's
   `SCContentFilter`, so icons are missing from the video without touching the real desktop.
