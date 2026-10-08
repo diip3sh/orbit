@@ -67,11 +67,28 @@ final class EditorWindowManager: NSObject {
         self.settings = settings
     }
 
-    /// Opens the editor for a recording in the output folder, or brings its window forward.
-    func open(_ videoURL: URL) {
+    /// Tells the user a movie that opened behind their work is ready; set by `AppDelegate`
+    var announceReady: ((URL) -> Void)?
+
+    /// Opens a movie that finished rendering on its own (an agent's, or the Web Recording window's) without
+    /// interrupting: in front while Reco is the active app, otherwise behind the user's windows, announced.
+    func openWhenReady(_ videoURL: URL) {
+        guard !NSApp.isActive else {
+            open(videoURL)
+            return
+        }
+        open(videoURL, activates: false)
+        announceReady?(videoURL)
+    }
+
+    /// Opens the editor for a recording in the output folder, or brings its window forward. Without
+    /// `activates`, the window goes behind every other and Reco stays in the background.
+    func open(_ videoURL: URL, activates: Bool = true) {
         let videoURL = videoURL.standardizedFileURL
         if let window = editors[videoURL]?.window {
-            activate(window)
+            if activates {
+                activate(window)
+            }
             return
         }
 
@@ -100,7 +117,11 @@ final class EditorWindowManager: NSObject {
 
         // A regular app gets a Dock icon, ⌘-Tab and the main menu with Undo and Redo
         NSApp.setActivationPolicy(.regular)
-        activate(window)
+        if activates {
+            activate(window)
+        } else {
+            window.orderBack(nil)
+        }
     }
 
     /// Shows the Library, Reco's main window, or brings it forward (spec 0010).
@@ -162,7 +183,7 @@ final class EditorWindowManager: NSObject {
     private func makeWebRecording() -> WebRecording {
         let viewModel = WebRecordingViewModel(settings: settings) { [weak self] url in
             self?.agentRecording?.didRender(url)
-            self?.open(url)
+            self?.openWhenReady(url)
         }
         let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel, agent: agentRecording).themed())
         hostingController.sizingOptions = .minSize

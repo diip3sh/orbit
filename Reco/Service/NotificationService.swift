@@ -150,6 +150,20 @@ final class NotificationService: NSObject {
         )
     }
 
+    /// Sends a notification for a movie an agent or the Web Recording window finished while the user worked
+    /// elsewhere; its editor waits behind their windows, and clicking the notification brings it forward.
+    /// - Parameter fileURL: The rendered movie
+    func sendRecordingReadyNotification(fileURL: URL) {
+        send(
+            title: "Recording Ready",
+            body: "\(fileURL.deletingPathExtension().lastPathComponent) is ready to edit.",
+            category: NotificationIdentifier.categoryRecordingEditable,
+            folderURL: fileURL.deletingLastPathComponent(),
+            fileURL: fileURL,
+            opensEditor: true
+        )
+    }
+
     /// Sends a notification for a recording that was saved without any video frames
     /// - Parameter fileURL: The URL of the saved recording file
     func sendRecordingMissingVideoNotification(fileURL: URL) {

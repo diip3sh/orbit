@@ -859,6 +859,11 @@ Key facts:
   first line, and never logged.
 - `record_page` and `render_status` wait 45 s, `inspect_page` 40 s: under the 60 s tool timeout of Codex
   and Claude Desktop. A longer render is followed with `render_status`.
+- **An agent never takes focus** (2026-10-08): pages are inspected and rendered in an offscreen window, and a finished
+  movie (the bridge's, and every Web Recording render, the chat's included) goes through
+  `EditorWindowManager.openWhenReady(_:)`: in front while Reco is the active app, otherwise its editor is ordered behind
+  every window (`orderBack`, no activation) and **Recording Ready** is posted (`sendRecordingReadyNotification`, Edit and
+  Show in Finder; a click brings the editor forward). A recording the user stops still opens in front, as before.
 - Windsurf is left out (config path unverifiable). `CODEX_HOME`, `GROK_HOME`, XDG and `OPENCODE_CONFIG`
   aren't followed (they could be now); `opencode.jsonc` isn't handled.
 - Edited JSON keeps its content but its key order becomes sorted. Files with comments are refused.
@@ -872,7 +877,8 @@ The agent is part of the one Web Recording window (**New Web Recording…**, and
 at the toolbar's leading edge opens the chat panel on the left. The shortcut **Record with AI Agent** (Settings → Shortcuts →
 Web Recording, no default) and the failure notification's action open the same window with the panel open
 (`EditorWindowManager.showAgentChat()`, S5); the menu bar and the Library have no row of their own. The Spotlight-style bar it used to open was removed on 2026-10-02. Reco runs the agent's command line headlessly with only its own
-three MCP tools allowed; the agent records through the bridge (S3) and the editor opens. While it
+three MCP tools allowed; the agent records through the bridge (S3) and the editor opens (behind the user's work, with a
+notification, when Reco isn't in front). While it
 runs the bar and the menu bar (a sparkle, "AI", then the render's percent) show it; **Cancel** stops
 the command line. A failure shows its reason with **Retry** in the bar and in a notification.
 
