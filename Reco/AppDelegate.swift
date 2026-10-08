@@ -81,9 +81,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             captureToolbar.hide(animated: false)
             notchShelf.hide()
         }
-        screenshots.onDidCapture = { [quickAccess, notchShelf] screenshot in
+        screenshots.onDidCapture = { [quickAccess, notchShelf] screenshot, followUp in
             notchShelf.restore()
-            if let screenshot {
+            if let screenshot, let followUp {
+                quickAccess.restore()
+                Task { await quickAccess.follow(followUp, with: screenshot) }
+            } else if let screenshot {
                 quickAccess.show(screenshot)
             } else {
                 quickAccess.restore()
@@ -236,6 +239,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await viewModel.cancelRecording() }
         case "restart":
             Task { await viewModel.restartRecording(countdown: false) }
+        case "capture-area", "capture-window", "capture-screen":
+            captureScreenshot(from: url)
         case "edit-last":
             editLastRecording()
         case "open-recordings":
@@ -249,6 +254,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: settings.outputDirectory.path)
         default:
             logger.warning("Unhandled URL host: \(url.host ?? "nil")")
+        }
+    }
+
+    /// `reco://capture-area`, `capture-window` or `capture-screen`, with `?then=copy|save|pin` in place of the card.
+    /// Ignored, like the shortcuts, while recording, counting down or capturing.
+    private func captureScreenshot(from url: URL) {
+        let followUp = ScreenshotFollowUp(url: url)
+        if followUp == nil, url.query()?.contains("then=") == true {
+            logger.warning("Unknown then in \(url.absoluteString); opening the card")
+        }
+        Task {
+            guard screenshots.canCapture(alongside: viewModel) else {
+                logger.info("Ignored \(url.absoluteString): recording, counting down or capturing")
+                return
+            }
+            switch url.host {
+            case "capture-area": await screenshots.captureArea(then: followUp)
+            case "capture-window": await screenshots.captureWindow(then: followUp)
+            default: await screenshots.captureScreen(then: followUp)
+            }
         }
     }
 }

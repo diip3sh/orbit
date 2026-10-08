@@ -17,8 +17,9 @@ final class ScreenshotController {
     /// Called as a screenshot starts, before anything is selected or captured
     @ObservationIgnored var onWillCapture: (@MainActor () -> Void)?
 
-    /// Called as a screenshot ends, with nil when it was cancelled or failed; nothing is written until `save(_:)`
-    @ObservationIgnored var onDidCapture: (@MainActor (Screenshot?) -> Void)?
+    /// Called as a screenshot ends, with nil when it was cancelled or failed, and what its `reco://` link asked for;
+    /// nothing is written until `save(_:)`
+    @ObservationIgnored var onDidCapture: (@MainActor (Screenshot?, ScreenshotFollowUp?) -> Void)?
 
     /// Whether a screenshot is being selected or captured. Not observed: the popover would dim its rows
     /// a frame before the screen is grabbed, and a shot of the popover would show them dimmed.
@@ -54,8 +55,9 @@ final class ScreenshotController {
     /// from the apps under it (hover states, tooltips, open menus) is still in the shot
     /// - Parameter leavingPopover: Started from the menu bar popover, which is closing and stays out of
     ///   the shot; from a shortcut, the popover is in it like everything else on screen
-    func captureArea(leavingPopover: Bool = false) async {
-        await capture {
+    /// - Parameter followUp: What a `reco://` link asked for in place of the card
+    func captureArea(leavingPopover: Bool = false, then followUp: ScreenshotFollowUp? = nil) async {
+        await capture(then: followUp) {
             let frozen = try await service.captureDisplays(leavingPopover: leavingPopover, settings: settings)
             guard let selection = await areaSelectionOverlay.present(confirmsOnRelease: true, frozen: frozen.mapValues(\.image)) else {
                 return nil
@@ -74,15 +76,15 @@ final class ScreenshotController {
         }
     }
 
-    func captureWindow() async {
-        await capture {
+    func captureWindow(then followUp: ScreenshotFollowUp? = nil) async {
+        await capture(then: followUp) {
             guard let filter = await windowPicker.pick() else { return nil }
             return try await service.capture(filter, sourceRect: nil, settings: settings)
         }
     }
 
-    func captureScreen(leavingPopover: Bool = false) async {
-        await capture {
+    func captureScreen(leavingPopover: Bool = false, then followUp: ScreenshotFollowUp? = nil) async {
+        await capture(then: followUp) {
             let mouse = NSEvent.mouseLocation
             guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main else { return nil }
             let filter = try await service.screenFilter(for: screen, leavingPopover: leavingPopover)
@@ -109,14 +111,14 @@ final class ScreenshotController {
     }
 
     /// Checks permission, then lets the user select and capture (nil = cancelled)
-    private func capture(_ take: () async throws -> Screenshot?) async {
+    private func capture(then followUp: ScreenshotFollowUp?, _ take: () async throws -> Screenshot?) async {
         guard !isCapturing else { return }
         isCapturing = true
         onWillCapture?()
         var screenshot: Screenshot?
         defer {
             isCapturing = false
-            onDidCapture?(screenshot)
+            onDidCapture?(screenshot, followUp)
         }
 
         do {

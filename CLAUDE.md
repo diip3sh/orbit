@@ -761,7 +761,7 @@ Key facts:
 ### C1 — Screenshots
 
 Menu bar **Capture Area / Capture Window / Capture Screen** and global shortcuts of the same names
-(Settings → Shortcuts → Screenshots, ⌘1 / ⌘2 / ⌘3; no URLs yet). Defaults are ⌘1–⌘7: capture area, window, screen, select content, select area, toggle and pause recording (`KeyboardShortcutNames.swift`); global, so they take ⌘1–⌘7 from every app until changed. The popover shows each row's shortcut dimmed (`MenuBarActionButton.shortcut`). Both follow `canCapture(alongside:)`: idle only,
+(Settings → Shortcuts → Screenshots, ⌘1 / ⌘2 / ⌘3) and `reco://capture-area`, `capture-window`, `capture-screen` (N16), which take `?then=copy|save|pin` in place of the card (`ScreenshotFollowUp`, `QuickAccessController.follow`: a card showing stays; a failed copy or save opens the card; an area pins where it was taken, anything else in the card's corner; the shot becomes the one Restore Last Screenshot brings back). Defaults are ⌘1–⌘7: capture area, window, screen, select content, select area, toggle and pause recording (`KeyboardShortcutNames.swift`); global, so they take ⌘1–⌘7 from every app until changed. The popover shows each row's shortcut dimmed (`MenuBarActionButton.shortcut`). Both follow `canCapture(alongside:)`: idle only,
 so a shortcut pressed while recording, counting down or capturing is ignored and logged.
 Capture Area freezes the screen first: every display is captured when it starts (`ScreenshotService.captureDisplays`),
 the overlay shows that picture (`AreaSelectionPanel.show(_:over:)`), and the area is cut from it

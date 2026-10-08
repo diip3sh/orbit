@@ -325,6 +325,9 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N16 — Small capture wins
 
+**Status (2026-10-08):** shipped: screenshot URLs (a card showing stays; an area pins where it was taken). Not yet
+checked in the running app.
+
 Each is S:
 - **Self-timer** (3, 5 or 10 s), reusing `RecordingCountdown`.
 - **Capture Previous Area**, alongside F7's remembered selection.

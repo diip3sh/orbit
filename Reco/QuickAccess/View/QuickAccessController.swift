@@ -87,6 +87,30 @@ final class QuickAccessController {
         }
     }
 
+    /// Does what a `reco://` link asked for in place of the card, leaving any card showing as it is. The shot is then
+    /// the one to restore; when copying or saving fails, its card opens instead.
+    func follow(_ followUp: ScreenshotFollowUp, with screenshot: Screenshot) async {
+        closedScreenshot = screenshot
+        switch followUp {
+        case .copy:
+            do {
+                ImagePasteboard.copy(png: try await ScreenshotService.pngData(of: screenshot.image))
+            } catch {
+                logger.error("Couldn't encode the screenshot to copy: \(error.localizedDescription)")
+                show(screenshot)
+            }
+        case .save:
+            if await !save(screenshot) {
+                show(screenshot)
+            }
+        case .pin:
+            let pointer = NSEvent.mouseLocation
+            guard let screen = NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) }) ?? NSScreen.main else { return }
+            // An area stays where it was taken; anything else pins where its card would open
+            pins.pin(screenshot, at: screenshot.region?.origin ?? Self.panelFrame(in: screen.visibleFrame, size: .zero).origin, on: screen)
+        }
+    }
+
     /// Brings back the last card that went away, in the screen's corner; a card showing takes its place in memory.
     func restoreClosed() {
         guard let closedScreenshot else { return }
