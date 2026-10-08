@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 918 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 924 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -825,9 +825,15 @@ Menu bar **Capture Area / Capture Window / Capture Screen** and global shortcuts
 (Settings → Shortcuts → Screenshots, ⌘1 / ⌘2 / ⌘3) and `reco://capture-area`, `capture-window`, `capture-screen` (N16); **Capture Previous Area** (N16, a shortcut with no default and `reco://capture-previous-area`) shoots the last area captured since launch again on its display, live and without selecting (Capture Area when there is none; `selectedDisplayDisconnected` when its display is gone). All four links take `?then=copy|save|pin` in place of the card (`ScreenshotFollowUp`, `QuickAccessController.follow`: a card showing stays; a failed copy or save opens the card; an area pins where it was taken, anything else in the card's corner; the shot becomes the one Restore Last Screenshot brings back). The capture toolbar's **Self-Timer** (screenshot mode; Off, 3, 5, 10 s, `SettingsStore.screenshotTimer`, default Off) counts down with the countdown's disc on the pointer's screen before its capture starts (`ScreenshotController.afterSelfTimer`; Esc cancels and nothing is captured); shortcuts and links don't wait. Defaults are ⌘1–⌘7: capture area, window, screen, select content, select area, toggle and pause recording (`KeyboardShortcutNames.swift`); global, so they take ⌘1–⌘7 from every app until changed. The popover shows each row's shortcut dimmed (`MenuBarActionButton.shortcut`). Both follow `canCapture(alongside:)`: idle only,
 so a shortcut pressed while recording, counting down or capturing is ignored and logged.
 Capture Area freezes the screen first: every display is captured when it starts (`ScreenshotService.captureDisplays`),
-the overlay shows that picture (`AreaSelectionPanel.show(_:over:)`), and the area is cut from it
+the overlay shows that picture (`AreaSelectionView.frozenScreen`, `AreaSelectionPanel.show(_:)`), and the area is cut from it
 (`Screenshot.cropped(to:)`), so hover states, tooltips and open menus the overlay takes away from the apps
-under it are still in the shot. Capture Area shoots as soon as the drag ends (`AreaSelectionOverlay.present(confirmsOnRelease:)`); a click, a
+under it are still in the shot. A **loupe** (N17; `LoupeView`, placed and fed by `LoupeGeometry`, pure) sits 20 pt below and
+right of the pointer (the other side at the screen's edges), 120 pt square: the frozen screen's pixels around the
+pointer at 4 pt each (30 across, drawn with no interpolation, a grid on their edges) with the pointer's pixel outlined
+in white with a dark halo. It shows before anything is drawn, while drawing or resizing, and over a handle; not while
+moving the selection or resting on it, where the buttons are (`AreaSelectionView.wantsLoupe(at:)`), and never over the
+live screen (a recording's selection), which has no still pixels. Not yet seen in the app; the orientation is tested by
+rendering the view. Capture Area shoots as soon as the drag ends (`AreaSelectionOverlay.present(confirmsOnRelease:)`); a click, a
 drag under 24 pt (`AreaSelectionView.drawingRelease`) or Esc cancels. Its overlay never activates the app or
 takes key, so a menu or dropdown open in another app stays open and lands in the shot; Esc is a temporary
 global hotkey, as in the countdown. macOS ignores cursor changes from an app that isn't frontmost, so

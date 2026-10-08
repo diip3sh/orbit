@@ -74,7 +74,7 @@ own spec before any code.
 
 N20 and N21 are small and can land any time.
 
-**Status (2026-10-08):** built: N1, N2, N3, N7, N8, N9, N10, N11, N12, N15, N16, N20, N21, N22; partly: N17 (freezing). The rest is open.
+**Status (2026-10-08):** built: N1, N2, N3, N7, N8, N9, N10, N11, N12, N15, N16, N17, N20, N21, N22. The rest is open.
 
 Every item follows spec 0003's standards: a pure core with tests, performance measured before a
 claim, docs updated, and the 8 ms frame budget kept.
@@ -360,8 +360,9 @@ Each is S:
 
 ### N17 — Freeze screen and loupe while selecting
 
-**Status (2026-10-08):** freezing shipped (Capture Area shows a picture of every display taken as it starts and cuts
-the area from it). The loupe is not built.
+**Status (2026-10-08): built.** Freezing shipped first (Capture Area shows a picture of every display taken as it starts
+and cuts the area from it); then the loupe (`LoupeView`, `LoupeGeometry`), which magnifies the frozen screen's pixels
+beside the pointer while an edge is aimed. A recording's selection stays live and has no loupe. See CLAUDE.md, C1.
 
 Capture the display once when area selection opens, show it under the overlay, and crop from that
 image, so hover states and open menus survive. A loupe next to the pointer shows pixels for exact
