@@ -7,11 +7,14 @@
 
 import SwiftUI
 
-/// Cutting and zooming, play/pause and frame stepping, and the playhead's time, in the timeline's
+/// Cutting, speed and zooming, play/pause and frame stepping, and the playhead's time, in the timeline's
 /// header. Space plays and pauses, ← and → step a frame, S splits at the playhead, Z adds a
-/// zoom there and ⌫ removes the selection.
+/// zoom there, ⌫ removes the selection and ⇧⌘C copies the frame.
 struct TransportBar: View {
-    let viewModel: EditorViewModel
+    @Bindable var viewModel: EditorViewModel
+
+    /// Shows a check for a moment after Copy Frame, since nothing else on screen changes.
+    @State private var copiedFrame = false
 
     var body: some View {
         let playback = viewModel.playback
@@ -27,6 +30,22 @@ struct TransportBar: View {
                 .keyboardShortcut("s", modifiers: [])
                 .help("Split at the playhead (S)")
 
+                Menu {
+                    Picker("Speed", selection: $viewModel.selectedSpeed) {
+                        ForEach(SpeedRange.rates, id: \.self) { rate in
+                            Text(SpeedRange.label(for: rate)).tag(rate)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Label("Speed", systemImage: "gauge.with.dots.needle.67percent")
+                }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help(viewModel.canChangeSpeed ? "Speed of the selected part" : "Select a part to change its speed")
+                .disabled(!viewModel.canChangeSpeed)
+
                 Button("Add Zoom", systemImage: "plus.magnifyingglass") {
                     viewModel.addZoom()
                 }
@@ -41,6 +60,18 @@ struct TransportBar: View {
                 .keyboardShortcut(.delete, modifiers: [])
                 .help(deletesZoom ? "Delete the selected zoom (⌫)" : "Cut the selected part (⌫)")
                 .disabled(!viewModel.canDeleteSelection)
+
+                Button(copiedFrame ? "Copied" : "Copy Frame", systemImage: copiedFrame ? "checkmark" : "photo.on.rectangle") {
+                    Task {
+                        guard await viewModel.copyFrame() else { return }
+                        copiedFrame = true
+                        try? await Task.sleep(for: .seconds(1.5))
+                        copiedFrame = false
+                    }
+                }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+                .contentTransition(.symbolEffect(.replace))
+                .help("Copy the frame at the playhead as an image (⇧⌘C)")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

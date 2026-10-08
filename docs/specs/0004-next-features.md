@@ -74,6 +74,8 @@ own spec before any code.
 
 N20 and N21 are small and can land any time.
 
+**Status (2026-10-08):** built: N1, N2, N3, N7, N10, N22; partly: N15 (history), N17 (freezing). The rest is open.
+
 Every item follows spec 0003's standards: a pure core with tests, performance measured before a
 claim, docs updated, and the 8 ms frame budget kept.
 
@@ -108,8 +110,11 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N2 — Cursor: loop to start, stop before end, tilt
 
-- **Status (2026-10-08):** *loop* shipped ("Loop Position"). *Stop before end* and *tilt* are not built. Related and
-  shipped: cursor movement **None** (the recorded positions, no spring or jitter filter).
+- **Status (2026-10-08):** built. *Loop* ("Loop Position"), *stop before end* ("Stop Before End", 0–3 s of output,
+  `CursorStyle.stopDuration`, `RenderPlan.cursorStop`) and *tilt* ("Tilt While Moving", `CursorStyle.tilts`: up to 12°,
+  76% of it at 800 pt/s of horizontal speed, eased by the Smooth spring; not yet checked by eye). With Loop on as
+  well, the cursor holds still and then glides back in the last second. Related and shipped: cursor movement
+  **None** (the recorded positions, no spring or jitter filter).
 - **What:**
   - *Loop:* in the last second, the cursor glides back to where it was in the first frame, so a
     video or GIF loops.
@@ -122,6 +127,9 @@ claim, docs updated, and the 8 ms frame budget kept.
   rest.
 
 ### N3 — Click sounds
+
+- **Status (2026-10-08): shipped** (spec 0003 phase 5: a synthesised click written once per window as Apple Lossless
+  CAF, with its volume in the Clicks section).
 
 - **What:** a soft click at every recorded press, with a volume control in the Clicks section.
 - **How:** mix the clicks offline, once per cut change, into a cached file. Use `AVAudioEngine`
@@ -191,6 +199,9 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N7 — Speed per part, and speeding up typing
 
+- **Status (2026-10-08): built**, see spec 0014. Open question 1 is settled: click rings, keystroke chips and
+  zoom transitions keep their on-screen length (timed on the output); the cursor moves with the content. Speed Up
+  Typing applies every stretch at once (one undo step) instead of listing them for review.
 - **What:**
   - Each kept part gets a speed from 1× to 8×.
   - Speed Up Typing proposes 2–4× for stretches of typing, with an "Apply all" button.
@@ -245,6 +256,9 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N10 — GIF export, copy frame
 
+- **Status (2026-10-08):** built. GIF export shipped earlier (spec 0003). **Copy Frame** (transport, ⇧⌘C) copies the
+  frame at the playhead as a PNG at Original export size, in SDR: an export-target plan swapped into the composition and
+  one frame read by `AVAssetImageGenerator` with zero tolerance (`FrameGrabber`), so it is exactly the export's frame.
 - **What:**
   - GIF in the export sheet: looping, 480–960 px, 25 or 50 fps.
   - Copy Frame copies the current frame at output size.
@@ -301,6 +315,9 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N15 — Restore a closed card; history
 
+- **Status (2026-10-08):** the history half shipped (spec 0012: every capture kept in the app's support folder for a
+  chosen time). Restore Last Screenshot is not built.
+
 - **S:** Restore Last Screenshot in the menu brings back the last closed card from memory.
 - **M, opt-in:** keep screenshots for 30 days in the app's Caches folder and list them. This
   conflicts with "nothing is written until Save" (see Open questions).
@@ -318,6 +335,9 @@ Each is S:
 - **Pins:** an opacity setting, and a click-through mode.
 
 ### N17 — Freeze screen and loupe while selecting
+
+**Status (2026-10-08):** freezing shipped (Capture Area shows a picture of every display taken as it starts and cuts
+the area from it). The loupe is not built.
 
 Capture the display once when area selection opens, show it under the overlay, and crop from that
 image, so hover states and open menus survive. A loupe next to the pointer shows pixels for exact
@@ -365,6 +385,8 @@ edges. Recording keeps the live selection.
   macOS 15 and 26.
 
 ### N22 — Scripted web recordings (own spec: `0005-web-recordings.md`)
+
+- **Status (2026-10-08): shipped**, see spec 0005 (New Web Recording…).
 
 - **Seen in** Tino Zabinskiy's programmatic recorder
   ([post](https://x.com/0x_tino/status/2104615778817577471), 28 Sep 2026, 39 s demo). You load a

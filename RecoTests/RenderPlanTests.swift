@@ -149,6 +149,24 @@ struct RenderPlanTests {
         #expect(plan.timeMap.outputDuration == 9)
     }
 
+    @Test func timesOverlaysAndTheCameraOnTheOutput() async {
+        // Kept: 0..<1.5, 2.5..<4, then 4..<8 at 2× and 8..<10: 7 s of output
+        var project = EditorProject(cuts: [1.5..<2.5])
+        project.speeds = [SpeedRange(range: 4..<8, rate: 2)]
+        project.zooms = [ZoomSegment(range: 4..<8, focus: .fixed(center: CGPoint(x: 0.5, y: 0.5)))]
+        let resources = RenderResources(keyLabels: KeyLabelFormatter.layout(id: "com.apple.keylayout.US"))
+
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: resources)
+
+        #expect(plan.timeMap.outputDuration == 7)
+        // The click at 2 s is cut; the one at 6 s is 2 s into the 2× part
+        #expect(plan.clicks.map(\.time) == [1, 4])
+        #expect(plan.keystrokes.map(\.time) == [1, 2, 3])
+        // The zoom spans output 3..<5
+        #expect(plan.camera.viewport(at: 2.9) == .whole)
+        #expect(plan.camera.viewport(at: 4.9).scale > 1.9)
+    }
+
     @Test func buildsNoOverlaysWithoutTelemetry() async {
         let plan = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), resources: RenderResources(keyLabels: KeyLabelFormatter.current()))
 
@@ -220,6 +238,18 @@ struct RenderPlanTests {
 
         #expect(abs(loop.glide.lowerBound - 9.6) < 1e-9)
         #expect(abs(loop.glide.upperBound - (10 - 1.0 / 60)) < 1e-9)
+    }
+
+    @Test func theCursorStopsItsDurationOfOutputBeforeTheLastFrame() throws {
+        // Source 2..<4 is cut, so the last frame at 599/60 of source is 479/60 of output
+        let timeMap = TimeMap(cuts: [2..<4], sourceDuration: 10, frameRate: 60)
+
+        #expect(RenderPlan.cursorStop(before: 0, for: timeMap) == nil)
+        let stop = try #require(RenderPlan.cursorStop(before: 3, for: timeMap))
+        // 479/60 - 3 of output is past the cut, so 2 s later in source
+        #expect(abs(stop - (479.0 / 60 - 3 + 2)) < 1e-9)
+        // Longer than the video, it holds from the first frame
+        #expect(RenderPlan.cursorStop(before: 20, for: timeMap) == 0)
     }
 
     @Test func buildsALoopingCursorOnlyWhenAsked() async {

@@ -56,6 +56,10 @@ final class EditorViewModel {
     /// The music's bookmark and the task opening its file (access stays on until it's replaced or the window closes).
     @ObservationIgnored var backgroundAudio: (bookmark: Data, url: Task<URL?, Never>)?
 
+    /// Each sped-up part's file, rendered the first time a part is at that speed and kept until the window closes, so
+    /// undo and redo don't render again. `nil` inside when it couldn't be rendered.
+    @ObservationIgnored var fastPartAudio: [SpeedAudio.Part: Task<URL?, Never>] = [:]
+
     /// The keyboard layout in use when the editor opened, the system's arrow for recordings made
     /// without the cursor, and the background picture.
     @ObservationIgnored var resources = RenderResources.none
@@ -108,7 +112,7 @@ final class EditorViewModel {
         resources.arrow = source.telemetry?.capture.cursorInVideo == false ? StandardCursors.arrowSprite : nil
         let backgroundIsReadable = await updateBackgroundImage(for: project.canvas.imageBookmark)
         let plan = await RenderPlan.build(project: project, source: source, resources: resources)
-        let extra = await extraAudio(for: project.audio, source: source)
+        let extra = await extraAudio(for: project.audio, source: source, timeMap: plan.timeMap)
         let composition: EditorComposition
         do {
             composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio, extra: extra)
@@ -247,6 +251,26 @@ final class EditorViewModel {
         return url
     }
 
+    /// Puts the frame at the playhead on the pasteboard as a PNG, drawn as an export at the original size draws
+    /// it, in SDR so every app pastes it alike. Returns whether it did.
+    func copyFrame() async -> Bool {
+        await rebuild?.value
+        guard let source, var composition else { return false }
+        let target = RenderTarget(shorterSide: exportShorterSide(nil), keepsHDR: false)
+        let plan = await RenderPlan.build(project: project, source: source, resources: resources, target: target)
+        composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan)
+        let frames = FrameGrid(frameRate: source.frameRate, duration: plan.timeMap.outputDuration)
+        let time = frames.time(ofFrame: frames.frame(at: playback.currentTime))
+        do {
+            let image = try await FrameGrabber.image(of: composition, at: time, timescale: source.timescale)
+            ImagePasteboard.copy(png: try await ScreenshotService.pngData(of: image))
+            return true
+        } catch {
+            fail(.frameNotCopied(error))
+            return false
+        }
+    }
+
     /// Releases the player and filmstrip and saves pending edits. Called when the window closes.
     func close() async {
         rebuild?.cancel()
@@ -295,7 +319,7 @@ final class EditorViewModel {
 
     private func updateTimeline() {
         guard let source else { return }
-        timeMap = TimeMap(cuts: project.cuts, sourceDuration: source.duration, frameRate: source.frameRate)
+        timeMap = TimeMap(cuts: project.cuts, speeds: project.speeds, sourceDuration: source.duration, frameRate: source.frameRate)
     }
 
     /// Builds a plan for the project off the main actor, replacing a build still running, and shows
@@ -309,7 +333,7 @@ final class EditorViewModel {
                 fail(.unreadableBackground)
             }
             let plan = await RenderPlan.build(project: project, source: source, resources: resources)
-            let extra = await extraAudio(for: self.project.audio, source: source)
+            let extra = await extraAudio(for: self.project.audio, source: source, timeMap: plan.timeMap)
             guard !Task.isCancelled, let playing = self.plan, var composition else { return }
             guard plan.timeMap != playing.timeMap || extra != composition.extraAudio else {
                 composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan)

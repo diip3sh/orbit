@@ -84,18 +84,15 @@ extension RenderPlan {
 
         let videoSize = source.naturalSize
         let dynamicRange = target.keepsHDR ? source.dynamicRange : .sdr
-        let timeMap = TimeMap(cuts: project.cuts, sourceDuration: source.duration, frameRate: source.frameRate)
+        let timeMap = TimeMap(cuts: project.cuts, speeds: project.speeds, sourceDuration: source.duration, frameRate: source.frameRate)
         // The costliest parts, and independent, so they're built alongside the rest. For 10 minutes
         // with 455 zooms, 3,000 clicks and 12,000 keys (M1, Debug), the camera takes 38 ms and the
         // cursor 35; the plan builds in 42 ms instead of 105
-        async let camera = CameraPath(
-            zooms: project.zooms, cursor: source.telemetry.map { cursorPoints(for: $0, during: project.zooms) } ?? [], duration: source.duration,
-            stiffness: project.zoomMotion.frequency
-        )
+        async let camera = camera(for: project, telemetry: source.telemetry, timeMap: timeMap)
         async let cursor = source.telemetry.flatMap {
             drawnCursor(
                 for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: resources.arrow,
-                loop: project.cursor.loops ? cursorLoop(for: timeMap) : nil
+                loop: project.cursor.loops ? cursorLoop(for: timeMap) : nil, stop: cursorStop(before: project.cursor.stopDuration, for: timeMap)
             )
         }
         let canvas = CanvasLayout(style: project.canvas, videoSize: videoSize, shorterSide: target.shorterSide, background: resources.background)
@@ -104,12 +101,16 @@ extension RenderPlan {
         var clicks: [ClickMarker] = []
         var keystrokes: [KeystrokeChip] = []
         var labels: [String] = []
+        // Rings and chips last their duration on screen whatever the speed, so they're timed on the output
         if let telemetry = source.telemetry {
             if project.clickHighlights.effect != .off {
-                clicks = clickMarkers(for: telemetry, style: project.clickHighlights, videoHeight: videoSize.height)
+                clicks = clickMarkers(for: telemetry, style: project.clickHighlights, videoHeight: videoSize.height).compactMap { marker in
+                    timeMap.outputTime(ifKept: marker.time).map { ClickMarker(time: $0, position: marker.position, diameter: marker.diameter) }
+                }
             }
             if project.keystrokes.isEnabled, let keyLabels = resources.keyLabels {
                 (keystrokes, labels) = keystrokeChips(for: telemetry, style: project.keystrokes, keyLabels: keyLabels)
+                keystrokes = keystrokes.compactMap { chip in timeMap.outputTime(ifKept: chip.time).map { KeystrokeChip(time: $0, image: chip.image) } }
             }
         }
 
@@ -174,10 +175,10 @@ extension RenderPlan {
     /// The cursor to draw and its images, or `nil` when the video shows the system's or it's off.
     nonisolated static func drawnCursor(
         for telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, arrow: InputTelemetry.CursorSprite?,
-        loop: CursorPath.Loop? = nil
+        loop: CursorPath.Loop? = nil, stop: Double? = nil
     ) -> (path: CursorPath, shapes: CursorShapeTrack)? {
         guard !telemetry.capture.cursorInVideo, style.isEnabled,
-              let path = CursorPath(telemetry: telemetry, style: style, duration: duration, videoHeight: videoHeight, loop: loop)
+              let path = CursorPath(telemetry: telemetry, style: style, duration: duration, videoHeight: videoHeight, loop: loop, stop: stop)
         else { return nil }
         // The images are drawn once, here, whatever the appearance
         let shapes = switch style.appearance {
@@ -192,9 +193,39 @@ extension RenderPlan {
     /// second of output (less when the last kept range is shorter, since the glide stays inside it).
     nonisolated static func cursorLoop(for timeMap: TimeMap) -> CursorPath.Loop {
         let frames = FrameGrid(frameRate: timeMap.frameRate, duration: timeMap.outputDuration)
-        let end = timeMap.sourceTime(atOutput: frames.time(ofFrame: frames.lastFrame))
+        let last = frames.time(ofFrame: frames.lastFrame)
+        let end = timeMap.sourceTime(atOutput: last)
         let rangeStart = timeMap.keptRanges.last?.lowerBound ?? 0
-        return CursorPath.Loop(start: timeMap.sourceTime(atOutput: 0), glide: max(end - CursorPath.loopDuration, rangeStart)..<end)
+        let glideStart = max(timeMap.sourceTime(atOutput: last - CursorPath.loopDuration), rangeStart)
+        return CursorPath.Loop(start: timeMap.sourceTime(atOutput: 0), glide: glideStart..<end)
+    }
+
+    /// The source time from which the cursor holds still: `duration` seconds of output before the last frame, or
+    /// `nil` when it never stops. With Loop Position on as well, the cursor glides back in the last second after it.
+    nonisolated static func cursorStop(before duration: Double, for timeMap: TimeMap) -> Double? {
+        guard duration > 0 else { return nil }
+        let frames = FrameGrid(frameRate: timeMap.frameRate, duration: timeMap.outputDuration)
+        return timeMap.sourceTime(atOutput: max(frames.time(ofFrame: frames.lastFrame) - duration, 0))
+    }
+
+    /// The camera, moving on output time, so a zoom eases in at the same pace in a fast part, and across a cut
+    /// instead of jumping.
+    nonisolated static func camera(for project: EditorProject, telemetry: InputTelemetry?, timeMap: TimeMap) -> CameraPath {
+        CameraPath(
+            zooms: outputZooms(project.zooms, timeMap: timeMap),
+            cursor: telemetry.map { cursorPoints(for: $0, during: project.zooms).map { (timeMap.outputTime(atSource: $0.time), $0.point) } } ?? [],
+            duration: timeMap.outputDuration,
+            stiffness: project.zoomMotion.frequency
+        )
+    }
+
+    /// The zooms on output time, for the camera; a zoom entirely cut is left out.
+    nonisolated static func outputZooms(_ zooms: [ZoomSegment], timeMap: TimeMap) -> [ZoomSegment] {
+        zooms.compactMap { zoom in
+            var output = zoom
+            output.range = timeMap.outputTime(atSource: zoom.range.lowerBound)..<timeMap.outputTime(atSource: zoom.range.upperBound)
+            return output.range.isEmpty ? nil : output
+        }
     }
 
     /// The cursor's positions in the video while a zoom follows it, from the one in effect at the

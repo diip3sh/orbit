@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 844 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 862 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -389,19 +389,55 @@ Audio tab sets each track's volume and mute, and holds the background audio (bel
 | `Editor/Model/AudioMixSettings.swift` | Volume and mute per audio track, by the recording's track order |
 
 Key facts:
-- Everything in the project and on the timeline is source time; only the player, the transport's
-  time label and the compositor's requests are output time. `TimeMap` is the only converter.
+- Everything in the project and on the timeline is source time; the player, the transport's time
+  label, the compositor's requests and the plan's click markers, keystroke chips and camera are
+  output time (speed, below). `TimeMap` is the only converter.
 - Cuts are normalized as frame boundaries (integers); the last boundary is the recording's end
   wherever it falls, so a trailing cut never leaves a sliver. Something must stay: trims keep a
   frame per kept part, and the last part can't be cut.
 - `splits` are saved in the project, so a split is an undoable edit. Splits inside cuts are kept
   and come back if the cut is restored.
-- A new player item is made only when the cuts change (the playhead stays on its content); other
+- A new player item is made only when the cuts or speeds change (the playhead stays on its content); other
   edits swap the video composition, volumes only the mix.
 - Audio fades 25 ms at every cut. The mix lags its ramps by ~10 ms: at a cut, 10 ms ramps still
   left 57% of the volume, 20 ms 20%, 25 ms 2%.
 - Audio tracks are named by the writer's order: two tracks are system audio then microphone; one
   track is just "Audio" since it could be either.
+
+### S2 — Speed per part, Speed Up Typing (spec 0014, N7)
+
+Select a part, then the transport's **Speed** menu sets it to 1×, 1.5×, 2×, 3×, 4× or 8× (one undo step; its
+ends become splits); the timeline labels each part that isn't at 1×. **Motion → Speed → Speed Up Typing** speeds
+every stretch of typing still at 1× in one undo step: 2× under 6 s, 3× under 12 s, 4× beyond.
+
+| File | Role |
+|---|---|
+| `Editor/Model/SpeedRange.swift` | A source range and its rate; `EditorProject.speeds` (cut parts keep theirs) |
+| `Editor/Render/TimeMap.swift` | Kept ranges divided at speed edges into `pieces`, each lasting length / rate in the output; `rate(atSource:)`, `outputTime(ifKept:)`, `speeds(setting:for:)`, `speeds(adding:)` |
+| `Editor/Service/TypingStretches.swift` | Pure: presses that aren't auto-repeats, gaps under 1 s, at least 3 s; ⌃/⌥/⌘ ends a stretch |
+| `Editor/Render/CompositionBuilder.swift` | Each piece inserted at its output length (to the nanosecond): video scaled with `scaleTimeRange`, audio at another speed from its sped-up file (`ExtraAudio.fastParts`, silent without one); music fills the output |
+| `Editor/Service/SpeedAudio.swift`, `EditorViewModel+Audio.swift` | Each audio track's (and the click sounds') part at another speed, run through `AVAudioUnitTimePitch` in an offline `AVAudioEngine` with 0.25 s of context read on each side, to an Apple Lossless CAF in `temporaryDirectory/Reco Speed Audio/`; rendered once per part and rate (`fastPartAudio`), deleted when the window closes |
+| `Editor/ViewModel/EditorViewModel+Speed.swift`, `Editor/View/SpeedInspectorSection.swift` | `selectedSpeed`, `setSpeed`, `typingSpeedUps`, `speedUpTyping()`; the Motion tab's Speed section |
+
+Key facts:
+- Click rings, keystroke chips and the camera are timed on the output, so a ring lasts its duration and a zoom
+  eases at its pace in a 4× part; the camera also eases across a cut now instead of jumping. Presses inside cuts
+  are dropped from the plan. The cursor (position, shape, press shrink, idle fade) stays on source time, since it
+  is content; the loop's glide is the last second of output. Motion blur's shutter is in output seconds, so a
+  fast part blurs the cursor more.
+- **Audio is never scaled in the composition.** `AVAssetReaderAudioMixOutput` (the export's audio) applies a scaled
+  edit's rate change only after it has converted past it (`AppendRateChange: scheduling rate change at unscaled t=9600,
+  but we previously did a conversion for t=13056`): a 1 s test recording with 0.2–0.6 s at 4× (0.7 s of output) mixed to
+  0.709–0.808 s across runs with every pitch algorithm, and exported at 0.775 s. So fast parts' audio is pre-rendered
+  (`SpeedAudio`) and inserted unscaled; the mix and the export now come out at exactly 0.7 s. The time-pitch keeps the
+  pitch (440 Hz stays within 10 Hz) and puts a part's sound where it belongs: a tone starting 75 ms into a 4× part reaches
+  half its level at 73 ms, spread over about 23 ms (60–83 ms from 2% to 80%). Measured on an M2, Debug, load average 12:
+  2 min of stereo AAC renders in 1.18 s at 2×, 0.67 s at 4×, 0.43 s at 8×; a rebuild waits for new parts, once.
+- A fast part shows the source frame under each output frame (every 4th at 4×), no blending. A 1× project builds
+  the same composition as before.
+- `ponytail:` click sounds are on the source timeline, so a fast part time-stretches them too.
+- Not measured yet: the plan's extra mapping (one binary search per press, zoom and cursor sample) and the
+  compositor's extra `sourceTime(atOutput:)` lookups per frame.
 
 ### S1 — Editor, phase 4: zoom (`feat/editor-shell`, spec 0003)
 
@@ -470,7 +506,7 @@ Key facts:
 A recording made without the cursor gets it back in the editor: drawn from its recorded images at a
 smoothed position, sharp when zoomed, with its hot spot on every click highlight. The inspector's
 Cursor tab (2026-10-07) holds the Cursor section (show or hide, style, size with Reset, "Always Use Pointer",
-shrinking on click, hiding when idle, "Loop Position") and the Clicks section (effect, color, size, duration,
+shrinking on click, hiding when idle, "Tilt While Moving", "Loop Position", "Stop Before End") and the Clicks section (effect, color, size, duration,
 buttons, click sound). Movement (Mellow, Smooth, Fast, None) is in the Motion tab.
 
 | File | Role |
@@ -516,6 +552,18 @@ Key facts:
   glide stays inside it) the path eases onto where the first frame has the cursor, so the last frame's position equals
   the first's exactly (`CursorPath.Loop`, `RenderPlan.cursorLoop(for:)`; the target is the path without the glide,
   so it is set last in the init). Only the position loops: the cursor's size, shape and idle fade don't.
+- **Stop Before End** (`CursorStyle.stopDuration`, 0–3 s of output, 0 off; N2): from `RenderPlan.cursorStop(before:for:)`, that
+  long before the last frame, `CursorPath` clamps the time its position, size and opacity are read at, so the reach for
+  Stop doesn't show. With Loop Position on too, the cursor holds still and then glides back in the last second.
+- **Tilt While Moving** (`CursorStyle.tilts`; N2): the arrow leans against its horizontal motion, clockwise moving right,
+  up to `CursorPath.maximumTilt` (12°), 76% of it (tanh 1) at `tiltSpeed` (800 pt/s), eased by the Smooth spring
+  (12.5 rad/s); computed once per plan at 120 Hz from the finished path, so it straightens at rest, at the stop and into
+  the loop's glide. `FrameRenderer` rotates the image about its hot spot (a 0 angle is the identity, so frames without
+  it are unchanged). Picked 2026-10-08, not yet checked by eye.
+- **Copy Frame** (transport, ⇧⌘C; N10): the frame at the playhead as a PNG at Original export size in SDR, on the
+  pasteboard (`EditorViewModel.copyFrame()`): an export-target plan in the composition, one frame read by
+  `FrameGrabber` (`AVAssetImageGenerator`, zero tolerance), `ScreenshotService.pngData`, `ImagePasteboard`. A check
+  shows on the button for 1.5 s.
 - **Click effects** (`ClickHighlightStyle.effect`): None; Circle, the old ring (faint fill, grows from 40%); Ripple, two
   unfilled rings that grow from 20% with the same cubic ease-out, each fading as it grows, each lasting 70% of the
   duration, the second starting 30% after the first, so the effect ends with the duration and

@@ -14,12 +14,15 @@ import CoreVideo
 /// Lookups into the plan and a small Core Image graph; nothing is simulated or allocated per frame.
 nonisolated enum FrameRenderer {
 
-    /// Draws the output frame for source time `time` into `buffer`, region by region, each from
+    /// Draws the output frame for output time `time` into `buffer`, region by region, each from
     /// only what shows there (see ``CanvasLayout/regions``), without color management: `context`
     /// must have none. HDR plans' overlays are already in the video's encoding.
+    ///
+    /// Clicks, chips and the camera are timed on the output, so they keep their pace at any speed; the
+    /// cursor is part of the content, so it's drawn at the source time shown.
     /// - Parameters:
-    ///   - frame: The recording's frame at `time`.
-    ///   - time: Source time, in seconds.
+    ///   - frame: The recording's frame shown at `time`.
+    ///   - time: Output time, in seconds.
     static func draw(_ frame: CIImage, at time: Double, plan: RenderPlan, into buffer: CVPixelBuffer, context: CIContext) throws {
         let video = video(frame, at: time, plan: plan)
         let destination = CIRenderDestination(pixelBuffer: buffer)
@@ -52,7 +55,8 @@ nonisolated enum FrameRenderer {
         let placements = placements(at: time, plan: plan)
         image = placements.count == 1 ? placed(image, by: placements[0], plan: plan) : summed(placements.map { placed(image, by: $0, plan: plan) })
         // The cursor is placed after, so it's drawn from its full-resolution image
-        if let path = plan.cursor, let sprite = plan.cursorShapes.sprite(at: time), let drawn = cursor(sprite, path: path, at: time, plan: plan) {
+        if let path = plan.cursor, let sprite = plan.cursorShapes.sprite(at: plan.timeMap.sourceTime(atOutput: time)),
+           let drawn = cursor(sprite, path: path, at: time, plan: plan) {
             image = drawn.composited(over: image)
         }
         if let (chip, opacity) = KeystrokeChip.visible(in: plan.keystrokes, at: time) {
@@ -151,22 +155,24 @@ nonisolated enum FrameRenderer {
 
     /// The cursor's image with its hot spot on the path, moved and magnified with the video, or `nil`
     /// while it's hidden. While it moves, the mean of the image at samples across the shutter, summed
-    /// before it's composited so Core Image draws it over the frame once.
+    /// before it's composited so Core Image draws it over the frame once. `time` is output time.
     private static func cursor(_ sprite: CursorShapeTrack.Sprite, path: CursorPath, at time: Double, plan: RenderPlan) -> CIImage? {
-        let opacity = path.opacity(at: time)
+        let opacity = path.opacity(at: plan.timeMap.sourceTime(atOutput: time))
         guard opacity > 0 else { return nil }
         let times = sampleTimes(at: time, plan: plan, threshold: cursorBlurThreshold) {
-            [path.position(at: $0).applying(placement(at: $0, plan: plan))]
+            [path.position(at: plan.timeMap.sourceTime(atOutput: $0)).applying(placement(at: $0, plan: plan))]
         }
-        let images = times.map { cursorImage(sprite, path: path, at: $0, placement: placement(at: $0, plan: plan)) }
+        let images = times.map { cursorImage(sprite, path: path, at: plan.timeMap.sourceTime(atOutput: $0), placement: placement(at: $0, plan: plan)) }
         let image = images.count == 1 ? images[0] : summed(images)
         return opacity < 1 ? image.fading(to: opacity) : image
     }
 
+    /// The image at source time `time`, placed with the video's output placement.
     private static func cursorImage(_ sprite: CursorShapeTrack.Sprite, path: CursorPath, at time: Double, placement: CGAffineTransform) -> CIImage {
         let position = path.position(at: time).applying(placement)
         let scale = path.scale(at: time) * placement.a * sprite.pointsPerPixel
         let placement = CGAffineTransform(translationX: -sprite.hotspot.x, y: -sprite.hotspot.y)
+            .concatenating(CGAffineTransform(rotationAngle: path.tilt(at: time)))
             .concatenating(CGAffineTransform(scaleX: scale, y: scale))
             .concatenating(CGAffineTransform(translationX: position.x, y: position.y))
         // Images recorded at up to 10× are scaled down a lot, which plain sampling would alias

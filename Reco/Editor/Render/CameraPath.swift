@@ -35,11 +35,12 @@ nonisolated struct CameraPath: Sendable {
     /// Empty when there are no zooms.
     private let samples: [Viewport]
 
+    /// Times are the output's (``RenderPlan`` maps them), so a zoom eases at the same pace at any speed.
     /// - Parameters:
     ///   - zooms: Sorted and apart.
-    ///   - cursor: The cursor's positions in the video, sorted by source time, each held until the
+    ///   - cursor: The cursor's positions in the video, sorted by time, each held until the
     ///     next. Without them, a zoom that follows the cursor centres on the frame.
-    ///   - duration: The recording's length in seconds.
+    ///   - duration: The output's length in seconds.
     ///   - stiffness: The spring's natural frequency, in radians per second (``ZoomMotion/frequency``).
     init(zooms: [ZoomSegment], cursor: [(time: Double, point: CGPoint)], duration: Double, stiffness: Double = ZoomMotion.smooth.frequency) {
         guard !zooms.isEmpty else {
@@ -81,7 +82,7 @@ nonisolated struct CameraPath: Sendable {
         self.samples = samples
     }
 
-    /// The view at source time `time`, clamped to the recording.
+    /// The view at output time `time`, clamped to the output.
     func viewport(at time: Double) -> Viewport {
         guard let last = samples.indices.last else { return .whole }
         let position = min(max(time * Self.sampleRate, 0), Double(last))

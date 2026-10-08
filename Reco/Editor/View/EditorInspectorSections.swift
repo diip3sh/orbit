@@ -53,6 +53,7 @@ struct EditorInspector: View {
                     case .motion:
                         MotionInspectorSection(viewModel: viewModel)
                         ZoomInspectorSection(viewModel: viewModel)
+                        SpeedInspectorSection(viewModel: viewModel)
                     case .camera, .caption:
                         EmptyView()
                     }
@@ -201,10 +202,17 @@ struct CursorInspectorSection: View {
                 .opacity(isRecordedStyle ? 1 : 0.4)
             Toggle("Shrink on Click", isOn: $viewModel.cursor.animatesClicks)
             Toggle("Hide When Idle", isOn: $viewModel.cursor.hidesWhenIdle)
+            Toggle("Tilt While Moving", isOn: $viewModel.cursor.tilts)
             Toggle("Loop Position", isOn: $viewModel.cursor.loops)
+            InspectorSlider("Stop Before End", value: $viewModel.cursor.stopDuration, in: 0...3, defaultValue: 0) {
+                $0 == 0 ? Text("Off") : Text("\($0, format: .number.precision(.fractionLength(1))) s")
+            }
         } footer: {
             if viewModel.cursor.loops {
                 Text("In the last second the cursor glides back to where it started, so the video loops.")
+            }
+            if viewModel.cursor.stopDuration > 0 {
+                Text("The cursor holds still at the end, so reaching for Stop doesn't show.")
             }
             if telemetry?.capture.cursorInVideo == true {
                 Text("""

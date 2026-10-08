@@ -10,7 +10,7 @@ import CoreGraphics
 /// A click to highlight, placed when the render plan is built.
 nonisolated struct ClickMarker: Equatable, Sendable {
 
-    /// Source time of the press.
+    /// Output time of the press, so its ring lasts its duration on screen at any speed.
     var time: Double
 
     /// The click point in Core Image pixel space (bottom-left origin).

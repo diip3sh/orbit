@@ -59,9 +59,8 @@ nonisolated class EditorCompositor: NSObject, AVVideoCompositing, @unchecked Sen
             CVBufferPropagateAttachments(source, output)
         }
 
-        let time = plan.timeMap.sourceTime(atOutput: request.compositionTime.seconds)
         do {
-            try FrameRenderer.draw(frame, at: time, plan: plan, into: output, context: Self.context)
+            try FrameRenderer.draw(frame, at: request.compositionTime.seconds, plan: plan, into: output, context: Self.context)
             request.finish(withComposedVideoFrame: output)
         } catch {
             request.finish(with: error)

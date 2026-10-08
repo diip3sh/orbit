@@ -37,8 +37,9 @@ extension EditorViewModel {
     }
 
     /// The files to add to the recording's audio. The click sounds are written the first time `audio` wants them, and
-    /// are there from then on (silent at volume 0), so changing the volume never makes a new player item.
-    func extraAudio(for audio: AudioMixSettings, source: EditorSource) async -> ExtraAudio {
+    /// are there from then on (silent at volume 0), so changing the volume never makes a new player item. The parts
+    /// `timeMap` speeds up are rendered once each.
+    func extraAudio(for audio: AudioMixSettings, source: EditorSource, timeMap: TimeMap) async -> ExtraAudio {
         let background = await backgroundAudioURL(for: audio.background?.bookmark)
         if clickSoundFile == nil, audio.clickVolume > 0 {
             let onsets = source.telemetry.map { ClickSound.onsets(of: $0.clicks) } ?? []
@@ -56,7 +57,8 @@ extension EditorViewModel {
                 }
             }
         }
-        return ExtraAudio(clicks: await clickSoundFile?.value, background: background)
+        let clicks = await clickSoundFile?.value
+        return ExtraAudio(clicks: clicks, background: background, fastParts: await fastPartFiles(for: timeMap, source: source, clicks: clicks))
     }
 
     /// Deletes the files ``extraAudio(for:source:)`` wrote and lets go of the music. Called when the window closes.
@@ -64,13 +66,46 @@ extension EditorViewModel {
         let music = backgroundAudio
         backgroundAudio = nil
         await music?.url.value?.stopAccessingSecurityScopedResource()
-        guard let file = clickSoundFile else { return }
+        let files = Array(fastPartAudio.values) + (clickSoundFile.map { [$0] } ?? [])
+        fastPartAudio = [:]
         clickSoundFile = nil
-        guard let url = await file.value else { return }
-        try? FileManager.default.removeItem(at: url)
+        for file in files {
+            if let url = await file.value {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
     }
 
     // MARK: - Private
+
+    /// The sped-up audio of the recording's tracks and the click sounds for each part of `timeMap` at another speed,
+    /// rendering the ones no rebuild has asked for yet, side by side.
+    private func fastPartFiles(for timeMap: TimeMap, source: EditorSource, clicks: URL?) async -> [SpeedAudio.Part: URL] {
+        let clickTrackID = CompositionBuilder.extraTrackID(1, for: source)
+        let parts = SpeedAudio.parts(of: timeMap, trackIDs: source.audioTrackIDs + (clicks == nil ? [] : [clickTrackID]))
+        let videoURL = videoURL
+        for part in parts where fastPartAudio[part] == nil {
+            let file = part.trackID == clickTrackID ? clicks : videoURL
+            let trackID = part.trackID == clickTrackID ? nil : part.trackID
+            let url = SpeedAudio.folder.appending(path: "\(UUID().uuidString).caf")
+            // Unstructured and stored before anything is awaited, as the music is: another rebuild finds it meanwhile
+            fastPartAudio[part] = Task {
+                guard let file else { return nil }
+                do {
+                    try await SpeedAudio.render(part, from: file, trackID: trackID, to: url)
+                    return url
+                } catch {
+                    self.logger.error("\(videoURL.lastPathComponent): no audio at \(part.rate)×: \(error.localizedDescription)")
+                    return nil
+                }
+            }
+        }
+        var files: [SpeedAudio.Part: URL] = [:]
+        for part in parts {
+            files[part] = await fastPartAudio[part]?.value
+        }
+        return files
+    }
 
     /// The music file `bookmark` opens, opened once per bookmark: a different one lets go of the last.
     private func backgroundAudioURL(for bookmark: Data?) async -> URL? {

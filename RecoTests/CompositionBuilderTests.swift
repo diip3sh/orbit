@@ -61,6 +61,59 @@ struct CompositionBuilderTests {
         #expect(abs(try await level(ofFrame: 6, in: exported) - (try await level(ofFrame: 15, in: source.asset))) <= 3)
     }
 
+    @Test func grabsTheFrameAtAnOutputTimeAsTheCompositionDrawsIt() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30) {
+            UInt8($0 * 8)
+        }
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        // Frames 6 to 14 are cut, so output frame 6 is source frame 15
+        let project = EditorProject(cuts: [0.2..<0.5])
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
+        let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
+
+        let image = try await FrameGrabber.image(of: composition, at: 6.0 / 30, timescale: source.timescale)
+
+        // On the canvas, at its size, with the video in the middle
+        #expect(CGFloat(image.width) == plan.canvas.size.width && CGFloat(image.height) == plan.canvas.size.height)
+        let level = Int(CIImage(cgImage: image).pixel(at: CGPoint(x: image.width / 2, y: image.height / 2))[1])
+        #expect(abs(level - (try await self.level(ofFrame: 15, in: source.asset))) <= 3)
+    }
+
+    @Test func exportPlaysAFasterPartFaster() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30, withTone: true) {
+            UInt8($0 * 8)
+        }
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        // Frames 6 to 17 at 4×: output 0.2..<0.3, so 0.7 s in all
+        var project = EditorProject()
+        project.speeds = [SpeedRange(range: 0.2..<0.6, rate: 4)]
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
+        var extra = ExtraAudio()
+        for part in SpeedAudio.parts(of: plan.timeMap, trackIDs: source.audioTrackIDs) {
+            let url = folder.appending(path: "fast-\(part.trackID).caf")
+            try await SpeedAudio.render(part, from: video, trackID: part.trackID, to: url)
+            extra.fastParts[part] = url
+        }
+        #expect(extra.fastParts.count == 1)
+        let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio, extra: extra)
+        let output = ExportFormat.mp4.outputURL(for: video)
+
+        // The tone plays throughout, the fast part too
+        let mixed = try await mixedAudio(of: composition)
+        #expect(abs(Double(mixed.count) / TestRecording.sampleRate - 0.7) < 0.003)
+        #expect(peak(of: mixed, from: 0.22, to: 0.28) > 0.3)
+        try await ExportService.export(composition, to: output, as: ExportSettings(quality: .studio)) { _ in }
+
+        let exported = AVURLAsset(url: output)
+        #expect(abs(try await exported.load(.duration).seconds - 0.7) < 1.0 / 30)
+        // Output frame 7 shows source frame 10, frame 9 shows 18
+        for (frame, shown) in [(5, 5), (7, 10), (9, 18), (12, 21)] {
+            #expect(abs(try await level(ofFrame: frame, in: exported) - (try await level(ofFrame: shown, in: source.asset))) <= 3)
+        }
+    }
+
     @Test func mixFadesAtTheCutAndPlaysEachTrackAtItsVolume() async throws {
         defer { try? FileManager.default.removeItem(at: folder) }
         try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30, withTone: true)

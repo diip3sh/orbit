@@ -15,4 +15,7 @@ nonisolated struct ExtraAudio: Equatable, Sendable {
 
     /// The chosen music, once its bookmark is resolved. Looped under the whole output (see ``CompositionBuilder``).
     var background: URL?
+
+    /// The recording's and the click sounds' audio of each part at another speed, sped up (see ``SpeedAudio``).
+    var fastParts: [SpeedAudio.Part: URL] = [:]
 }
