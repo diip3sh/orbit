@@ -93,7 +93,7 @@ private struct QuickAccessPreview: View {
     }
 }
 
-/// Close top-left, Recognize Text and Pin top-right. Space between them isn't hit-tested, so a drag
+/// Close top-left; Hide Sensitive Info, Recognize Text and Pin top-right. Space between them isn't hit-tested, so a drag
 /// there starts on the screenshot.
 private struct QuickAccessControls: View {
 
@@ -106,6 +106,11 @@ private struct QuickAccessControls: View {
             Spacer()
             // Annotate goes first once annotation exists:
             // Button("Annotate", systemImage: "pencil", action: model.annotate)
+            Button { Task { await model.hideSensitiveInfo() } } label: {
+                Label { Text("Hide Sensitive Info") } icon: { LineIcon(.hugeiconsViewOffSlash) }
+            }
+            .help("Pixelate emails, phone numbers, card numbers and API keys")
+            .disabled(model.isHidingSensitiveInfo)
             Button { Task { await model.recognizeText() } } label: {
                 Label { Text("Recognize Text") } icon: { LineIcon(.hugeiconsScanText) }
             }

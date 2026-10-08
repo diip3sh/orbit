@@ -102,7 +102,8 @@ struct CropField: View {
                 RegionPad(
                     image: viewModel.thumbnail(at: viewModel.playheadSourceTime),
                     videoSize: videoSize,
-                    region: $viewModel.crop,
+                    regions: Binding { [viewModel.crop] } set: { viewModel.crop = $0[0] },
+                    selection: .constant(0),
                     minimumSize: VideoCrop.minimumSize,
                     label: "Crop",
                     onEnd: viewModel.cropDidSettle

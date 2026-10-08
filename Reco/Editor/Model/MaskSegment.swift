@@ -6,14 +6,15 @@
 import CoreGraphics
 import Foundation
 
-/// A rectangle of the content hidden for a while (spec 0004, N8): blurred, pixelated, or the only part not dimmed.
-/// It's on the content, so it zooms and pans with it. Times are source seconds.
+/// Rectangles of the content hidden for a while (spec 0004, N8): blurred, pixelated, or the only parts not dimmed.
+/// They're on the content, so they zoom and pan with it. Times are source seconds.
 nonisolated struct MaskSegment: Codable, Equatable, Identifiable, Sendable {
     var id = UUID()
     var range: Range<Double>
 
-    /// As fractions of the video (the crop, when there is one) from its top-left corner.
-    var rect = CGRect(x: 0.35, y: 0.35, width: 0.3, height: 0.3)
+    /// As fractions of the video (the crop, when there is one) from its top-left corner; at least one. Several, since
+    /// a frame often shows more than one thing to hide at once and masks are apart in time.
+    var rects = [Self.defaultRect]
 
     var kind = Kind.blur
 
@@ -36,6 +37,9 @@ nonisolated struct MaskSegment: Codable, Equatable, Identifiable, Sendable {
             }
         }
     }
+
+    /// A rectangle added by hand: the middle of the frame.
+    static let defaultRect = CGRect(x: 0.35, y: 0.35, width: 0.3, height: 0.3)
 
     /// A mask added by hand lasts this long, if there's room.
     static let defaultDuration = 3.0

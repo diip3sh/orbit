@@ -5,8 +5,8 @@
 
 import SwiftUI
 
-/// A frame with a rectangle outlined on it and the rest dimmed, for the crop and masks. Dragging near an edge or a
-/// corner moves those edges, inside moves the rectangle, 1:1 from where it was grabbed.
+/// A frame with rectangles outlined on it and the rest dimmed, for the crop and masks. Dragging near the selected
+/// rectangle's edge or corner moves those edges, inside one selects and moves it, 1:1 from where it was grabbed.
 struct RegionPad: View {
 
     /// The frame, or `nil` while the filmstrip loads.
@@ -15,9 +15,12 @@ struct RegionPad: View {
     let videoSize: CGSize
 
     /// As fractions of the video from its top-left corner.
-    @Binding var region: CGRect
+    @Binding var regions: [CGRect]
 
-    /// The smallest share of each side the rectangle keeps.
+    /// The rectangle with handles, which edge drags resize.
+    @Binding var selection: Int
+
+    /// The smallest share of each side a rectangle keeps.
     let minimumSize: Double
 
     let label: LocalizedStringKey
@@ -32,13 +35,17 @@ struct RegionPad: View {
 
     @State private var size: CGSize = .zero
 
-    /// The rectangle and the edges a drag moves, from when it started.
-    @State private var drag: (start: CGRect, edges: RegionDrag.Edges)?
+    /// The rectangle being dragged, where it was when the drag started, and the edges it moves.
+    private struct Drag {
+        var index: Int
+        var start: CGRect
+        var edges: RegionDrag.Edges
+    }
+
+    @State private var drag: Drag?
 
     var body: some View {
-        let outline = CGRect(
-            x: region.minX * size.width, y: region.minY * size.height, width: region.width * size.width, height: region.height * size.height
-        )
+        let outlines = regions.map(outline)
 
         ZStack(alignment: .topLeading) {
             if let image {
@@ -50,20 +57,27 @@ struct RegionPad: View {
             Canvas { context, size in
                 context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black.opacity(0.5)))
                 context.blendMode = .clear
-                context.fill(Path(outline), with: .color(.black))
-            }
-            Rectangle()
-                .strokeBorder(EditorTheme.accent, lineWidth: 2)
-                .overlay {
-                    ForEach(Self.corners.indices, id: \.self) { corner in
-                        RoundedRectangle(cornerRadius: 1.5)
-                            .fill(EditorTheme.accent)
-                            .frame(width: 8, height: 8)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: Self.corners[corner])
-                    }
+                for outline in outlines {
+                    context.fill(Path(outline), with: .color(.black))
                 }
-                .frame(width: outline.width, height: outline.height)
-                .offset(x: outline.minX, y: outline.minY)
+            }
+            ForEach(outlines.indices, id: \.self) { index in
+                let isSelected = index == selection
+                Rectangle()
+                    .strokeBorder(isSelected ? EditorTheme.accent : .white.opacity(0.8), lineWidth: isSelected ? 2 : 1)
+                    .overlay {
+                        if isSelected {
+                            ForEach(Self.corners.indices, id: \.self) { corner in
+                                RoundedRectangle(cornerRadius: 1.5)
+                                    .fill(EditorTheme.accent)
+                                    .frame(width: 8, height: 8)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: Self.corners[corner])
+                            }
+                        }
+                    }
+                    .frame(width: outlines[index].width, height: outlines[index].height)
+                    .offset(x: outlines[index].minX, y: outlines[index].minY)
+            }
         }
         .aspectRatio(videoSize, contentMode: .fit)
         .clipShape(.rect(cornerRadius: 6))
@@ -76,21 +90,39 @@ struct RegionPad: View {
             DragGesture(minimumDistance: 1)
                 .onChanged { value in
                     guard size.width > 0, size.height > 0 else { return }
-                    let current = drag ?? (region, Self.edges(at: value.startLocation, of: outline))
+                    guard let current = drag ?? grab(at: value.startLocation, in: outlines) else { return }
                     drag = current
-                    guard !current.edges.isEmpty else { return }
-                    region = RegionDrag.dragged(
+                    regions[current.index] = RegionDrag.dragged(
                         current.start, edges: current.edges,
                         by: CGSize(width: value.translation.width / size.width, height: value.translation.height / size.height),
                         minimumSize: minimumSize
                     )
                 }
                 .onEnded { _ in
+                    guard drag != nil else { return }
                     drag = nil
                     onEnd()
                 }
         )
         .accessibilityLabel(Text(label))
+    }
+
+    private func outline(of region: CGRect) -> CGRect {
+        CGRect(x: region.minX * size.width, y: region.minY * size.height, width: region.width * size.width, height: region.height * size.height)
+    }
+
+    /// What a press at `point` drags: the selected rectangle's edges near it, or else the topmost rectangle under it,
+    /// which it selects.
+    private func grab(at point: CGPoint, in outlines: [CGRect]) -> Drag? {
+        if regions.indices.contains(selection) {
+            let edges = Self.edges(at: point, of: outlines[selection])
+            if !edges.isEmpty {
+                return Drag(index: selection, start: regions[selection], edges: edges)
+            }
+        }
+        guard let index = outlines.lastIndex(where: { $0.contains(point) }) else { return nil }
+        selection = index
+        return Drag(index: index, start: regions[index], edges: .all)
     }
 
     /// The edges within ``edgeReach`` of `point`, all four inside the outline away from them, none outside it.

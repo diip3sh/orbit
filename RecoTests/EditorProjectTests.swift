@@ -38,7 +38,7 @@ struct EditorProjectTests {
         project.canvas.borderWidth = 0.01
         project.canvas.borderColor = RGBAColor(red: 1, green: 0, blue: 0, alpha: 1)
         project.audio[track: 1].isMuted = true
-        project.masks = [MaskSegment(range: 1..<2, rect: CGRect(x: 0.1, y: 0.2, width: 0.3, height: 0.4), kind: .pixelate)]
+        project.masks = [MaskSegment(range: 1..<2, rects: [CGRect(x: 0.1, y: 0.2, width: 0.3, height: 0.4)], kind: .pixelate)]
 
         let data = try JSONEncoder().encode(project)
         let json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])

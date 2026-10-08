@@ -40,9 +40,7 @@ struct EditorInspector: View {
                     switch tab {
                     case .background:
                         CanvasInspectorSection(viewModel: viewModel)
-                        if !viewModel.project.masks.isEmpty {
-                            MaskInspectorSection(viewModel: viewModel)
-                        }
+                        MaskInspectorSection(viewModel: viewModel)
                     case .audio:
                         if !trackNames.isEmpty {
                             AudioInspectorSection(viewModel: viewModel, trackNames: trackNames)

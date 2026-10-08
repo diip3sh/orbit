@@ -240,6 +240,10 @@ under 5 ms p95 (CLAUDE.md). Not yet checked in the running app.
 
 ### N9 — Find sensitive info
 
+**Status (2026-10-08):** built as below, in the Mask section and on the screenshot card (Hide Sensitive Info pixelates the
+shot). Masks hold several rectangles for it. Frames are read at 1 Hz only (no change detection); boxes join across consecutive
+samples and are hidden from the sample before to the one after. Not yet checked in the running app.
+
 - **What:** Find Sensitive Info proposes masks over emails, phone numbers, card numbers and API
   keys. The same finder runs on the screenshot card.
 - **How:** a pure `SensitiveTextFinder`.

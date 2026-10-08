@@ -121,7 +121,8 @@ final class QuickAccessController {
         loadTask?.cancel()
         loadTask = nil
         if let current {
-            closedScreenshot = current
+            // The card's shot, since hiding sensitive info replaces it
+            closedScreenshot = model?.screenshot ?? current
             self.current = nil
         }
 

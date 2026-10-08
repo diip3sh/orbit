@@ -40,6 +40,11 @@ final class EditorViewModel {
     /// How far an export is, from 0 to 1, or `nil` when none is running.
     private(set) var exportProgress: Double?
 
+    /// How far Find Sensitive Info is, from 0 to 1, or `nil` when it isn't running, and how much it found last.
+    var sensitiveInfoProgress: Double?
+    var sensitiveInfoFound: Int?
+    @ObservationIgnored var sensitiveInfoSearch: Task<Void, Never>?
+
     /// The project as last read from or written to disk.
     @ObservationIgnored private var savedProject = EditorProject()
     @ObservationIgnored private(set) var autosave: Task<Void, Never>?
@@ -274,6 +279,7 @@ final class EditorViewModel {
     /// Releases the player and filmstrip and saves pending edits. Called when the window closes.
     func close() async {
         rebuild?.cancel()
+        sensitiveInfoSearch?.cancel()
         playback.release()
         thumbnails = []
         await releaseAudioFiles()

@@ -90,6 +90,20 @@ struct QuickAccessViewModelTests {
         #expect(pasteboard.string(forType: .string) == "previous")
         #expect(probe.closed == 0)
     }
+
+    @Test func hidingNothingSensitiveSaysSoAndKeepsTheShot() async throws {
+        let probe = CardProbe()
+        let model = try probe.makeModel(image: .filled(width: 400, height: 200))
+        defer { model.removeDragFile() }
+        let before = model.screenshot.image
+
+        await model.hideSensitiveInfo()
+
+        #expect(model.feedback == .nothingToHide)
+        #expect(!model.isHidingSensitiveInfo)
+        #expect(model.screenshot.image === before)
+        #expect(probe.closed == 0)
+    }
 }
 
 /// Builds card models and records what they ask their owner to do

@@ -16,7 +16,7 @@ import UniformTypeIdentifiers
 final class QuickAccessViewModel {
 
     /// A short confirmation shown on the card: on the Copy or Save button, or as a toast for text
-    enum Feedback {
+    enum Feedback: Equatable {
         case copied
         case saved
         case textCopied
@@ -24,6 +24,8 @@ final class QuickAccessViewModel {
         case noTextFound
         case copyFailed
         case textFailed
+        case hidden(Int)
+        case nothingToHide
 
         var message: String {
             switch self {
@@ -34,6 +36,8 @@ final class QuickAccessViewModel {
             case .noTextFound: "No Text Found"
             case .copyFailed: "Couldn't Copy"
             case .textFailed: "Couldn't Read the Text"
+            case .hidden(let count): count == 1 ? "Hid 1 Item" : "Hid \(count) Items"
+            case .nothingToHide: "Nothing Sensitive Found"
             }
         }
 
@@ -43,16 +47,18 @@ final class QuickAccessViewModel {
         }
     }
 
-    let screenshot: Screenshot
+    /// Replaced, with its preview, when its private text is hidden
+    private(set) var screenshot: Screenshot
 
     /// Drawn at the card's size; the full image is only encoded when copied, saved or dragged
-    let preview: CGImage
+    private(set) var preview: CGImage
 
     /// False once the card is on its way out, which plays its exit; set by `QuickAccessController`
     var isPresented = true
 
     private(set) var feedback: Feedback?
     private(set) var isRecognizingText = false
+    private(set) var isHidingSensitiveInfo = false
 
     /// Closes the card. Set by `QuickAccessController`, cleared when the card goes away.
     @ObservationIgnored var onClose: (@MainActor () -> Void)?
@@ -122,6 +128,32 @@ final class QuickAccessViewModel {
             show(found.isEmpty ? .textCopied : .codeCopied)
         } catch {
             logger.error("Text recognition failed: \(error.localizedDescription)")
+            show(.textFailed)
+        }
+    }
+
+    /// Pixelates the emails, phone numbers, card numbers and API keys in the shot; the card stays open, showing
+    /// the result. Copy, Save, Pin and drag-out then use the hidden shot.
+    func hideSensitiveInfo() async {
+        isHidingSensitiveInfo = true
+        defer { isHidingSensitiveInfo = false }
+        do {
+            let (hidden, count) = try await ScreenshotRedactor.hidingSensitiveText(in: screenshot)
+            guard count > 0 else {
+                show(.nothingToHide)
+                return
+            }
+            guard let preview = await ImageDownsampler.thumbnail(of: hidden.image, maxPixelSize: CGFloat(max(preview.width, preview.height))) else {
+                show(.textFailed)
+                return
+            }
+            screenshot = hidden
+            self.preview = preview
+            removeDragFile()
+            writeDragFile()
+            show(.hidden(count))
+        } catch {
+            logger.error("Couldn't hide sensitive text: \(error.localizedDescription)")
             show(.textFailed)
         }
     }

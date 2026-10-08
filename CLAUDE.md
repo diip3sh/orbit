@@ -266,7 +266,7 @@ ended, on the pointer's sides facing away from the captured area (`Screenshot.re
 mouse (clear of notifications and the menu bar popover, top-right). The card takes the screenshot's shape
 (`cardSize(for:)`: fitted in 260×220, never enlarged, at least 200×120) on an 8 pt glass edge. **Copy ⌘C** and
 **Save ⌘S** (the shortcut shown dimmed in the button) always sit along its bottom edge; under the pointer the shot
-dims and shows Close, **Recognize Text** and **Pin** as small icons in its corners. The card takes key when it appears, without
+dims and shows Close, **Hide Sensitive Info** (N9), **Recognize Text** and **Pin** as small icons in its corners. The card takes key when it appears, without
 activating the app, so the shortcuts work until another window is clicked; typing goes to the card meanwhile.
 It grows from the card's corner nearest the pointer (`QuickAccessController.anchor(for:pointer:)`, the
 bottom-left without a region) and shrinks back there when closed, copied, saved or pinned; `hide()` and
@@ -286,8 +286,9 @@ it was only the way in, so Esc on an area selection closes that state and leaves
   fade. **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed
   notification is sent. **Recognize Text** (C7): the
   image's text to the clipboard, or, when it holds QR codes or barcodes, their payloads (N16: `TextRecognizer.codes`, Vision's
-  `DetectBarcodesRequest` alongside the text request; Code Copied). **Pin** (C8): the image in its own panel, then closes. Recognize Text
-  confirms on the card for 1.5 s.
+  `DetectBarcodesRequest` alongside the text request; Code Copied). **Hide Sensitive Info** (N9): pixelates emails, phone numbers,
+  card numbers and API keys into the shot, which the card then shows and every other action uses. **Pin** (C8): the image in its
+  own panel, then closes. Recognize Text and Hide Sensitive Info confirm on the card for 1.5 s.
 
 | File | Role |
 |---|---|
@@ -686,17 +687,37 @@ Key facts:
   generated again in the same undo step (not per drag step: ~34 ms for 10 minutes); manual fixed zooms keep their fractions,
   so they shift with a new crop. The filmstrip and the timeline show the whole frame.
 - **Masks** (N8, 2026-10-08; **M** or the transport's Add Mask, a mask lane under the zoom lane once there is one, the Background
-  tab's Mask section for the selected one: Blur, Pixelate or Spotlight and a `RegionPad` on the cropped frame where it starts):
-  `EditorProject.masks` (`MaskSegment`: source range, rectangle as fractions of the crop from its top-left, kind; 3 s and
-  30% of each side when added, at least 2% a side and 0.25 s), a `TimelineClip` list like the zooms, so masks are sorted and
-  apart: **one mask at a time**. `RenderPlan.masks` holds them in the crop's Core Image pixels on whole pixels (`PlannedMask`);
-  `FrameRenderer.masked(_:at:plan:)` applies the one showing at the frame's source time right after the crop, before zoom and
-  overlays, so a mask stays on the content and the cursor and click rings stay over it. Blur: the clamped frame blurred at sigma
-  1.2% of the shorter side, cut to the rectangle. Pixelate: `CIPixellate` cells of 2% of the shorter side (at least 4 px) from the
-  rectangle's corner, each multiplied by a random grey of 0.94–1.06 (`CIRandomGenerator`, the same every frame), so a cell is
-  no longer the average of what's under it and can't be matched back. Spotlight: everything else at 40%. Measured 2026-10-08
-  on an M2 (Mac14,2), Debug, load average 5, a 3840×2160 frame on the default canvas, 180 frames: no mask 2.6 ms p50 / 3.2 p95,
+  tab's Mask section for the selected one: Blur, Pixelate or Spotlight, a `RegionPad` on the cropped frame where it starts with
+  every rectangle outlined and the selected one's handles, Add Area and Remove Area): `EditorProject.masks` (`MaskSegment`:
+  source range, one or more rectangles as fractions of the crop from its top-left, kind; 3 s and 30% of each side when added,
+  at least 2% a side and 0.25 s), a `TimelineClip` list like the zooms, so masks are sorted and apart: **one mask at a time**,
+  which is why a mask holds several rectangles (a frame often shows two things to hide at once). `RenderPlan.masks` holds
+  them in the crop's Core Image pixels on whole pixels (`PlannedMask`); `FrameRenderer.masked(_:at:plan:)` applies the one
+  showing at the frame's source time right after the crop, before zoom and overlays, so a mask stays on the content and the
+  cursor and click rings stay over it; `MaskRenderer.apply(_:to:of:)` does the pixels, for the screenshot card too. Blur: the
+  clamped frame blurred at sigma 1.2% of the shorter side, cut to each rectangle. Pixelate: `CIPixellate` cells of 2% of the
+  shorter side (at least 4 px) from each rectangle's corner, each cell one pixel's colour (not an average: 8 px cells over 4 px
+  strokes came out solid black) multiplied by a random grey of 0.94–1.06 (`CIRandomGenerator`, the same every frame), so cells
+  can't be matched against rendered candidates. Spotlight: everything else at 40%. Measured 2026-10-08 on an M2 (Mac14,2),
+  Debug, load average 5, a 3840×2160 frame on the default canvas, one rectangle, 180 frames: no mask 2.6 ms p50 / 3.2 p95,
   blur 3.7 / 4.0, pixelate 4.5 / 4.9, spotlight 3.0 / 3.1.
+- **Find Sensitive Info** (N9, 2026-10-08; the Mask section's button, with progress and Cancel while it runs): reads a frame
+  a second of the kept parts (`SensitiveInfoScanner`: `AVAssetImageGenerator` with half a second's tolerance, each sample at
+  the frame's own time, cut to the crop), finds text with Vision (`SensitiveTextFinder`: `RecognizeTextRequest` `.fast` with
+  `minimumTextHeightFraction` 0.008, since at the default `.fast` read nothing at 26 px on 4K, measured for spec 0004; about
+  150 ms a 4K frame, so 10 minutes take ~90 s off the main actor) and what in it is private (`SensitiveText`, pure:
+  `NSDataDetector` phone numbers and `mailto:` links, so plain links aren't masked; 13–19 digits passing Luhn for cards, which
+  the detectors don't find; `sk-`, `sk_live_`, `gh*_`, `github_pat_`, `AKIA`, `xox*-` keys; `NSRegularExpression`, since Swift's
+  `Regex` has no lookbehind and isn't `Sendable`). `RecognizedText.boundingBox(for:)` turns each match into a box, padded by a
+  quarter of its height, at least a mask's minimum size. `SensitiveMasks.masks(from:interval:duration:)` (pure) joins a box
+  with the overlapping one in the sample before into one rectangle covering everywhere it was, hidden from the sample before
+  it was seen to the one after (text can come or go any time between), so only text showing under a second can be missed;
+  rectangles overlapping in time share a mask. `merging(_:into:)` adds them to the project's masks in one undo step: a found
+  mask overlapping one made by hand joins it, which keeps its id and kind and grows to cover both. Found masks are Pixelate.
+  The footer says how many were masked and never that everything was found. On the **screenshot card**, Hide Sensitive Info
+  (`hugeicons-view-off-slash`, first of the top-right icons) runs the same finder at `.accurate` (one still) and pixelates the
+  boxes into the shot (`ScreenshotRedactor`, through `MaskRenderer`); the card then shows and copies, saves, pins and drags
+  the hidden shot, and a toast says how many items were hidden. The HDR copy is dropped, so a hidden shot saves as PNG.
 - HDR frames are drawn without color management too: the plan draws its overlays once in the
   recording's encoding (`OverlayImages.encoded`), SDR white at 203 nits (BT.2408). Their
   semi-transparent parts (the chip's backing, the cursor's shadow, a fading ring) blend in PQ's
