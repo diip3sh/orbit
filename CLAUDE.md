@@ -218,6 +218,15 @@ indicator stays on); every sample is dropped and the paused time is cut from the
 
 Audio buffers straddling a pause edge are dropped whole (gap ≤ ~21 ms per edge, marked `ponytail:`).
 
+### N20 — Cancel and restart (spec 0004)
+
+The capture toolbar's live pill has **Cancel** (trash) and **Restart** beside Pause; global shortcuts **Cancel
+Recording** and **Restart Recording** (Settings → Shortcuts, no defaults: a stray global key would throw a take away),
+`reco://cancel` and `reco://restart`. `RecorderViewModel.cancelRecording()` stops what feeds the take (`endCapture()`,
+shared with `stopRecording`), drops the buffered telemetry (`InputTelemetryRecorder.discard()`) and cancels the writer,
+which deletes the movie: nothing is saved, notified or opened. It also cancels a countdown. `restartRecording()` cancels,
+then starts again on the same selection, through the countdown unless it came from `reco://restart`.
+
 ### F5 — Countdown (`feat/countdown`)
 
 **Settings → General → Recording → Countdown**: Off / 3 / 5 / 10 s (default 3). Every user start (the capture
@@ -1273,7 +1282,7 @@ Reference repos for later work: `syi0808/screenize` and `imbhargav5/open-recorde
 
 Recordings can be scripted: select content once in the menu, then drive the running build with
 `open -g -a /tmp/bc-build/dd/Build/Products/Debug/Reco.app "reco://toggle"` (starts
-when content is selected, stops when recording; no countdown), `reco://pause` and
+when content is selected, stops when recording; no countdown), `reco://pause`, `reco://cancel`, `reco://restart` and
 `reco://edit-last` (opens the editor). Use `-a` with the path:
 a plain `open` may launch another copy (e.g. Xcode's DerivedData build). Play `afplay` ticks at
 logged wall times, then check each tick lands where expected in the audio, shifted by the paused time.

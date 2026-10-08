@@ -7,7 +7,7 @@ import KeyboardShortcuts
 import SwiftUI
 
 /// During a take: what it records, shown but fixed until it ends, and the live pill with the time,
-/// pause and stop. The time is red while it runs, dim while paused.
+/// cancel, restart, pause and stop. The time is red while it runs, dim while paused.
 struct CaptureToolbarLiveControls: View {
     let recorder: RecorderViewModel
 
@@ -30,6 +30,24 @@ struct CaptureToolbarLiveControls: View {
                 .padding(.leading, EditorTheme.mediumSpacing)
                 .padding(.trailing, EditorTheme.tightSpacing)
                 .accessibilityLabel(recorder.isPaused ? "Paused at \(recorder.formattedDuration)" : "Recording, \(recorder.formattedDuration)")
+
+            Button {
+                Task { await recorder.cancelRecording() }
+            } label: {
+                Label("Cancel Recording", systemImage: "trash")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.captureToolbar)
+            .captureToolbarTooltip("Cancel", shortcut: Self.shortcut(for: .cancelRecording))
+
+            Button {
+                Task { await recorder.restartRecording() }
+            } label: {
+                Label("Restart Recording", systemImage: "arrow.counterclockwise")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.captureToolbar)
+            .captureToolbarTooltip("Restart", shortcut: Self.shortcut(for: .restartRecording))
 
             Button {
                 recorder.togglePause()

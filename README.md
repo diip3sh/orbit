@@ -123,6 +123,8 @@ These work from any app and can be changed in **Settings → Shortcuts**.
 | `reco://toggle` | Start or stop recording, without a countdown |
 | `reco://toggle-copy` | The same, and copy the file when it is saved |
 | `reco://pause` | Pause or resume |
+| `reco://cancel` | Stop recording and throw the take away |
+| `reco://restart` | Throw the take away and record the same selection again, without a countdown |
 | `reco://edit-last` | Open the last recording in the editor |
 
 ## Development & contribution

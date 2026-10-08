@@ -259,7 +259,7 @@ final class RecorderViewModel {
 
             // Determine video size from filter
             if let filter = selectedContentFilter {
-                videoSize = await getContentSize(from: filter)
+                videoSize = contentSize(of: filter)
             }
             logger.info("Video size: \(self.videoSize.width)x\(self.videoSize.height)")
 
@@ -342,16 +342,9 @@ final class RecorderViewModel {
         guard isRecording else { return }
 
         state = .stopping
-        stopTimer()
-        isPaused = false
-        selectionBorderFrame.dismiss()
-        inputTelemetry.stop()
 
         do {
-            // Stop capture and camera session
-            try await captureEngine.stopCapture()
-            cameraSession.stop()
-            isPresenterOverlayActive = false
+            try await endCapture()
 
             // Finalize file. The session start and pauses are read first because finishing resets them.
             let sessionStart = assetWriter.sessionStartTime
@@ -375,7 +368,7 @@ final class RecorderViewModel {
             reportSaved(outputURL, videoFrameCount: videoFrameCount, cursorLeftToEditor: cursorLeftToEditor, copied: copyToClipboard)
 
             if copyToClipboard {
-                copyFileToClipboard(outputURL)
+                FilePasteboard.copy(file: outputURL)
             }
 
             settings.stopAccessingOutputDirectory()
@@ -388,6 +381,19 @@ final class RecorderViewModel {
             notificationService.sendRecordingFailedNotification(error: error)
             logger.error("Failed to stop recording: \(error.localizedDescription)")
         }
+    }
+
+    /// Stops everything that feeds the take, leaving the writer to be finished or cancelled.
+    private func endCapture() async throws {
+        stopTimer()
+        isPaused = false
+        selectionBorderFrame.dismiss()
+        inputTelemetry.stop()
+        defer {
+            cameraSession.stop()
+            isPresenterOverlayActive = false
+        }
+        try await captureEngine.stopCapture()
     }
 
     /// Resets the capture selection, removing the border frame and clearing state
@@ -424,50 +430,6 @@ final class RecorderViewModel {
         recordingTimer?.invalidate()
         recordingTimer = nil
         recordingStartTime = nil
-    }
-
-    // MARK: - Helper Methods
-
-    private func copyFileToClipboard(_ url: URL) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects([url as NSURL])
-    }
-
-    private func getContentSize(from filter: SCContentFilter) async -> CGSize {
-        // Apply scale if Capture Native Resolution setting is enabled
-        let applyScale: Bool = settings.captureNativeResolution
-
-        // If area selection is active, use the source rect dimensions.
-        // The sourceRect is already snapped to even pixel counts in presentAreaSelection().
-        if let sourceRect = selectedSourceRect {
-            return CaptureSizeCalculator.videoSize(
-                contentRect: sourceRect,
-                scale: CGFloat(filter.pointPixelScale),
-                useNativeResolution: applyScale
-            )
-        }
-
-        // Get the content rect from the filter
-        let rect = filter.contentRect
-
-        if rect.width > 0 && rect.height > 0 {
-            return CaptureSizeCalculator.videoSize(
-                contentRect: rect,
-                scale: filter.captureScale,
-                useNativeResolution: applyScale
-            )
-        }
-
-        // Fallback to main screen size
-        if let screen = NSScreen.main {
-            return CGSize(
-                width: applyScale ? screen.frame.width * screen.backingScaleFactor : screen.frame.width,
-                height: applyScale ? screen.frame.height * screen.backingScaleFactor : screen.frame.height
-            )
-        }
-
-        return CGSize(width: 1920, height: 1080)
     }
 }
 
@@ -514,6 +476,41 @@ extension RecorderViewModel {
 
         isPaused.toggle()
         logger.info("Recording \(self.isPaused ? "paused" : "resumed")")
+    }
+}
+
+// MARK: - Cancelling
+
+extension RecorderViewModel {
+
+    /// Ends the take and throws it away: neither the movie nor its telemetry is kept. Cancels a countdown too.
+    func cancelRecording() async {
+        cancelCountdown()
+        guard isRecording else { return }
+
+        state = .stopping
+        do {
+            try await endCapture()
+        } catch {
+            logger.error("Failed to stop capture while cancelling: \(error.localizedDescription)")
+        }
+        inputTelemetry.discard()
+        assetWriter.cancel()
+        settings.stopAccessingOutputDirectory()
+        state = .idle
+        recordingDuration = 0
+        logger.info("Recording cancelled")
+    }
+
+    /// Throws the take away and records the same selection again, after the countdown unless `countdown` is false.
+    func restartRecording(countdown useCountdown: Bool = true) async {
+        guard isRecording else { return }
+        await cancelRecording()
+        if useCountdown {
+            await startRecordingWithCountdown()
+        } else {
+            await startRecording()
+        }
     }
 }
 

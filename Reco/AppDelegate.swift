@@ -162,33 +162,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Keyboard Shortcuts
 
     private func registerKeyboardShortcuts() {
-        KeyboardShortcuts.onKeyUp(for: .toggleRecording) { [viewModel] in
-            Task { @MainActor in
-                await viewModel.toggleRecording()
-            }
-        }
-
-        KeyboardShortcuts.onKeyUp(for: .pauseRecording) { [viewModel] in
-            Task { @MainActor in
-                viewModel.togglePause()
+        let recording: [(KeyboardShortcuts.Name, @MainActor (RecorderViewModel) async -> Void)] = [
+            (.toggleRecording, { await $0.toggleRecording() }),
+            (.pauseRecording, { $0.togglePause() }),
+            (.restartRecording, { await $0.restartRecording() }),
+            (.cancelRecording, { await $0.cancelRecording() }),
+            (.selectContent, { $0.presentPicker() }),
+            (.selectArea, { await $0.presentAreaSelection() })
+        ]
+        for (name, action) in recording {
+            KeyboardShortcuts.onKeyUp(for: name) { [viewModel] in
+                Task { @MainActor in
+                    await action(viewModel)
+                }
             }
         }
 
         KeyboardShortcuts.onKeyUp(for: .recordWithAgent) { [weak self] in
             Task { @MainActor in
                 self?.showAgentRecording()
-            }
-        }
-
-        KeyboardShortcuts.onKeyUp(for: .selectContent) { [viewModel] in
-            Task { @MainActor in
-                viewModel.presentPicker()
-            }
-        }
-
-        KeyboardShortcuts.onKeyUp(for: .selectArea) { [viewModel] in
-            Task { @MainActor in
-                await viewModel.presentAreaSelection()
             }
         }
 
@@ -240,6 +232,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         case "pause":
             viewModel.togglePause()
+        case "cancel":
+            Task { await viewModel.cancelRecording() }
+        case "restart":
+            Task { await viewModel.restartRecording(countdown: false) }
         case "edit-last":
             editLastRecording()
         case "open-recordings":

@@ -74,7 +74,7 @@ own spec before any code.
 
 N20 and N21 are small and can land any time.
 
-**Status (2026-10-08):** built: N1, N2, N3, N7, N10, N22; partly: N15 (history), N17 (freezing). The rest is open.
+**Status (2026-10-08):** built: N1, N2, N3, N7, N10, N20, N22; partly: N15 (history), N17 (freezing). The rest is open.
 
 Every item follows spec 0003's standards: a pure core with tests, performance measured before a
 claim, docs updated, and the 8 ms frame budget kept.
@@ -371,6 +371,10 @@ edges. Recording keeps the live selection.
   (256×192 mask), `.balanced` 10.2 ms; the mask is always 4:3.
 
 ### N20 — Cancel and restart a recording
+
+- **Status (2026-10-08): shipped.** Cancel and Restart buttons in the capture toolbar's live pill, global shortcuts
+  without defaults, `reco://cancel` and `reco://restart` (no countdown; the button and shortcut use it). Tested: a
+  cancelled writer leaves no file, paused or not. Not yet checked in the running app.
 
 - **What:** shortcuts plus `reco://cancel` and `reco://restart`.
   - Cancel throws away the movie and its telemetry.
