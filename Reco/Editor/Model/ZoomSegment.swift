@@ -56,11 +56,12 @@ nonisolated struct ZoomSegment: Codable, Equatable, Identifiable, Sendable {
     /// A zoom added by hand lasts this long, if there's room.
     static let defaultDuration = 3.0
 
-    /// The centre nearest `center` at which a view magnified `scale` times stays inside the frame.
-    /// Both are fractions of the video's width and height from its top-left corner.
-    static func clamped(_ center: CGPoint, scale: Double) -> CGPoint {
-        let margin = 0.5 / max(scale, 1)
-        return CGPoint(x: min(max(center.x, margin), 1 - margin), y: min(max(center.y, margin), 1 - margin))
+    /// The centre nearest `center` at which `view` (the part of the video shown at 1×, as fractions of it)
+    /// magnified `scale` times stays inside the frame. Both points are fractions of the video's width and
+    /// height from its top-left corner.
+    static func clamped(_ center: CGPoint, scale: Double, in view: CGSize = CGSize(width: 1, height: 1)) -> CGPoint {
+        let (marginX, marginY) = (view.width / 2 / max(scale, 1), view.height / 2 / max(scale, 1))
+        return CGPoint(x: min(max(center.x, marginX), 1 - marginX), y: min(max(center.y, marginY), 1 - marginY))
     }
 }
 

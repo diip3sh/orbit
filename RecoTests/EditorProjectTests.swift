@@ -32,6 +32,7 @@ struct EditorProjectTests {
         project.motionBlur = 0.6
         project.cursor.smoothing = .off
         project.canvas.aspect = .portrait
+        project.canvas.fillsFrame = true
         project.canvas.background = .image
         project.canvas.imageBookmark = Data([1, 2, 3])
         project.canvas.backgroundBlur = 0.4

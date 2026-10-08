@@ -103,6 +103,42 @@ struct CameraPathTests {
         #expect(isClose(path.viewport(at: 6), to: CameraPath.Viewport(center: CGPoint(x: 0.75, y: 0.5), scale: 2)))
     }
 
+    /// The left half of the video, as a 1:1 canvas filled from 2:1 would show.
+    private let halfView = CGSize(width: 0.5, height: 1)
+
+    @Test func aBaseViewSmallerThanTheVideoFollowsTheCursorBetweenZooms() {
+        let cursor = [(time: 0.0, point: CGPoint(x: 0.1, y: 0.5)), (time: 3.0, point: CGPoint(x: 0.9, y: 0.5))]
+        let path = CameraPath(zooms: [], cursor: cursor, duration: 10, baseView: halfView)
+
+        // Starts on the cursor, as far left as the view goes, with no move in from the centre
+        #expect(isClose(path.viewport(at: 0), to: CameraPath.Viewport(center: CGPoint(x: 0.25, y: 0.5), scale: 1)))
+        #expect(isClose(path.viewport(at: 2.9), to: CameraPath.Viewport(center: CGPoint(x: 0.25, y: 0.5), scale: 1)))
+        #expect(isClose(path.viewport(at: 6), to: CameraPath.Viewport(center: CGPoint(x: 0.75, y: 0.5), scale: 1)))
+    }
+
+    @Test func aBaseViewWithoutACursorStaysCentred() {
+        let path = CameraPath(zooms: [], cursor: [], duration: 10, baseView: halfView)
+
+        #expect(path.viewport(at: 5) == .whole)
+    }
+
+    @Test func zoomsScaleFromTheBaseViewAndStayInsideTheFrame() {
+        let path = CameraPath(zooms: [zoom(1..<5, at: CGPoint(x: 1, y: 0))], cursor: [], duration: 10, baseView: halfView)
+
+        // At 2×, the view is a quarter of the width and half the height, so its centre can get within 0.125 and 0.25 of the edges
+        #expect(isClose(path.viewport(at: 4), to: CameraPath.Viewport(center: CGPoint(x: 0.875, y: 0.25), scale: 2)))
+        #expect(path.viewport(at: 9) == .whole)
+    }
+
+    @Test func followingReachesByTheBaseView() {
+        let center = CGPoint(x: 0.5, y: 0.5)
+
+        // At 2× of the half view, the dead zone reaches 0.0625 of the frame sideways and 0.125 up and down
+        #expect(CameraPath.following(CGPoint(x: 0.55, y: 0.6), from: center, scale: 2, in: halfView) == center)
+        #expect(CameraPath.following(CGPoint(x: 0.75, y: 0.5), from: center, scale: 2, in: halfView) == CGPoint(x: 0.6875, y: 0.5))
+        #expect(CameraPath.following(CGPoint(x: 0.5, y: 0.9), from: center, scale: 2, in: halfView) == CGPoint(x: 0.5, y: 0.75))
+    }
+
     @Test func aZoomFollowingNoCursorCentresOnTheFrame() {
         let path = CameraPath(zooms: [ZoomSegment(range: 0..<10, focus: .followCursor)], cursor: [], duration: 10)
 

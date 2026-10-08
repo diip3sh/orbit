@@ -226,6 +226,27 @@ struct RenderPlanTests {
         #expect(export.canvas.videoFrame.height == 504)
     }
 
+    @Test func fillingFollowsTheCursorThroughTheRecording() async {
+        var project = EditorProject()
+        project.canvas = CanvasStyle(aspect: .portrait, fillsFrame: true, padding: 0)
+        var telemetry = telemetry
+        // 50 pt into the 800 pt window, then 650 pt in after it has moved
+        telemetry.cursor = [.init(time: 0, location: CGPoint(x: 150, y: 380)), .init(time: 6, location: CGPoint(x: 850, y: 380))]
+
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: .none)
+
+        // 1200×2134 of a 1600×1200 video: its full height and 0.4217 of its width
+        #expect(plan.canvas.size == CGSize(width: 1200, height: 2134))
+        #expect(plan.canvas.videoFrame == CGRect(origin: .zero, size: plan.canvas.size))
+        #expect(plan.camera.baseView == plan.canvas.baseView)
+        #expect(abs(plan.camera.baseView.width - 0.4217) < 1e-3 && plan.camera.baseView.height == 1)
+        // The view starts as far left as it goes for the cursor at 0.0625, then follows it to 0.8125 at a dead zone's reach
+        let before = plan.camera.viewport(at: 2.9)
+        let after = plan.camera.viewport(at: 9.9)
+        #expect(abs(before.center.x - 0.2108) < 1e-3 && before.scale == 1)
+        #expect(abs(after.center.x - 0.7071) < 1e-3 && after.scale == 1)
+    }
+
     @Test func buildsOneChipImagePerLabel() async {
         let plan = await RenderPlan.build(
             project: EditorProject(), source: source(telemetry: telemetry), resources: RenderResources(keyLabels: KeyLabelFormatter.layout(id: "com.apple.keylayout.US"))

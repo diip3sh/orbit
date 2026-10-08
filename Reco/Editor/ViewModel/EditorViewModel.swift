@@ -226,7 +226,7 @@ final class EditorViewModel {
     private func exportShorterSide(_ resolution: Int?) -> CGFloat? {
         guard let videoSize else { return nil }
         return resolution.map { CGFloat($0) }
-            ?? CanvasLayout.nativeShorterSide(for: videoSize, aspect: project.canvas.aspect, padding: project.canvas.padding)
+            ?? CanvasLayout.nativeShorterSide(for: videoSize, style: project.canvas)
     }
 
     /// Exports the edited video as `<name>-edited` to `destination` and returns where, or `nil` while the

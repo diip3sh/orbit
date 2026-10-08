@@ -37,11 +37,51 @@ struct CanvasLayoutTests {
     @Test func anExportAtTheNativeSizeKeepsTheVideosOwnPixels() {
         for video in [CGSize(width: 3420, height: 2224), CGSize(width: 1080, height: 1920)] {
             for aspect in CanvasStyle.Aspect.allCases {
-                let side = CanvasLayout.nativeShorterSide(for: video, aspect: aspect, padding: 0.08)
+                let style = CanvasStyle(aspect: aspect, padding: 0.08)
+                let side = CanvasLayout.nativeShorterSide(for: video, style: style)
                 let size = CanvasLayout.size(for: video, aspect: aspect, padding: 0.08, shorterSide: side)
                 #expect(CanvasLayout.videoFrame(for: video, in: size, padding: 0.08).size == video, "\(video) \(aspect)")
             }
         }
+    }
+
+    @Test func anExportAtTheNativeSizeKeepsTheFilledPartsOwnPixels() {
+        for video in [CGSize(width: 3420, height: 2224), CGSize(width: 1080, height: 1920), CGSize(width: 1917, height: 1079)] {
+            for aspect in CanvasStyle.Aspect.allCases where aspect != .source {
+                let style = CanvasStyle(aspect: aspect, fillsFrame: true, padding: 0.08)
+                let side = CanvasLayout.nativeShorterSide(for: video, style: style)
+                let size = CanvasLayout.size(for: video, aspect: aspect, padding: 0.08, shorterSide: side)
+                let frame = CanvasLayout.filledFrame(for: video, in: size, padding: 0.08)
+                let shown = CanvasLayout.baseView(for: video, shape: frame.size)
+                // The part shown is scaled onto the frame by exactly 1, and the padding stays within a few pixels of 8%
+                #expect(abs(frame.width / (video.width * shown.width) - 1) < 1e-9, "\(video) \(aspect): \(frame.size)")
+                #expect(abs(frame.height / (video.height * shown.height) - 1) < 1e-9, "\(video) \(aspect): \(frame.size)")
+                let inset = 0.08 * side
+                #expect(abs(frame.minX - inset) <= 6 && abs(frame.minY - inset) <= 6, "\(video) \(aspect): \(frame) in \(size)")
+            }
+        }
+    }
+
+    @Test func fillingCoversThePaddedSpaceWithThePartOfTheVideoInItsShape() {
+        let style = CanvasStyle(aspect: .square, fillsFrame: true, padding: 0.1, cornerRadius: 0, shadow: 0)
+        let layout = CanvasLayout(style: style, videoSize: CGSize(width: 400, height: 300), shorterSide: nil, background: nil)
+
+        #expect(layout.size == CGSize(width: 300, height: 300))
+        #expect(layout.videoFrame == CGRect(x: 30, y: 30, width: 240, height: 240))
+        // The video's full height, and as much of its width as is square
+        #expect(layout.baseView == CGSize(width: 0.75, height: 1))
+        #expect(CanvasLayout.baseView(for: CGSize(width: 400, height: 300), style: style) == CGSize(width: 0.75, height: 1))
+        // A space within the rounding of the part's own size takes that size: 3420×2224 in 16:9 at 2118 is 3766×2118,
+        // whose space is 3428×1780 for a part of 3420×1776
+        let native = CanvasLayout.filledFrame(for: CGSize(width: 3420, height: 2224), in: CGSize(width: 3766, height: 2118), padding: 0.08)
+        #expect(native == CGRect(x: 173, y: 171, width: 3420, height: 1776))
+        // Fitting, or in the video's own shape, the whole video
+        #expect(CanvasLayout.baseView(for: CGSize(width: 400, height: 300), style: CanvasStyle(aspect: .square, padding: 0.1)) == CameraPath.wholeVideo)
+        var own = style
+        own.aspect = .source
+        #expect(CanvasLayout.baseView(for: CGSize(width: 400, height: 300), style: own) == CameraPath.wholeVideo)
+        // A video narrower than the shape gives its full width
+        #expect(CanvasLayout.baseView(for: CGSize(width: 300, height: 600), shape: CGSize(width: 1, height: 1)) == CGSize(width: 1, height: 0.5))
     }
 
     @Test func fitsTheVideoInsideThePaddingOnWholePixels() {

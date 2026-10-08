@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 895 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 918 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -669,6 +669,22 @@ Key facts:
   border was left out: it looks like a border with less padding and would resample the video.
 - With padding, Original grows by it (`CanvasLayout.paddedRatio`), so the padding is equal on every side; a
   fixed shape whose ratio differs from the video's puts the rest on one axis.
+- **Fill** (N12, 2026-10-08; the Background tab's Video: Fit / Fill, shown in any shape but the recording's;
+  `CanvasStyle.fillsFrame`): the video covers the space inside the padding instead of fitting in it. `CanvasLayout.videoFrame`
+  is that space (`filledFrame`) and `baseView` the largest part of the video in its shape, as fractions of the video (a 16:9
+  recording in 9:16 shows 0.29 of its width); `CameraPath` takes the base view as what 1× shows: it follows the cursor
+  with it between zooms with the zooms' dead zone (`RenderPlan.camera` places every cursor sample then, not only the
+  followed zooms'), starts on the cursor instead of easing there from the centre, and clamps and scales zooms from it
+  (`ZoomSegment.clamped(_:scale:in:)`, `CameraPath.following(_:from:scale:in:)`; the zoom focus pad outlines the base view
+  at the zoom's scale). `FrameRenderer.transform(to:of:size:)` stretches the view to the video's size and `videoTransform`
+  the video onto the frame, so the two scale evenly. Original export: `nativeShorterSide` sizes the canvas for the part
+  shown, and since the canvas's even sides leave the padded space up to 10 px off that part's own size, `filledFrame` takes
+  the part's size when within `ownPixelsSlack` (12 px) of the space and lets the padding absorb the difference, and
+  `FrameRenderer.placement` moves a 1× video by whole pixels, so the export is the video's pixels panning. Automatic
+  zooms are still made for the whole video, so one may not fit the base view; it's clamped into it. Measured 2026-10-08
+  on an M2 (Mac14,2), Debug, load average 5–6 (noisy), a 3840×2160 frame on the 9:16 preview canvas (2160×3840), no
+  overlays, the cursor crossing the frame so the view pans, 180 frames, three runs: fit 3.2–5.6 ms p50, fill 3.8–7.2 ms p50
+  (a filling frame is always resampled, like a zoomed one; a fitted 1× frame isn't); p95 13–16 for both, load spikes.
 - Frames are drawn region by region (`CanvasLayout.regions`): the padding from the backdrop alone,
   the video in 8 bands, its rounded corners with the mask. Core Image evaluates every overlay
   across the whole region it renders; in bands it skips them where they aren't. Measured on an M1,

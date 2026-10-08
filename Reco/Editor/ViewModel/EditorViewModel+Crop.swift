@@ -18,6 +18,11 @@ extension EditorViewModel {
         source.map { VideoCrop.pixels(of: project.crop, in: $0.naturalSize).size }
     }
 
+    /// The part of the video the camera shows at 1× (``CanvasLayout/baseView``), for the zoom focus pad.
+    var baseView: CGSize {
+        videoSize.map { CanvasLayout.baseView(for: $0, style: project.canvas) } ?? CameraPath.wholeVideo
+    }
+
     /// The telemetry with every position in the crop, for automatic zooms.
     var croppedTelemetry: InputTelemetry? {
         guard let source else { return nil }

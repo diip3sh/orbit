@@ -79,9 +79,16 @@ nonisolated enum FrameRenderer {
     /// The cursor blurs from this far, in output pixels.
     static let cursorBlurThreshold = 1.0
 
-    /// Where the video sits at `time`: zoomed to the camera's view, and on the canvas.
+    /// Where the video sits at `time`: zoomed to the camera's view, and on the canvas. At the video's own pixels it
+    /// moves by whole ones, so a filling base view panning at 1× (an export at the original size) isn't resampled.
     private static func placement(at time: Double, plan: RenderPlan) -> CGAffineTransform {
-        transform(to: plan.camera.viewport(at: time), size: plan.videoSize).concatenating(plan.canvas.videoTransform)
+        var placement = transform(to: plan.camera.viewport(at: time), of: plan.camera.baseView, size: plan.videoSize)
+            .concatenating(plan.canvas.videoTransform)
+        if abs(placement.a - 1) < 1e-6, abs(placement.d - 1) < 1e-6 {
+            placement.tx.round()
+            placement.ty.round()
+        }
+        return placement
     }
 
     /// The placements to average for the frame at `time`: only the one at `time` when the shutter is closed
@@ -138,15 +145,17 @@ nonisolated enum FrameRenderer {
             .transformed(by: placement, highQualityDownsample: plan.downsamplesSmoothly)
     }
 
-    /// Maps the frame's Core Image pixels to the zoomed frame's: the part in `viewport` fills it.
-    private static func transform(to viewport: CameraPath.Viewport, size: CGSize) -> CGAffineTransform {
-        guard viewport.scale > 1 else { return .identity }
+    /// Maps the frame's Core Image pixels to the zoomed frame's: the part in `viewport`, `view` (the base view,
+    /// fractions of the frame) magnified, fills it.
+    private static func transform(to viewport: CameraPath.Viewport, of view: CGSize, size: CGSize) -> CGAffineTransform {
+        guard viewport.scale > 1 || view != CameraPath.wholeVideo else { return .identity }
         // The view's bottom-left corner in Core Image space
         let origin = CGPoint(
-            x: (viewport.center.x - 0.5 / viewport.scale) * size.width,
-            y: (1 - viewport.center.y - 0.5 / viewport.scale) * size.height
+            x: (viewport.center.x - view.width / 2 / viewport.scale) * size.width,
+            y: (1 - viewport.center.y - view.height / 2 / viewport.scale) * size.height
         )
-        return CGAffineTransform(translationX: -origin.x, y: -origin.y).concatenating(CGAffineTransform(scaleX: viewport.scale, y: viewport.scale))
+        return CGAffineTransform(translationX: -origin.x, y: -origin.y)
+            .concatenating(CGAffineTransform(scaleX: viewport.scale / view.width, y: viewport.scale / view.height))
     }
 
     /// The video in its shape over the background.

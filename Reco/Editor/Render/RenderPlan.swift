@@ -94,18 +94,18 @@ extension RenderPlan {
         let telemetry = source.telemetry?.cropped(to: cropPixels)
         let dynamicRange = target.keepsHDR ? source.dynamicRange : .sdr
         let timeMap = TimeMap(cuts: project.cuts, speeds: project.speeds, sourceDuration: source.duration, frameRate: source.frameRate)
+        let canvas = CanvasLayout(style: project.canvas, videoSize: videoSize, shorterSide: target.shorterSide, background: resources.background)
+            .encoded(in: dynamicRange)
         // The costliest parts, and independent, so they're built alongside the rest. For 10 minutes
         // with 455 zooms, 3,000 clicks and 12,000 keys (M1, Debug), the camera takes 38 ms and the
         // cursor 35; the plan builds in 42 ms instead of 105
-        async let camera = camera(for: project, telemetry: telemetry, timeMap: timeMap)
+        async let camera = camera(for: project, telemetry: telemetry, timeMap: timeMap, baseView: canvas.baseView)
         async let cursor = telemetry.flatMap {
             drawnCursor(
                 for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: resources.arrow,
                 loop: project.cursor.loops ? cursorLoop(for: timeMap) : nil, stop: cursorStop(before: project.cursor.stopDuration, for: timeMap)
             )
         }
-        let canvas = CanvasLayout(style: project.canvas, videoSize: videoSize, shorterSide: target.shorterSide, background: resources.background)
-            .encoded(in: dynamicRange)
 
         var clicks: [ClickMarker] = []
         var keystrokes: [KeystrokeChip] = []
@@ -227,13 +227,18 @@ extension RenderPlan {
     }
 
     /// The camera, moving on output time, so a zoom eases in at the same pace in a fast part, and across a cut
-    /// instead of jumping.
-    nonisolated static func camera(for project: EditorProject, telemetry: InputTelemetry?, timeMap: TimeMap) -> CameraPath {
-        CameraPath(
+    /// instead of jumping. A base view smaller than the video (``CanvasLayout/baseView``) follows the cursor
+    /// throughout, so every cursor sample is placed for it.
+    nonisolated static func camera(
+        for project: EditorProject, telemetry: InputTelemetry?, timeMap: TimeMap, baseView: CGSize = CameraPath.wholeVideo
+    ) -> CameraPath {
+        let followed = baseView == CameraPath.wholeVideo ? project.zooms : [ZoomSegment(range: 0..<timeMap.sourceDuration, focus: .followCursor)]
+        return CameraPath(
             zooms: outputZooms(project.zooms, timeMap: timeMap),
-            cursor: telemetry.map { cursorPoints(for: $0, during: project.zooms).map { (timeMap.outputTime(atSource: $0.time), $0.point) } } ?? [],
+            cursor: telemetry.map { cursorPoints(for: $0, during: followed).map { (timeMap.outputTime(atSource: $0.time), $0.point) } } ?? [],
             duration: timeMap.outputDuration,
-            stiffness: project.zoomMotion.frequency
+            stiffness: project.zoomMotion.frequency,
+            baseView: baseView
         )
     }
 

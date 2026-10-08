@@ -100,6 +100,7 @@ struct ZoomInspectorSection: View {
                         image: viewModel.croppedThumbnail(at: zoom.wrappedValue.range.lowerBound),
                         videoSize: videoSize,
                         scale: zoom.wrappedValue.scale,
+                        baseView: viewModel.baseView,
                         center: center
                     )
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))

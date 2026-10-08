@@ -27,6 +27,13 @@ struct CanvasInspectorSection: View {
                         .aspectRatio(aspect.ratio ?? videoSize.width / max(videoSize.height, 1), contentMode: .fit)
                 }
             }
+            // In the recording's own shape the video fills the frame either way
+            if viewModel.canvas.aspect != .source {
+                InspectorField("Video") {
+                    SegmentedChoice(selection: $viewModel.canvas.fillsFrame, options: [(false, "Fit"), (true, "Fill")])
+                }
+                .transition(.opacity)
+            }
 
             CropField(viewModel: viewModel)
 
@@ -73,6 +80,7 @@ struct CanvasInspectorSection: View {
             }
         }
         .editorMotion(value: viewModel.canvas.background)
+        .editorMotion(value: viewModel.canvas.aspect == .source)
         .task { await viewModel.loadWallpapers() }
         .fileImporter(isPresented: $choosesBackgroundImage, allowedContentTypes: [.image]) { result in
             if case .success(let url) = result {

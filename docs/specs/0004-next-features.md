@@ -74,7 +74,7 @@ own spec before any code.
 
 N20 and N21 are small and can land any time.
 
-**Status (2026-10-08):** built: N1, N2, N3, N7, N10, N15, N20, N21, N22; partly: N17 (freezing). The rest is open.
+**Status (2026-10-08):** built: N1, N2, N3, N7, N8, N9, N10, N11, N12, N15, N16, N20, N21, N22; partly: N17 (freezing). The rest is open.
 
 Every item follows spec 0003's standards: a pure core with tests, performance measured before a
 claim, docs updated, and the 8 ms frame budget kept.
@@ -304,6 +304,11 @@ automatic zooms are made again when a crop drag ends. Not yet checked in the run
 - **How:** `CameraPath` gets a base view, the largest rectangle of the canvas's shape that fits in
   the video. Between zooms it follows the cursor with the existing dead zone, and zooms scale from
   it. No renderer change: the view is already one transform.
+- **Status (2026-10-08): built**, as Fit / Fill in the Background tab for every shape but the recording's
+  (`CanvasStyle.fillsFrame`, `CanvasLayout.baseView`). The renderer did change a little: the base view is
+  stretched to the video's size and the video onto the frame, which together scale evenly, and a 1× video
+  moves by whole pixels so an Original export pans the recording's own pixels. Automatic zooms aren't
+  generated for the base view yet; one that doesn't fit is clamped into it. See CLAUDE.md, phase 6.
 
 ### N13 — Annotate screenshots (own spec)
 

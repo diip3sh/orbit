@@ -18,6 +18,9 @@ struct ZoomFocusPad: View {
     let videoSize: CGSize
     let scale: Double
 
+    /// The part of the video shown at 1×, as fractions of it (``CanvasLayout/baseView``), which the zoom magnifies.
+    var baseView = CameraPath.wholeVideo
+
     /// As fractions of the video's width and height from its top-left corner.
     @Binding var center: CGPoint
 
@@ -27,10 +30,11 @@ struct ZoomFocusPad: View {
     @State private var grabOffset: CGSize?
 
     var body: some View {
-        let shown = ZoomSegment.clamped(center, scale: scale)
+        let shown = ZoomSegment.clamped(center, scale: scale, in: baseView)
+        let viewSize = CGSize(width: size.width * baseView.width / scale, height: size.height * baseView.height / scale)
         let view = CGRect(
-            x: shown.x * size.width - size.width / scale / 2, y: shown.y * size.height - size.height / scale / 2,
-            width: size.width / scale, height: size.height / scale
+            x: shown.x * size.width - viewSize.width / 2, y: shown.y * size.height - viewSize.height / 2,
+            width: viewSize.width, height: viewSize.height
         )
 
         ZStack(alignment: .topLeading) {
