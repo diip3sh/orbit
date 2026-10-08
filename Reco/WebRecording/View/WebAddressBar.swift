@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// The page's address on glass: ⏎ loads what's typed, the button reloads the script's page.
+/// The page's address on a solid capsule: ⏎ loads what's typed, the button reloads the script's page.
 struct WebAddressBar: View {
     @Bindable var viewModel: WebRecordingViewModel
 

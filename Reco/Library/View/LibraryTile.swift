@@ -15,13 +15,13 @@ struct LibraryTile: View {
     @State private var isHovered = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: EditorTheme.radius, style: .continuous)
 
         Button {
             viewModel.open(item)
         } label: {
             VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
-                EditorTheme.softHairline
+                EditorTheme.control
                     .aspectRatio(16 / 10, contentMode: .fit)
                     .overlay {
                         if let thumbnail {
@@ -33,14 +33,14 @@ struct LibraryTile: View {
                         }
                     }
                     .clipShape(shape)
-                    // A faint edge, so a picture as light as the window still has one
+                    // A hairline edge, so a picture as dark as the window still has one
                     .overlay {
-                        shape.strokeBorder(isHovered ? EditorTheme.faint : EditorTheme.softHairline)
+                        shape.strokeBorder(isHovered ? EditorTheme.faint : EditorTheme.hairline)
                     }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.name)
-                        .font(.callout)
+                        .font(.theme(.callout))
                         .foregroundStyle(EditorTheme.ink)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -51,7 +51,7 @@ struct LibraryTile: View {
                         Text(item.date, format: .dateTime.month(.abbreviated).day().hour().minute())
                             .monospacedDigit()
                     }
-                    .font(.caption)
+                    .font(.theme(.caption))
                     .foregroundStyle(EditorTheme.dim)
                 }
                 .padding(.horizontal, 2)
@@ -67,9 +67,9 @@ struct LibraryTile: View {
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(EditorTheme.ink)
                     .frame(width: 24, height: 24)
-                    .background(.black.opacity(0.55), in: .circle)
+                    .editorSurface(in: .circle, fill: EditorTheme.raised)
             }
             .menuStyle(.button)
             .buttonStyle(.plain)

@@ -26,7 +26,7 @@ struct PinView: View {
             .scaledToFit()
             .clipShape(shape)
             // Keeps the edge visible where the shot meets a background of the same colour
-            .overlay { shape.strokeBorder(.white.opacity(0.15)) }
+            .overlay { shape.strokeBorder(EditorTheme.hairline) }
             .gesture(WindowDragGesture())
             .overlay(alignment: .topLeading) {
                 Button(action: close) { Label { Text("Close") } icon: { LineIcon(.hugeiconsCancel) } }

@@ -7,7 +7,7 @@ import AppKit
 import SwiftUI
 
 /// The windows or displays to record, as thumbnails above the capture toolbar. Nothing is drawn but a
-/// light frost behind them, so what is offered is the window's picture and its name: no panel with a
+/// raised surface behind them, so what is offered is the window's picture and its name: no panel with a
 /// title or a button in it. A click records that one; Esc or a click elsewhere closes it.
 ///
 /// It shares the toolbar's window rather than sitting in one of its own — a second window would take
@@ -43,7 +43,7 @@ struct CaptureSourcePickerView: View {
             .frame(width: panelSize.width, height: panelSize.height)
             .clipShape(.rect(cornerRadius: PickerBackdrop.cornerRadius, style: .continuous))
             .pickerBackdrop()
-            .environment(\.colorScheme, .dark)
+            .foregroundStyle(EditorTheme.ink)
             // Scoped, so the window growing around it in the same update isn't animated
             .animation(reducesMotion ? EditorTheme.fadeMotion : Self.motion) { view in
                 view
@@ -77,7 +77,7 @@ struct CaptureSourcePickerView: View {
         }
     }
 
-    /// One row, scrolled sideways past four tiles. The scroll view spans the frost, so tiles scroll
+    /// One row, scrolled sideways past four tiles. The scroll view spans the backdrop, so tiles scroll
     /// out under its edges rather than being cut off inside its padding.
     private func row(_ sources: [CaptureSource]) -> some View {
         ScrollViewReader { proxy in
@@ -123,7 +123,7 @@ struct CaptureSourcePickerView: View {
 
     private func notice(_ text: String) -> some View {
         Text(text)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(EditorTheme.dim)
             .multilineTextAlignment(.center)
             .padding(Grid.padding)
     }
@@ -153,39 +153,20 @@ private struct StaggeredEntrance: ViewModifier {
 }
 
 extension View {
-    /// The picker's own frost, behind the tiles
+    /// The picker's own surface, behind the tiles
     fileprivate func pickerBackdrop() -> some View {
         modifier(PickerBackdrop())
     }
 }
 
-/// The frost the tiles and their names sit on: without it they land straight on whatever is under the
-/// panel and the names can't be read. A plain dark frost — no edge, no tint of its own, and lighter than
-/// the bar's glass, so it reads as one surface with the bar rather than a second panel. Solid with Reduce
-/// Transparency, which has no blur to fall back on.
+/// The surface the tiles and their names sit on: without it they land straight on whatever is under the
+/// panel and the names can't be read. Raised, a step lighter than the bar, so it reads as a layer over it.
 private struct PickerBackdrop: ViewModifier {
     static let cornerRadius: CGFloat = 20
 
-    @Environment(\.accessibilityReduceTransparency) private var reducesTransparency
-    @Environment(\.colorSchemeContrast) private var contrast
-
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
         content
-            .background {
-                if reducesTransparency {
-                    shape.fill(CaptureToolbarView.ground.opacity(0.88))
-                } else {
-                    // Dark enough for white labels over any window, whatever is behind the panel
-                    shape.fill(.ultraThinMaterial)
-                    shape.fill(CaptureToolbarView.ground.opacity(0.55))
-                }
-            }
-            .overlay {
-                if contrast == .increased {
-                    shape.strokeBorder(.white.opacity(0.4))
-                }
-            }
+            .editorSurface(in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous), fill: EditorTheme.raised)
     }
 }
 
@@ -221,11 +202,11 @@ private struct CaptureSourceTile: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(source.title)
-                    .font(.callout)
+                    .font(.theme(.callout))
                     .lineLimit(1)
                 Text(source.subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.theme(.caption))
+                    .foregroundStyle(EditorTheme.dim)
                     .lineLimit(1)
             }
         }
@@ -256,12 +237,12 @@ private struct CaptureSourcePicture: View {
                     .transition(.opacity)
             } else {
                 // Until it is drawn, the tile's shape stands in
-                shape.fill(.white.opacity(0.06))
+                shape.fill(EditorTheme.control)
             }
         }
         .overlay {
             // The accent, as the toolbar marks what is chosen: full on press, softer when highlighted
-            shape.strokeBorder(CaptureToolbarView.live.opacity(isPressed ? 1 : isHighlighted ? 0.7 : 0), lineWidth: 2)
+            shape.strokeBorder(EditorTheme.accent.opacity(isPressed ? 1 : isHighlighted ? 0.7 : 0), lineWidth: 2)
         }
         .frame(width: CaptureSourceGrid.tileWidth, height: CaptureSourceGrid.thumbnailHeight, alignment: .bottom)
         .editorMotion(EditorTheme.quickMotion, value: thumbnail == nil)

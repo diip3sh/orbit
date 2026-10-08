@@ -20,8 +20,8 @@ struct LibraryView: View {
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
         } detail: {
             LibraryGrid(viewModel: viewModel)
-                // Solid, where the window's own colour matched the sidebar's within a few levels (55 against
-                // 57 in dark mode), so the two read as one surface
+                // Solid, so it reads apart from the sidebar's glass: the window's own colour matched the sidebar's
+                // within a few levels (55 against 57 in dark mode), so the two read as one surface
                 .background(LibraryGrid.background)
         }
         .searchable(text: $viewModel.search, placement: .toolbar, prompt: "Search by name")
@@ -41,8 +41,8 @@ private struct LibraryGrid: View {
     /// The coordinate space the date headers measure themselves in, for the rail's active date.
     static let gridSpace = "libraryGrid"
 
-    /// The content area's colour: white in light mode, the darkest grey in dark mode.
-    static let background = Color(nsColor: .controlBackgroundColor)
+    /// The content area's colour: the window's ground.
+    static let background = EditorTheme.stage
 
     /// Columns at least this wide, filling the row; tiles sit closer side by side than date to date.
     private static let columns = [GridItem(.adaptive(minimum: 200), spacing: EditorTheme.spacing, alignment: .top)]
@@ -91,7 +91,7 @@ private struct LibraryGrid: View {
                                     }
                                 } header: {
                                     Text(group.title)
-                                        .font(.headline)
+                                        .font(.theme(.headline))
                                         .foregroundStyle(EditorTheme.ink)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         // Where the rail scrolls to, and what it measures

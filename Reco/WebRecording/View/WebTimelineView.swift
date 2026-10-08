@@ -36,7 +36,7 @@ struct WebTimelineView: View {
                     Text("Scroll")
                         .frame(height: TimelineLane<ScrollClip, EmptyView>.height)
                 }
-                .font(.caption)
+                .font(.theme(.caption))
                 .foregroundStyle(EditorTheme.dim)
                 .frame(width: Self.labelWidth, alignment: .leading)
 
@@ -218,9 +218,9 @@ private struct WebTimelineHeader: View {
                     Text("/ \(Self.format(viewModel.script.duration))")
                         .foregroundStyle(EditorTheme.dim)
                 }
-                .monospaced()
+                .monospacedDigit()
             }
-            .font(.callout)
+            .font(.theme(.callout))
             .lineLimit(1)
             .fixedSize()
             .frame(maxWidth: .infinity, alignment: .trailing)

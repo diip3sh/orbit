@@ -12,26 +12,26 @@ import Testing
 struct ThemeContrastTests {
 
     nonisolated static let appearances: [NSAppearance.Name] = [
-        .darkAqua, .aqua, .accessibilityHighContrastDarkAqua, .accessibilityHighContrastAqua,
+        .darkAqua, .aqua, .accessibilityHighContrastDarkAqua, .accessibilityHighContrastAqua
     ]
 
     static let surfaces: [(String, ColorResource)] = [
-        ("stage", .stage), ("panel", .panel), ("surface", .surface), ("raised", .raised), ("control", .control),
+        ("stage", .stage), ("panel", .panel), ("surface", .surface), ("raised", .raised), ("control", .control)
     ]
 
     /// Text needs 4.5:1; ink is held to 7:1 (AAA), since it is most of what is read. Faint marks and the accent's
     /// lines are non-text, 3:1.
-    static let foregrounds: [(String, NSColor, Double)] = [
-        ("ink", NSColor(resource: .ink), 7),
-        ("dim", NSColor(resource: .dim), 4.5),
-        ("faint", NSColor(resource: .faint), 3),
+    static let foregrounds: [String: (color: NSColor, minimum: Double)] = [
+        "ink": (NSColor(resource: .ink), 7),
+        "dim": (NSColor(resource: .dim), 4.5),
+        "faint": (NSColor(resource: .faint), 3),
         // The asset `Color.accentColor` resolves to while the user's accent is Multicolor
-        ("accent", NSColor(named: "AccentColor") ?? .clear, 3),
+        "accent": (NSColor(named: "AccentColor") ?? .clear, 3)
     ]
 
     @Test(arguments: appearances)
     func foregroundsReadOnEverySurface(_ appearance: NSAppearance.Name) {
-        for (name, color, minimum) in Self.foregrounds {
+        for (name, (color, minimum)) in Self.foregrounds {
             for (surfaceName, surface) in Self.surfaces {
                 let ratio = contrast(color, NSColor(resource: surface), in: appearance)
                 #expect(ratio >= minimum, "\(name) on \(surfaceName) in \(appearance.rawValue): \(ratio)")
@@ -48,7 +48,7 @@ struct ThemeContrastTests {
     @Test func darkIsLinearsTokens() {
         let tokens: [(ColorResource, Int)] = [
             (.stage, 0x08090A), (.surface, 0x0F1011), (.raised, 0x161718), (.control, 0x23252A),
-            (.hairline, 0x23252A), (.ink, 0xE5E5E6), (.dim, 0x8A8F98), (.accentFill, 0xE4F222),
+            (.hairline, 0x23252A), (.ink, 0xE5E5E6), (.dim, 0x8A8F98), (.accentFill, 0xE4F222)
         ]
         for (resource, hex) in tokens {
             #expect(rgb(NSColor(resource: resource), in: .darkAqua) == hex)

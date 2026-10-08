@@ -15,7 +15,7 @@ private final class CaptureToolbarPanel: NSPanel {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
-        // The glass draws its own edge and shadow; the window's would outline the whole rectangle
+        // The pills draw their own edge; the window's shadow would outline the whole rectangle
         hasShadow = false
         level = .floating
         isReleasedWhenClosed = false

@@ -40,11 +40,11 @@ struct AgentChatProgress: View {
         VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
             HStack {
                 Text("Rendering…")
-                    .font(.callout)
+                    .font(.theme(.callout))
                     .foregroundStyle(EditorTheme.dim)
                 Spacer()
                 Text(progress, format: .percent.precision(.fractionLength(0)))
-                    .font(.callout)
+                    .font(.theme(.callout))
                     .monospacedDigit()
                     .foregroundStyle(EditorTheme.dim)
             }

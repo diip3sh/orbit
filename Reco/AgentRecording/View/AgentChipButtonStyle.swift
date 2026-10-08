@@ -6,7 +6,8 @@
 import SwiftUI
 
 /// The agent chat's small buttons: suggestion chips, round buttons (New Chat, Send, Stop) and the result
-/// card. Hover is a fill step; a press shows on the frame it lands, only the release eases.
+/// card, on the control fill (the card on a surface) with a hairline edge; Send is the accent's lime. Hover is a
+/// fill step; a press shows on the frame it lands, only the release eases.
 struct AgentChipButtonStyle: ButtonStyle {
     enum Kind {
         case chip, card, circle, accentCircle
@@ -39,12 +40,19 @@ private struct AgentChipButton: View {
 
     var body: some View {
         configuration.label
-            .font(kind == .chip ? .callout : .body.weight(.medium))
+            .font(kind == .chip ? .theme(.callout) : .theme(weight: .medium))
             .foregroundStyle(foreground)
             .padding(.horizontal, kind == .chip ? EditorTheme.mediumSpacing : 0)
             .padding(.vertical, kind == .chip ? EditorTheme.tightSpacing + 2 : 0)
             .frame(width: kind == .circle || isAccent ? Self.circleSize : nil, height: kind == .circle || isAccent ? Self.circleSize : nil)
-            .background(fill, in: shape)
+            .background {
+                shape.fill(fill)
+                if !isAccent {
+                    shape.fill(EditorTheme.ink.opacity(isEnabled && configuration.isPressed ? 0.1 : isLit ? 0.06 : 0))
+                    // Inside the edge, as `strokeBorder` would draw it; `AnyShape` isn't insettable
+                    shape.stroke(EditorTheme.hairline).padding(0.5)
+                }
+            }
             .contentShape(shape)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .opacity(isEnabled || isAccent ? 1 : 0.4)
@@ -56,7 +64,7 @@ private struct AgentChipButton: View {
     private var shape: AnyShape {
         switch kind {
         case .chip, .circle, .accentCircle: AnyShape(.capsule)
-        case .card: AnyShape(.rect(cornerRadius: 14, style: .continuous))
+        case .card: AnyShape(.rect(cornerRadius: EditorTheme.radius, style: .continuous))
         }
     }
 
@@ -66,14 +74,14 @@ private struct AgentChipButton: View {
 
     private var fill: Color {
         if isAccent {
-            return isEnabled ? EditorTheme.accent.opacity(configuration.isPressed ? 0.7 : isLit ? 0.85 : 1) : EditorTheme.softHairline
+            return isEnabled ? EditorTheme.accentFill.opacity(configuration.isPressed ? 0.7 : isLit ? 0.85 : 1) : EditorTheme.control
         }
-        return Color.primary.opacity(isEnabled && configuration.isPressed ? 0.14 : isLit ? 0.1 : 0.06)
+        return kind == .card ? EditorTheme.surface : EditorTheme.control
     }
 
     private var foreground: Color {
         if isAccent {
-            return isEnabled ? .white : EditorTheme.faint
+            return isEnabled ? EditorTheme.onAccent : EditorTheme.faint
         }
         return kind == .card || isLit ? EditorTheme.ink : EditorTheme.dim
     }

@@ -9,6 +9,7 @@ import AppKit
 import KeyboardShortcuts
 import Observation
 import OSLog
+import SwiftUI
 
 /// Result of an area selection operation
 struct AreaSelectionResult: Sendable {
@@ -467,7 +468,7 @@ final class AreaSelectionView: NSView {
 
         let text = "\(evenWidth) × \(evenHeight)"
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
+            .font: NSFont.theme(.callout, weight: .medium, .mono),
             .foregroundColor: NSColor.white
         ]
         let attributedString = NSAttributedString(string: text, attributes: attributes)
@@ -573,19 +574,17 @@ final class AreaSelectionView: NSView {
         buttonContainerCenterY?.constant = selectionRect.midY
     }
 
-    /// A system button: glass on macOS 26. Return confirms and Esc cancels, as the keys always did.
-    /// Confirm is tinted with the accent colour, as the capture toolbar's action is.
+    /// A solid system button. Return confirms and Esc cancels, as the keys always did.
+    /// Confirm is the accent fill with dark text, as the capture toolbar's action is.
     private func makeActionButton(title: String, keyEquivalent: String, isProminent: Bool = false, action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
         button.controlSize = .large
         button.keyEquivalent = keyEquivalent
-        if #available(macOS 26, *) {
-            button.bezelStyle = .glass
-        } else {
-            button.bezelStyle = .push
-        }
+        button.bezelStyle = .push
+        button.font = .theme(weight: .medium)
         if isProminent {
-            button.bezelColor = .controlAccentColor
+            button.bezelColor = NSColor(resource: .accentFill)
+            button.contentTintColor = NSColor(resource: .onAccent)
         }
         button.widthAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
         return button

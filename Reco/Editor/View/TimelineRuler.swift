@@ -47,8 +47,7 @@ struct TimelineRuler: View {
                 let time = Double(index) * scale.major
                 let label = context.resolve(
                     Text(Self.label(for: time, major: scale.major))
-                        .font(.caption2)
-                        .monospaced()
+                        .font(.theme(.caption2).monospacedDigit())
                         .foregroundStyle(EditorTheme.dim)
                 )
                 // Clear of the playhead's knob, which rests on the first tick

@@ -37,6 +37,7 @@ struct WebRecordingView: View {
                     .padding(.horizontal, EditorTheme.largeSpacing)
                     .padding(.top, EditorTheme.smallSpacing)
                     .padding(.bottom, EditorTheme.spacing)
+                    .background(EditorTheme.panel)
                     .overlay(alignment: .top) {
                         Rectangle()
                             .fill(EditorTheme.hairline)
@@ -61,7 +62,7 @@ struct WebRecordingView: View {
                         Label("AI Agent", image: "button-agent")
                     }
                     .buttonStyle(.editorSecondary)
-                    // The open panel beside it shows the state; a fill behind glass only muddied it
+                    // The open panel beside it shows the state; a selected fill only muddied it
                     .accessibilityAddTraits(viewModel.showsAgent ? .isSelected : [])
                     .help(viewModel.showsAgent ? "Hide the agent" : "Have a coding agent script and record this page")
                 }
@@ -86,8 +87,10 @@ struct WebRecordingView: View {
                 Button("Inspector", systemImage: "sidebar.trailing") {
                     viewModel.showsInspector.toggle()
                 }
+                .buttonStyle(.editorIcon)
                 .help(viewModel.showsInspector ? "Hide the inspector" : "Show the inspector")
             }
+            .hidingSharedBackground()
         }
         // Filling the window, like the editor's root, so SwiftUI never fits the window down to it
         .frame(minWidth: viewModel.showsAgent ? 900 + Self.panelWidth : 900, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)

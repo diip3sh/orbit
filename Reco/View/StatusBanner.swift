@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// Something that went wrong, on glass over a window's content, with a button to put it away: the
+/// Something that went wrong, on a surface over a window's content, with a button to put it away: the
 /// studio windows' one way of reporting a problem (Web Recording, Library, Editor).
 struct StatusBanner: View {
     let message: String

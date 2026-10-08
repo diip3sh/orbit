@@ -5,9 +5,9 @@
 
 import SwiftUI
 
-/// A choice among a few short options, in the studio windows' look: a neutral track with a light fill
-/// that slides to the chosen one. Replaces the system segmented control, whose accent fill was the
-/// only blue in the inspectors (the accent is kept for the playhead and the selection).
+/// A choice among a few short options: a track in the control fill with a raised fill that slides to the
+/// chosen one. Replaces the system segmented control, whose accent fill would put lime on every choice in
+/// the inspectors (the accent is kept for the playhead, the selection and the chosen tab).
 struct SegmentedChoice<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, title: String)]
@@ -25,7 +25,7 @@ struct SegmentedChoice<Value: Hashable>: View {
                     selection = option.value
                 } label: {
                     Text(option.title)
-                        .font(.callout)
+                        .font(.theme(.callout))
                         .lineLimit(1)
                         .foregroundStyle(isSelected ? EditorTheme.ink : EditorTheme.dim)
                         .frame(maxWidth: .infinity)
@@ -34,8 +34,8 @@ struct SegmentedChoice<Value: Hashable>: View {
                         .background {
                             if isSelected {
                                 RoundedRectangle(cornerRadius: 6)
-                                    .fill(EditorTheme.stage)
-                                    .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
+                                    .fill(EditorTheme.raised)
+                                    .strokeBorder(EditorTheme.hairline)
                                     .matchedGeometryEffect(id: "highlight", in: highlight)
                             }
                         }
@@ -48,7 +48,7 @@ struct SegmentedChoice<Value: Hashable>: View {
             }
         }
         .padding(2)
-        .background(EditorTheme.softHairline, in: .rect(cornerRadius: 8))
+        .background(EditorTheme.control, in: .rect(cornerRadius: 8))
         .editorMotion(EditorTheme.quickMotion, value: selection)
     }
 }

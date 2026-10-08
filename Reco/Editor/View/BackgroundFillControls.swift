@@ -51,6 +51,7 @@ struct BackgroundFillControls: View {
                     Label("Choose Image…", systemImage: "photo")
                         .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.editorSecondary)
                 InspectorSlider("Blur", value: $viewModel.canvas.backgroundBlur, in: 0...1, defaultValue: 0) {
                     $0 == 0 ? Text("Off") : Text($0, format: .percent.precision(.fractionLength(0)))
                 }

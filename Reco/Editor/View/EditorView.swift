@@ -93,6 +93,7 @@ struct EditorView: View {
         .padding(.horizontal, EditorTheme.largeSpacing)
         .padding(.top, EditorTheme.smallSpacing)
         .padding(.bottom, EditorTheme.spacing)
+        .background(EditorTheme.panel)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(EditorTheme.hairline)
@@ -138,8 +139,10 @@ struct EditorView: View {
                 Button("Inspector", systemImage: "sidebar.trailing") {
                     showsInspector.toggle()
                 }
+                .buttonStyle(.editorIcon)
                 .help(showsInspector ? "Hide the inspector" : "Show the inspector")
             }
+            .hidingSharedBackground()
         }
     }
 

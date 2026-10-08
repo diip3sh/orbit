@@ -28,7 +28,7 @@ nonisolated enum Typeface: Sendable {
     func font(size: CGFloat, weight: CGFloat) -> NSFont {
         let descriptor = NSFontDescriptor(fontAttributes: [
             .family: family,
-            .variation: [NSNumber(value: Self.weightAxis): weight],
+            .variation: [NSNumber(value: Self.weightAxis): weight]
         ])
         if let font = NSFont(descriptor: descriptor, size: size), font.familyName == family {
             return font

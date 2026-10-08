@@ -22,7 +22,7 @@ struct RecordingNameField: View {
         if isRenaming {
             // Sized by the text, between the limits, with the field laid over it
             Text(draft.isEmpty ? " " : draft)
-                .font(.headline)
+                .font(.theme(.headline))
                 .lineLimit(1)
                 .padding(.trailing, Self.padding)
                 .hidden()
@@ -40,7 +40,8 @@ struct RecordingNameField: View {
                 isRenaming = true
             } label: {
                 Text(name)
-                    .font(.headline)
+                    .font(.theme(.headline))
+                    .foregroundStyle(EditorTheme.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: Self.maximumWidth)
@@ -85,7 +86,8 @@ private struct NameEditor: NSViewRepresentable {
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
-        field.font = .preferredFont(forTextStyle: .headline)
+        field.font = .theme(.headline)
+        field.textColor = NSColor(resource: .ink)
         field.cell?.isScrollable = true
         field.delegate = context.coordinator
         return field
@@ -146,7 +148,7 @@ private struct NameButton: View {
     var body: some View {
         configuration.label
             .padding(.vertical, 4)
-            .background(.primary.opacity(fill), in: .rect(cornerRadius: 6, style: .continuous))
+            .background(EditorTheme.ink.opacity(fill), in: .rect(cornerRadius: 6, style: .continuous))
             .contentShape(.rect(cornerRadius: 6, style: .continuous))
             .opacity(isEnabled ? 1 : 0.5)
             // The press shows on the frame it lands; only hover and release ease

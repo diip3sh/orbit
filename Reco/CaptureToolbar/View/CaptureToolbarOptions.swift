@@ -26,7 +26,7 @@ struct CaptureToolbarOptions: View {
                 Text(settings.countdownDuration == .off ? "Off" : "\(settings.countdownDuration.rawValue)s")
                     .monospacedDigit()
                 Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.semibold))
+                    .font(.theme(.caption2, weight: .semibold))
                     .accessibilityHidden(true)
             }
         }

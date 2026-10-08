@@ -29,11 +29,11 @@ struct EditorInspector: View {
                 VStack(spacing: 0) {
                     if let reason = viewModel.source?.telemetryError {
                         Label(reason.localizedDescription, systemImage: "info.circle")
-                            .font(.callout)
+                            .font(.theme(.callout))
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(EditorTheme.mediumSpacing)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.primary.opacity(0.06), in: .rect(cornerRadius: 8))
+                            .editorSurface(in: .rect(cornerRadius: 8), fill: EditorTheme.control)
                             .padding([.horizontal, .top])
                     }
 
@@ -110,6 +110,7 @@ struct ZoomInspectorSection: View {
                 Label("Regenerate Automatic Zooms", systemImage: "wand.and.sparkles")
                     .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.editorSecondary)
             .disabled(telemetry == nil)
         } footer: {
             if telemetry?.clicks.isEmpty == true {
@@ -312,6 +313,7 @@ struct BackgroundAudioInspectorSection: View {
                         Label("Remove", systemImage: "trash")
                             .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.editorSecondary)
                 } else {
                     Button {
                         choosesFile = true
@@ -319,6 +321,7 @@ struct BackgroundAudioInspectorSection: View {
                         Label("Add Background Audio…", systemImage: "music.note")
                             .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.editorSecondary)
                 }
             }
             .transition(.opacity)

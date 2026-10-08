@@ -6,7 +6,7 @@
 import SwiftUI
 
 /// A control on the capture toolbar: dim at rest, a fill that steps up under the pointer and the moment
-/// it's pressed. `isOn` makes it a switch: on is filled with the system accent colour, off sits on a
+/// it's pressed. `isOn` makes it a switch: on is filled with the accent, off sits on a
 /// faint fill of its own so it still reads as a switch. Only the press lands at once; hover and release ease.
 struct CaptureToolbarButtonStyle: ButtonStyle {
     var isOn: Bool?
@@ -63,8 +63,9 @@ private struct CaptureToolbarButton: View {
     }
 
     private var foreground: Color {
-        if isOn == true { return .white }
-        return isSelected || isLit ? .primary : .secondary
+        // A selected mode sits on the live highlight its group draws behind it
+        if isOn == true || isSelected { return EditorTheme.onAccent }
+        return isLit ? EditorTheme.ink : EditorTheme.dim
     }
 
     private var fill: Color {
@@ -73,7 +74,7 @@ private struct CaptureToolbarButton: View {
         }
         guard isEnabled else { return .clear }
         let rest = isOn == false ? 0.06 : 0
-        return .primary.opacity(configuration.isPressed ? 0.14 : isHovered ? 0.1 : rest)
+        return EditorTheme.ink.opacity(configuration.isPressed ? 0.14 : isHovered ? 0.1 : rest)
     }
 }
 
@@ -84,8 +85,8 @@ private struct CaptureToolbarActionButton: View {
 
     var body: some View {
         configuration.label
-            .font(.body.weight(.semibold))
-            .foregroundStyle(.white)
+            .font(.theme(.body, weight: .semibold))
+            .foregroundStyle(EditorTheme.onAccent)
             .padding(.horizontal, EditorTheme.mediumSpacing + EditorTheme.tightSpacing)
             .frame(minHeight: 36)
             .contentShape(.rect(cornerRadius: 12, style: .continuous))

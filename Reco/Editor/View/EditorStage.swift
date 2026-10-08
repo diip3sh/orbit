@@ -24,18 +24,11 @@ struct EditorStage: View {
                 if viewModel.canvas.background == .transparent {
                     Checkerboard(square: 10)
                         .clipShape(shape)
-                } else {
-                    shape.fill(.black)
                 }
             }
-            // A rim of light inside, a dark ring outside and a deep shadow, like a window on the desktop
-            .shadow(color: .black.opacity(0.7), radius: 24, y: 24)
-            .overlay {
-                shape.strokeBorder(.white.opacity(0.1))
-            }
-            .overlay {
-                shape.stroke(.black.opacity(0.9), lineWidth: 1)
-            }
+            // The video's black backing (under the checkerboard when transparent), a hairline round it and the
+            // floating shadow, which the stage's padding leaves room for
+            .editorSurface(in: shape, fill: .black, floats: true)
             .aspectRatio(viewModel.exportSize(resolution: nil), contentMode: .fit)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(EditorTheme.largeSpacing)

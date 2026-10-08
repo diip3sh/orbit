@@ -23,8 +23,8 @@ struct CaptureToolbarLiveControls: View {
 
         HStack(spacing: EditorTheme.tightSpacing) {
             Text(recorder.formattedDuration)
-                .font(.title3.monospacedDigit())
-                .foregroundStyle(recorder.isPaused ? Color.secondary : CaptureToolbarView.recording)
+                .font(.theme(.title3).monospacedDigit())
+                .foregroundStyle(recorder.isPaused ? EditorTheme.dim : CaptureToolbarView.recording)
                 .contentTransition(.numericText())
                 .editorMotion(EditorTheme.quickMotion, value: recorder.formattedDuration)
                 .padding(.leading, EditorTheme.mediumSpacing)
@@ -63,7 +63,7 @@ struct CaptureToolbarLiveControls: View {
 
     private func indicator(_ title: String, short: String, icon: ImageResource, isOn: Bool) -> some View {
         ToolbarIcon(icon)
-            .foregroundStyle(isOn ? CaptureToolbarView.live : .secondary)
+            .foregroundStyle(isOn ? EditorTheme.accent : EditorTheme.dim)
             .opacity(isOn ? 1 : 0.5)
             .frame(width: 36, height: 36)
             .accessibilityLabel("\(title): \(isOn ? "On" : "Off")")
@@ -75,13 +75,13 @@ struct CaptureToolbarLiveControls: View {
     }
 }
 
-/// Stop, from the moodboard's recording bar: a dark square on white, the brightest thing on the bar.
+/// Stop, from the moodboard's recording bar: the bar's ground on ink, the strongest thing on the bar.
 private struct CaptureToolbarStopButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(CaptureToolbarView.ground)
             .frame(width: 36, height: 36)
-            .background(.white.opacity(configuration.isPressed ? 0.75 : 1), in: .rect(cornerRadius: 12, style: .continuous))
+            .background(EditorTheme.ink.opacity(configuration.isPressed ? 0.75 : 1), in: .rect(cornerRadius: 12, style: .continuous))
             .contentShape(.rect(cornerRadius: 12, style: .continuous))
     }
 }

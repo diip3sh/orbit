@@ -107,20 +107,20 @@ struct CaptureGroupRow: View {
         } label: {
             HStack(spacing: EditorTheme.mediumSpacing) {
                 Image(systemName: systemImage)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(EditorTheme.dim)
                     .frame(width: 20)
 
                 Text(title)
-                    .font(.body.weight(.medium))
+                    .font(.theme(.body, weight: .medium))
 
                 Spacer()
 
                 Text(value)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(EditorTheme.dim)
 
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(.theme(.caption, weight: .semibold))
+                    .foregroundStyle(EditorTheme.dim)
                     .rotationEffect(.degrees(isExpanded ? 90 : 0))
             }
             .padding(.horizontal, EditorTheme.mediumSpacing)

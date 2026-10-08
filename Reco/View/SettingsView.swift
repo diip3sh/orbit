@@ -44,6 +44,17 @@ struct SettingsView: View {
     }
 }
 
+extension View {
+
+    /// A Settings tab's grouped form on the theme's ground instead of the system's window colour.
+    func settingsForm() -> some View {
+        formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .padding()
+            .editorWindowBackground()
+    }
+}
+
 // MARK: - Shortcuts Settings
 
 struct ShortcutsSettingsView: View {
@@ -76,12 +87,11 @@ struct ShortcutsSettingsView: View {
 
             Section {
                 Text("Shortcuts work globally, even when Orbit is not focused.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.theme(.caption))
+                    .foregroundStyle(EditorTheme.dim)
             }
         }
-        .formStyle(.grouped)
-        .padding()
+        .settingsForm()
     }
 }
 
@@ -138,7 +148,7 @@ struct VideoSettingsView: View {
                             Text(codec.rawValue).tag(codec)
                         } else {
                             Text("\(codec.rawValue) (not supported for \(settings.containerFormat.rawValue.uppercased()))")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(EditorTheme.dim)
                                 .tag(codec)
                         }
                     }
@@ -204,8 +214,7 @@ struct VideoSettingsView: View {
                     .help("Include window shadows when capturing individual windows")
             }
         }
-        .formStyle(.grouped)
-        .padding()
+        .settingsForm()
     }
 }
 
@@ -232,7 +241,7 @@ struct AudioSettingsView: View {
                             Text(codec.rawValue).tag(codec)
                         } else {
                             Text("\(codec.rawValue) (not supported for \(settings.containerFormat.rawValue.uppercased()))")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(EditorTheme.dim)
                                 .tag(codec)
                         }
                     }
@@ -242,12 +251,11 @@ struct AudioSettingsView: View {
 
             Section {
                 Text("Audio tracks are recorded separately for post-processing flexibility.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.theme(.caption))
+                    .foregroundStyle(EditorTheme.dim)
             }
         }
-        .formStyle(.grouped)
-        .padding()
+        .settingsForm()
     }
 }
 
@@ -321,8 +329,7 @@ struct GeneralSettingsView: View {
 
             AboutSection()
         }
-        .formStyle(.grouped)
-        .padding()
+        .settingsForm()
     }
 
     /// Opens an NSOpenPanel to select a custom output directory
@@ -390,13 +397,14 @@ private struct FolderSettingRow: View {
                 Text(title)
                 Label {
                     Text(displayPath)
+                        .font(.theme(.caption, .mono))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 } icon: {
                     Image(systemName: "folder")
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.theme(.caption))
+                .foregroundStyle(EditorTheme.dim)
             }
         }
     }

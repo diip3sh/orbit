@@ -62,7 +62,7 @@ private struct CaptureToolbarTooltipModifier: ViewModifier {
     }
 }
 
-/// The tooltip's content, in its own window above the bar: a grey bubble with a tail pointing at the
+/// The tooltip's content, in its own window above the bar: a raised bubble with a tail pointing at the
 /// control, as the Dock's are. It only fades: in quickly so it answers the rest, out quicker still so it
 /// never trails the pointer. Moving to another control swaps its text and place at once, without a fade,
 /// and a change of what the control does swaps the text in place; nothing slides or scales.
@@ -89,14 +89,13 @@ struct CaptureToolbarTooltipView: View {
         }
         // A fade is kept with Reduce Motion: nothing moves
         .animation(tooltips.isShown ? .easeOut(duration: 0.12) : .easeIn(duration: 0.08), value: tooltips.isShown)
-        .environment(\.colorScheme, .dark)
         .padding(Self.margin)
         .fixedSize()
     }
 }
 
-/// The Dock's tooltip: white medium text on translucent grey, a hairline edge, and a tail; the key that
-/// does the same, dimmed after it, as a menu shows it
+/// The Dock's tooltip: medium text on a raised surface, a hairline edge, and a tail; the key that does the
+/// same, dimmed after it, as a menu shows it
 private struct CaptureToolbarTooltipBubble: View {
     let text: String
     let shortcut: String?
@@ -106,20 +105,20 @@ private struct CaptureToolbarTooltipBubble: View {
         let shape = TooltipBubbleShape(pointsUp: pointsUp)
         HStack(spacing: 6) {
             Text(text)
-                .foregroundStyle(.white)
+                .foregroundStyle(EditorTheme.ink)
             if let shortcut {
                 Text(shortcut)
-                    .foregroundStyle(.white.opacity(0.55))
+                    .font(.theme(.body, weight: .medium, .mono))
+                    .foregroundStyle(EditorTheme.dim)
             }
         }
-        .font(.body.weight(.medium))
+        .font(.theme(.body, weight: .medium))
         .lineLimit(1)
         .padding(.horizontal, EditorTheme.mediumSpacing)
         .padding(.vertical, 6)
         .padding(pointsUp ? .top : .bottom, TooltipBubbleShape.tailHeight)
-        .background(Color(white: 0.26).opacity(0.85), in: shape)
-        .background(.ultraThinMaterial, in: shape)
-        .overlay(shape.stroke(.white.opacity(0.14), lineWidth: 0.5))
+        .background(EditorTheme.raised, in: shape)
+        .overlay(shape.stroke(EditorTheme.hairline))
         .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
     }
 }

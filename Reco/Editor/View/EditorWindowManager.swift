@@ -180,7 +180,7 @@ final class EditorWindowManager: NSObject {
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
         window.toolbarStyle = .unified
-        window.backgroundColor = .windowBackgroundColor
+        window.backgroundColor = NSColor(resource: .stage)
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         window.delegate = self

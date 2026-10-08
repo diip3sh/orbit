@@ -21,7 +21,7 @@ final class QuickAccessController {
     /// The smallest card: room for Copy ⌘C and Save ⌘S side by side, and the corner buttons above them
     nonisolated static let minCardSize = CGSize(width: 200, height: 120)
 
-    /// The glass edge around the preview, which is also where the card is dragged
+    /// The surface's edge around the preview, which is also where the card is dragged
     nonisolated static let inset: CGFloat = 8
 
     /// The card for a screenshot of `pointSize`: the shot fitted inside `maxCardSize` less the edge,
@@ -156,7 +156,7 @@ final class QuickAccessController {
         )
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        // No window shadow: it outlines the whole rectangle around the rounded glass, which has its own edge
+        // No window shadow: it outlines the whole rectangle around the rounded card, which has its own edge
         panel.hasShadow = false
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]

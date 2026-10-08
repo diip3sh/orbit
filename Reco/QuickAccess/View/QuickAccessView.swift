@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// The Quick Access card: the screenshot in its own shape on a thin glass edge, with Copy and Save along
+/// The Quick Access card: the screenshot in its own shape on a thin surface edge, with Copy and Save along
 /// its bottom, which confirm on the button. Under the pointer it dims and shows Close, Recognize Text and Pin in its corners. Drag the screenshot into
 /// another app; drag the edge to move the card, or flick it away; Esc closes it. It grows from `anchor`, the corner
 /// nearest where it opened.
@@ -62,29 +62,25 @@ private struct QuickAccessPreview: View {
             .onDrag(model.dragItem)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay {
-                shape.fill(.black.opacity(showsControls ? 0.45 : 0))
+                shape.fill(EditorTheme.stage.opacity(showsControls ? 0.45 : 0))
                     .allowsHitTesting(false)
             }
             .overlay {
                 QuickAccessControls(model: model)
-                    // Light buttons on the dimmed shot in either appearance
-                    .environment(\.colorScheme, .dark)
                     .opacity(showsControls ? 1 : 0)
             }
             // Always shown, so ⌘C and ⌘S work without the pointer on the card
             .overlay(alignment: .bottom) {
                 QuickAccessActions(model: model)
-                    .environment(\.colorScheme, .dark)
             }
             .overlay {
                 if let feedback = model.feedback, feedback.isToast {
                     Text(feedback.message)
-                        .font(.caption)
-                        .foregroundStyle(.white)
+                        .font(.theme(.caption))
+                        .foregroundStyle(EditorTheme.ink)
                         .padding(.horizontal, EditorTheme.smallSpacing)
                         .padding(.vertical, EditorTheme.tightSpacing)
-                        // Solid: it sits on the screenshot, which a material would only muddy
-                        .background(.black.opacity(0.75), in: .capsule)
+                        .editorSurface(in: .capsule, fill: EditorTheme.raised)
                         .padding(6)
                         .transition(.opacity.combined(with: .offset(y: 4)))
                 }
@@ -158,6 +154,7 @@ private struct ShortcutLabel: View {
             HStack(spacing: EditorTheme.tightSpacing) {
                 Text(title)
                 Text(keys)
+                    .font(.theme(weight: .medium, .mono))
                     .opacity(0.5)
                     .accessibilityHidden(true)
             }

@@ -23,7 +23,7 @@ struct AgentsSettingsView: View {
             Section("Server") {
                 LabeledContent("Status") {
                     Text(viewModel.serverStatus)
-                        .foregroundStyle(viewModel.hasServerError ? .red : .primary)
+                        .foregroundStyle(viewModel.hasServerError ? .red : EditorTheme.ink)
                 }
                 LabeledContent("Agents connected now", value: viewModel.server.sessionCount, format: .number)
                 LabeledContent("Latest render", value: viewModel.renderSummary)
@@ -34,7 +34,7 @@ struct AgentsSettingsView: View {
                     LabeledContent(row.kind.displayName) {
                         HStack {
                             Text(row.statusText)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(EditorTheme.dim)
                             if let title = row.actionTitle {
                                 Button(title) {
                                     viewModel.perform(row)
@@ -49,8 +49,7 @@ struct AgentsSettingsView: View {
                 Text("Restart an agent after connecting it. Orbit adds itself as an MCP server named reco to the agent's own settings.")
             }
         }
-        .formStyle(.grouped)
-        .padding()
+        .settingsForm()
         .task { viewModel.refresh() }
         .alert("Couldn't Update the Agent", isPresented: errorShown) {
             Button("OK") {}

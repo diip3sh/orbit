@@ -51,7 +51,7 @@ struct MenuBarView: View {
                             .controlSize(.small)
                             .frame(width: 20)
                         Text("Saving Recording…")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(EditorTheme.dim)
                         Spacer()
                     }
                     .padding(.horizontal, EditorTheme.mediumSpacing)
@@ -121,7 +121,8 @@ struct MenuBarView: View {
             .padding(.bottom, 8)
         }
         .frame(width: 288)
-        .background(.ultraThinMaterial)
+        .foregroundStyle(EditorTheme.ink)
+        .background(EditorTheme.surface)
     }
 }
 
@@ -139,13 +140,13 @@ struct MenuBarErrorRow: View {
                 .frame(width: 20)
                 .accessibilityHidden(true)
             Text(message)
-                .font(.callout)
+                .font(.theme(.callout))
                 .lineLimit(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button("Dismiss", systemImage: "xmark", action: dismiss)
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(EditorTheme.dim)
         }
         .padding(.horizontal, EditorTheme.mediumSpacing)
         .padding(.vertical, EditorTheme.smallSpacing)
@@ -167,7 +168,7 @@ struct PermissionStatusBanner: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
                 Text("Permissions Required")
-                    .font(.body.weight(.semibold))
+                    .font(.theme(.body, weight: .semibold))
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -215,17 +216,17 @@ struct PermissionRow: View {
             HStack(spacing: 8) {
                 Image(systemName: isGranted ? "checkmark.circle.fill" : "xmark.circle.fill")
                     .foregroundStyle(isGranted ? .green : .red)
-                    .font(.callout)
+                    .font(.theme(.callout))
 
                 Text(title)
-                    .font(.callout)
+                    .font(.theme(.callout))
 
                 Spacer()
 
                 if !isGranted {
                     Text("Open Settings")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.theme(.subheadline))
+                        .foregroundStyle(EditorTheme.dim)
                 }
             }
             .padding(.horizontal, 12)

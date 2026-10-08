@@ -54,7 +54,8 @@ struct CaptureToolbarIdleControls: View {
             HStack(spacing: EditorTheme.tightSpacing) {
                 Text(viewModel.mode.actionTitle)
                 Text(CaptureToolbarShortcut.action.symbol)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(.theme(.body, weight: .semibold, .mono))
+                    .foregroundStyle(EditorTheme.onAccent.opacity(0.6))
                     .accessibilityHidden(true)
             }
         }
