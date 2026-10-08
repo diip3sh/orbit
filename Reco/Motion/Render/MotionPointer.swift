@@ -8,8 +8,9 @@ import ImageIO
 
 /// The pointer a click shows (spec 0014): the system's arrow rising in from below, its pointing hand once it's over
 /// what it clicks, pressing with it, then fading. Drawn over a scene's layers at its target's middle, wherever the
-/// target has moved. Measured on the Spotify Jam film: the arrow rises in about 0.5 s and turns to the hand on
-/// arrival; the hand is 8 % of the frame's height (46 of 576 px).
+/// target has moved. Measured on the Spotify Jam film: the arrow comes up from below the frame, fast and slowing, about
+/// 0.3 s before it lands (0.76, 0.65 and 0.6 of the frame's height 0.2, 0.13 and 0.07 s before), blurred by its speed,
+/// and turns to the hand on arrival; the hand is 8 % of the frame's height (46 of 576 px).
 nonisolated struct MotionPointer: Sendable {
 
     let arrow: CursorShapeTrack.Sprite
@@ -18,7 +19,7 @@ nonisolated struct MotionPointer: Sendable {
     /// The hand's drawn height in points, without the clear margin its image has for its shadow.
     let handHeight: Double
 
-    static let travel = 0.5
+    static let travel = 0.3
 
     /// It lands this long before its press.
     static let landing = 0.15
@@ -55,28 +56,31 @@ nonisolated struct MotionPointer: Sendable {
         return drawn.first.flatMap { first in drawn.last.map { Double($0 - first + 1) } }
     }
 
+    /// Where the pointer of `click` on a layer whose quad is `corners` (canvas points, top-left origin) has its tip at `time`
+    /// in the scene, and how opaque it is; `nil` while it isn't on screen.
+    static func tip(of click: MotionPlan.Click, on corners: [CGPoint], at time: Double, canvas: CGSize) -> (point: CGPoint, opacity: Double)? {
+        let lands = click.press - landing
+        let appears = lands - travel
+        guard corners.count == 4, time >= appears, time <= click.leaves + fade else { return nil }
+        let middle = CGPoint(x: corners.map(\.x).reduce(0, +) / 4, y: corners.map(\.y).reduce(0, +) / 4)
+        let onScreen = hypot(corners[3].x - corners[0].x, corners[3].y - corners[0].y)
+        let target = CGPoint(x: middle.x, y: middle.y + tipBelow * onScreen)
+        if time < lands {
+            // From just below the frame, so it needs no fade
+            let progress = MotionEasing.enter.progress((time - appears) / travel, duration: travel)
+            let start = CGPoint(x: target.x + 0.02 * canvas.width, y: max(canvas.height * 1.02, target.y + 0.2 * canvas.height))
+            return (CGPoint(x: start.x + (target.x - start.x) * progress, y: start.y + (target.y - start.y) * progress), 1)
+        }
+        guard time > click.leaves else { return (target, 1) }
+        let gone = (time - click.leaves) / fade
+        return gone < 1 ? (CGPoint(x: target.x, y: target.y + 0.03 * canvas.height * gone), 1 - gone) : nil
+    }
+
     /// The pointer of `click` on a layer whose quad is `corners` (canvas points, top-left origin) at `time` in the
     /// scene, in output pixels from the bottom-left; `nil` while it isn't on screen.
     func image(of click: MotionPlan.Click, on corners: [CGPoint], at time: Double, canvas: CGSize, outputScale: Double) -> CIImage? {
-        let lands = click.press - Self.landing
-        let appears = lands - Self.travel
-        guard corners.count == 4, time >= appears, time <= click.leaves + Self.fade else { return nil }
-        let middle = CGPoint(x: corners.map(\.x).reduce(0, +) / 4, y: corners.map(\.y).reduce(0, +) / 4)
-        let onScreen = hypot(corners[3].x - corners[0].x, corners[3].y - corners[0].y)
-        let tip = CGPoint(x: middle.x, y: middle.y + Self.tipBelow * onScreen)
-        var position = tip
-        var opacity = min((time - appears) / 0.1, 1)
-        if time < lands {
-            let progress = MotionEasing.move.progress((time - appears) / Self.travel, duration: Self.travel)
-            let start = CGPoint(x: tip.x + 0.04 * canvas.width, y: tip.y + 0.3 * canvas.height)
-            position = CGPoint(x: start.x + (tip.x - start.x) * progress, y: start.y + (tip.y - start.y) * progress)
-        } else if time > click.leaves {
-            let gone = (time - click.leaves) / Self.fade
-            opacity *= 1 - gone
-            position.y += 0.03 * canvas.height * gone
-        }
-        guard opacity > 0 else { return nil }
-        let sprite = time < lands - 0.05 ? arrow : hand
+        guard let (position, opacity) = Self.tip(of: click, on: corners, at: time, canvas: canvas) else { return nil }
+        let sprite = time < click.press - Self.landing - 0.05 ? arrow : hand
         let pressing = time - (click.press - 0.04)
         let press = pressing > 0 && pressing < 0.2 ? 1 - Self.pressDepth * sin(.pi * pressing / 0.2) : 1
         // Both sprites at the hand's points to pixels, so the arrow is the hand's size as on screen

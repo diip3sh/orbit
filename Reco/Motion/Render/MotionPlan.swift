@@ -72,6 +72,9 @@ nonisolated struct MotionPlan: Sendable {
         /// When a pointer clicks it.
         var clicks: [Click] = []
 
+        /// Drawn where it is at the frame's own time under motion blur, as a burst's particles are (``BurstExpansion/isParticles(_:)``).
+        var isSharp = false
+
         /// The shadow, blurred once at ``rasterScale`` in the layer's own space and projected with
         /// it: blurring it per frame cost most of a frame (a 40 px shadow at 1080p). It spans the
         /// layer and ``shadowPadding`` around it.
@@ -142,7 +145,7 @@ nonisolated struct MotionPlan: Sendable {
         let layer: Int
 
         /// Top-left, top-right, bottom-right and bottom-left, in canvas pixels from the top-left.
-        let corners: [CGPoint]
+        var corners: [CGPoint]
 
         /// The centre's distance from the camera; drawn farthest first.
         let depth: Double
@@ -157,6 +160,9 @@ nonisolated struct MotionPlan: Sendable {
 
         /// The corners of the shadow's image, like ``corners``; `nil` without a shadow.
         var shadowCorners: [CGPoint]?
+
+        /// The corners of the room its letters spring through (``Layer/revealRoom``), like ``corners``; `nil` without it.
+        var roomCorners: [CGPoint]?
 
         /// The camera's blur at each corner in canvas pixels, signed: negative in front of what's
         /// in focus. Empty without depth of field.
@@ -263,13 +269,18 @@ nonisolated struct MotionPlan: Sendable {
             if aperture > 0 {
                 placement.defocus = projected.map { aperture * ($0.depth - focus) / 100 }
             }
-            if layer.shadow != nil {
-                let padding = layer.shadowPadding
-                let padded = [
-                    CGPoint(x: -padding, y: -padding), CGPoint(x: size.width + padding, y: -padding),
-                    CGPoint(x: size.width + padding, y: size.height + padding), CGPoint(x: -padding, y: size.height + padding)
+            let around = { (room: CGSize) -> [CGPoint]? in
+                let corners = [
+                    CGPoint(x: -room.width, y: -room.height), CGPoint(x: size.width + room.width, y: -room.height),
+                    CGPoint(x: size.width + room.width, y: size.height + room.height), CGPoint(x: -room.width, y: size.height + room.height)
                 ].compactMap { point in camera.project((matrix * SIMD4(point.x, point.y, 0, 1)).xyz)?.point }
-                placement.shadowCorners = padded.count == 4 ? padded : nil
+                return corners.count == 4 ? corners : nil
+            }
+            if layer.shadow != nil {
+                placement.shadowCorners = around(CGSize(width: layer.shadowPadding, height: layer.shadowPadding))
+            }
+            if case let room = layer.revealRoom, room != .zero {
+                placement.roomCorners = around(room)
             }
             placements.append(placement)
         }

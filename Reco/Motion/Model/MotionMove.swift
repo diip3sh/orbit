@@ -21,8 +21,8 @@ nonisolated struct MotionMove: Equatable, Sendable {
         // UI and any layer
         case rise, slideIn, tilt, focus, detach, stateChange
         // Motion design, any layer: a pop in, a press, a pointer clicking it, particles out of it, rings out of it,
-        // a long travel to `to`, and a change of size, corners, colour, outline or place
-        case pop, press, click, burst, ripple, scroll, morph
+        // a long travel to `to`, a change of size, corners, colour, outline or place, and a turn into place
+        case pop, press, click, burst, ripple, scroll, morph, spin
         // Motion design, a rectangle: out past the frame's corners
         case flood
         // Groups: their layers one after another

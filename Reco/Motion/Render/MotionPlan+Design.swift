@@ -3,9 +3,9 @@
 //  Reco
 //
 
-import Foundation
+import CoreGraphics
 
-/// What a plan knows of motion design's clicks (spec 0014).
+/// What a plan knows of motion design's clicks and letters (spec 0014).
 nonisolated extension MotionPlan {
 
     /// A pointer clicking a layer: it presses at `press` and stays until `leaves`, seconds into the scene.
@@ -32,5 +32,16 @@ nonisolated extension MotionPlan.Scene {
             current = layers[layer].parent
         }
         return false
+    }
+}
+
+nonisolated extension MotionPlan.Layer {
+
+    /// The room its letters spring through around it, in canvas pixels each side and whole image pixels: its revealed
+    /// image is that much larger, drawn onto the quad around it.
+    var revealRoom: CGSize {
+        guard reveal?.style == .letter, let line = parts.map(\.height).max(), rasterScale > 0 else { return .zero }
+        let room = { (lines: Double) in (line * lines * rasterScale).rounded(.up) / rasterScale }
+        return CGSize(width: room(MotionFrameRenderer.letterRoom.width), height: room(MotionFrameRenderer.letterRoom.height))
     }
 }

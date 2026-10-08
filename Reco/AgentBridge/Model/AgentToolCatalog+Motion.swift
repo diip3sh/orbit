@@ -68,13 +68,15 @@ nonisolated extension AgentToolCatalog {
         Moves {move, start, duration, intensity, direction, words, region, to}: text fadeUp, blurIn, blurWipe (letters sharpen \
         left to right), lineMask (lines rise out of a mask), wordByWord (words fade up one after another), type, roll (words: \
         the last word replaced in turn), exit; any layer rise, tilt, focus (region), detach, stateChange; a group cascade; \
-        the camera hold, push, pan (to [x,y] on the canvas, intensity the zoom it ends at), whip (to [x,y], intensity how much \
+        the camera hold, push, pan (to [x,y] on the canvas, intensity the zoom it ends at; pans chain, so a pan back out \
+        follows a pan in), whip (to [x,y], intensity how much \
         closer, 0.35 s), pullBack, drift (direction left, right, up, down). intensity 1 is the grammar's own amount.
         Motion design (the reco-motion-design skill has recipes): shape layers {size, cornerRadius, color, stroke (an \
         outline that wide), kind rectangle|triangle|plus|check|cross|arrow|search|play|pause}; a shadow {opacity, radius, \
         offset 0, color} is a glow; canvas fieldStrength 0–1 tones the field down. Moves: morph {size, radius, color, \
-        stroke (0 fills), to [x,y]} from where the last left it; flood (a rectangle out past the frame); pop; press; click (a \
-        pointer comes in and presses it, a group too); burst {color} (particles); ripple {color, stroke for soft bands}; \
+        stroke (0 fills), to [x,y]} from where the last left it; flood (a rectangle out past the frame); pop; press; spin (a \
+        quarter turn into place); click (a pointer comes in and presses it, a group too); burst {color} (particles); ripple \
+        {color, stroke for soft bands inside a rectangle}; \
         letters and kinetic (text: springing in; typed behind an accent caret); scroll {to} (with cascade, rows build as \
         they come into view).
 

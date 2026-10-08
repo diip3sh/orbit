@@ -22,8 +22,13 @@ nonisolated enum MotionLint {
         let message: String
     }
 
-    /// Nothing moving and nothing to read for longer than this is a frozen stretch.
+    /// Nothing moving and nothing to read for longer than this is a frozen stretch; in motion design, where something
+    /// changes every beat, a beat and a half at the reference's 125 BPM (spec 0014).
     static let longestStillness = 1.5
+    static let designStillness = 0.72
+
+    /// The moves that make a scene motion design.
+    private static let designMoves: Set<MotionMove.Kind> = [.letters, .kinetic, .pop, .press, .click, .burst, .ripple, .scroll, .morph, .spin, .flood]
 
     /// Typing faster than the fastest reference (25 characters a second) reads as a paste.
     static let fastestTyping = 25.0
@@ -33,7 +38,7 @@ nonisolated enum MotionLint {
 
     /// Moves that act on a layer already shown: they don't delay when it can be read. A burst and a ripple start
     /// their own layers, which count for them.
-    private static let actions: Set<MotionMove.Kind> = [.exit, .click, .press, .morph, .flood, .scroll, .burst, .ripple]
+    private static let actions: Set<MotionMove.Kind> = [.exit, .click, .press, .spin, .morph, .flood, .scroll, .burst, .ripple]
 
     static func findings(in document: MotionDocument, sizes: [String: CGSize] = [:]) -> [Finding] {
         let expanded = DocumentExpansion.expanded(document, sizes: sizes)
@@ -205,9 +210,12 @@ nonisolated enum MotionLint {
         var findings: [Finding] = []
         let cameraMoves = scene.camera.moves.map { MoveExpansion.timing(of: $0, in: MoveContext(sceneDuration: scene.duration, canvas: .zero)) }
         let cameraMovesAtCut = cameraMoves.contains { $0.start < 0.3 } || scene.seam == .cutOnMotion
-        // A burst's and a ripple's own layers carry their start
+        // A burst's and a ripple's own layers carry their start; a group and its layers are one thing
         let starts = layers.flatMap { layer in
-            layer.moves.filter { $0.kind != .burst && $0.kind != .ripple }.map { (start: $0.start, key: layer.group ?? layer.layer.id + "\($0.start)") }
+            let isGroup = if case .group = layer.layer.content { true } else { false }
+            return layer.moves.filter { $0.kind != .burst && $0.kind != .ripple }.map { move in
+                (start: move.start, key: layer.group ?? (isGroup ? layer.layer.id : layer.layer.id + "\(move.start)"))
+            }
         }.sorted { $0.start < $1.start }
 
         if let first = starts.first?.start {
@@ -237,7 +245,8 @@ nonisolated enum MotionLint {
                 findings.append(Finding(rule: .typingRate, scene: scene.id, layer: timed.layer.id, message: "Typed faster than 25 characters a second."))
             }
         }
-        if !isEndCard, let gap = longestStillness(layers, scene: scene, cameraMoves: cameraMoves, live: live), gap.length > longestStillness {
+        let stillest = layers.contains { $0.moves.contains { designMoves.contains($0.kind) } } ? designStillness : longestStillness
+        if !isEndCard, let gap = longestStillness(layers, scene: scene, cameraMoves: cameraMoves, live: live), gap.length > stillest {
             findings.append(Finding(
                 rule: .stillness, scene: scene.id,
                 message: "Nothing moves and nothing new is read from \(gap.start.formatted()) s for \(gap.length.formatted(.number.precision(.fractionLength(1)))) s."

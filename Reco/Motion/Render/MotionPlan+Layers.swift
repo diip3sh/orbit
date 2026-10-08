@@ -35,6 +35,7 @@ extension MotionPlan {
                 size: size, shadow: layer.shadow
             )
             planned.parts = parts
+            planned.isSharp = BurstExpansion.isParticles(layer.id) || parent.map { list[$0].isSharp } ?? false
             for move in layer.moves {
                 let effect = MoveExpansion.effect(of: move, in: context)
                 planned.moves.merge(effect.tracks) { $0 + $1 }

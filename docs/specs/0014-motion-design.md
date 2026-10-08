@@ -145,7 +145,8 @@ and `reference/*.md`. For Claude Code, `--tools` adds `Read`, and `--allowedTool
 | D3 | Sound cues | Done |
 | D4 | Skill, prompts, catalog, permission | Done |
 | D5 | Look-dev: the reference's beats rebuilt by hand, stills beside its frames | Done |
-| D6 | The Spotify film from the app | Done; the user's verdict next |
+| D6 | The Spotify film from the app | Done |
+| D7 | Smoother: the reference's transitions measured again, the engine and the skill after them | Done; the user's verdict next |
 
 ## Open questions
 
@@ -207,6 +208,7 @@ The reference's beats were rebuilt as one document from Spotify's web player and
   reference's at every beat: the queue, the pill, the click, the flood with bands and chip, the outline with
   listeners, Invite chosen, kinetic type, the check in a burst.
 - **Open:** Spotify's nav logo lifts with an opaque grey box (`#6b7885`) behind it, even bare and at a phone viewport.
+  (D7: the same logo from www.spotify.com's header, `header svg`, lifts clean.)
 
 ### D6: the Spotify film from the app
 
@@ -233,3 +235,51 @@ movements:
     - No icon in the pill.
 - **Full suite:** 847 tests. Only `ExportServiceTests.keepsATransparentBackgroundInProRes4444` fails (alpha 254),
   as before.
+
+### D7: smoother, after a second look at the reference
+
+The user found the D6 film good but its transitions and animation not yet professional. The reference and the film
+were compared frame by frame at every transition (strips of 24–36 frames). The reference is never still and never
+waiting: each move starts before the last settles, new things come out of what is there, and the camera carries the
+changes it doesn't cut. The engine's moves were measured again where they read differently.
+
+- **Letters** (`TextReveal.letterPose`): tracked letter by letter in "Start a Jam" (the pill's own lift taken out), each
+  comes up from about 0.7 of its line below at a third of its size, is at 1.35× a quarter line above its place 0.1 s in
+  (its height 39 px against 24 at rest, the hover's 1.2× taken out), and falls back over 0.3 s in-out with no second
+  bounce. Before, letters rose 0.45 of a line with CSS's out-back (10 % past) and read as a fade. A letter reveal's
+  image has room around its text (half a line across, a line up and down, whole pixels), projected onto the quad grown
+  by the same room (`Placement.roomCorners`), so letters travel outside their line.
+- **The hover** lifts the pill about 75 px and grows it 20 % in 0.1 s (it had grown 10 %); the press brings it back.
+- **The flood** (`ShapeMorph`): its widths a frame apart were 0.19 (dipped), 0.37, 0.54, 0.66, 0.76, 0.84, 0.90, 0.96,
+  0.99 and 1.0 of the frame, out-cubic, at an aspect near the frame's (1.95). It now grows into the frame's shape,
+  corners 0.35 of its height round, 1.05× what covers the frame from where the shape is. Grown round at the pill's
+  aspect it had to reach 3–4 frame widths, and filled the frame in two frames. The dip measured 0.57, not 0.6.
+- **Bands** (a ripple with a stroke on a rectangle) are drawn inside its shape, from a tenth of its size out to its
+  edge, so they open in the flood's shape and leave with the iris; drawn as rings over it, they hung over black after
+  the iris. A thin ripple's rings open by half the layer's side (they crossed the frame) over 0.7 s.
+- **Particles** are drawn at the frame's own time under motion blur (`Layer.isSharp`, `BurstExpansion.isParticles`),
+  and don't count towards how far the frame moves: a 180° shutter streaked them into rays, where the reference's are
+  sharp. They spread 1.4× farther across than down.
+- **The pointer** comes up from below the frame in 0.3 s, out-cubic (the reference: 0.76, 0.65, 0.6 of the height 0.2,
+  0.13 and 0.07 s before it lands); it had drifted in over 0.5 s, faded. Its travel counts towards motion blur, so it
+  streaks as the reference's does.
+- **`spin`**: a quarter turn into place, overshooting, 0.5 s: the reference's plus spinning in.
+- **Pans chain** (`MoveExpansion.cameraContexts`): each camera move starts where the moves before left the camera, so a
+  pan in on the plus and a pan back out show the check landing in the queue without a cut. Before, a second pan was
+  computed from the scene's start and did nothing.
+- **Kinetic type's caret** is there 0.3 s before the first letter, so the caret the scene before stretched out of a dot
+  holds across the cut.
+- **Lint:** a motion-design scene holds still for at most 0.72 s (a beat and a half at 125 BPM, 1.5 s otherwise); a
+  group and its layers count once among simultaneous starts.
+- **The skill** says all of this: never still, things out of each other, the camera carrying the change, a cut only
+  where a shape continues; its recipes and example are the new look-dev.
+- **Look-dev** (`~/Movies/Reco/quality/design/Jam Smooth.motion`, made and exported in the app): 19.4 s in four scenes,
+  lint-clean, exported at 4K in 2 min. The pill grows as the list leaves; the hover lifts it; the chip is in the flood
+  from its start; Invite and Leave slide out of the outline; Invite flies to the caret's place; the carets meet across
+  the cut to the pixel; the camera pans in on the plus and back out into the queue, which scrolls away to the logo.
+- **From the app:** the D6 request (its ending changed to "the queue scrolls away to Spotify's logo") made `Spotify Jam
+  2` in 6.3 min (20:29–20:36): the agent built from the new example with its own words ("Listen together"), lint-clean;
+  19.4 s at 4K, −16.0 LUFS, −3.9 dBFS peak.
+- A test helper read Core Image's bitmaps bottom-up (`MotionDesignTests.pixels`): the shapes it measured are symmetric,
+  so no test had noticed.
+

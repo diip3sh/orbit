@@ -60,15 +60,16 @@ scene.
 
 | Move | On | Fields | What it does | Default length |
 |---|---|---|---|---|
-| `morph` | Any layer; size, radius, colour and outline only on a rectangle | `size` [w, h], `radius`, `color`, `stroke` (0 fills it), `to` [x, y] | Changes the shape from where the morph before left it, and moves its anchor to `to`. Slow off, fast, long settle. Chain as many as you like. | 0.43 s (0.1–0.15 s for a hover) |
-| `flood` | Rectangle | | A dip to 0.6 of its size, then out past the frame's corners, filled. A `morph` to a size after it is the iris back. | 0.57 s |
+| `morph` | Any layer; size, radius, colour and outline only on a rectangle | `size` [w, h], `radius`, `color`, `stroke` (0 fills it), `to` [x, y] | Changes the shape from where the morph before left it, and moves its anchor to `to`. Slow off, fast, long settle. Chain as many as you like. With `to` alone it's a move: a slide out of another layer, a lift, a flight to where the next state is. | 0.43 s (0.1–0.15 s for a hover) |
+| `flood` | Rectangle | | A dip to 0.57 of its size, then a rounded rectangle of the frame's shape that covers the frame 0.3 s on and stops just past its corners. A `morph` to a size after it is the iris back. | 0.57 s |
 | `pop` | Any | `intensity` (1: from 0.6 of its size) | Appears, growing past its size and settling. | 0.4 s |
 | `press` | Any | `intensity` | Dips to 0.92 and springs back past it. | 0.4 s |
-| `click` | Any, a group too | | A pointer rises in from below over 0.5 s, lands 0.15 s before `start`, turns to a hand, presses the layer at `start` (as `press`), and fades after `duration`. Put it where the state changes. | 0.8 s after the press |
-| `burst` | Any | `color`, `intensity` (how far) | About 36 triangles thrown out from its middle to most of the frame's height in 0.3 s, spinning and drifting, gone by 1.2 s. Behind it. | 1.2 s |
-| `ripple` | Any; a rectangle's own shape | `color`, `stroke` (soft bands that wide), `intensity` (how far) | Two rings, 0.12 s apart, opening from its edge and fading, over it. Thin by default (a pulse round a check); with `stroke` 70–90, soft bands (the flood's). | 0.9 s |
-| `letters` | Text | | Each letter springs up into place, 0.036 s apart, overshooting. | 0.036 s a letter + 0.32 s |
-| `kinetic` | Text | `color` (the accent by default) | Typed at 13 characters a second behind a caret block. The newest letters are in the colour, fading to the text's over 0.25 s. The caret goes 0.6 s after the last letter. | Characters / 13 |
+| `click` | Any, a group too | | A pointer comes up from below the frame in 0.3 s, fast then slowing, lands 0.15 s before `start`, turns to a hand, presses the layer at `start` (as `press`), and fades after `duration`. Put it where the state changes. | 0.8 s after the press |
+| `burst` | Any | `color`, `intensity` (how far) | About 36 sharp triangles thrown out from its middle across the frame in 0.2 s, spinning and drifting, gone by 1.2 s. Behind it. | 1.2 s |
+| `ripple` | Any | `color`, `stroke`, `intensity` (how far) | Thin by default: two rings, 0.12 s apart, opening from its edge by half its side and fading, over it (a pulse round a check). With `stroke` 70–90 on a rectangle: soft bands of light opening inside it from its middle to its edge, going where it goes (the flood's, gone with the iris). | 0.7 s; bands 0.9 s |
+| `letters` | Text | | Each letter springs up from below its line, 0.036 s apart: small at first, past its place at 1.35× a tenth of a second in, then settling. | 0.036 s a letter + 0.4 s |
+| `kinetic` | Text | `color` (the accent by default) | Typed at 13 characters a second behind a caret block. The caret is there 0.3 s before the first letter, so a caret from the scene before holds across the cut. The newest letters are in the colour, fading to the text's over 0.25 s. The caret goes 0.6 s after the last letter. | Characters / 13 |
+| `spin` | Any; a glyph usually | `intensity` (quarter turns) | Turns a quarter turn into place, overshooting: a plus spinning in with its `pop`. | 0.5 s |
 | `scroll` | Any, usually a group | `to` [x, y] | A long travel, slow off and slow in, blurred in its middle. A group that also has `cascade` builds each row as it comes into view. | From the distance, about 1.8 frame heights a second at the fastest |
 | `cascade` | Group | | Its layers rise one after another; with a `scroll`, as they come into view. | |
 | `exit` | Any | `direction` up, down, left or right | Leaves, blurring, the way it's told. | 0.25 s |
@@ -78,7 +79,9 @@ scene.
 Camera moves sit on the scene: `"camera": {"moves": [...]}`.
 
 - `push`: `intensity` 2 is 24 % closer.
-- `pan`: `to` [x, y] is the point it looks at; `intensity` is how much closer it ends.
+- `pan`: `to` [x, y] is the point it looks at; `intensity` is how much closer than at the scene's start it ends.
+  Pans chain: each starts where the camera is. Pan in on what's about to change, then pan back out (`to` the
+  frame's middle, `intensity` 1) to show where it landed, instead of cutting to a new layout.
 - `whip`, `pullBack`.
 
 ## Canvas
@@ -88,29 +91,33 @@ Camera moves sit on the scene: `"camera": {"moves": [...]}`.
 
 ## Scenes and seams
 
-- Cut between scenes, on a beat, where the same object continues. End one scene on a pill of a size and place,
-  and start the next with a pill of that size and place.
+- Cut between scenes, on a beat, only where the same object continues. End one scene on a pill of a size and
+  place, and start the next with a pill of that size and place. Where the next state is a new layout around the
+  same object, keep one scene and move the camera instead.
 - Give each scene enough time for its moves: the last move's end plus about 0.3 s.
 - A scene whose first layer must be there on its first frame shouldn't wait for an entrance. Lifted UI `rise`s
   from 0.
 
 ## Morphs, worked through
 
-A pill that grows out of a dot, rises, grows on hover, is clicked and floods:
+A pill that grows out of a dash while it's still popping, rises before it's done growing, lifts and grows on hover,
+is pressed back down, and floods:
 
 ```json
 "moves": [
   {"move": "pop", "start": 3.3},
-  {"move": "morph", "start": 3.45, "size": [560, 184]},
-  {"move": "morph", "start": 3.8, "to": [960, 540]},
-  {"move": "morph", "start": 4.85, "size": [615, 202], "duration": 0.12},
-  {"move": "click", "start": 5.2, "duration": 0.4},
-  {"move": "morph", "start": 5.35, "size": [560, 184], "duration": 0.25},
-  {"move": "flood", "start": 5.75},
-  {"move": "ripple", "start": 6.35, "color": "#3bf07c", "stroke": 90, "intensity": 2.5},
-  {"move": "morph", "start": 6.95, "size": [560, 184], "duration": 0.35}
+  {"move": "morph", "start": 3.33, "size": [560, 184]},
+  {"move": "morph", "start": 3.55, "to": [960, 540]},
+  {"move": "morph", "start": 4.85, "size": [672, 221], "to": [960, 505], "duration": 0.12},
+  {"move": "morph", "start": 5.1, "size": [560, 184], "to": [960, 540], "duration": 0.2},
+  {"move": "click", "start": 5.2, "duration": 0.35},
+  {"move": "flood", "start": 5.72},
+  {"move": "ripple", "start": 6.3, "color": "#3bf07c", "stroke": 90},
+  {"move": "morph", "start": 7.05, "size": [430, 130], "duration": 0.3}
 ]
 ```
+
+Its label moves with it: the same `to` morphs at the same times.
 
 An outlined button whose outline turns green on hover and which then fills, shrinks to a dot and stretches into
 a caret:

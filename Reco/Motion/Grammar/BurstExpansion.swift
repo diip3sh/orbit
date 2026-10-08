@@ -8,24 +8,26 @@ import Foundation
 
 /// Motion design's accents as layers of their own (spec 0014): a burst's particles and a ripple's rings, laid
 /// beside the layer they come out of and keyframed, seeded by its id so they fall the same way every time. Measured
-/// on the Spotify Jam film's check (13.0–14.0 s): about 40 triangles thrown out to most of the frame's height in
-/// 0.3 s, drifting and spinning, gone within a second.
+/// on the Spotify Jam film's check (13.0–14.0 s): about 40 triangles thrown out across the frame in 0.2 s, sharp, drifting
+/// and spinning, gone within a second; a thin ring hugging the disc. A ripple with a stroke is the flood's soft bands,
+/// drawn inside its shape (``ShapeMorph/Band``).
 nonisolated enum BurstExpansion {
 
     static let particles = 36
     static let duration = 1.2
 
-    /// How far the farthest particle flies, as a share of the canvas's height.
+    /// How far the farthest particle flies, as a share of the canvas's height, and how much farther across.
     static let reach = 0.6
+    static let reachAcross = 1.4
 
     /// Particles' sides at 1080p.
     static let sides = 8.0...19.0
 
-    /// Rings: two, 0.12 s apart, each opening this far past the layer's edge (a share of the canvas's height).
+    /// Rings: two, 0.12 s apart, each opening past the layer's edge by this share of its shorter side.
     static let rings = 2
     static let ringStagger = 0.12
-    static let ringReach = 0.25
-    static let rippleDuration = 0.9
+    static let ringReach = 0.5
+    static let rippleDuration = 0.7
     static let ringWidth = 2.5
 
     /// A band's blur, as a share of its width.
@@ -45,11 +47,25 @@ nonisolated enum BurstExpansion {
         for (index, move) in source.layer.moves.enumerated() {
             switch move.kind {
             case .burst: accents.behind.append(burst(move, number: index, from: source))
-            case .ripple: accents.over.append(ripple(move, number: index, from: source))
+            case .ripple:
+                if case .shape(let shape) = source.layer.content, ShapeMorph.isBand(move, on: shape) {
+                    continue
+                }
+                accents.over.append(ripple(move, number: index, from: source))
             default: break
             }
         }
         return accents
+    }
+
+    /// Whether `id` is a burst's particles: drawn sharp at the frame's time under motion blur, as the film's are. Thrown
+    /// across the frame in 0.2 s, a 180° shutter streaked them into rays.
+    static func isParticles(_ id: String) -> Bool {
+        id.split(separator: ".").last.map { $0.hasPrefix("burst") && $0.dropFirst(5).allSatisfy(\.isNumber) && $0.count > 5 } ?? false
+    }
+
+    private static func particlesID(of layer: String, number: Int) -> String {
+        "\(layer).burst\(number)"
     }
 
     // MARK: - Burst
@@ -61,6 +77,7 @@ nonisolated enum BurstExpansion {
         var random = SeededRandom(seed: seed("\(layer.id).burst\(number)"))
         let amount = move.intensity ?? 1
         let unit = context.unit
+        let group = particlesID(of: layer.id, number: number)
         let pieces = (0..<particles).map { index -> MotionLayer in
             let angle = random.uniform(0...(2 * .pi))
             let distance = reach * context.canvas.height * amount * (0.3 + 0.7 * pow(random.unit(), 0.6))
@@ -70,12 +87,12 @@ nonisolated enum BurstExpansion {
             var alpha = color
             alpha.alpha *= random.uniform(0.55...1)
             var piece = MotionLayer(
-                id: "\(layer.id).burst\(number).\(index)",
+                id: "\(group).\(index)",
                 content: .shape(ShapeContent(kind: .triangle, size: CGSize(width: side, height: side), color: alpha))
             )
             let thrown = MotionEasing.settle(timeConstant: 0.18)
             piece.keyframes = [
-                .positionX: [Keyframe(time: start, value: 0, easing: thrown), Keyframe(time: start + lasts, value: cos(angle) * distance)],
+                .positionX: [Keyframe(time: start, value: 0, easing: thrown), Keyframe(time: start + lasts, value: cos(angle) * distance * reachAcross)],
                 .positionY: [Keyframe(time: start, value: 0, easing: thrown), Keyframe(time: start + lasts, value: sin(angle) * distance)],
                 .rotationZ: [Keyframe(time: start, value: random.uniform(0...360)), Keyframe(time: start + lasts, value: spin)],
                 .scale: [Keyframe(time: start, value: 0.3, easing: .enterFast), Keyframe(time: start + 0.15, value: 1)],
@@ -87,7 +104,7 @@ nonisolated enum BurstExpansion {
             return piece
         }
         let place = centre(of: layer, before: start, sizes: source.sizes, context: context)
-        return MotionLayer(id: "\(layer.id).burst\(number)", content: .group(pieces), transform: Transform3D(position: place))
+        return MotionLayer(id: group, content: .group(pieces), transform: Transform3D(position: place))
     }
 
     // MARK: - Ripple
@@ -100,15 +117,17 @@ nonisolated enum BurstExpansion {
         let amount = move.intensity ?? 1
         let edge: (size: CGSize, radius: Double)
         if case .shape(let shape) = layer.content, !shape.isGlyph {
-            edge = (shape.size, shape.cornerRadius)
+            // As its morphs have left it
+            let state = ShapeMorph(shape, moves: layer.moves, context: context)?.state(at: start)
+            edge = (state?.size ?? shape.size, state?.radius ?? shape.cornerRadius)
         } else {
             let side = 0.12 * context.canvas.height
             edge = (CGSize(width: side, height: side), side / 2)
         }
         let rings = (0..<rings).map { index -> MotionLayer in
             let begins = start + Double(index) * ringStagger
-            let margin = ringReach * context.canvas.height * amount * (1 + 0.4 * Double(index))
-            // A thin ring by default, a pulse; a ripple with a stroke opens soft bands that wide, as the film's flood does
+            let margin = ringReach * min(edge.size.width, edge.size.height) * amount * (1 + 0.4 * Double(index))
+            // A thin ring by default, a pulse; soft bands that wide around anything but a rectangle, which has them inside
             let width = move.stroke ?? ringWidth * context.unit
             var ring = MotionLayer(
                 id: "\(layer.id).ripple\(number).\(index)",

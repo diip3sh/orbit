@@ -192,7 +192,7 @@ extension AgentInvocationTests {
         let end = try #require(example.range(of: "\n```", range: start.upperBound..<example.endIndex))
         let document = try JSONDecoder().decode(MotionDocument.self, from: Data(example[start.upperBound..<end.lowerBound].utf8))
         try document.validate()
-        #expect(document.canvas.fieldStrength == 0.45 && document.scenes.count == 5)
+        #expect(document.canvas.fieldStrength == 0.45 && document.scenes.count == 4)
         #expect(MotionLint.findings(in: document).isEmpty)
     }
 

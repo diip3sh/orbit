@@ -14,12 +14,8 @@ extension MotionPlan {
     nonisolated static func cameraMoves(_ moves: [MotionMove], of scene: Scene, context: MoveContext) -> [MotionProperty: [PropertyTrack]] {
         var context = context
         context.lookAt = CGPoint(x: scene.cameraBase[.positionX] ?? 0, y: scene.cameraBase[.positionY] ?? 0)
-        return moves.reduce(into: [:]) { tracks, move in
-            tracks.merge(MoveExpansion.effect(of: move, in: context).tracks) { $0 + $1 }
-            // A move after a whip starts where it looks: a macro's whips go from stop to stop
-            if move.kind == .whip, let target = move.target {
-                context.lookAt = target
-            }
+        return zip(moves, MoveExpansion.cameraContexts(of: moves, from: context)).reduce(into: [:]) { tracks, move in
+            tracks.merge(MoveExpansion.effect(of: move.0, in: move.1).tracks) { $0 + $1 }
         }
     }
 

@@ -35,35 +35,44 @@ nonisolated enum MotionFrameRenderer {
         let scene = plan.scenes[plan.sceneIndex(at: time)]
         // Inside the scene: a shutter open across a cut would blend the two shots
         let times = offsets.map { min(max(time + $0 * shutter, scene.start), scene.start + scene.duration - 1e-6) }
-        let frame = FrameRenderer.average(times.map { still(at: $0, plan: plan, frames: frames) })
+        let frame = FrameRenderer.average(times.map { still(at: $0, sharpAt: time, plan: plan, frames: frames) })
         // Satin's grain goes over the whole frame, its UI too, once a frame
         guard scene.field == .satin else { return frame }
         return FieldRenderer.grained(frame, index: Int((time * Double(plan.frameRate)).rounded()), size: plan.outputSize)
     }
 
-    /// How far the planes on screen at `time` move while a shutter `shutter` seconds long is open, in
-    /// output pixels: the most any of their corners travels.
+    /// How far the planes and pointers on screen at `time` move while a shutter `shutter` seconds long is open, in
+    /// output pixels: the most any of their corners or tips travels. Layers drawn sharp don't count.
     private static func travel(at time: Double, across shutter: Double, plan: MotionPlan) -> Double {
         let (scene, sceneTime) = plan.scene(at: time)
-        let closing = Dictionary(plan.placements(of: scene, at: sceneTime + shutter / 2).map { ($0.layer, $0.corners) }) { first, _ in first }
-        let travel = plan.placements(of: scene, at: sceneTime - shutter / 2).map { opening in
+        let (opens, closes) = (sceneTime - shutter / 2, sceneTime + shutter / 2)
+        let moving = { (time: Double) in plan.placements(of: scene, at: time).filter { !scene.layers[$0.layer].isSharp } }
+        let closing = Dictionary(moving(closes).map { ($0.layer, $0.corners) }) { first, _ in first }
+        let travel = moving(opens).map { opening in
             closing[opening.layer].map { corners in
                 zip(opening.corners, corners).map { hypot($0.x - $1.x, $0.y - $1.y) }.max() ?? 0
             } ?? 0
         }
-        return (travel.max() ?? 0) * plan.outputScale
+        let pointers = zip(pointerTips(of: scene, at: opens, plan: plan), pointerTips(of: scene, at: closes, plan: plan)).map { tips in
+            tips.0.flatMap { from in tips.1.map { hypot($0.x - from.x, $0.y - from.y) } } ?? 0
+        }
+        return ((travel + pointers).max() ?? 0) * plan.outputScale
     }
 
-    /// The frame at `time` as a shutter open for an instant sees it.
-    private static func still(at time: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage]) -> CIImage {
+    /// The frame at `time` as a shutter open for an instant sees it, with layers drawn sharp where they are at `sharp`, the
+    /// frame's own time.
+    private static func still(at time: Double, sharpAt sharp: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage]) -> CIImage {
         let bounds = CGRect(origin: .zero, size: plan.outputSize)
         let index = plan.sceneIndex(at: time)
         let sceneTime = time - plan.scenes[index].start
+        let sharpTime = sharp - plan.scenes[index].start
         let background = CIImage(color: plan.background).cropped(to: bounds)
-        var frame = sceneImage(index, at: sceneTime, plan: plan, frames: frames)
+        var frame = sceneImage(index, at: sceneTime, sharpAt: sharpTime, plan: plan, frames: frames)
         // Under a transition, the scene before goes on from its end
         if let transition = plan.scenes[index].transition, index > 0, sceneTime < transition.duration {
-            let previous = sceneImage(index - 1, at: plan.scenes[index - 1].duration + sceneTime, plan: plan, frames: frames)
+            let previous = sceneImage(
+                index - 1, at: plan.scenes[index - 1].duration + sceneTime, sharpAt: plan.scenes[index - 1].duration + sharpTime, plan: plan, frames: frames
+            )
             let progress = transition.progress(at: sceneTime)
             switch transition.seam {
             case .push:
@@ -96,12 +105,17 @@ nonisolated enum MotionFrameRenderer {
         _ = try context.startTask(toRender: image(at: time, plan: plan, frames: frames), to: destination).waitUntilCompleted()
     }
 
-    /// A scene's layers at `time` in it, blurred as its camera is, over its field.
-    private static func sceneImage(_ index: Int, at time: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage]) -> CIImage {
+    /// A scene's layers at `time` in it, blurred as its camera is, over its field; layers drawn sharp where they are at
+    /// `sharp`.
+    private static func sceneImage(_ index: Int, at time: Double, sharpAt sharp: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage]) -> CIImage {
         let scene = plan.scenes[index]
         let field = ground(index, at: time, plan: plan)
         var image = CIImage.empty()
-        for placement in plan.placements(of: scene, at: time) {
+        var placements = plan.placements(of: scene, at: time)
+        if sharp != time, scene.layers.contains(where: \.isSharp) {
+            placements = sharpened(placements, at: plan.placements(of: scene, at: sharp), of: scene)
+        }
+        for placement in placements {
             var layer = scene.layers[placement.layer]
             guard var content = content(of: &layer, at: time, take: frames[MotionPlan.LayerKey(scene: index, layer: placement.layer)]) else { continue }
             if let reveal = layer.reveal {
@@ -115,7 +129,10 @@ nonisolated enum MotionFrameRenderer {
                     content = MotionPlan.focused(content, on: region, dim: dim, height: layer.size.height)
                 }
             }
-            var layerImage = drawn(content, layer: layer, at: placement, time: time, plan: plan)
+            // Letters springing in are drawn in the room around the layer
+            var room = placement
+            room.corners = placement.roomCorners ?? placement.corners
+            var layerImage = drawn(content, layer: layer, at: room, time: time, plan: plan)
             // On glass: over its panel, clipped to it, and the panel's shadow under both
             if let panel = GlassRenderer.panel(under: layer, at: placement, lit: SatinSetup.forShot(scene.fieldShot).glass, over: field, plan: plan) {
                 let faded = { (image: CIImage) in placement.opacity < 1 ? image.fading(to: placement.opacity) : image }
@@ -299,75 +316,6 @@ nonisolated enum MotionFrameRenderer {
         }
         return side(1).applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: side(-1)])
             .cropped(to: extent)
-    }
-
-    /// A text layer's parts shown as far as `reveal` has got at `time`: each whole, or partly, by
-    /// its style. Its image is drawn at its raster scale, rounded up to whole pixels.
-    private static func revealed(_ image: CIImage, of layer: MotionPlan.Layer, by reveal: TextReveal, at time: Double) -> CIImage {
-        let pixels = { (rect: CGRect) in revealPixels(of: rect, in: layer) }
-        // The layer's whole extent, clear where nothing shows yet: the projection maps the extent to the quad
-        var shown = CIImage(color: .clear).cropped(to: image.extent)
-        // Parts already shown in full, joined while they're on one line
-        var whole: CGRect?
-        for (index, part) in layer.parts.enumerated() {
-            let fraction = reveal.fraction(ofPart: index, at: time)
-            guard fraction > 0 else { break }
-            if fraction >= 1 {
-                if let run = whole, abs(run.minY - part.minY) < 0.5 {
-                    whole = run.union(part)
-                } else {
-                    if let run = whole {
-                        shown = image.cropped(to: pixels(run)).composited(over: shown)
-                    }
-                    whole = part
-                }
-                continue
-            }
-            let progress = reveal.progress(ofPart: index, at: time)
-            if let piece = partway(image.cropped(to: pixels(part)), part: part, of: layer, style: reveal.style, progress: (progress, fraction)) {
-                shown = piece.composited(over: shown)
-            }
-        }
-        if let run = whole {
-            shown = image.cropped(to: pixels(run)).composited(over: shown)
-        }
-        if reveal.style == .kinetic, layer.accent != nil {
-            shown = kinetic(shown, image: image, of: layer, by: reveal, at: time)
-        }
-        return shown.cropped(to: image.extent)
-    }
-
-    /// A part's rectangle (canvas pixels from the layer's top-left) in its image's pixels, taller than its line for
-    /// accents and descenders that reach past it.
-    static func revealPixels(of rect: CGRect, in layer: MotionPlan.Layer) -> CGRect {
-        let (scale, height) = (layer.rasterScale, layer.size.height)
-        let rect = rect.insetBy(dx: 0, dy: -rect.height * 0.15)
-        return CGRect(x: rect.minX * scale, y: (height - rect.maxY) * scale, width: rect.width * scale, height: rect.height * scale)
-    }
-
-    /// A part on its way in, `progress` of the way (eased, then not), as its style shows it; `nil` for a style that
-    /// shows a part only whole.
-    private static func partway(
-        _ piece: CIImage, part: CGRect, of layer: MotionPlan.Layer, style: TextReveal.Style, progress: (eased: Double, fraction: Double)
-    ) -> CIImage? {
-        let (eased, line, scale) = (progress.eased, part.height, layer.rasterScale)
-        switch style {
-        case .type, .kinetic:
-            return nil
-        case .wipe:
-            // Sharpens as it fades in: 8% of its line, 9.8 px for a 1080p headline (at most 10 on text)
-            return piece.applyingGaussianBlur(sigma: (1 - eased) * line * 0.08 * scale).fading(to: eased)
-        case .rise:
-            return piece.transformed(by: CGAffineTransform(translationX: 0, y: -(1 - eased) * line * scale)).cropped(to: revealPixels(of: part, in: layer))
-        case .word:
-            // Up a quarter of its line, sharpening from 4% of it, as it fades in
-            return piece.applyingGaussianBlur(sigma: (1 - eased) * line * 0.04 * scale)
-                .transformed(by: CGAffineTransform(translationX: 0, y: -(1 - eased) * line * 0.25 * scale)).fading(to: eased)
-        case .letter:
-            // Up 0.45 of its line past its place and back, sharpening from 6% of it, there within its first 40%
-            return piece.applyingGaussianBlur(sigma: max(1 - progress.fraction * 1.5, 0) * line * 0.06 * scale)
-                .transformed(by: CGAffineTransform(translationX: 0, y: -(1 - eased) * line * 0.45 * scale)).fading(to: min(progress.fraction / 0.4, 1))
-        }
     }
 
     /// `image` with its corners on `corners`, given in canvas points from the top-left.

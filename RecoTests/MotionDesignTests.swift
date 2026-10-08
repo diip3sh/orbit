@@ -66,16 +66,28 @@ struct MotionDesignTests {
         #expect(layer.morph == nil)
     }
 
-    @Test func aFloodCoversTheFrameFromItsCorner() async throws {
-        let plan = await MotionPlan.build(try document(pill(#"[{"move": "flood", "start": 0.5}]"#, at: "[0, 0, 0]")), bundle: bundle)
+    @Test func aFloodTakesTheFramesShapeAndJustCoversIt() async throws {
+        let plan = await MotionPlan.build(try document(pill(#"[{"move": "flood", "start": 0.5}]"#)), bundle: bundle)
         let morph = try #require(plan.scenes[0].layers[0].morph)
 
-        // Its dip first, to 0.6 of its size
+        // Its dip first, to 0.57 of its size
         let dipped = morph.state(at: 0.5 + ShapeMorph.floodDip)
-        #expect(abs(dipped.size.width - 24) < 1e-6)
+        #expect(abs(dipped.size.width - 40 * ShapeMorph.floodDipScale) < 1e-6)
+        // The frame's shape, its corners a third of its height round, just past the frame's corners from its middle
         let filled = morph.state(at: 2)
-        #expect(filled.stroke == 0 && filled.isRound)
-        // The frame's far corner is inside its round end
+        #expect(filled.stroke == 0 && !filled.isRound && abs(filled.size.width / filled.size.height - 1920.0 / 1080) < 1e-6)
+        #expect(abs(filled.radius - ShapeMorph.floodRoundness * filled.size.height) < 1e-6)
+        #expect(filled.size.width > 1920 * 1.1 && filled.size.width < 1920 * 1.4)
+        let inner = CGPoint(x: filled.size.width / 2 - filled.radius, y: filled.size.height / 2 - filled.radius)
+        #expect(hypot(960 - inner.x, 540 - inner.y) <= filled.radius)
+        // Seen growing: narrower than the frame for three frames of its fill
+        #expect(morph.state(at: 0.5 + ShapeMorph.floodDip + 0.1).size.width < 1920)
+    }
+
+    @Test func aFloodFromACornerCoversTheFarOne() async throws {
+        let plan = await MotionPlan.build(try document(pill(#"[{"move": "flood", "start": 0.5}]"#, at: "[0, 0, 0]")), bundle: bundle)
+        let filled = try #require(plan.scenes[0].layers[0].morph).state(at: 2)
+
         let inner = CGPoint(x: filled.size.width / 2 - filled.radius, y: filled.size.height / 2 - filled.radius)
         #expect(hypot(max(1920 - inner.x, 0), max(1080 - inner.y, 0)) <= filled.radius)
     }
@@ -121,7 +133,7 @@ struct MotionDesignTests {
         let kinetic = try #require(plan.scenes[0].layers[1].reveal)
 
         #expect(letters.style == .letter && abs(letters.stagger - MoveExpansion.letterStagger) < 1e-12)
-        #expect(letters.progress(ofPart: 0, at: 0.1 + 0.6 * MoveExpansion.letterDuration) > 1)
+        #expect(TextReveal.letterPose(TextReveal.letterPeak).scale > 1)
         #expect(letters.fraction(ofPart: 0, at: 0.1 + MoveExpansion.letterDuration) == 1)
         #expect(kinetic.style == .kinetic)
         #expect(abs(kinetic.start(ofPart: 11) - (0.5 + 11 / MoveExpansion.kineticRate)) < 1e-9)
@@ -148,16 +160,30 @@ struct MotionDesignTests {
         #expect(track.value(at: 1) == 0 && track.value(at: 3) != 0)
     }
 
-    @Test func aRippleOpensSoftBandsOverItsLayer() throws {
-        let layers = DocumentExpansion.expanded(try document(pill(#"[{"move": "ripple", "start": 1, "stroke": 80}]"#)), sizes: [:]).scenes[0].layers
+    @Test func aRippleWithAStrokeOpensBandsInsideItsShape() async throws {
+        let moves = #"[{"move": "flood", "start": 0.2}, {"move": "ripple", "start": 1, "stroke": 80, "color": "3bf07c"}]"#
+        let document = try document(pill(moves))
+        let morph = try #require(await MotionPlan.build(document, bundle: bundle).scenes[0].layers[0].morph)
+
+        // No rings of its own: bands drawn inside the shape, so they leave as it does
+        #expect(DocumentExpansion.expanded(document, sizes: [:]).scenes[0].layers.map(\.id) == ["pill"])
+        #expect(morph.bands.count == 1 && morph.bands[0].width == 80 && morph.bands[0].start == 1)
+        let image = morph.image(at: 1.3, scale: 0.1)
+        #expect(image.extent == ShapeMorph.image(of: morph.state(at: 1.3), scale: 0.1).extent)
+    }
+
+    @Test func aThinRippleHugsItsLayer() throws {
+        let layers = DocumentExpansion.expanded(try document(pill(#"[{"move": "ripple", "start": 1}]"#)), sizes: [:]).scenes[0].layers
 
         #expect(layers.map(\.id) == ["pill", "pill.ripple0"])
         guard case .group(let rings) = layers[1].content, case .shape(let ring) = rings.first?.content else {
             Issue.record("No rings")
             return
         }
-        #expect(rings.count == BurstExpansion.rings && ring.stroke == 80 && rings[0].blur == 80 * BurstExpansion.softBands)
+        #expect(rings.count == BurstExpansion.rings && ring.stroke == BurstExpansion.ringWidth && rings[0].blur == 0)
         #expect(rings[1].moves.first?.start == 1 + BurstExpansion.ringStagger)
+        // Out by half the pill's side, not across the frame
+        #expect(rings[0].moves.first?.size == CGSize(width: 40 + 2 * BurstExpansion.ringReach * 40, height: 40 + 2 * BurstExpansion.ringReach * 40))
     }
 
     @Test func rowsBuildAsTheScrollBringsThemIn() throws {
@@ -262,17 +288,17 @@ struct MotionDesignTests {
 
     // MARK: - Pixels
 
-    private static func pixels(of image: CIImage, size: CGSize) throws -> [UInt8] {
+    static func pixels(of image: CIImage, size: CGSize) throws -> [UInt8] {
         let width = Int(size.width.rounded()), height = Int(size.height.rounded())
         var data = [UInt8](repeating: 0, count: width * height * 4)
         let context = CIContext(options: [.workingColorSpace: NSNull()])
+        // Rows from the top, as Core Image writes a bitmap
         context.render(image, toBitmap: &data, rowBytes: width * 4, bounds: CGRect(x: 0, y: 0, width: width, height: height), format: .RGBA8, colorSpace: nil)
-        // Rows from the top
-        return (0..<height).reversed().flatMap { row in data[(row * width * 4)..<((row + 1) * width * 4)] }
+        return data
     }
 
     /// The box of the pixels `matches` picks, in pixels.
-    private static func box(of image: CIImage, size: CGSize, _ matches: ([UInt8]) -> Bool) throws -> CGRect {
+    static func box(of image: CIImage, size: CGSize, _ matches: ([UInt8]) -> Bool) throws -> CGRect {
         let pixels = try pixels(of: image, size: size)
         let width = Int(size.width.rounded())
         var (minX, minY, maxX, maxY) = (Int.max, Int.max, Int.min, Int.min)

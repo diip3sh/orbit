@@ -17,10 +17,18 @@ the queue as a "+" turns into a green check in a burst of particles. The list sc
 What makes it good, and what yours must have:
 
 - **One object, not shots.** There is one hard cut in 19 s; every other change is a morph of the thing on screen.
-- **Something changes every beat.** At 125 BPM a beat is 0.48 s. Every pop, morph, flood and burst lands on one.
-- **Micro-interactions.** Hover (a pill grows 10 %), press, a pointer that turns to a hand, an outline that moves
-  between buttons.
-- **Overshoot.** Letters and pops pass their mark and settle, as this kind always does.
+- **Never still, never waiting.** At 125 BPM a beat is 0.48 s, and something changes on every one. The next move
+  starts before the last has settled: the pill grows while the list is still leaving, the words come in while the
+  pill is still rising, the hand arrives while the letters spring. Nothing holds still for more than a beat and a
+  half; the lint says so.
+- **Out of each other.** New things come out of what is there: Invite and Leave slide out of the pill they split
+  from, the dot flies to where the caret will be, the check shrinks into the row it was added to. A pop in place
+  is for the first thing in a scene.
+- **The camera carries the change.** It pans in on what is clicked and back out to show where it landed; the
+  reference cuts once, and only where one shape continues.
+- **Micro-interactions.** Hover (a pill lifts and grows 20 %), press, a pointer that comes up from below and turns
+  to a hand, an outline that moves between buttons.
+- **Overshoot.** Letters spring up past their line at 1.35× and settle, pops pass their size, a glyph spins in.
 - **Restraint.** A black ground with the brand's light toned down, the brand colour, white type, the UI's own art.
 
 `reference/film.md` has the film beat by beat with every timing measured. Read it before your first storyboard.
@@ -43,7 +51,8 @@ What makes it good, and what yours must have:
    - Find the parts to lift: list rows, cover art, avatars, the logo. For the n-th of many alike, select it with
      `div:nth-of-type(n) > <the row's selector>`.
 2. **Storyboard** the beats. For each, say which object carries over from the beat before: the pill that
-   was the dot, the dot that becomes the caret. Put every change on the 0.48 s grid.
+   was the dot, the dot that becomes the caret. Put every change on the 0.48 s grid, and start each move a
+   little before the one before ends.
 3. **Assets.**
    - Lift what is real (rows, art, logo) as `bare` stills with the viewport the page was designed for, often a
      phone's `[390, 844]`.
@@ -56,7 +65,7 @@ What makes it good, and what yours must have:
    - Every field and default of the moves is in `reference/moves.md`. Read it when a recipe isn't enough.
 5. **Check.** Call preview_motion and look at every frame:
    - Does each state come out of the last?
-   - Does anything just appear or vanish?
+   - Does anything just appear or vanish, or wait for something else to finish?
    - Is the type at least 32 px and the pill at least 500 px wide?
    - Does the pointer land on what it clicks?
 
@@ -75,13 +84,14 @@ What makes it good, and what yours must have:
   - `text` is `#ffffff`;
   - `accent` is the brand's colour (kinetic carets, bursts and rings take it);
   - `face` is sans.
-- Pills and buttons are the accent with a glow: `shadow {opacity 0.6–0.8, radius 34, offset 0, color: the accent}`.
+- Pills and buttons are the accent with a glow: `shadow {opacity 0.8, radius 40, offset 0, color: the accent}`.
 - Type is the system's sans, white on black and black on the accent; bold for anything typed big.
 
 ## Never
 
 - A title card, a headline alone between beats, a fade between scenes, a card sliding in from the side.
 - A layer that appears or disappears without a move: everything pops, morphs, rises, floods or exits.
+- A cut where a camera move or a morph could carry the change: a cut only where the same shape continues.
 - A scene where nothing changes for longer than a beat and a half.
 - A second accent colour, a gradient on a control, an emoji.
 - The pointer on a layer it doesn't press: a click is the moment something changes.

@@ -1218,12 +1218,12 @@ longer film.
 
 | File | Role |
 |---|---|
-| `Motion/Model/MotionMove.swift`, `ShapeContent.swift`, `LayerShadow.swift`, `MotionCanvas.swift` | The moves `morph`, `flood`, `pop`, `press`, `click`, `burst`, `ripple`, `letters`, `kinetic`, `scroll` and their fields (`size`, `radius`, `color`, `stroke`, `to`); shapes' `stroke` and `kind` (triangle and seven glyphs); a shadow's `color` (a glow); `fieldStrength` |
+| `Motion/Model/MotionMove.swift`, `ShapeContent.swift`, `LayerShadow.swift`, `MotionCanvas.swift` | The moves `morph`, `flood`, `pop`, `press`, `click`, `spin`, `burst`, `ripple`, `letters`, `kinetic`, `scroll` and their fields (`size`, `radius`, `color`, `stroke`, `to`); shapes' `stroke` and `kind` (triangle and seven glyphs); a shadow's `color` (a glow); `fieldStrength` |
 | `Motion/Render/ShapeMorph.swift` | A rectangle's states from its morphs and floods, each from where the last left it, generated each frame |
 | `Motion/Grammar/MoveExpansion.swift` | Pop and press tracks, letters and kinetic reveals, `placeTracks` (morph and scroll `to`), the measured numbers |
 | `Motion/Grammar/BurstExpansion.swift`, `DocumentExpansion.swift` | Particles behind a layer, rings over it, seeded by its id; a cascade's rows rising as its group's scroll brings them in |
 | `Motion/Render/MotionPointer.swift`, `ShapeGlyph.swift` | The system's arrow and pointing hand on a click's target (a group too); triangles and glyphs drawn once |
-| `Motion/Render/MotionFrameRenderer.swift` | Morphing shapes and their glow per frame, pointers over a scene, letters and the kinetic caret and tint, the toned-down field |
+| `Motion/Render/MotionFrameRenderer.swift`, `+Reveal.swift`, `+Design.swift` | Morphing shapes and their glow per frame, pointers over a scene, letters in the room around their text, the kinetic caret and tint, particles drawn sharp, the toned-down field |
 | `Motion/Sound/SoundCueList.swift` (`design`) | A blip a pop, a key a press or click, a riser and hit on a flood, glass on a burst, kinetic keys, a whoosh on a fast scroll |
 | `Motion/Grammar/MotionLint.swift` | A control's label is read against its control and at a glance; actions don't delay reading; a toned-down field isn't busy |
 | `AgentRecording/Skills/reco-motion-design*.md`, `Model/AgentSkill.swift` | The skill and its references (the film, moves, recipes, longer films, a whole example), installed as `.claude/skills/reco-motion-design/` |
@@ -1241,6 +1241,17 @@ Key facts:
   clear without passing through black. A ripple's rings go over their layer (they show across a flood), a burst's particles
   under it, in the shape's colour at the burst (a white disc turning green throws green).
 - The system cursor images carry clear margins for their shadow: the pointer is sized by the hand's drawn rows.
+- **Smoother (D7), measured again on the reference's transitions.**
+  - A letter comes up from 0.7 of its line below at 0.3×, is at 1.35× a quarter line above its place 0.1 s in, and settles
+    over 0.3 s (`TextReveal.letterPose`). Its reveal is drawn with room around the text, onto the quad grown by it.
+  - The flood grows into the frame's shape (corners 0.35 of its height) to 1.05× what covers the frame: seen growing
+    over 0.3 s, where the round pill had to reach 3–4 widths and filled the frame in two frames.
+  - Bands are drawn inside their rectangle, so they leave with the iris; thin rings open by half the layer's side.
+  - Particles are drawn at the frame's own time under motion blur (`isSharp`): a 180° shutter made them rays.
+  - The pointer comes up from below the frame in 0.3 s, out-cubic, and its travel counts for motion blur.
+  - Camera moves chain (`MoveExpansion.cameraContexts`): a pan in then a pan back out replaces a cut.
+  - A kinetic caret shows 0.3 s before the first letter, so the caret from the scene before holds across the cut.
+  - The lint holds a motion-design scene still for at most 0.72 s (a beat and a half), and counts a group once.
 - `--tools …,Read --allowedTools … "Read(./.claude/skills/**)" --permission-mode dontAsk`: a headless run read its skill's
   reference and was denied a file outside it.
 - Look-dev in the app (`~/Movies/Reco/quality/design/`): the reference's beats rebuilt from Spotify's web player (signed out,
@@ -1321,7 +1332,7 @@ should hold but need re-measuring.
 | S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 done: moves, seams, shots, lint, scenes lane and inspector; the benchmark rebuilt in 10 lines and three sites rendered, awaiting the user's side-by-side. Phase 4 done: agent tools, Launch Video mode, chat with selection; three sites run from their address with clean lint and design check, three chat edits change only their targets; cost recorded for one run. The window seen in a window capture; editing by hand not yet tried |
 | S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields ported, then rejected by the user as pasted behind the old video; directions picked from launch films (Raycast, Nothing OS 5.0, 3D layers). L1a–c built (satin, coverage mattes, typing cursor rules, parallax, motion blur), but the user found the test shot "really bad" next to Raycast. L0: still frames matched to Raycast's (glass for lifted UI, hero scale, a better ground), then a 24 s Supabase docs film in that look rendered as a look-dev pass outside the engine. The user approved the film; its port into the engine has begun: phases 1 (satin, grain), 2 (glass, sharp macro) and 3 (typing, caret, results) done, matching the film at 47–64 dB; phase 4 captures UI behind a click and typing states live (Supabase's search, matching the film's lifts); phase 5 the selection, the camera following it, the whip's blur; phase 6 the `closing` shot; the whole film now made by the app from one document, matching the approved one where the site is the same. L4/Q4: the film's grammar named (`macro` views, `whip` move and seam, mockup typing) and its method shipped as the `reco-launch-film` skill; Launch Video runs on linear.app from the address make macro films on glass over satin. Looks: light and dither grounds (Paper's other shapes) and seams in their language (`glow`, `dither`, `ring`), the agent choosing the look from the brand. Next: the user's verdict on them |
 | S8 motion sound (spec 0013) | S1–S4 done: cue sheet from the plan, voices, room, finish, loudness, cache, preview and export, `set_sound`, the Sound section; the Supabase film's sheet matches the hand-made score. Next: the user's listening round (S5) |
-| S9 motion design (spec 0014) | D1–D5 done: morphs, floods, pops, clicks, bursts, ripples, letters, kinetic type, scrolls; their sounds; the `reco-motion-design` skill with references read on demand; look-dev matching the Spotify Jam reference. D6: a Spotify film made from the app (9 min, 30 s 4K, every named movement). Next: the user's verdict |
+| S9 motion design (spec 0014) | D1–D5 done: morphs, floods, pops, clicks, bursts, ripples, letters, kinetic type, scrolls; their sounds; the `reco-motion-design` skill with references read on demand; look-dev matching the Spotify Jam reference. D6: a Spotify film made from the app (9 min, 30 s 4K, every named movement). D7: smoother after the user's review (letters, flood, bands, sharp particles, pointer, spin, chained pans, stillness lint, skill and example rebuilt). Next: the user's verdict |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

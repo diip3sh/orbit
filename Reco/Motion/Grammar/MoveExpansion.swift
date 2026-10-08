@@ -24,8 +24,9 @@ nonisolated struct MoveContext: Sendable {
     let sceneDuration: Double
     let canvas: CGSize
 
-    /// Where the camera looks before its moves; only pans use it.
+    /// Where the camera looks before the move, and how much closer than at the scene's start; only pans and whips use them.
     var lookAt = CGPoint.zero
+    var zoom = 1.0
 
     /// Where the layer's anchor sits before its moves; only a scroll's length uses it.
     var position = CGPoint.zero
@@ -104,9 +105,9 @@ nonisolated enum MoveExpansion {
     /// A morph: the film's pill growing out of a dot in 0.43 s.
     static let morphDuration = 0.43
 
-    /// Letters 0.036 s apart ("Start a Jam", 11 in 0.4 s), each rising 0.45 of its line over 0.32 s and overshooting.
+    /// Letters 0.036 s apart ("Start a Jam", 11 in 0.4 s), each in over 0.4 s (``TextReveal/letterPose(_:)``).
     static let letterStagger = 0.036
-    static let letterDuration = 0.32
+    static let letterDuration = 0.4
 
     /// Kinetic typing: "Black & Tan" at about 13 characters a second.
     static let kineticRate = 13.0
@@ -117,6 +118,10 @@ nonisolated enum MoveExpansion {
     static let pressDepth = 0.92
     static let pressDown = 0.1
     static let pressDuration = 0.4
+
+    /// A spin turns a quarter turn into place, overshooting, in 0.5 s: the film's "+" spinning in (11.7–12.3 s).
+    static let spinTurn = 90.0
+    static let spinDuration = 0.5
 
     /// A scroll's fastest moment in canvas heights a second: the film's queue went 1.83 heights in 1.5 s, in and out.
     static let scrollSpeed = 1.8
@@ -158,6 +163,8 @@ nonisolated enum MoveExpansion {
             add(.scale, 1 - (1 - popFrom) * min(amount, 1.5), 1, easing: .overshoot)
         case .press, .click:
             effect.tracks[.scale] = pressTracks(depth: pow(pressDepth, amount), start: start, duration: duration)
+        case .spin:
+            add(.rotationZ, -spinTurn * amount, 0, easing: .overshoot)
         case .rise:
             effect.tracks[.opacity] = [ramp(.opacity, (0, 1), start: start, duration: min(uiAppearance, duration), easing: .enterFast)]
             // From 0.9–0.97 and at most 16 px (agentic-product-demo)
@@ -179,6 +186,32 @@ nonisolated enum MoveExpansion {
             add(.blur, 4 * unit * amount, 0, easing: .enterFast)
         }
         return effect
+    }
+
+    /// The context each of a scene's camera `moves` starts from, in their order: where the moves that start before it left the
+    /// camera. A macro's whips go from stop to stop; a pan back out follows a pan in.
+    static func cameraContexts(of moves: [MotionMove], from context: MoveContext) -> [MoveContext] {
+        let order = moves.indices.sorted { (timing(of: moves[$0], in: context).start, $0) < (timing(of: moves[$1], in: context).start, $1) }
+        var contexts = Array(repeating: context, count: moves.count)
+        var camera = context
+        for index in order {
+            contexts[index] = camera
+            let move = moves[index]
+            let amount = move.intensity ?? 1
+            switch move.kind {
+            case .whip:
+                camera.lookAt = move.target ?? camera.lookAt
+                camera.zoom *= amount
+            case .pan:
+                camera.lookAt = move.target ?? camera.lookAt
+                camera.zoom = amount
+            case .push:
+                camera.zoom *= 1 + pushZoom * amount
+            default:
+                break
+            }
+        }
+        return contexts
     }
 
     /// Where morphs and scrolls with `to` take a layer from `position`, as changes added to its place: each from
@@ -314,6 +347,7 @@ nonisolated enum MoveExpansion {
         case .flood: return ShapeMorph.floodDip + ShapeMorph.floodFill
         case .pop: return popDuration
         case .press: return pressDuration
+        case .spin: return spinDuration
         // The pointer stays this long after its press
         case .click: return 0.8
         case .burst: return BurstExpansion.duration
@@ -366,7 +400,7 @@ nonisolated enum MoveExpansion {
     /// Long enough that the pan's fastest moment stays at ``panSpeed`` (a zoom counted as the
     /// distance its view's edge travels), and at least 0.5 s.
     private static func panDuration(to target: CGPoint, zoom: Double, in context: MoveContext) -> Double {
-        let distance = hypot(target.x - context.lookAt.x, target.y - context.lookAt.y) + abs(1 - 1 / zoom) * context.canvas.width / 2
+        let distance = hypot(target.x - context.lookAt.x, target.y - context.lookAt.y) + abs(1 / context.zoom - 1 / zoom) * context.canvas.width / 2
         return max(0.5, steepestMove * distance / (panSpeed * context.canvas.width))
     }
 
@@ -380,9 +414,11 @@ nonisolated enum MoveExpansion {
     }()
 
     /// The camera's look-at offset and zoom along the ``ZoomPath`` to `target` seen `zoom` times
-    /// closer, eased with ``MotionEasing/move`` and sampled at 30 Hz.
+    /// closer than at the scene's start, eased with ``MotionEasing/move`` and sampled at 30 Hz: from where the moves before
+    /// left it, so a pan in and a pan back out chain.
     private static func pan(to target: CGPoint, zoom: Double, start: Double, duration: Double, in context: MoveContext) -> [MotionProperty: [PropertyTrack]] {
-        let path = ZoomPath(from: context.lookAt, width: context.canvas.width, to: target, width: context.canvas.width / zoom)
+        let width = context.canvas.width / context.zoom
+        let path = ZoomPath(from: context.lookAt, width: width, to: target, width: context.canvas.width / zoom)
         let count = max(Int((duration * 30).rounded(.up)), 1)
         var keyframes: [MotionProperty: [Keyframe]] = [:]
         for index in 0...count {
@@ -391,7 +427,7 @@ nonisolated enum MoveExpansion {
             let time = start + fraction * duration
             keyframes[.positionX, default: []].append(Keyframe(time: time, value: view.center.x - context.lookAt.x))
             keyframes[.positionY, default: []].append(Keyframe(time: time, value: view.center.y - context.lookAt.y))
-            keyframes[.scale, default: []].append(Keyframe(time: time, value: context.canvas.width / view.width))
+            keyframes[.scale, default: []].append(Keyframe(time: time, value: width / view.width))
         }
         return keyframes.reduce(into: [:]) { tracks, entry in
             tracks[entry.key] = PropertyTrack(entry.key, keyframes: entry.value).map { [$0] }

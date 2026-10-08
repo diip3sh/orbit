@@ -97,7 +97,7 @@ nonisolated struct MotionSummary: Encodable, Equatable, Sendable {
             return Scene(
                 id: scene.id, start: start, duration: scene.duration, seam: scene.seam, field: scene.field ?? document.canvas.field, shot: scene.shot,
                 layers: scene.layers.map { Self.layer($0, fromShot: shotIDs.contains($0.id), in: scene, canvas: document.canvas.size) },
-                camera: scene.camera.moves.map { Self.move($0, in: camera) }
+                camera: zip(scene.camera.moves, MoveExpansion.cameraContexts(of: scene.camera.moves, from: camera)).map { Self.move($0, in: $1) }
             )
         }
         findings = MotionLint.findings(in: document, sizes: sizes).map {
