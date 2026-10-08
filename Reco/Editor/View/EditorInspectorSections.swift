@@ -294,7 +294,7 @@ struct KeystrokesInspectorSection: View {
     }
 }
 
-/// Each audio track's volume and mute.
+/// Each audio track's volume and mute, and Enhance Voice on the microphone's.
 struct AudioInspectorSection: View {
     @Bindable var viewModel: EditorViewModel
     let trackNames: [String]
@@ -302,7 +302,13 @@ struct AudioInspectorSection: View {
     var body: some View {
         InspectorSection("Audio") {
             ForEach(trackNames.indices, id: \.self) { index in
-                AudioTrackRow(name: trackNames[index], settings: $viewModel.audio[track: index])
+                AudioTrackRow(
+                    name: trackNames[index], mayHoldVoice: index == viewModel.source?.voiceTrackIndex, settings: $viewModel.audio[track: index]
+                )
+            }
+        } footer: {
+            if viewModel.source?.voiceTrackIndex != nil {
+                Text("Enhance Voice takes out the noise around the voice.")
             }
         }
     }

@@ -169,6 +169,51 @@ struct CompositionBuilderTests {
         #expect(try await plain.asset.loadTracks(withMediaType: .audio).count == 1)
     }
 
+    @Test func anEnhancedFilePlaysInItsTracksPlaceThroughTheCuts() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30, withTone: true)
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        let trackID = try #require(source.audioTrackIDs.first)
+        // Cut 0.2 to 0.5; the enhanced file is a second of the tone at half the recording's level, on the source timeline
+        let project = EditorProject(cuts: [0.2..<0.5])
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
+        let enhanced = folder.appending(path: "enhanced.caf")
+        try writeTone(amplitude: 0.25, duration: 1, to: enhanced)
+
+        let composition = try await CompositionBuilder.composition(
+            for: source, plan: plan, audio: project.audio, extra: ExtraAudio(enhanced: [trackID: enhanced])
+        )
+        let mixed = try await mixedAudio(of: composition)
+
+        // Still one track, 0.7 s long, at the file's level either side of the cut
+        #expect(try await composition.asset.loadTracks(withMediaType: .audio).count == 1)
+        #expect(abs(Double(mixed.count) / TestRecording.sampleRate - 0.7) < 0.003)
+        #expect(abs(peak(of: mixed, from: 0.1, to: 0.15) - 0.25) < 0.02)
+        #expect(abs(peak(of: mixed, from: 0.25, to: 0.3) - 0.25) < 0.02)
+
+        // A file that couldn't be rendered, or one for another track, leaves the recording's audio as it is
+        for extra in [ExtraAudio(enhanced: [trackID: nil]), ExtraAudio(enhanced: [trackID + 7: enhanced])] {
+            let own = try await mixedAudio(of: try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio, extra: extra))
+            #expect(peak(of: own, from: 0.1, to: 0.15) > 0.45)
+        }
+    }
+
+    /// Writes `duration` seconds of a 440 Hz tone at `amplitude`, mono at the test recording's rate, to `url`.
+    private func writeTone(amplitude: Float, duration: Double, to url: URL) throws {
+        let file = try AVAudioFile(
+            forWriting: url, settings: [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: TestRecording.sampleRate, AVNumberOfChannelsKey: 1],
+            commonFormat: .pcmFormatFloat32, interleaved: false
+        )
+        let count = Int(duration * TestRecording.sampleRate)
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(count)))
+        buffer.frameLength = AVAudioFrameCount(count)
+        let samples = try #require(buffer.floatChannelData)[0]
+        for index in 0..<count {
+            samples[index] = amplitude * Float(sin(2 * .pi * 440 * Double(index) / TestRecording.sampleRate))
+        }
+        try file.write(from: buffer)
+    }
+
     @Test func loopsFillTheOutputExactlyAndTheLastOneIsCut() {
         func seconds(_ ranges: [CMTimeRange]) -> [[Double]] {
             ranges.map { [$0.start.seconds, $0.duration.seconds] }

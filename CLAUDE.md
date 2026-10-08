@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 924 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 926 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -438,7 +438,7 @@ every stretch of typing still at 1× in one undo step: 2× under 6 s, 3× under 
 | `Editor/Render/TimeMap.swift` | Kept ranges divided at speed edges into `pieces`, each lasting length / rate in the output; `rate(atSource:)`, `outputTime(ifKept:)`, `speeds(setting:for:)`, `speeds(adding:)` |
 | `Editor/Service/TypingStretches.swift` | Pure: presses that aren't auto-repeats, gaps under 1 s, at least 3 s; ⌃/⌥/⌘ ends a stretch |
 | `Editor/Render/CompositionBuilder.swift` | Each piece inserted at its output length (to the nanosecond): video scaled with `scaleTimeRange`, audio at another speed from its sped-up file (`ExtraAudio.fastParts`, silent without one); music fills the output |
-| `Editor/Service/SpeedAudio.swift`, `EditorViewModel+Audio.swift` | Each audio track's (and the click sounds') part at another speed, run through `AVAudioUnitTimePitch` in an offline `AVAudioEngine` with 0.25 s of context read on each side, to an Apple Lossless CAF in `temporaryDirectory/Reco Speed Audio/`; rendered once per part and rate (`fastPartAudio`), deleted when the window closes |
+| `Editor/Service/SpeedAudio.swift`, `OfflineAudioEffect.swift`, `EditorViewModel+Audio.swift` | Each audio track's (and the click sounds') part at another speed, run through `AVAudioUnitTimePitch` in an offline `AVAudioEngine` (`OfflineAudioEffect`, shared with `VoiceEnhancer`: a source node feeding one effect a chunk at a time, the latency and context dropped on the way out) with 0.25 s of context read on each side, to an Apple Lossless CAF in `temporaryDirectory/Reco Speed Audio/`; rendered once per part and rate (`fastPartAudio`), deleted when the window closes |
 | `Editor/ViewModel/EditorViewModel+Speed.swift`, `Editor/View/SpeedInspectorSection.swift` | `selectedSpeed`, `setSpeed`, `typingSpeedUps`, `speedUpTyping()`; the Motion tab's Speed section |
 
 Key facts:
@@ -613,6 +613,24 @@ Key facts:
   the mix. An unreadable file shows `unreadableBackgroundAudio` and is left out. The Audio tab is always available (a silent
   recording can get music); the per-track section shows only when the recording has tracks. No music is bundled (licensing).
   `ponytail:` a file that doesn't loop cleanly clicks at the seam; a crossfade needs two alternating tracks.
+- **Enhance Voice** (N4, 2026-10-08; `AudioMixSettings.Track.enhancesVoice`, a switch on the microphone track's row, or the one
+  track's, which may be it: `EditorSource.voiceTrackIndex`): the track with its voice isolated, played in its place. `VoiceEnhancer`
+  runs the system's `AUSoundIsolation` (`kAUSoundIsolationSoundType_HighQualityVoice`; the plain Voice type takes more noise and
+  more voice: noise alone went from RMS 0.0162 to 0.0038 with it against 0.0005, measured for spec 0004) over the whole track once,
+  in the offline engine `SpeedAudio` uses (`OfflineAudioEffect`, one loop for both), to an Apple Lossless CAF in
+  `temporaryDirectory/Reco Enhanced Voice/`, on the source timeline from 0 and exactly the track's length, so `CompositionBuilder`
+  inserts the track's pieces from it (`ExtraAudio.enhanced`; `nil` inside for a track that couldn't be rendered, which plays as it
+  is and isn't tried again on every edit) and a fast part of that track is sped up from it (`fastPartAudio` keeps the file each part
+  was rendered from and replaces one rendered from another). Rendered once per track per window (`enhancedVoice`), deleted when
+  the window closes; switching it makes a new player item (`needsNewAudioFiles`). Measured 2026-10-08 (macOS 27.0.1, M2, Debug):
+  **the unit reports a latency of 0 but delays the audio by 92.5 ms in mono (4440 frames at 48 kHz, 4083 at 44.1) and 132.5 ms in
+  stereo**, the same through a file and across runs, so `VoiceEnhancer.latency(channels:)` holds those and the test checks the
+  speech lands within 15 ms. And **`AVAudioPlayerNode` is not deterministic in manual rendering**: its schedules reach the render
+  through a queue, and in 3 of 9 runs the first render came before the first buffer, so the whole file was one render chunk late
+  (exactly 4096, 1024 or 512 frames, whatever the chunk); the engine is fed by an `AVAudioSourceNode` reading a queue
+  synchronously instead, which fixed it (lag 0 in 9 of 9) for the time-pitch too. 7 s of 48 kHz speech renders in 0.13 s,
+  35 s in 0.57 s (about 60× real time), once. The test speaks with `/usr/bin/say` under white noise: the noise-only RMS falls to
+  under a quarter, the voice keeps over half its RMS, the length is unchanged.
 - A track holds its asset weakly: inserting from a click file whose `AVURLAsset` was already released failed with -12780, so
   `CompositionBuilder` keeps it alive (`withExtendedLifetime`) until the insert is done.
 - Projects saved before these settings decode with defaults (`init(from:)` in extensions, like `EditorProject`): the

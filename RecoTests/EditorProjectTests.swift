@@ -108,6 +108,7 @@ struct EditorProjectTests {
 
         let audio = try JSONDecoder().decode(AudioMixSettings.self, from: Data(#"{ "tracks": [{ "volume": 0.5, "isMuted": true }] }"#.utf8))
         #expect(audio.tracks == [AudioMixSettings.Track(volume: 0.5, isMuted: true)])
+        #expect(!audio.tracks[0].enhancesVoice && audio.enhancedTracks.isEmpty)
         #expect(audio.clickVolume == 0 && audio.background == nil && !audio.addsAudio)
         #expect(AudioMixSettings(background: BackgroundAudio(bookmark: Data(), name: "Song")).addsAudio)
     }

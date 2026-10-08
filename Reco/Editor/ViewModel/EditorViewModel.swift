@@ -6,6 +6,7 @@
 //
 
 import CoreGraphics
+import CoreMedia
 import Foundation
 import OSLog
 
@@ -51,7 +52,7 @@ final class EditorViewModel {
 
     /// What the player shows and export writes. Behind the project while a rebuild runs.
     @ObservationIgnored private var plan: RenderPlan?
-    @ObservationIgnored private var composition: EditorComposition?
+    @ObservationIgnored private(set) var composition: EditorComposition?
     @ObservationIgnored private var rebuild: Task<Void, Never>?
 
     /// The click sounds' file, once something asked for them: written once per window, since it is on the source
@@ -62,8 +63,13 @@ final class EditorViewModel {
     @ObservationIgnored var backgroundAudio: (bookmark: Data, url: Task<URL?, Never>)?
 
     /// Each sped-up part's file, rendered the first time a part is at that speed and kept until the window closes, so
-    /// undo and redo don't render again. `nil` inside when it couldn't be rendered.
-    @ObservationIgnored var fastPartAudio: [SpeedAudio.Part: Task<URL?, Never>] = [:]
+    /// undo and redo don't render again, with the file it was rendered from (a track's enhanced file, or the
+    /// recording). `nil` inside when it couldn't be rendered.
+    @ObservationIgnored var fastPartAudio: [SpeedAudio.Part: (source: URL, file: Task<URL?, Never>)] = [:]
+
+    /// Each track's file with its voice isolated, rendered the first time Enhance Voice is on for it and kept until the
+    /// window closes. `nil` inside when it couldn't be rendered.
+    @ObservationIgnored var enhancedVoice: [CMPersistentTrackID: Task<URL?, Never>] = [:]
 
     /// The keyboard layout in use when the editor opened, the system's arrow for recordings made
     /// without the cursor, and the background picture.

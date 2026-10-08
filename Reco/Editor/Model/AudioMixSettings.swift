@@ -36,6 +36,11 @@ nonisolated struct AudioMixSettings: Codable, Equatable, Sendable {
         }
     }
 
+    /// The tracks whose voice is isolated (see ``VoiceEnhancer``), by index.
+    var enhancedTracks: [Int] {
+        tracks.indices.filter { tracks[$0].enhancesVoice }
+    }
+
     nonisolated struct Track: Codable, Equatable, Sendable {
 
         /// From 0 to 1, the range `AVAudioMix` takes.
@@ -43,6 +48,9 @@ nonisolated struct AudioMixSettings: Codable, Equatable, Sendable {
 
         /// Silences the track without losing its volume.
         var isMuted = false
+
+        /// Plays the track with its voice isolated from the noise around it.
+        var enhancesVoice = false
 
         /// What the track plays at.
         var effectiveVolume: Float {
@@ -62,5 +70,16 @@ extension AudioMixSettings {
         tracks = try container.decodeIfPresent([Track].self, forKey: .tracks) ?? tracks
         clickVolume = try container.decodeIfPresent(Double.self, forKey: .clickVolume) ?? clickVolume
         background = try container.decodeIfPresent(BackgroundAudio.self, forKey: .background)
+    }
+}
+
+extension AudioMixSettings.Track {
+
+    nonisolated init(from decoder: any Decoder) throws {
+        self.init()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        volume = try container.decodeIfPresent(Double.self, forKey: .volume) ?? volume
+        isMuted = try container.decodeIfPresent(Bool.self, forKey: .isMuted) ?? isMuted
+        enhancesVoice = try container.decodeIfPresent(Bool.self, forKey: .enhancesVoice) ?? enhancesVoice
     }
 }

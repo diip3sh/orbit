@@ -125,9 +125,14 @@ enum CompositionBuilder {
             try insert(track, as: track.trackID, pieces: pieces, into: composition)
         }
         for track in try await source.asset.loadTracks(withMediaType: .audio) {
+            // The enhanced file is on the source timeline, so the track's pieces are its pieces; left out when missing
+            var enhanced: FileTrack?
+            if let url = extra.enhancedFile(for: track.trackID) {
+                enhanced = await audioTrack(of: url)
+            }
             let fast = await fastParts(of: track.trackID, pieces: pieces, files: extra.fastParts)
-            try withExtendedLifetime(fast) {
-                try insert(track, as: track.trackID, pieces: pieces, fastParts: fast, into: composition)
+            try withExtendedLifetime((enhanced, fast)) {
+                try insert(enhanced?.track ?? track, as: track.trackID, pieces: pieces, fastParts: fast, into: composition)
             }
         }
         // Optional, so a click file that went missing leaves the recording as it is; the mix names a track that isn't there
@@ -175,7 +180,7 @@ enum CompositionBuilder {
     /// Video is scaled; audio at another speed comes from its sped-up file in `fastParts` (by piece), silent without
     /// one, since a scaled audio edit exports at the wrong length (see ``SpeedAudio``).
     private static func insert(
-        _ track: AVAssetTrack, as trackID: CMPersistentTrackID, pieces: [Piece], fastParts: [Int: FastPart] = [:],
+        _ track: AVAssetTrack, as trackID: CMPersistentTrackID, pieces: [Piece], fastParts: [Int: FileTrack] = [:],
         into composition: AVMutableComposition
     ) throws {
         guard let compositionTrack = composition.addMutableTrack(withMediaType: track.mediaType, preferredTrackID: trackID) else {
@@ -198,24 +203,30 @@ enum CompositionBuilder {
         }
     }
 
-    /// A sped-up file's track, with its asset, which the composition holds only weakly.
-    private struct FastPart {
+    /// A file's first audio track, with its asset, which the composition holds only weakly.
+    private struct FileTrack {
         let asset: AVURLAsset
         let track: AVAssetTrack
         let range: CMTimeRange
     }
 
+    /// The first audio track of the file at `url`, or `nil` when it is missing or unreadable.
+    private static func audioTrack(of url: URL) async -> FileTrack? {
+        let asset = AVURLAsset(url: url)
+        guard let track = try? await asset.loadTracks(withMediaType: .audio).first, let range = try? await track.load(.timeRange) else {
+            return nil
+        }
+        return FileTrack(asset: asset, track: track, range: range)
+    }
+
     /// The sped-up files of track `trackID`'s pieces at another speed, by piece; a piece whose file is missing or
     /// unreadable is left out.
-    private static func fastParts(of trackID: CMPersistentTrackID, pieces: [Piece], files: [SpeedAudio.Part: URL]) async -> [Int: FastPart] {
-        var parts: [Int: FastPart] = [:]
+    private static func fastParts(of trackID: CMPersistentTrackID, pieces: [Piece], files: [SpeedAudio.Part: URL]) async -> [Int: FileTrack] {
+        var parts: [Int: FileTrack] = [:]
         for (index, piece) in pieces.enumerated() where piece.speed.rate != 1 {
-            guard let url = files[SpeedAudio.Part(trackID: trackID, range: piece.speed.range, rate: piece.speed.rate)] else { continue }
-            let asset = AVURLAsset(url: url)
-            guard let track = try? await asset.loadTracks(withMediaType: .audio).first, let range = try? await track.load(.timeRange) else {
-                continue
-            }
-            parts[index] = FastPart(asset: asset, track: track, range: range)
+            guard let url = files[SpeedAudio.Part(trackID: trackID, range: piece.speed.range, rate: piece.speed.rate)],
+                  let part = await audioTrack(of: url) else { continue }
+            parts[index] = part
         }
         return parts
     }

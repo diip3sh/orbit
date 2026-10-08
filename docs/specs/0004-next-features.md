@@ -74,7 +74,7 @@ own spec before any code.
 
 N20 and N21 are small and can land any time.
 
-**Status (2026-10-08):** built: N1, N2, N3, N7, N8, N9, N10, N11, N12, N15, N16, N17, N20, N21, N22. The rest is open.
+**Status (2026-10-08):** built: N1, N2, N3, N4, N7, N8, N9, N10, N11, N12, N15, N16, N17, N20, N21, N22. The rest is open.
 
 Every item follows spec 0003's standards: a pure core with tests, performance measured before a
 claim, docs updated, and the 8 ms frame budget kept.
@@ -140,6 +140,10 @@ claim, docs updated, and the 8 ms frame budget kept.
   times.
 
 ### N4 — Enhance voice
+
+- **Status (2026-10-08): built** (`VoiceEnhancer`, `OfflineAudioEffect`; CLAUDE.md phase 5 has the numbers). Found on the way:
+  `AUSoundIsolation` reports a latency of 0 but delays mono by 92.5 ms and stereo by 132.5 ms, compensated by measurement; and
+  `AVAudioPlayerNode` in manual rendering was one chunk late in a third of runs, so the engine is fed by an `AVAudioSourceNode`.
 
 - **What:** an Enhance Voice switch on the microphone track in the Audio section.
 - **How:** `AUSoundIsolation` (macOS 13; `kAUSoundIsolationSoundType_HighQualityVoice` on macOS 15),
