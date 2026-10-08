@@ -155,8 +155,9 @@ struct CompositionBuilderTests {
 
         #expect(try await composition.asset.loadTracks(withMediaType: .audio).count == 2)
         #expect(composition.extraAudio.clicks == clicks)
-        #expect(abs(peak(of: mixed, from: 0.1, to: 0.12) - loudest * 0.5) < 0.02)
-        #expect(abs(peak(of: mixed, from: 0.3, to: 0.32) - loudest * 0.5) < 0.02)
+        let half: Float = loudest * 0.5
+        #expect(abs(peak(of: mixed, from: 0.1, to: 0.12) - half) < 0.02)
+        #expect(abs(peak(of: mixed, from: 0.3, to: 0.32) - half) < 0.02)
         // Nothing of the click in the cut, nor between the others
         #expect(peak(of: mixed, from: 0.13, to: 0.29) < 0.001)
 

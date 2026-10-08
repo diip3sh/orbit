@@ -54,8 +54,10 @@ struct CanvasLayoutTests {
                 let frame = CanvasLayout.filledFrame(for: video, in: size, padding: 0.08)
                 let shown = CanvasLayout.baseView(for: video, shape: frame.size)
                 // The part shown is scaled onto the frame by exactly 1, and the padding stays within a few pixels of 8%
-                #expect(abs(frame.width / (video.width * shown.width) - 1) < 1e-9, "\(video) \(aspect): \(frame.size)")
-                #expect(abs(frame.height / (video.height * shown.height) - 1) < 1e-9, "\(video) \(aspect): \(frame.size)")
+                let scaleX: CGFloat = frame.width / (video.width * shown.width)
+                let scaleY: CGFloat = frame.height / (video.height * shown.height)
+                #expect(abs(scaleX - 1) < 1e-9, "\(video) \(aspect): \(frame.size)")
+                #expect(abs(scaleY - 1) < 1e-9, "\(video) \(aspect): \(frame.size)")
                 let inset = 0.08 * side
                 #expect(abs(frame.minX - inset) <= 6 && abs(frame.minY - inset) <= 6, "\(video) \(aspect): \(frame) in \(size)")
             }
