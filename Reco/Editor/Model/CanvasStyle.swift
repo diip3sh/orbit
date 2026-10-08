@@ -55,6 +55,18 @@ nonisolated struct CanvasStyle: Codable, Equatable, Sendable {
         fillsFrame && aspect != .source
     }
 
+    /// Makes `preset` the gradient: both colors at once, so a bound control's one write is one edit.
+    mutating func apply(_ preset: GradientPreset) {
+        gradientStart = preset.start
+        gradientEnd = preset.end
+    }
+
+    /// Makes the picture `bookmark` opens the background.
+    mutating func setImage(_ bookmark: Data) {
+        background = .image
+        imageBookmark = bookmark
+    }
+
     /// The recording as it is: its own shape, filling the frame.
     static let plain = CanvasStyle(aspect: .source, padding: 0, cornerRadius: 0, shadow: 0)
 

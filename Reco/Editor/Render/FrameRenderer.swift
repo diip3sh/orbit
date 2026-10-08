@@ -158,8 +158,8 @@ nonisolated enum FrameRenderer {
             .concatenating(CGAffineTransform(scaleX: viewport.scale / view.width, y: viewport.scale / view.height))
     }
 
-    /// The video in its shape over the background.
-    private static func framed(_ video: CIImage, on canvas: CanvasLayout) -> CIImage {
+    /// The video in its shape over the background; a screenshot the same way (`ScreenshotFramer`).
+    static func framed(_ video: CIImage, on canvas: CanvasLayout) -> CIImage {
         guard let backdrop = canvas.backdrop else { return video }
         guard let mask = canvas.videoMask else { return video.composited(over: backdrop) }
         return video.applyingFilter("CIBlendWithAlphaMask", parameters: [kCIInputBackgroundImageKey: backdrop, kCIInputMaskImageKey: mask])

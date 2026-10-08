@@ -17,10 +17,11 @@ struct EditorViewModelBackgroundTests {
         let viewModel = EditorViewModel(videoURL: URL.temporaryDirectory.appending(path: "\(UUID().uuidString).mov"))
         let ocean = GradientPreset.all[3]
 
-        viewModel.applyGradient(ocean)
+        // As the swatch grid writes it: both colors in one write of the bound canvas
+        viewModel.canvas.apply(ocean)
 
         #expect(viewModel.project.canvas.gradientPreset == ocean)
-        #expect(viewModel.undoManager.undoActionName == "Gradient")
+        #expect(viewModel.undoManager.undoActionName == "Canvas")
         viewModel.undoManager.undo()
         #expect(viewModel.project.canvas.gradientPreset == .slate)
         #expect(!viewModel.undoManager.canUndo)
@@ -39,16 +40,16 @@ struct EditorViewModelBackgroundTests {
         }.png.write(to: picture)
         let viewModel = EditorViewModel(videoURL: video)
         await viewModel.load()
-        let wallpaper = SystemWallpaper(url: picture.resolvingSymlinksInPath(), thumbnail: try .filled(width: 4, height: 3))
-        #expect(!viewModel.isBackground(wallpaper))
+        #expect(viewModel.backgroundImageURL == nil)
 
         viewModel.setBackgroundImage(picture)
 
         for _ in 0..<500 where viewModel.backgroundImageURL == nil {
             try await Task.sleep(for: .milliseconds(10))
         }
+        // What the wallpaper grid rings its tile by
         #expect(viewModel.backgroundImageURL == picture.resolvingSymlinksInPath())
-        #expect(viewModel.isBackground(wallpaper))
+        #expect(viewModel.project.canvas.background == .image)
         await viewModel.close()
     }
 }

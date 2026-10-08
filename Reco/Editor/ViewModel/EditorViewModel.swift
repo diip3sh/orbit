@@ -203,10 +203,7 @@ final class EditorViewModel {
     func setBackgroundImage(_ url: URL) {
         do {
             let bookmark = try BackgroundImageLoader.bookmark(for: url)
-            edit("Background Image") {
-                $0.canvas.background = .image
-                $0.canvas.imageBookmark = bookmark
-            }
+            edit("Background Image") { $0.canvas.setImage(bookmark) }
         } catch {
             logger.error("No bookmark for \(url.lastPathComponent): \(error.localizedDescription)")
             fail(.unreadableBackground)

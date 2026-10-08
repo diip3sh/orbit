@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 926 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 939 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -266,7 +266,7 @@ ended, on the pointer's sides facing away from the captured area (`Screenshot.re
 mouse (clear of notifications and the menu bar popover, top-right). The card takes the screenshot's shape
 (`cardSize(for:)`: fitted in 260×220, never enlarged, at least 200×120) on an 8 pt glass edge. **Copy ⌘C** and
 **Save ⌘S** (the shortcut shown dimmed in the button) always sit along its bottom edge; under the pointer the shot
-dims and shows Close, **Hide Sensitive Info** (N9), **Recognize Text** and **Pin** as small icons in its corners. The card takes key when it appears, without
+dims and shows Close, **Add Background** (N14), **Hide Sensitive Info** (N9), **Recognize Text** and **Pin** as small icons in its corners. The card takes key when it appears, without
 activating the app, so the shortcuts work until another window is clicked; typing goes to the card meanwhile.
 It grows from the card's corner nearest the pointer (`QuickAccessController.anchor(for:pointer:)`, the
 bottom-left without a region) and shrinks back there when closed, copied, saved or pinned; `hide()` and
@@ -289,11 +289,26 @@ it was only the way in, so Esc on an area selection closes that state and leaves
   `DetectBarcodesRequest` alongside the text request; Code Copied). **Hide Sensitive Info** (N9): pixelates emails, phone numbers,
   card numbers and API keys into the shot, which the card then shows and every other action uses. **Pin** (C8): the image in its
   own panel, then closes. Recognize Text and Hide Sensitive Info confirm on the card for 1.5 s.
+- **Add Background** (N14, 2026-10-08; `hugeicons-background`, first of the top-right icons, the accent colour while on): puts
+  the shot on the background from **Settings → Screenshots → Background** (`ScreenshotBackground`: a `CanvasStyle` whose shape is
+  always the shot's own, plus Auto Balance; kept as JSON in `SettingsStore.screenshotBackground`), and a second click takes it
+  off. Always off for a new card: a background is a choice per shot, not a default. `ScreenshotFramer` draws it off the main
+  actor like `ScreenshotRedactor`: Auto Balance trims rows and columns within 2 per channel of the top-left pixel's colour
+  (`UniformBorders`, pure; a window shot's desktop, a page's margins), then `CanvasLayout` at `nativeShorterSide`, so the shot
+  keeps its own pixels inside the padding as an Original export does, and `FrameRenderer.framed` blends it over the backdrop
+  through the rounded mask. The HDR copy is dropped, so a framed shot saves as PNG; a clear background keeps its alpha. The
+  view model keeps the shot without the background (`plainScreenshot`): Hide Sensitive Info works on that and frames the result
+  again, so the background goes over the hidden text and comes off without undoing it. The card refits to the new shape
+  (`onReshape` → `QuickAccessController.refit()`, keeping the corner it grew from; `QuickAccessView` reads `cardSize` from the
+  shot), and the preview is redrawn at the size the first one was (`previewPixelSize`). The Settings section reuses the editor's
+  controls (`CanvasStyleControls`, `BackgroundFillControls`, now bound to a `CanvasStyle` rather than the editor's view model;
+  `CanvasStyle.apply(_:)` and `setImage(_:)` make a preset or a picture one write, so one edit).
 
 | File | Role |
 |---|---|
 | `QuickAccess/View/QuickAccessController.swift`, `QuickAccessPanel.swift` | Non-activating borderless `.floating` dark panel (key on appearing, `hidesOnDeactivate = false`), enter/exit through `panelPresentation` (`exitDelay` before ordering out; leaving panels are tracked so `hide()` clears them too), placement (`panelFrame`), owns the card's view model and the pins |
-| `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin` |
+| `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin`/`onReshape` |
+| `Screenshot/Model/ScreenshotBackground.swift`, `UniformBorders.swift`, `Screenshot/Service/ScreenshotFramer.swift`, `Model/SettingsStore+ScreenshotBackground.swift`, `View/ScreenshotSettingsView.swift` | The background setting and Auto Balance's trim (pure); the shot drawn on the canvas; the Settings → Screenshots tab (HDR, history, background) |
 | `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius), hover scrim and controls (Copy and Save both `.editorPrimary`: secondary's accent text over the shot read as a disabled Copy; dark corner icons), a solid toast; icons are 1.5 pt line
 SVGs in `Assets.xcassets/LineIcons` as template vectors, drawn by `LineIcon` in `CornerButtonStyle`'s dark circles (both shared with pins): Hugeicons
 stroke-rounded (MIT) cancel, checkmark circle, scan text and pin, as in the capture toolbar (the app's icons are SF Symbols and Hugeicons only); a `DragGesture` on the edge drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the shot. Annotate goes first in the top-right corner once it exists (one line) |
@@ -866,8 +881,8 @@ macOS asks once for Desktop access the first time a screenshot is saved there.
 
 **History** (spec 0012): every capture is also written, in the background (the card doesn't wait), to
 `URL.recoSupport/Screenshots/` under the same name. Save deletes that copy (after awaiting its write, if still
-running), so nothing is stored or listed twice; Copy, Pin, Recognize Text and Close leave it. **Settings → General →
-Screenshot History**: Keep Screenshots Off / 1 Week / 1 Month (default) / 3 Months, and Clear History…. Expired
+running), so nothing is stored or listed twice; Copy, Pin, Recognize Text and Close leave it. **Settings → Screenshots →
+History** (in General until N14 gave screenshots their own tab): Keep Screenshots Off / 1 Week / 1 Month (default) / 3 Months, and Clear History…. Expired
 files (creation date older than the retention; Off expires all) are deleted with `removeItem`, not trashed, to free
 space: at launch and after each history write, by `ScreenshotHistory.isExpired`, the one rule. The screenshot folder
 is never pruned.
@@ -891,7 +906,7 @@ Key facts:
 - Window shots use the window recording config: SCK fits window + shadow into the window's frame, so
   shadow padding is uneven (same as recordings).
 - Verified on an M2 (1710×1112 pt, 2×): screen 3420×2224, window and area at 2×, sRGB, no Reco UI.
-- **HDR screenshots** (N16; Settings → General → Screenshots → Capture HDR Screenshots, macOS 26 and later, off by default,
+- **HDR screenshots** (N16; Settings → Screenshots → Capture → Capture HDR Screenshots, macOS 26 and later, off by default,
   `SettingsStore.capturesHDRScreenshots`): screen and area shots are taken with `SCScreenshotManager.captureScreenshot` and
   `dynamicRange = .hdr` (`ScreenshotService.hdrConfiguration`) and keep the picture as `Screenshot.hdrImage` (16-bit extended
   sRGB); `image` is drawn from it in 8-bit sRGB, highlights clipped (`standardRange(of:)`), for the card, pins, Copy (still a
@@ -1275,7 +1290,7 @@ text sent to the agent never includes a password's value.
 A black shape over the notch of every screen (a 120×8 pt pill at the top centre where there is none). The pointer
 on it makes it peek (+7.5 pt each side, +5 down, shadow); staying 300 ms opens it into a 560 pt panel with the
 newest 20 screenshots (saved and history): click copies the PNG (tile says Copied for 1.2 s), drag drops the file.
-Collapses 500 ms after the pointer leaves. **Settings → General → Screenshot History → Show Screenshots in the Notch** (default off).
+Collapses 500 ms after the pointer leaves. **Settings → Screenshots → History → Show Screenshots in the Notch** (default off).
 Hidden while a take records or saves (`AppDelegate.hideNotchShelfWhileRecording`), so a display recording never shows it as a bar over the notch, Show Reco or not. Hover rings a tile in the accent; a press dims and shrinks it on the frame it lands and lets go after 4 pt, so the file drag still starts.
 
 | File | Role |

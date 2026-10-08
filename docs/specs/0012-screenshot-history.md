@@ -15,7 +15,7 @@ and deleted after that so it doesn't fill the disk.
   background: the card doesn't wait for it. A failed write is logged, never shown.
 - **Save** writes to the screenshot folder as before, then deletes the history copy. Copy, Pin,
   Recognize Text and Close leave it.
-- **Settings → General → Screenshot History**: Keep Screenshots (Off, 1 Week, 1 Month, 3 Months; default
+- **Settings → Screenshots → History** (in General until 2026-10-08): Keep Screenshots (Off, 1 Week, 1 Month, 3 Months; default
   1 Month) and Clear History… (asks first).
 - The Library lists history screenshots with the saved ones, grouped under date headers.
 

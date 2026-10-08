@@ -26,6 +26,7 @@ final class QuickAccessViewModel {
         case textFailed
         case hidden(Int)
         case nothingToHide
+        case backgroundFailed
 
         var message: String {
             switch self {
@@ -38,6 +39,7 @@ final class QuickAccessViewModel {
             case .textFailed: "Couldn't Read the Text"
             case .hidden(let count): count == 1 ? "Hid 1 Item" : "Hid \(count) Items"
             case .nothingToHide: "Nothing Sensitive Found"
+            case .backgroundFailed: "Couldn't Add the Background"
             }
         }
 
@@ -47,7 +49,8 @@ final class QuickAccessViewModel {
         }
     }
 
-    /// Replaced, with its preview, when its private text is hidden
+    /// What the card shows and every action uses: replaced, with its preview, when its private text is hidden or
+    /// it's put on a background
     private(set) var screenshot: Screenshot
 
     /// Drawn at the card's size; the full image is only encoded when copied, saved or dragged
@@ -60,13 +63,26 @@ final class QuickAccessViewModel {
     private(set) var isRecognizingText = false
     private(set) var isHidingSensitiveInfo = false
 
+    /// Whether the shot is on the background from Settings; off for every new card
+    private(set) var hasBackground = false
+    private(set) var isChangingBackground = false
+
     /// Closes the card. Set by `QuickAccessController`, cleared when the card goes away.
     @ObservationIgnored var onClose: (@MainActor () -> Void)?
 
     /// Pins the screenshot where the card is. Set by `QuickAccessController`.
     @ObservationIgnored var onPin: (@MainActor () -> Void)?
 
+    /// The shot changed shape, as a background does. Set by `QuickAccessController`, which refits the card.
+    @ObservationIgnored var onReshape: (@MainActor () -> Void)?
+
+    /// The shot without its background, which Hide Sensitive Info works on, so the background goes over the
+    /// hidden text and comes off without undoing it
+    @ObservationIgnored private var plainScreenshot: Screenshot
+
+    private let previewPixelSize: CGFloat
     private let saveScreenshot: @MainActor (Screenshot) async -> Bool
+    private let background: @MainActor () -> ScreenshotBackground
     private let pasteboard: NSPasteboard
     /// Holds the drag-out file under the save name; unique per card so two cards never share a file
     private let dragFolder = URL.temporaryDirectory.appending(path: UUID().uuidString)
@@ -76,11 +92,20 @@ final class QuickAccessViewModel {
     @ObservationIgnored private var dragFileTask: Task<Void, Never>?
     @ObservationIgnored private var feedbackTask: Task<Void, Never>?
 
-    /// - Parameter save: Saves into the output folder and reports failures itself; returns whether it saved
-    init(screenshot: Screenshot, preview: CGImage, save: @escaping @MainActor (Screenshot) async -> Bool, pasteboard: NSPasteboard = .general) {
+    /// - Parameters:
+    ///   - preview: The shot drawn at most `previewPixelSize` on its longer side; a replaced shot's is drawn the same
+    ///   - save: Saves into the output folder and reports failures itself; returns whether it saved
+    ///   - background: The background Add Background puts the shot on, read when it's clicked
+    init(
+        screenshot: Screenshot, preview: CGImage, previewPixelSize: CGFloat, save: @escaping @MainActor (Screenshot) async -> Bool,
+        background: @escaping @MainActor () -> ScreenshotBackground, pasteboard: NSPasteboard = .general
+    ) {
         self.screenshot = screenshot
+        plainScreenshot = screenshot
         self.preview = preview
+        self.previewPixelSize = previewPixelSize
         self.saveScreenshot = save
+        self.background = background
         self.pasteboard = pasteboard
         writeDragFile()
     }
@@ -138,24 +163,55 @@ final class QuickAccessViewModel {
         isHidingSensitiveInfo = true
         defer { isHidingSensitiveInfo = false }
         do {
-            let (hidden, count) = try await ScreenshotRedactor.hidingSensitiveText(in: screenshot)
+            let (hidden, count) = try await ScreenshotRedactor.hidingSensitiveText(in: plainScreenshot)
             guard count > 0 else {
                 show(.nothingToHide)
                 return
             }
-            guard let preview = await ImageDownsampler.thumbnail(of: hidden.image, maxPixelSize: CGFloat(max(preview.width, preview.height))) else {
+            let shown = hasBackground ? try await ScreenshotFramer.framing(hidden, with: background()) : hidden
+            guard await display(shown) else {
                 show(.textFailed)
                 return
             }
-            screenshot = hidden
-            self.preview = preview
-            removeDragFile()
-            writeDragFile()
+            plainScreenshot = hidden
             show(.hidden(count))
         } catch {
             logger.error("Couldn't hide sensitive text: \(error.localizedDescription)")
             show(.textFailed)
         }
+    }
+
+    /// Puts the shot on the background from Settings, or takes it off again; the card refits to the new shape and
+    /// Copy, Save, Pin and drag-out use what it shows.
+    func toggleBackground() async {
+        isChangingBackground = true
+        defer { isChangingBackground = false }
+        if hasBackground {
+            hasBackground = await !display(plainScreenshot)
+            return
+        }
+        do {
+            let framed = try await ScreenshotFramer.framing(plainScreenshot, with: background())
+            hasBackground = await display(framed)
+        } catch {
+            logger.error("Couldn't put the screenshot on a background: \(error.localizedDescription)")
+            show(.backgroundFailed)
+        }
+    }
+
+    /// Shows `shot` in place of the current one, with a new preview and drag-out file; `false` when no preview
+    /// could be drawn, in which case nothing changes.
+    private func display(_ shot: Screenshot) async -> Bool {
+        guard let preview = await ImageDownsampler.thumbnail(of: shot.image, maxPixelSize: previewPixelSize) else { return false }
+        let reshaped = shot.pointSize != screenshot.pointSize
+        screenshot = shot
+        self.preview = preview
+        removeDragFile()
+        writeDragFile()
+        if reshaped {
+            onReshape?()
+        }
+        return true
     }
 
     /// Pins the screenshot, then closes the card

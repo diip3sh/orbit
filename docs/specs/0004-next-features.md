@@ -74,7 +74,7 @@ own spec before any code.
 
 N20 and N21 are small and can land any time.
 
-**Status (2026-10-08):** built: N1, N2, N3, N4, N7, N8, N9, N10, N11, N12, N15, N16, N17, N20, N21, N22. The rest is open.
+**Status (2026-10-08):** built: N1, N2, N3, N4, N7, N8, N9, N10, N11, N12, N14, N15, N16, N17, N20, N21, N22. The rest is open.
 
 Every item follows spec 0003's standards: a pure core with tests, performance measured before a
 claim, docs updated, and the 8 ms frame budget kept.
@@ -327,6 +327,13 @@ automatic zooms are made again when a crop drag ends. Not yet checked in the run
   - Blur and pixelate reuse N8's filters; one-click redaction reuses N9.
 
 ### N14 — Screenshot backgrounds
+
+**Status (2026-10-08):** built. The card's background button (top-right, first) puts the shot on the background set in
+**Settings → Screenshots → Background** (the editor's canvas controls: gradient presets, colour, wallpaper or picture with
+blur, clear; padding, corners, shadow, border; plus Auto Balance), always off until clicked, and takes it off again. The
+shot keeps its own pixels inside the padding (`CanvasLayout.nativeShorterSide`, like an Original export); Auto Balance trims
+rows and columns within 2 of the top-left pixel's colour per channel. Hide Sensitive Info works on the shot without the
+background and frames it again. The card refits to the new shape, keeping the corner it grew from. Not yet checked by eye.
 
 - **What:** put a screenshot on a gradient, colour or picture, with padding, corners and a shadow.
   Auto Balance centres the content with even margins.

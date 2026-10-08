@@ -14,7 +14,7 @@ import Testing
 @MainActor
 struct QuickAccessRestoreTests {
 
-    private let controller = QuickAccessController { _ in false }
+    private let controller = QuickAccessController(save: { _ in false }, background: { ScreenshotBackground() })
 
     private func screenshot(at seconds: TimeInterval) throws -> Screenshot {
         try Screenshot(image: .filled(width: 4, height: 4), scale: 2, date: Date(timeIntervalSince1970: seconds))

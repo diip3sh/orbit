@@ -16,11 +16,13 @@ struct QuickAccessView: View {
     let model: QuickAccessViewModel
     let dragger: PanelDragger
     let anchor: UnitPoint
-    let size: CGSize
 
     @State private var isHovering = false
 
     var body: some View {
+        // The shot's shape, which a background changes; the controller refits the panel to the same size
+        let size = QuickAccessController.cardSize(for: model.screenshot.pointSize)
+
         QuickAccessPreview(model: model, showsControls: isHovering)
             .padding(QuickAccessController.inset)
             .frame(width: size.width, height: size.height)
@@ -93,8 +95,8 @@ private struct QuickAccessPreview: View {
     }
 }
 
-/// Close top-left; Hide Sensitive Info, Recognize Text and Pin top-right. Space between them isn't hit-tested, so a drag
-/// there starts on the screenshot.
+/// Close top-left; Background, Hide Sensitive Info, Recognize Text and Pin top-right. Space between them isn't
+/// hit-tested, so a drag there starts on the screenshot.
 private struct QuickAccessControls: View {
 
     let model: QuickAccessViewModel
@@ -106,6 +108,15 @@ private struct QuickAccessControls: View {
             Spacer()
             // Annotate goes first once annotation exists:
             // Button("Annotate", systemImage: "pencil", action: model.annotate)
+            Button { Task { await model.toggleBackground() } } label: {
+                Label { Text(model.hasBackground ? "Remove Background" : "Add Background") } icon: {
+                    LineIcon(.hugeiconsBackground)
+                        // The one control on the card that stays on: the accent says so
+                        .foregroundStyle(model.hasBackground ? AnyShapeStyle(EditorTheme.accent) : AnyShapeStyle(.white))
+                }
+            }
+            .help(model.hasBackground ? "Remove the background" : "Put the screenshot on the background from Settings")
+            .disabled(model.isChangingBackground)
             Button { Task { await model.hideSensitiveInfo() } } label: {
                 Label { Text("Hide Sensitive Info") } icon: { LineIcon(.hugeiconsViewOffSlash) }
             }

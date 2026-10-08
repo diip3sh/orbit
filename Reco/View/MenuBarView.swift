@@ -259,7 +259,7 @@ struct PermissionRow: View {
         showScreenshotToolbar: {},
         showRecordingToolbar: {},
         editLastRecording: {},
-        quickAccess: QuickAccessController { _ in false },
+        quickAccess: QuickAccessController(save: { _ in false }, background: { ScreenshotBackground() }),
         showLibrary: {},
         showWebRecording: {},
         agentRecording: AgentRecordingViewModel(
