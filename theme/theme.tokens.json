@@ -196,7 +196,7 @@
     "surface": {
       "$value": "{color.carbon}",
       "$type": "color",
-      "$description": "EditorTheme.surface — cards and floating panels: the capture toolbar, the Quick Access card, the popover",
+      "$description": "EditorTheme.surface — cards and floating panels: the capture toolbar, the Quick Access card",
       "$extensions": { "com.reco.theme": { "light": "{lightColor.snow}", "darkHighContrast": "#0f1011", "lightHighContrast": "{lightColor.snow}" } }
     },
     "raised": {

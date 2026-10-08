@@ -22,16 +22,15 @@ struct MenuBarActionButton: View {
             HStack(spacing: 12) {
                 if let systemImage {
                     Image(systemName: systemImage)
-                        .foregroundStyle(EditorTheme.dim)
+                        .foregroundStyle(.secondary)
                         .frame(width: 20)
                 }
                 Text(title)
-                    .font(.theme(.body, weight: .medium))
+                    .font(.body.weight(.medium))
                 Spacer()
                 if let shortcut = shortcut.flatMap(KeyboardShortcuts.getShortcut(for:)) {
                     Text(shortcut.description)
-                        .font(.theme(.body, .mono))
-                        .foregroundStyle(EditorTheme.dim)
+                        .foregroundStyle(.tertiary)
                 }
             }
             .padding(.horizontal, 12)

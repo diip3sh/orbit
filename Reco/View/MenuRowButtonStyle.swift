@@ -12,7 +12,7 @@ struct MenuRowHighlight: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(EditorTheme.ink.opacity(opacity))
+            .fill(Color.primary.opacity(opacity))
             .padding(.horizontal, 6)
     }
 }

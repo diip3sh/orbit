@@ -616,8 +616,8 @@ Key facts:
 
 ### S1 — Editor design (`feat/editor-shell`, theme `feat/linear-theme`)
 
-Since 2026-10-08 the whole app wears Linear's design tokens (extracted from linear.app by Refero): near-black solid
-surfaces one step apart (void `#08090a` for window grounds, carbon `#0f1011` for cards, floating panels and the popover,
+Since 2026-10-08 every window and floating panel wears Linear's design tokens (extracted from linear.app by Refero): near-black solid
+surfaces one step apart (void `#08090a` for window grounds, carbon `#0f1011` for cards and floating panels,
 obsidian `#161718` for what floats over them, slate `#23252a` for control fills), text in three tones (ink, dim, faint),
 graphite hairlines instead of boxes, Inter for every label and JetBrains Mono for shortcuts, file names and code, and acid
 lime `#e4f222` as the one accent. Light mode (2026-10-08) takes the light end of Default's tokens (default.com, also by
@@ -626,7 +626,8 @@ hairlines, void `#0b0c0e` text, steel darkened to `#6b6b73` for dim text (steel 
 `#858687` for faint marks, and iris `#314ef0` as the accent and its fill, with white on it (Signal Blue `#3b82f6` was
 turned down: white on it is 3.7:1). Every colour is a colour set in `Assets.xcassets/Theme` (and `AccentColor`) with a
 dark, a light and an Increase Contrast variant of each, so the app still follows the user's appearance; no window forces
-one (the notch shelf excepted: it is black under the notch). No Liquid Glass and no materials, with two exceptions the system draws: the Library's sidebar and the
+one (the notch shelf excepted: it is black under the notch). The menu bar popover stays native, as before the theme: the
+system font, label colours and accent on `.ultraThinMaterial`. No Liquid Glass and no materials, with two exceptions the system draws: the Library's sidebar and the
 editor's and Web Recording's `.inspector` columns. Native controls (Settings' forms, switches, pickers, the shortcut
 recorder) stay native and take the accent through `.tint`; AppKit controls follow the user's own accent instead when it isn't
 Multicolor. This replaced the system colours and glass of 2026-09-28 to 2026-10-07. The preview sits on a dot grid; the inspector (toolbar toggle) holds every
@@ -697,7 +698,7 @@ Key facts:
   and badges where a native control works, no all-caps titles, hover as a fill step (no lifts or
   scaling).
 - One visual family, one motion system: every window and floating panel (editor, Library, Web Recording, the agent
-  bar, Quick Access card, pins, capture toolbar and its picker, countdown, popover, Settings) on the same surfaces, with
+  bar, Quick Access card, pins, capture toolbar and its picker, countdown, Settings) on the same surfaces, with
   the accent for what is chosen or the action; a take in progress is red, a status colour outside the tokens.
 - Motion follows the apple-design skill: respond on press, move 1:1 from the grab point, springs that start
   from the current value, bounce only after a flick, symmetric enter and exit from the source. Timeline

@@ -21,7 +21,7 @@ enum EditorTheme {
     /// Under the timeline (carbon `#0f1011`).
     static let panel = Color(.panel)
 
-    /// Cards and floating panels: the capture toolbar, the Quick Access card, the popover (carbon `#0f1011`).
+    /// Cards and floating panels: the capture toolbar, the Quick Access card (carbon `#0f1011`).
     static let surface = Color(.surface)
 
     /// What floats over a surface: tooltips, menus, the source picker (obsidian `#161718`).

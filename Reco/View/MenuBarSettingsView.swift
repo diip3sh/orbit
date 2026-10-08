@@ -13,7 +13,6 @@ import SwiftUI
 struct SectionDivider: View {
     var body: some View {
         Divider()
-            .overlay(EditorTheme.hairline)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
     }
@@ -27,8 +26,8 @@ struct SectionHeader: View {
 
     var body: some View {
         Text(title)
-            .font(.theme(.callout, weight: .semibold))
-            .foregroundStyle(EditorTheme.dim)
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
@@ -41,7 +40,6 @@ struct SectionHeader: View {
 struct MenuBarDivider: View {
     var body: some View {
         Divider()
-            .overlay(EditorTheme.hairline)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
     }
@@ -64,8 +62,8 @@ struct MenuBarToggle: View {
         } label: {
             HStack {
                 Text(name)
-                    .font(.theme(.body, weight: .medium))
-                    .foregroundStyle(isDisabled || !isEnabled ? EditorTheme.dim : EditorTheme.ink)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(isDisabled || !isEnabled ? .secondary : .primary)
                 Spacer()
                 Toggle("", isOn: $isOn)
                     .toggleStyle(.switch)
@@ -101,15 +99,15 @@ struct ExpandableHeader: View {
         } label: {
             HStack {
                 Text(title)
-                    .font(.theme(.body, weight: .medium))
+                    .font(.body.weight(.medium))
                 Spacer()
                 if let value {
                     Text(value)
-                        .foregroundStyle(EditorTheme.dim)
+                        .foregroundStyle(.secondary)
                 }
                 Image(systemName: "chevron.right")
-                    .font(.theme(.caption, weight: .semibold))
-                    .foregroundStyle(EditorTheme.dim)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
                     .rotationEffect(.degrees(isExpanded ? 90 : 0))
             }
             .padding(.horizontal, 12)
@@ -134,7 +132,7 @@ struct DeviceRow: View {
         Button(action: onSelect) {
             HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .foregroundStyle(EditorTheme.dim)
+                    .foregroundStyle(.secondary)
                     .frame(width: 20)
 
                 Text(name)
@@ -143,7 +141,7 @@ struct DeviceRow: View {
 
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.theme(.callout, weight: .semibold))
+                        .font(.callout.weight(.semibold))
                 }
             }
             .padding(.horizontal, 12)
@@ -191,7 +189,7 @@ struct MicrophoneExpandablePicker: View {
                     }
                 }
                 .padding(.leading, 12)
-                .background(EditorTheme.softHairline)
+                .background(.quaternary.opacity(0.3))
             }
         }
     }
@@ -246,7 +244,7 @@ struct CameraExpandablePicker: View {
                     }
                 }
                 .padding(.leading, 12)
-                .background(EditorTheme.softHairline)
+                .background(.quaternary.opacity(0.3))
             }
         }
     }

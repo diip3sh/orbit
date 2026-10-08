@@ -29,7 +29,6 @@ struct RecoApp: App {
                 showWebRecording: appDelegate.showWebRecording,
                 agentRecording: appDelegate.agentRecording
             )
-                .themed()
                 .task {
                     await viewModel.requestPermissionsOnLaunch()
                 }
