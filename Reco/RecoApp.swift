@@ -29,6 +29,7 @@ struct RecoApp: App {
                 showWebRecording: appDelegate.showWebRecording,
                 agentRecording: appDelegate.agentRecording
             )
+                .themed()
                 .task {
                     await viewModel.requestPermissionsOnLaunch()
                 }
@@ -40,6 +41,7 @@ struct RecoApp: App {
         // Settings window
         Settings {
             SettingsView(settings: viewModel.settings, updaterService: updaterService, agentBridge: appDelegate.agentBridge)
+                .themed()
         }
     }
 }

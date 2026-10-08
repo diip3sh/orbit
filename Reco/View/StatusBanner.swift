@@ -23,7 +23,7 @@ struct StatusBanner: View {
         }
         .padding(.horizontal, EditorTheme.mediumSpacing)
         .padding(.vertical, EditorTheme.smallSpacing)
-        .editorGlass(in: .capsule)
+        .editorSurface(in: .capsule)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }

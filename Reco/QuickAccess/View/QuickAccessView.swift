@@ -33,7 +33,7 @@ struct QuickAccessView: View {
                             .onEnded { _ in dragger.end() }
                     )
             }
-            .editorGlass(in: .rect(cornerRadius: 16))
+            .editorSurface(in: .rect(cornerRadius: 16))
             .onHover { isHovering = $0 }
             .editorMotion(EditorTheme.quickMotion, value: isHovering)
             .panelPresentation(isPresented: model.isPresented, anchor: anchor)

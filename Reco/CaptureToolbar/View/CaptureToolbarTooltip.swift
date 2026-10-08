@@ -76,7 +76,7 @@ struct CaptureToolbarTooltipView: View {
     /// holds the previous text when a hover lands, so a window sized from it let the bubble spill over the bar.
     static func size(for target: CaptureToolbarTooltips.Target) -> CGSize {
         let bubble = CaptureToolbarTooltipBubble(text: target.text, shortcut: target.shortcut, pointsUp: false)
-        let fitted = NSHostingView(rootView: bubble).fittingSize
+        let fitted = NSHostingView(rootView: bubble.themed()).fittingSize
         return CGSize(width: fitted.width.rounded(.up) + margin * 2, height: fitted.height.rounded(.up) + margin * 2)
     }
 

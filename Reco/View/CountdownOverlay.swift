@@ -41,7 +41,7 @@ final class CountdownOverlay {
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
         panel.animationBehavior = .none
-        panel.contentView = NSHostingView(rootView: CountdownView(countdown: countdown))
+        panel.contentView = NSHostingView(rootView: CountdownView(countdown: countdown).themed())
         panel.orderFront(nil)
         self.panel = panel
 

@@ -95,7 +95,7 @@ private final class NotchShelf {
         let viewModel = NotchShelfViewModel(geometry: geometry) { [settings] in (settings.screenshotDirectory, ScreenshotHistory.directory) }
         self.viewModel = viewModel
 
-        hostingView = NotchHostingView(rootView: AnyView(NotchShelfView(viewModel: viewModel)))
+        hostingView = NotchHostingView(rootView: AnyView(NotchShelfView(viewModel: viewModel).themed()))
         hostingView.sizingOptions = []
         hostingView.activeRect = { [weak viewModel] in viewModel?.activeRect ?? .zero }
         hostingView.onEnter = { [weak viewModel] in viewModel?.pointerEntered() }

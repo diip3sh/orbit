@@ -40,7 +40,7 @@ final class PinController {
         let hostingView = NSHostingView(rootView: PinView(image: screenshot.image, presence: presence) { [weak self, weak panel] in
             guard let self, let panel else { return }
             close(panel, presence: presence)
-        })
+        }.themed())
         // The panel's frame is the size; the image's intrinsic size would grow it to full pixels
         hostingView.sizingOptions = []
         panel.contentView = hostingView

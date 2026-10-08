@@ -169,7 +169,7 @@ final class QuickAccessController {
         dragger.panel = panel
         dragger.onFlick = { [weak model] in model?.close() }
         let anchor = Self.anchor(for: frame, pointer: region == nil ? nil : pointer)
-        panel.contentView = NSHostingView(rootView: QuickAccessView(model: model, dragger: dragger, anchor: anchor, size: size))
+        panel.contentView = NSHostingView(rootView: QuickAccessView(model: model, dragger: dragger, anchor: anchor, size: size).themed())
         // Key, so ⌘C and ⌘S copy and save the new screenshot until another window is clicked
         panel.makeKeyAndOrderFront(nil)
         self.panel = panel

@@ -79,7 +79,7 @@ final class EditorWindowManager: NSObject {
         let accessesOutputDirectory = settings.startAccessingOutputDirectory()
 
         let viewModel = EditorViewModel(videoURL: videoURL)
-        let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel))
+        let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel).themed())
         // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
         hostingController.sizingOptions = .minSize
         // The name field, export and inspector buttons are SwiftUI toolbar items. The title isn't bridged: the
@@ -121,7 +121,7 @@ final class EditorWindowManager: NSObject {
             actions: libraryActions,
             openMovie: openMovie
         )
-        let hostingController = NSHostingController(rootView: LibraryView(viewModel: viewModel))
+        let hostingController = NSHostingController(rootView: LibraryView(viewModel: viewModel).themed())
         hostingController.sizingOptions = .minSize
         hostingController.sceneBridgingOptions = [.toolbars]
         let window = makeWindow(hostingController, title: "Reco", size: NSSize(width: 1100, height: 720))
@@ -163,7 +163,7 @@ final class EditorWindowManager: NSObject {
             self?.agentRecording?.didRender(url)
             self?.open(url)
         }
-        let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel, agent: agentRecording))
+        let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel, agent: agentRecording).themed())
         hostingController.sizingOptions = .minSize
         hostingController.sceneBridgingOptions = [.toolbars]
         let window = makeWindow(hostingController, title: "Web Recording", size: NSSize(width: 1533, height: 943))

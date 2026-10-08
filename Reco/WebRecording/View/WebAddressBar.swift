@@ -31,6 +31,6 @@ struct WebAddressBar: View {
         .disabled(!viewModel.isEditable)
         .padding(.horizontal, EditorTheme.mediumSpacing)
         .frame(maxWidth: 560, minHeight: 32)
-        .editorGlass(in: .capsule)
+        .editorSurface(in: .capsule)
     }
 }

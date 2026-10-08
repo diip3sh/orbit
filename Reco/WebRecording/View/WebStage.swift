@@ -88,7 +88,7 @@ struct WebStage: View {
                     }
                     .padding(.leading, EditorTheme.mediumSpacing)
                     .padding(EditorTheme.tightSpacing)
-                    .editorGlass(in: .capsule)
+                    .editorSurface(in: .capsule)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
