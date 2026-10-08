@@ -31,6 +31,9 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     /// Sorted and apart.
     var zooms: [ZoomSegment] = []
 
+    /// Sorted and apart.
+    var masks: [MaskSegment] = []
+
     var clickHighlights = ClickHighlightStyle()
     var keystrokes = KeystrokeOverlayStyle()
     var cursor = CursorStyle()
@@ -67,6 +70,7 @@ extension EditorProject {
         splits = try container.decodeIfPresent([Double].self, forKey: .splits) ?? []
         speeds = try container.decodeIfPresent([SpeedRange].self, forKey: .speeds) ?? []
         zooms = try container.decodeIfPresent([ZoomSegment].self, forKey: .zooms) ?? []
+        masks = try container.decodeIfPresent([MaskSegment].self, forKey: .masks) ?? []
         clickHighlights = try container.decodeIfPresent(ClickHighlightStyle.self, forKey: .clickHighlights) ?? ClickHighlightStyle()
         keystrokes = try container.decodeIfPresent(KeystrokeOverlayStyle.self, forKey: .keystrokes) ?? KeystrokeOverlayStyle()
         cursor = try container.decodeIfPresent(CursorStyle.self, forKey: .cursor) ?? CursorStyle()

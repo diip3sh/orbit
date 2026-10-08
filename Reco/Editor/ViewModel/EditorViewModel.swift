@@ -409,7 +409,7 @@ extension EditorViewModel {
     var canDeleteSelection: Bool {
         switch selection {
         case .segment: segments.count > 1
-        case .zoom: true
+        case .zoom, .mask: true
         case nil: false
         }
     }
@@ -431,7 +431,7 @@ extension EditorViewModel {
         edit("Split") { $0.splits = splits }
     }
 
-    /// Cuts the selected segment or deletes the selected zoom.
+    /// Cuts the selected segment or deletes the selected zoom or mask.
     func deleteSelection() {
         guard let selection, canDeleteSelection else { return }
         switch selection {
@@ -439,6 +439,8 @@ extension EditorViewModel {
             edit("Cut") { $0.cuts = timeMap.cuts(adding: range) }
         case .zoom(let id):
             edit("Delete Zoom") { $0.zooms = $0.zooms.removing(id) }
+        case .mask(let id):
+            edit("Delete Mask") { $0.masks = $0.masks.removing(id) }
         }
     }
 

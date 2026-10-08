@@ -88,7 +88,13 @@ struct EditorTimelineView: View {
             }
 
             ZoomLane(viewModel: viewModel, width: width)
+
+            if !viewModel.project.masks.isEmpty {
+                MaskLane(viewModel: viewModel, width: width)
+                    .transition(.opacity)
+            }
         }
+        .editorMotion(value: viewModel.project.masks.isEmpty)
         .editorMotion(.smooth, value: viewModel.thumbnails.count { $0 != nil })
         .overlay {
             // Cuts dimmed and hatched, and splits across the filmstrip (handles cover the kept parts' starts)

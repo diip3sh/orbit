@@ -1,42 +1,13 @@
 //
-//  CropPad.swift
+//  RegionPad.swift
 //  Reco
 //
 
 import SwiftUI
 
-/// The canvas inspector's crop: the pad on the frame at the playhead, and Reset once something is cropped.
-struct CropField: View {
-    @Bindable var viewModel: EditorViewModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
-            HStack {
-                Text("Crop")
-                Spacer()
-                if viewModel.crop != VideoCrop.full {
-                    Button("Reset", action: viewModel.resetCrop)
-                        .buttonStyle(.borderless)
-                        .font(.caption)
-                        .transition(.opacity)
-                }
-            }
-            if let videoSize = viewModel.source?.naturalSize {
-                CropPad(
-                    image: viewModel.thumbnail(at: viewModel.playheadSourceTime),
-                    videoSize: videoSize,
-                    crop: $viewModel.crop,
-                    onEnd: viewModel.cropDidSettle
-                )
-            }
-        }
-        .editorMotion(value: viewModel.crop == VideoCrop.full)
-    }
-}
-
-/// The whole frame with the crop outlined on it and the rest dimmed. Dragging near an edge or a corner moves
-/// those edges, inside moves the crop, 1:1 from where it was grabbed.
-struct CropPad: View {
+/// A frame with a rectangle outlined on it and the rest dimmed, for the crop and masks. Dragging near an edge or a
+/// corner moves those edges, inside moves the rectangle, 1:1 from where it was grabbed.
+struct RegionPad: View {
 
     /// The frame, or `nil` while the filmstrip loads.
     let image: CGImage?
@@ -44,10 +15,15 @@ struct CropPad: View {
     let videoSize: CGSize
 
     /// As fractions of the video from its top-left corner.
-    @Binding var crop: CGRect
+    @Binding var region: CGRect
+
+    /// The smallest share of each side the rectangle keeps.
+    let minimumSize: Double
+
+    let label: LocalizedStringKey
 
     /// A drag has ended.
-    let onEnd: () -> Void
+    var onEnd: () -> Void = {}
 
     /// How close to an edge, in points, a press takes that edge.
     private static let edgeReach: CGFloat = 10
@@ -56,12 +32,12 @@ struct CropPad: View {
 
     @State private var size: CGSize = .zero
 
-    /// The crop and the edges a drag moves, from when it started.
-    @State private var drag: (start: CGRect, edges: VideoCrop.Edges)?
+    /// The rectangle and the edges a drag moves, from when it started.
+    @State private var drag: (start: CGRect, edges: RegionDrag.Edges)?
 
     var body: some View {
         let outline = CGRect(
-            x: crop.minX * size.width, y: crop.minY * size.height, width: crop.width * size.width, height: crop.height * size.height
+            x: region.minX * size.width, y: region.minY * size.height, width: region.width * size.width, height: region.height * size.height
         )
 
         ZStack(alignment: .topLeading) {
@@ -100,12 +76,13 @@ struct CropPad: View {
             DragGesture(minimumDistance: 1)
                 .onChanged { value in
                     guard size.width > 0, size.height > 0 else { return }
-                    let current = drag ?? (crop, Self.edges(at: value.startLocation, of: outline))
+                    let current = drag ?? (region, Self.edges(at: value.startLocation, of: outline))
                     drag = current
                     guard !current.edges.isEmpty else { return }
-                    crop = VideoCrop.dragged(
+                    region = RegionDrag.dragged(
                         current.start, edges: current.edges,
-                        by: CGSize(width: value.translation.width / size.width, height: value.translation.height / size.height)
+                        by: CGSize(width: value.translation.width / size.width, height: value.translation.height / size.height),
+                        minimumSize: minimumSize
                     )
                 }
                 .onEnded { _ in
@@ -113,19 +90,19 @@ struct CropPad: View {
                     onEnd()
                 }
         )
-        .accessibilityLabel("Crop")
+        .accessibilityLabel(Text(label))
     }
 
     /// The edges within ``edgeReach`` of `point`, all four inside the outline away from them, none outside it.
-    private static func edges(at point: CGPoint, of outline: CGRect) -> VideoCrop.Edges {
+    private static func edges(at point: CGPoint, of outline: CGRect) -> RegionDrag.Edges {
         let reach = outline.insetBy(dx: -edgeReach, dy: -edgeReach)
         guard reach.contains(point) else { return [] }
-        var edges: VideoCrop.Edges = []
+        var edges: RegionDrag.Edges = []
         if abs(point.x - outline.minX) < edgeReach { edges.insert(.left) }
         if abs(point.x - outline.maxX) < edgeReach { edges.insert(.right) }
         if abs(point.y - outline.minY) < edgeReach { edges.insert(.top) }
         if abs(point.y - outline.maxY) < edgeReach { edges.insert(.bottom) }
-        // A crop narrower than twice the reach would take both sides; the nearer one wins
+        // A rectangle narrower than twice the reach would take both sides; the nearer one wins
         if edges.isSuperset(of: [.left, .right]) {
             edges.remove(abs(point.x - outline.minX) < abs(point.x - outline.maxX) ? .right : .left)
         }

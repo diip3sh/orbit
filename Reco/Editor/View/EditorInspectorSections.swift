@@ -9,7 +9,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// The editor's right column: the tab bar, a notice when the telemetry is missing, then the chosen tab's
-/// sections. Selecting a zoom on the timeline turns to Motion, where its settings are.
+/// sections. Selecting a zoom on the timeline turns to Motion, a mask to Background, where their settings are.
 struct EditorInspector: View {
     @Bindable var viewModel: EditorViewModel
     @Binding var tab: InspectorTab
@@ -40,6 +40,9 @@ struct EditorInspector: View {
                     switch tab {
                     case .background:
                         CanvasInspectorSection(viewModel: viewModel)
+                        if !viewModel.project.masks.isEmpty {
+                            MaskInspectorSection(viewModel: viewModel)
+                        }
                     case .audio:
                         if !trackNames.isEmpty {
                             AudioInspectorSection(viewModel: viewModel, trackNames: trackNames)
@@ -68,8 +71,10 @@ struct EditorInspector: View {
         }
         .editorMotion(EditorTheme.quickMotion, value: tab)
         .onChange(of: viewModel.selection) { _, selection in
-            if case .zoom = selection {
-                tab = .motion
+            switch selection {
+            case .zoom: tab = .motion
+            case .mask: tab = .background
+            case .segment, nil: break
             }
         }
     }

@@ -45,6 +45,8 @@ nonisolated enum FrameRenderer {
     private static func video(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CIImage {
         // The crop moved to the origin (whole pixels, so nothing is resampled) is the video for everything after
         var image = plan.crop.map { frame.cropped(to: $0).transformed(by: CGAffineTransform(translationX: -$0.minX, y: -$0.minY)) } ?? frame
+        // On the content, before the zoom, so a mask stays on what it hides
+        image = masked(image, at: plan.timeMap.sourceTime(atOutput: time), plan: plan)
         for click in ClickMarker.active(in: plan.clicks, at: time, duration: plan.clickDuration) {
             for index in 0..<plan.clickEffect.ringCount {
                 if let progress = plan.clickEffect.progress(ofRing: index, atAge: (time - click.time) / plan.clickDuration) {

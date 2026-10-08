@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Cutting, speed and zooming, play/pause and frame stepping, and the playhead's time, in the timeline's
 /// header. Space plays and pauses, ← and → step a frame, S splits at the playhead, Z adds a
-/// zoom there, ⌫ removes the selection and ⇧⌘C copies the frame.
+/// zoom there, M a mask, ⌫ removes the selection and ⇧⌘C copies the frame.
 struct TransportBar: View {
     @Bindable var viewModel: EditorViewModel
 
@@ -53,12 +53,19 @@ struct TransportBar: View {
                 .help("Add a zoom at the playhead (Z)")
                 .disabled(!viewModel.canAddZoom)
 
-                let deletesZoom = viewModel.selectedZoom != nil
-                Button(deletesZoom ? "Delete Zoom" : "Cut Selection", systemImage: "trash") {
+                Button("Add Mask", systemImage: "eye.slash") {
+                    viewModel.addMask()
+                }
+                .keyboardShortcut("m", modifiers: [])
+                .help("Hide part of the frame from the playhead (M)")
+                .disabled(!viewModel.canAddMask)
+
+                let deleted = deletedName
+                Button(deleted.map { "Delete \($0)" } ?? "Cut Selection", systemImage: "trash") {
                     viewModel.deleteSelection()
                 }
                 .keyboardShortcut(.delete, modifiers: [])
-                .help(deletesZoom ? "Delete the selected zoom (⌫)" : "Cut the selected part (⌫)")
+                .help(deleted.map { "Delete the selected \($0.lowercased()) (⌫)" } ?? "Cut the selected part (⌫)")
                 .disabled(!viewModel.canDeleteSelection)
 
                 Button(copiedFrame ? "Copied" : "Copy Frame", systemImage: copiedFrame ? "checkmark" : "photo.on.rectangle") {
@@ -109,6 +116,15 @@ struct TransportBar: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .buttonStyle(.editorIcon)
+    }
+
+    /// What ⌫ deletes when it isn't a part of the recording.
+    private var deletedName: String? {
+        switch viewModel.selection {
+        case .zoom: "Zoom"
+        case .mask: "Mask"
+        case .segment, nil: nil
+        }
     }
 
     private static func format(_ seconds: Double) -> String {

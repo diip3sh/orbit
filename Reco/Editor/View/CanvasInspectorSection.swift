@@ -81,3 +81,34 @@ struct CanvasInspectorSection: View {
         }
     }
 }
+
+/// The canvas's crop: the pad on the frame at the playhead, and Reset once something is cropped.
+struct CropField: View {
+    @Bindable var viewModel: EditorViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
+            HStack {
+                Text("Crop")
+                Spacer()
+                if viewModel.crop != VideoCrop.full {
+                    Button("Reset", action: viewModel.resetCrop)
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                        .transition(.opacity)
+                }
+            }
+            if let videoSize = viewModel.source?.naturalSize {
+                RegionPad(
+                    image: viewModel.thumbnail(at: viewModel.playheadSourceTime),
+                    videoSize: videoSize,
+                    region: $viewModel.crop,
+                    minimumSize: VideoCrop.minimumSize,
+                    label: "Crop",
+                    onEnd: viewModel.cropDidSettle
+                )
+            }
+        }
+        .editorMotion(value: viewModel.crop == VideoCrop.full)
+    }
+}

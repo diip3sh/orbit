@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 862 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 895 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -674,8 +674,8 @@ Key facts:
   Debug, 4K with a ring and a chip, load average 4–6: 3 ms p50 plain (7 drawn whole), 3.7–5 ms on
   the default canvas (9 whole), p95 under 7.5 ms. The backdrop takes 4 ms to draw (17 the first time).
 - A transparent background keeps its alpha only in ProRes 4444 (the ProRes tab's 4444 when the canvas is transparent); other formats export it black.
-- **Crop** (N11, 2026-10-08; Background tab, `CropField`/`CropPad`: the frame at the playhead with the crop outlined, edges and
-  corners dragged within 10 pt, inside moves it, Reset): `EditorProject.crop`, fractions of the video from its top-left corner,
+- **Crop** (N11, 2026-10-08; Background tab, `CropField` on a `RegionPad`: the frame at the playhead with the crop outlined, edges and
+  corners dragged within 10 pt, inside moves it (`RegionDrag`, shared with masks), Reset): `EditorProject.crop`, fractions of the video from its top-left corner,
   at least 10% a side (`VideoCrop`). `VideoCrop.pixels(of:in:)` puts it on whole pixels with even sides (the whole video exactly
   when nothing is cropped), and from there **the crop is the video**: `RenderPlan.videoSize` is its size, so the canvas, export
   sizes and the stage's shape follow; the plan reads `InputTelemetry.cropped(to:)`, which moves every geometry entry's
@@ -685,6 +685,18 @@ Key facts:
   anything is drawn, so nothing is resampled. Zoom focus is a fraction of the crop: when a crop drag ends, automatic zooms are
   generated again in the same undo step (not per drag step: ~34 ms for 10 minutes); manual fixed zooms keep their fractions,
   so they shift with a new crop. The filmstrip and the timeline show the whole frame.
+- **Masks** (N8, 2026-10-08; **M** or the transport's Add Mask, a mask lane under the zoom lane once there is one, the Background
+  tab's Mask section for the selected one: Blur, Pixelate or Spotlight and a `RegionPad` on the cropped frame where it starts):
+  `EditorProject.masks` (`MaskSegment`: source range, rectangle as fractions of the crop from its top-left, kind; 3 s and
+  30% of each side when added, at least 2% a side and 0.25 s), a `TimelineClip` list like the zooms, so masks are sorted and
+  apart: **one mask at a time**. `RenderPlan.masks` holds them in the crop's Core Image pixels on whole pixels (`PlannedMask`);
+  `FrameRenderer.masked(_:at:plan:)` applies the one showing at the frame's source time right after the crop, before zoom and
+  overlays, so a mask stays on the content and the cursor and click rings stay over it. Blur: the clamped frame blurred at sigma
+  1.2% of the shorter side, cut to the rectangle. Pixelate: `CIPixellate` cells of 2% of the shorter side (at least 4 px) from the
+  rectangle's corner, each multiplied by a random grey of 0.94–1.06 (`CIRandomGenerator`, the same every frame), so a cell is
+  no longer the average of what's under it and can't be matched back. Spotlight: everything else at 40%. Measured 2026-10-08
+  on an M2 (Mac14,2), Debug, load average 5, a 3840×2160 frame on the default canvas, 180 frames: no mask 2.6 ms p50 / 3.2 p95,
+  blur 3.7 / 4.0, pixelate 4.5 / 4.9, spotlight 3.0 / 3.1.
 - HDR frames are drawn without color management too: the plan draws its overlays once in the
   recording's encoding (`OverlayImages.encoded`), SDR white at 203 nits (BT.2408). Their
   semi-transparent parts (the chip's backing, the cursor's shadow, a fading ring) blend in PQ's

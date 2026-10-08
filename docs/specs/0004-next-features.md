@@ -221,6 +221,10 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N8 — Masks: blur, pixelate, spotlight
 
+**Status (2026-10-08):** built. One mask shows at a time (the lane keeps them apart, like zooms). The spotlight darkens the
+rest with a color over it rather than `CIBlendWithMask`, and bands aren't special-cased: a 4K frame with any mask rendered in
+under 5 ms p95 (CLAUDE.md). Not yet checked in the running app.
+
 - **What:** a mask lane, like the zoom lane, holding rectangles that blur or pixelate what's under
   them, or dim everything else (spotlight). Pixelation adds noise so it can't be reversed, as
   CleanShot's does.

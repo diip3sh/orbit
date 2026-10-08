@@ -69,6 +69,9 @@ nonisolated struct RenderPlan: Sendable {
     /// The part of the recording's frames drawn, in their Core Image pixels, or `nil` for all of it. Everything
     /// else in the plan (``videoSize``, positions, the camera) is already of the crop.
     var crop: CGRect?
+
+    /// The masks, sorted and apart.
+    var masks: [PlannedMask] = []
 }
 
 // MARK: - Building
@@ -137,7 +140,8 @@ extension RenderPlan {
             dynamicRange: dynamicRange,
             downsamplesSmoothly: target.shorterSide != nil,
             shutter: project.motionBlur / (target.frameRate ?? source.frameRate), maximumBlurSamples: target.shorterSide == nil ? 2 : 8,
-            crop: videoSize == source.naturalSize ? nil : VideoCrop.coreImageRect(cropPixels, videoHeight: source.naturalSize.height)
+            crop: videoSize == source.naturalSize ? nil : VideoCrop.coreImageRect(cropPixels, videoHeight: source.naturalSize.height),
+            masks: PlannedMask.planned(project.masks, videoSize: videoSize)
         )
     }
 
