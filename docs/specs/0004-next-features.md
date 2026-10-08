@@ -328,7 +328,8 @@ claim, docs updated, and the 8 ms frame budget kept.
 **Status (2026-10-08):** shipped: screenshot URLs (a card showing stays; an area pins where it was taken); QR codes (a shot with a code
 copies its payload in place of the text); Capture Previous Area (the last area since launch, in memory: F7 isn't built); the
 self-timer (the capture toolbar's Self-Timer menu in screenshot mode, Off by default; the countdown's disc on the pointer's screen, Esc
-cancels). Not yet checked in the running app.
+cancels); pins' opacity and click-through (a pin's context menu; the menu bar's Unlock Pins takes clicks again). Not yet checked in
+the running app.
 
 Each is S:
 - **Self-timer** (3, 5 or 10 s), reusing `RecordingCountdown`.

@@ -44,7 +44,7 @@ final class QuickAccessController {
     private(set) var closedScreenshot: Screenshot?
 
     @ObservationIgnored private let save: @MainActor (Screenshot) async -> Bool
-    @ObservationIgnored private let pins = PinController()
+    @ObservationIgnored let pins = PinController()
     @ObservationIgnored private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "QuickAccess")
 
     @ObservationIgnored private var panel: NSPanel?

@@ -47,6 +47,33 @@ struct QuickAccessRestoreTests {
     }
 }
 
+@MainActor
+struct PinClickThroughTests {
+
+    private let pins = PinController()
+
+    private func pinOne() throws -> NSPanel {
+        let screenshot = try Screenshot(image: .filled(width: 4, height: 4), scale: 2, date: .now)
+        let screen = try #require(NSScreen.main)
+        pins.pin(screenshot, at: screen.visibleFrame.origin, on: screen)
+        return try #require(pins.panels.last)
+    }
+
+    @Test func aClickThroughPinTakesClicksAgainOnceUnlocked() throws {
+        let panel = try pinOne()
+        #expect(!pins.hasClickThroughPins)
+
+        pins.letClicksThrough(panel)
+        #expect(panel.ignoresMouseEvents)
+        #expect(pins.hasClickThroughPins)
+
+        pins.unlockPins()
+        #expect(!panel.ignoresMouseEvents)
+        #expect(!pins.hasClickThroughPins)
+        panel.orderOut(nil)
+    }
+}
+
 struct QuickAccessControllerTests {
 
     private let card = CGSize(width: 230, height: 210)

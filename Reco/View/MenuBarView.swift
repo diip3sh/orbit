@@ -99,6 +99,13 @@ struct MenuBarView: View {
                     }
                 }
 
+                if quickAccess.pins.hasClickThroughPins {
+                    MenuBarActionButton(title: "Unlock Pins", systemImage: "lock.open") {
+                        dismiss()
+                        quickAccess.pins.unlockPins()
+                    }
+                }
+
                 if agentRecording.isRunning {
                     MenuBarActionButton(title: "Cancel Agent Recording", systemImage: "xmark.circle") {
                         agentRecording.cancel()
