@@ -1168,6 +1168,46 @@ Key facts:
   light UI is still to build. After the opening, glow, backdrop and caret fixes, bolt.new again (four runs, 5–11 min
   each): the last, `Bolt 5`, 29 s at 4K, typed on its line, a glow, a whip, the ring.
 
+### S8 — Motion sound (`remotion`, spec 0013)
+
+Every motion video gets a score and quiet effects made for its own picture: generated on device from the plan's
+times, mixed as the hand-made Supabase film was (`~/Movies/Reco/quality/audio/score.py`, round 6, the closing
+Raycast's), nothing recorded or licensed. The preview plays it; HEVC, H.264 and ProRes exports carry it; GIFs
+don't. `sound` in the document turns the score or the effects off or moves their level; agents use `set_sound`
+only when asked; the side panel's Style has a Sound section.
+
+| File | Role |
+|---|---|
+| `Motion/Model/MotionSound.swift` | The document's `sound`: `score`, `effects`, `scoreLevel`, `effectsLevel` (−24…6 dB) |
+| `Motion/Sound/SoundRules.swift` | Every number, one place each: chords, levels, hits, keys, whips, the closing, frame snapping |
+| `Motion/Sound/SoundCueSheet+Plan.swift`, `+Score.swift`, `SoundCueList.swift` | Pure: plan → cue sheet (`MotionPlan.sound`, made in `build`); first UI, cuts, typing, whips from the camera's speed, the body's chords, `ClosingCues` |
+| `Motion/Sound/SoundSignal.swift`, `SoundVoices.swift`, `+Score.swift` | vDSP: seeded noise, Butterworth sections, oscillators; the voices; wavetable pads |
+| `Motion/Sound/SoundRoom.swift`, `SoundFinish.swift`, `Loudness.swift`, `ScoreRenderer.swift` | The room by DFT convolution, stopped at the cut to black; the finish (−16 LUFS, ≤ −1.5 dBTP); BS.1770-4; the render |
+| `Motion/Service/SoundCache.swift` | `assets/sound/<sheet hash>.caf`, 24-bit Apple Lossless, `soundVersion`, three kept |
+| `Motion/Render/MotionCompositionBuilder.swift` | `composition(for:sound:)`: the audio track, trimmed to the video |
+| `Motion/View/MotionSoundSection.swift` | Score and Effects switches and levels |
+
+Key facts:
+- **Rules.** A chord a shot (D major, walked back so the shot before black is I), changing 0.04 s before each cut
+  and at a whip's landing inside a scene; a glass and thump as the first UI shows; a quiet swish and thump on
+  plain cuts; keys, a blip per settled word, arrows with a blip, Enter before a selection's cut; a whip's riser,
+  whoosh at its speed peak, landing thump and glass; the closing as Raycast's: a hit on black, IV with a felt
+  arpeggio under the words (no sound of a word's own), I, vi, V, the logo quietest. No effect from the cut to
+  black on. Every cue on the frame that first shows its moment (⌈t·fps⌉/fps).
+- **Whips** are found from the camera's speed across the frame (240 Hz, over 5 widths a second, bounded at 1 %
+  of the peak), so keyed cameras count as moves do; the camera following a selection peaks near 3.
+- **Against `score.py`.** The Supabase film's document gives its 105 cues and 9 chords; rendered: −16.0 LUFS (ffmpeg
+  agrees), closing levels within 0.3 dB, bands within 1 point, centroid 425 Hz against 411. The whoosh peaks at the
+  measured 11.903 s, not the hand-made 11.97; keys follow the engine's own typing.
+- **Speed (M5, Debug).** The sheet comes with the plan (0.10 s); the Supabase film's 24 s are made in 0.34–0.41 s,
+  everything per sample on vDSP. The preview waits for it once per timing edit; other edits read the cache.
+- A field blips as its words settle only if it grows to 1.5× its empty height (results): bolt.new's chat prompt
+  popped on every word.
+- An AAC export's cue lands within 1 ms of where it was made (`AVAssetReader`, priming applied); ProRes is PCM.
+  From the app, `Bolt 6`'s AAC was its cue sheet's sound sample for sample (0 lag at every cue checked), and the
+  approved Supabase film exported at −16.0 LUFS like the hand-made one.
+- `vDSP.DFT` is deprecated on macOS 26: `vDSP.DiscreteFourierTransform` (macOS 12+).
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -1241,7 +1281,7 @@ should hold but need re-measuring.
 | Spec 0009 batch 1: cursor loop/hold/tilt, motion blur, GIF, copy frame, `export_recording`, type steps, shown elements, playbook | Done and tested; a real web take was exported as GIF and HEVC and its frames checked (zoom blur, cursor trail, tilt, loop); linear.app walkthroughs run from the app through `reco://record-agent`. Not yet tried: the new controls in the app, a GIF of a long recording, typing on real sites (React forms, search boxes), `export_recording` from a real agent |
 | S6 motion editor (spec 0011): launch videos as motion design from the real UI | Phases 0 and 1 done: benchmark, spikes, document, renderer, preview and export. Phase 2 done: lifts, live layers, media on the take's clock, `hide`, sign-in, `brand`. Phase 3 done: moves, seams, shots, lint, scenes lane and inspector; the benchmark rebuilt in 10 lines and three sites rendered, awaiting the user's side-by-side. Phase 4 done: agent tools, Launch Video mode, chat with selection; three sites run from their address with clean lint and design check, three chat edits change only their targets; cost recorded for one run. The window seen in a window capture; editing by hand not yet tried |
 | S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields ported, then rejected by the user as pasted behind the old video; directions picked from launch films (Raycast, Nothing OS 5.0, 3D layers). L1a–c built (satin, coverage mattes, typing cursor rules, parallax, motion blur), but the user found the test shot "really bad" next to Raycast. L0: still frames matched to Raycast's (glass for lifted UI, hero scale, a better ground), then a 24 s Supabase docs film in that look rendered as a look-dev pass outside the engine. The user approved the film; its port into the engine has begun: phases 1 (satin, grain), 2 (glass, sharp macro) and 3 (typing, caret, results) done, matching the film at 47–64 dB; phase 4 captures UI behind a click and typing states live (Supabase's search, matching the film's lifts); phase 5 the selection, the camera following it, the whip's blur; phase 6 the `closing` shot; the whole film now made by the app from one document, matching the approved one where the site is the same. L4/Q4: the film's grammar named (`macro` views, `whip` move and seam, mockup typing) and its method shipped as the `reco-launch-film` skill; Launch Video runs on linear.app from the address make macro films on glass over satin. Looks: light and dither grounds (Paper's other shapes) and seams in their language (`glow`, `dither`, `ring`), the agent choosing the look from the brand. Next: the user's verdict on them |
-| S8 motion sound (spec 0013) | Planned: Raycast's soundtrack measured, the Supabase film's sound made by hand in six rounds (`~/Movies/Reco/quality/audio/`); the engine build (cue sheet, voices, mix, export, agent) todo |
+| S8 motion sound (spec 0013) | S1–S4 done: cue sheet from the plan, voices, room, finish, loudness, cache, preview and export, `set_sound`, the Sound section; the Supabase film's sheet matches the hand-made score. Next: the user's listening round (S5) |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

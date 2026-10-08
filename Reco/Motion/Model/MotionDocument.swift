@@ -18,6 +18,9 @@ nonisolated struct MotionDocument: Equatable, Sendable {
     /// UI to lift from web pages, shown by `ui` layers.
     var assets: [MotionAsset] = []
 
+    /// The score and effects made for it.
+    var sound = MotionSound()
+
     /// The video's length in seconds: every scene, end to end.
     var duration: Double {
         scenes.reduce(0) { $0 + $1.duration }
@@ -27,6 +30,7 @@ nonisolated struct MotionDocument: Equatable, Sendable {
     func validate() throws(MotionDocumentError) {
         guard canvas.size.width >= 16, canvas.size.height >= 16 else { throw .invalidCanvas }
         guard (1...120).contains(canvas.frameRate) else { throw .invalidCanvas }
+        guard MotionSound.levels.contains(sound.scoreLevel), MotionSound.levels.contains(sound.effectsLevel) else { throw .invalidSound }
         guard !scenes.isEmpty else { throw .noScenes }
         let assetIDs = try validatedAssetIDs()
         var sceneIDs = Set<String>()
@@ -139,5 +143,6 @@ nonisolated extension MotionDocument: Codable {
         style = try container.decodeIfPresent(StyleTokens.self, forKey: .style) ?? StyleTokens()
         scenes = try container.decode([MotionScene].self, forKey: .scenes)
         assets = try container.decodeIfPresent([MotionAsset].self, forKey: .assets) ?? []
+        sound = try container.decodeIfPresent(MotionSound.self, forKey: .sound) ?? MotionSound()
     }
 }

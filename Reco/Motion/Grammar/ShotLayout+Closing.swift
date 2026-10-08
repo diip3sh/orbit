@@ -15,17 +15,22 @@ nonisolated extension ShotLayout {
     /// The caps' size: 2.5 % of the frame's height in cap height, SF Mono's being 0.7 of its size.
     static let closingCapHeight = 0.025
 
-    /// When the first word cuts in.
+    /// When the first word cuts in, and how long each word shows before the next.
     static let closingSwaps = 0.25
+    static let closingSwapInterval = 0.42
 
     /// When a closing's parts come, from its scene's start.
     nonisolated struct ClosingTimes {
+        /// When each word cuts in.
+        let words: [Double]
+
         /// The last word held 0.74 s, then the name and it sliding together over 1.4 s, the line under
         /// them 0.3 s later and the logo alone 1.55 s after that.
         let slide, settled, underline, logo: Double
 
-        init(words: Int) {
-            slide = closingSwaps + 0.42 * Double(max(words - 1, 0)) + 0.74
+        init(words count: Int) {
+            words = (0..<count).map { closingSwaps + closingSwapInterval * Double($0) }
+            slide = closingSwaps + closingSwapInterval * Double(max(count - 1, 0)) + 0.74
             settled = slide + 1.4
             underline = settled + 0.3
             logo = underline + 1.55
@@ -64,9 +69,10 @@ nonisolated extension ShotLayout {
         layout.layers.append(nameLayer)
         for (index, word) in words.enumerated() {
             let isLast = index == words.count - 1
-            let start = swaps + 0.42 * Double(index)
+            let start = times.words[index]
             var layer = anchored(
-                "\(context.scene.id).word\(index)", caps(word, style.text), at: [0.68 * size.width, middle, 0], anchor: 1, during: start..<(isLast ? ending : start + 0.42)
+                "\(context.scene.id).word\(index)", caps(word, style.text), at: [0.68 * size.width, middle, 0], anchor: 1,
+                during: start..<(isLast ? ending : start + closingSwapInterval)
             )
             if isLast {
                 layer.keyframes[.positionX] = slid(0.68 * size.width, onto: size.width - lockupLeft, over: slide...settled)

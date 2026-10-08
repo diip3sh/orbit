@@ -83,7 +83,8 @@ final class MotionEditorViewModel {
             for: document, bundle: bundleURL, shorterSide: min(min(canvas.size.width, canvas.size.height), Self.previewShorterSide)
         )
         plan.isPreview = true
-        let composition = try await MotionCompositionBuilder.composition(for: plan)
+        let sound = try await SoundCache.sound(for: plan.sound, in: bundleURL)
+        let composition = try await MotionCompositionBuilder.composition(for: plan, sound: sound)
         try Task.checkCancellation()
         playback.load(
             composition, frames: FrameGrid(frameRate: Double(plan.frameRate), duration: plan.duration),

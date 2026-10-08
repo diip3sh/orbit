@@ -23,7 +23,17 @@ nonisolated struct MotionToolStatus: Encodable, Equatable, Sendable {
 
     /// What the grammar's rules find, with the UI's sizes known.
     var lint: [MotionSummary.Finding]?
+
+    /// The sound made for the video, as an export will have it.
+    var sound: Sound?
     var error: String?
+
+    nonisolated struct Sound: Encodable, Equatable, Sendable {
+        var cues: Int
+
+        /// Integrated, in LUFS: the master holds every video at −16.
+        var loudness: Double
+    }
 
     nonisolated struct Frame: Encodable, Equatable, Sendable {
         var scene: String

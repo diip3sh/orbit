@@ -22,7 +22,9 @@ enum MotionExporter {
         let plan = try await UICapture.plan(
             for: document, bundle: bundle, shorterSide: settings.resolution.map { CGFloat($0) }, frameRate: settings.frameRate
         )
-        let composition = try await MotionCompositionBuilder.composition(for: plan)
+        // A GIF has no sound
+        let sound = settings.format == .gif ? nil : try await SoundCache.sound(for: plan.sound, in: bundle)
+        let composition = try await MotionCompositionBuilder.composition(for: plan, sound: sound)
         let url = settings.format.outputURL(for: bundle)
         try await ExportService.export(composition, to: url, as: settings.format, progress: progress)
         return url

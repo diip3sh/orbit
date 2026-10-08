@@ -76,9 +76,12 @@ extension AgentTools {
             let summary = MotionSummary(document, bundle: bundle, sizes: UILiftCache.sizes(of: document, in: bundle))
             let findings = DesignCheck.findings(in: frames, at: moments, accent: document.style.accent)
                 + DesignCheck.bareOpenings(in: plan, scenes: document.scenes.map(\.id))
-            let status = MotionToolStatus(
+            var status = MotionToolStatus(
                 status: .done, frames: shown.map { MotionToolStatus.Frame(scene: $0.scene, time: $0.time) }, findings: findings, lint: summary.findings
             )
+            if let sound = try await SoundCache.sound(for: plan.sound, in: bundle) {
+                status.sound = MotionToolStatus.Sound(cues: plan.sound.cues.count, loudness: (try await SoundCache.loudness(of: sound) * 10).rounded() / 10)
+            }
             return (status, image)
         }
     }

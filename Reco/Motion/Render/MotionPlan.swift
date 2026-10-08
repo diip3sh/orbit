@@ -170,6 +170,9 @@ nonisolated struct MotionPlan: Sendable {
     /// pixels per CSS pixel) to bake at: 0 to measure an element first, then whatever it's shown at.
     private(set) var bakesNeeded: [String: Int] = [:]
 
+    /// What the video's sound is made from (spec 0013).
+    private(set) var sound = SoundCueSheet()
+
     var duration: Double {
         scenes.last.map { $0.start + $0.duration } ?? 0
     }
@@ -338,7 +341,7 @@ extension MotionPlan {
         for index in plan.scenes.indices {
             plan.scenes[index].cameraMoves[.positionY, default: []] += plan.scenes[index].layers.flatMap { $0.typing?.follow() ?? [] }
         }
-        return plan
+        return plan.scored(by: expanded)
     }
 
     /// Draws every layer's image at the largest scale it's shown in its scene, and lists the lifts
@@ -428,6 +431,18 @@ extension MotionPlan {
             ))
         } ?? Self.roundedRectangle(size: layer.size, radius: radius, scale: rasterScale)
         scenes[key.scene].layers[key.layer].shadowImage = Self.shadow(of: box, shadow: shadow, padding: layer.shadowPadding, scale: rasterScale)
+    }
+}
+
+// MARK: - Sound
+
+extension MotionPlan {
+
+    /// The plan with its sound's cue sheet, from `document` as it was laid out for the plan.
+    nonisolated func scored(by document: MotionDocument) -> MotionPlan {
+        var plan = self
+        plan.sound = SoundCueSheet.make(plan: self, document: document)
+        return plan
     }
 }
 

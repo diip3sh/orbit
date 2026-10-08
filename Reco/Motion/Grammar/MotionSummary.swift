@@ -16,6 +16,9 @@ nonisolated struct MotionSummary: Encodable, Equatable, Sendable {
     var pacing: MotionCanvas.Pacing
     var assets: [Asset]
     var scenes: [Scene]
+
+    /// The score and effects made for it, and how they're set.
+    var sound: MotionSound
     var findings: [Finding]
 
     nonisolated struct Asset: Encodable, Equatable, Sendable {
@@ -82,6 +85,7 @@ nonisolated struct MotionSummary: Encodable, Equatable, Sendable {
         frameRate = document.canvas.frameRate
         pacing = document.canvas.pacing
         assets = document.assets.map { Asset(id: $0.id, live: $0.steps != nil, size: sizes[$0.id]) }
+        sound = document.sound
         var start = 0.0
         scenes = document.scenes.indices.map { index in
             let source = document.scenes[index]
@@ -128,6 +132,6 @@ nonisolated struct MotionSummary: Encodable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case frameRate = "frame_rate"
-        case bundle, duration, pacing, assets, scenes, findings
+        case bundle, duration, pacing, assets, scenes, sound, findings
     }
 }

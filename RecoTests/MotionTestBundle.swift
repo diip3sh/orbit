@@ -69,8 +69,9 @@ enum MotionTestBundle {
     /// A search field typed into ("ab", from 0.5 s) on glass over satin, its lifts at 2×: the row
     /// (576×48 CSS pixels) empty and with each letter, the whole field (576×200) once its results
     /// settle, a bar of results under the row, and again with the next result selected (a second bar);
-    /// the selection moves down at 2 s and back up at 2.5 and 2.8 s.
-    static func makeTyping() throws -> (url: URL, document: MotionDocument) {
+    /// the selection moves down at 2 s and back up at 2.5 and 2.8 s. With `results` false, the field is a
+    /// prompt that never grows: settled, it's the row alone.
+    static func makeTyping(results: Bool = true) throws -> (url: URL, document: MotionDocument) {
         let json = #"""
             {"version": 1, "canvas": {"field": "satin"},
              "assets": [{"id": "search", "url": "https://example.com", "selector": "#search", "glass": true,
@@ -87,14 +88,15 @@ enum MotionTestBundle {
         try Data(json.utf8).write(to: MotionStore.documentURL(in: url))
         try JSONEncoder().encode(UILiftCache.Shape(radius: 8)).write(to: UILiftCache.shapeURL(of: asset, in: url))
         let typing = UILiftCache.Typing(
-            row: CGRect(x: 0, y: 0, width: 576, height: 48), ends: [40, 50, 60], line: 24, fontSize: 16, settled: [2], heights: [200], selections: [97, 137]
+            row: CGRect(x: 0, y: 0, width: 576, height: 48), ends: [40, 50, 60], line: 24, fontSize: 16, settled: [2], heights: [results ? 200 : 48],
+            selections: [97, 137]
         )
         try JSONEncoder().encode(typing).write(to: UILiftCache.typingURL(of: asset, in: url))
         try writeField(to: UILiftCache.url(of: asset, scale: 2, in: url), height: 48, typed: 0)
         try writeField(to: UILiftCache.typedURL(of: asset, length: 1, scale: 2, in: url), height: 48, typed: 1)
         try writeField(to: UILiftCache.typedURL(of: asset, length: 2, scale: 2, in: url), height: 48, typed: 2)
-        try writeField(to: UILiftCache.settledURL(of: asset, length: 2, scale: 2, in: url), height: 200, typed: 2)
-        try writeField(to: UILiftCache.selectedURL(of: asset, presses: 1, scale: 2, in: url), height: 200, typed: 2, selected: true)
+        try writeField(to: UILiftCache.settledURL(of: asset, length: 2, scale: 2, in: url), height: results ? 200 : 48, typed: 2)
+        try writeField(to: UILiftCache.selectedURL(of: asset, presses: 1, scale: 2, in: url), height: results ? 200 : 48, typed: 2, selected: results)
         return (url, document)
     }
 

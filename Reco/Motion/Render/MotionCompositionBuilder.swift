@@ -6,14 +6,16 @@
 import AVFoundation
 
 /// Builds what the player plays and export writes for a motion video: frames drawn by
-/// ``MotionCompositor``, driven by a placeholder movie, with a track for each live layer's take.
+/// ``MotionCompositor``, driven by a placeholder movie, with a track for each live layer's take and
+/// one for its sound.
 ///
 /// A composition needs a video track with media: one that holds only an empty range reports a
 /// duration of 0, and `AVAssetReaderVideoCompositionOutput` refuses it. A 1-frame 16×16 movie
 /// stretched to the video's length drives preview, export and GIF alike (spec 0011, spike A).
 enum MotionCompositionBuilder {
 
-    static func composition(for plan: MotionPlan) async throws -> EditorComposition {
+    /// - Parameter sound: The video's sound (``SoundCache``), played from its start; `nil` for none.
+    static func composition(for plan: MotionPlan, sound: URL? = nil) async throws -> EditorComposition {
         let placeholder = AVURLAsset(url: try await placeholderMovie())
         guard let source = try await placeholder.loadTracks(withMediaType: .video).first else { throw AVError(.unknown) }
         let range = try await source.load(.timeRange)
@@ -27,6 +29,9 @@ enum MotionCompositionBuilder {
         var liveTracks: [MotionPlan.LayerKey: CMPersistentTrackID] = [:]
         for layer in plan.liveLayers {
             liveTracks[layer.key] = try await add(layer, to: composition)
+        }
+        if let sound {
+            try await add(sound, to: composition, length: duration(of: plan))
         }
         return EditorComposition(
             asset: composition, videoComposition: videoComposition(for: plan, placeholderTrackID: track.trackID, liveTracks: liveTracks),
@@ -56,6 +61,18 @@ enum MotionCompositionBuilder {
             track.scaleTimeRange(CMTimeRange(start: start + shown, duration: frame), toDuration: scene - shown)
         }
         return track.trackID
+    }
+
+    /// Plays `sound` from the video's start, cut where the video ends.
+    private static func add(_ sound: URL, to composition: AVMutableComposition, length: CMTime) async throws {
+        // Kept until inserted: a track holds its asset weakly
+        let asset = AVURLAsset(url: sound)
+        guard let source = try await asset.loadTracks(withMediaType: .audio).first,
+              let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+            throw AVError(.unknown)
+        }
+        let range = try await source.load(.timeRange)
+        try track.insertTimeRange(CMTimeRange(start: range.start, duration: CMTimeMinimum(range.duration, length)), of: source, at: .zero)
     }
 
     /// Frames drawn with `plan` at its frame rate, tagged BT.709.

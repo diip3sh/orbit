@@ -16,6 +16,8 @@ nonisolated struct MotionEdit: Codable, Equatable, Sendable {
         case setCanvas = "set_canvas"
         /// `style`: the fields to change.
         case setStyle = "set_style"
+        /// `sound`: the fields to change.
+        case setSound = "set_sound"
         /// `asset`: added, or replacing the one with its id.
         case setAsset = "set_asset"
         /// `scene`, at `index` or last.
@@ -39,6 +41,7 @@ nonisolated struct MotionEdit: Codable, Equatable, Sendable {
     var index: Int?
     var canvas: CanvasChange?
     var style: StyleChange?
+    var sound: SoundChange?
     var asset: MotionAsset?
     var scene: MotionScene?
     var layer: MotionLayer?
@@ -50,7 +53,7 @@ nonisolated struct MotionEdit: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case operation = "op"
-        case id, target, index, canvas, style, asset, scene, layer, duration, seam, shot, field, moves
+        case id, target, index, canvas, style, sound, asset, scene, layer, duration, seam, shot, field, moves
     }
 
     init(_ operation: Operation, id: String? = nil, target: String? = nil) {
@@ -75,11 +78,19 @@ nonisolated struct MotionEdit: Codable, Equatable, Sendable {
         var alignment: TextContent.Alignment?
     }
 
+    nonisolated struct SoundChange: Codable, Equatable, Sendable {
+        var score: Bool?
+        var effects: Bool?
+        var scoreLevel: Double?
+        var effectsLevel: Double?
+    }
+
     /// The undo step's name, as the Edit menu shows it.
     var actionName: String {
         switch operation {
         case .setCanvas: "Canvas"
         case .setStyle: "Style"
+        case .setSound: "Sound"
         case .setAsset: "UI"
         case .addScene: "Add Scene"
         case .setScene: "Scene"
@@ -99,20 +110,8 @@ nonisolated extension MotionEdit {
     /// The result isn't validated: a batch is, once whole.
     func apply(to document: inout MotionDocument) throws(MotionEditError) {
         switch operation {
-        case .setCanvas:
-            let change = try required(canvas, "canvas")
-            document.canvas.size = change.size ?? document.canvas.size
-            document.canvas.frameRate = change.frameRate ?? document.canvas.frameRate
-            document.canvas.background = change.background ?? document.canvas.background
-            document.canvas.field = change.field ?? document.canvas.field
-            document.canvas.pacing = change.pacing ?? document.canvas.pacing
-        case .setStyle:
-            let change = try required(style, "style")
-            document.style.text = change.text ?? document.style.text
-            document.style.dim = change.dim ?? document.style.dim
-            document.style.accent = change.accent ?? document.style.accent
-            document.style.face = change.face ?? document.style.face
-            document.style.alignment = change.alignment ?? document.style.alignment
+        case .setCanvas, .setStyle, .setSound:
+            try setVideo(in: &document)
         case .setAsset:
             let asset = try required(asset, "asset")
             document.assets.removeAll { $0.id == asset.id }
@@ -133,6 +132,32 @@ nonisolated extension MotionEdit {
             document.scenes.insert(document.scenes.remove(at: from), at: destination)
         case .remove:
             try remove(from: &document)
+        }
+    }
+
+    /// The settings of the whole video: its canvas, style or sound.
+    private func setVideo(in document: inout MotionDocument) throws(MotionEditError) {
+        switch operation {
+        case .setCanvas:
+            let change = try required(canvas, "canvas")
+            document.canvas.size = change.size ?? document.canvas.size
+            document.canvas.frameRate = change.frameRate ?? document.canvas.frameRate
+            document.canvas.background = change.background ?? document.canvas.background
+            document.canvas.field = change.field ?? document.canvas.field
+            document.canvas.pacing = change.pacing ?? document.canvas.pacing
+        case .setStyle:
+            let change = try required(style, "style")
+            document.style.text = change.text ?? document.style.text
+            document.style.dim = change.dim ?? document.style.dim
+            document.style.accent = change.accent ?? document.style.accent
+            document.style.face = change.face ?? document.style.face
+            document.style.alignment = change.alignment ?? document.style.alignment
+        default:
+            let change = try required(sound, "sound")
+            document.sound.score = change.score ?? document.sound.score
+            document.sound.effects = change.effects ?? document.sound.effects
+            document.sound.scoreLevel = change.scoreLevel ?? document.sound.scoreLevel
+            document.sound.effectsLevel = change.effectsLevel ?? document.sound.effectsLevel
         }
     }
 

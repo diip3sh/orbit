@@ -259,23 +259,26 @@ Its numbers are where the engine starts.
 | File | Role |
 |---|---|
 | `Motion/Model/MotionSound.swift` | The document's `sound`: `score` and `effects` on or off, and a level for each in dB (defaults: on, on, 0, 0) |
-| `Motion/Sound/SoundCue.swift`, `SoundCueSheet.swift` | Pure: the plan's events through `SoundRules` into timed cues (voice, pitch, level, pan, send) and the score's chords and dynamics |
+| `Motion/Sound/SoundCue.swift`, `SoundCueSheet.swift` | A cue (voice, part, the frame it marks, offset, level, pan, send, seed); the sheet (chords, air, cues, the room's stop) |
+| `Motion/Sound/SoundCueSheet+Plan.swift`, `+Score.swift`, `SoundCueList.swift` | Pure: the plan's events through `SoundRules` into the sheet; whips from the camera's speed; the body's chords; the closing (`ClosingCues`) |
 | `Motion/Sound/SoundRules.swift` | The numbers above, each in one place |
-| `Motion/Sound/Voices.swift` | Pure DSP on vDSP. Pads read from one band-limited wavetable per note (a sine per harmonic would be ~700 M sines for 60 s). Felt, glass, thump, key, blip, whoosh and riser voices; seeded noise (SplitMix64) |
-| `Motion/Sound/Room.swift`, `Master.swift` | The seeded impulse convolved by FFT (`vDSP.FFT`); the high-pass, soft clip, fade and normalization |
-| `Motion/Sound/Loudness.swift` | BS.1770-4: K-weighting, gated integrated loudness, true peak at 4× |
-| `Motion/Service/SoundCache.swift` | `assets/sound/<cue-sheet hash>.caf`, keyed with a `soundVersion` the way lifts use `liftVersion` |
-| `Motion/Render/MotionCompositionBuilder.swift` | The audio track at `.zero`, trimmed to the plan's duration, kept alive by the composition's assets |
+| `Motion/Sound/SoundSignal.swift` | Seeded noise (SplitMix64, Box–Muller), Butterworth sections (`vDSP.Biquad`), swept band-pass, oscillators, `StereoSound` |
+| `Motion/Sound/SoundVoices.swift`, `+Score.swift` | Glass, felt, blip, thump, key, swish, whoosh and riser; pads read from one band-limited wavetable per note (`vDSP_vtabi`) and the air |
+| `Motion/Sound/SoundRoom.swift`, `SoundFinish.swift` | The seeded impulse convolved by DFT overlap-add, stopped at the cut to black; the high-pass, fade, soft clip, loudness and ceiling |
+| `Motion/Sound/Loudness.swift`, `ScoreRenderer.swift` | BS.1770-4 (K-weighting, gated integrated loudness, true peak at 4×); the sheet placed dry and sent, roomed and finished |
+| `Motion/Service/SoundCache.swift` | `assets/sound/<cue-sheet hash>.caf`, 24-bit Apple Lossless, keyed with a `soundVersion`, the three most recent kept |
+| `Motion/Render/MotionCompositionBuilder.swift` | The audio track at `.zero`, trimmed to the plan's duration |
+| `Motion/View/MotionSoundSection.swift` | The side panel's Sound section |
 
 ### Phases
 
 | Phase | Size | Status |
 |---|---|---|
-| S1 - Rules and cue sheet | S | Todo |
-| S2 - Voices, room, master, loudness | M | Todo |
-| S3 - Preview and export | S | Todo |
-| S4 - Document, agent, inspector | S | Todo |
-| S5 - Listening round | S | Todo |
+| S1 - Rules and cue sheet | S | Done |
+| S2 - Voices, room, master, loudness | M | Done |
+| S3 - Preview and export | S | Done |
+| S4 - Document, agent, inspector | S | Done |
+| S5 - Listening round | S | Next: the user's |
 | S6 - The user's own music | M | Later (spec 0011 phase 5) |
 
 #### S1 - Rules and cue sheet (S)
@@ -343,3 +346,66 @@ Its numbers are where the engine starts.
 2. **Cut accents.** Keep the body's quiet swish and thump (round 1, liked), or go music-only like Raycast?
 3. **Key.** Fixed D major, or chosen per brand (from its hue or name, deterministically)?
 4. **Loudness.** −16 LUFS (what the user heard) or −14 (YouTube and Spotify)?
+
+## Progress
+
+### 2026-10-08: S1–S4 built
+
+Open questions 1–4 are left as the user heard round 6 until the listening round: its brightness, the quiet
+accents on cuts, D major, −16 LUFS.
+
+- **The renderer against `score.py`.** `score.py`'s own events, as a cue sheet, rendered by the Swift voices
+  (M5, Debug):
+
+  | | Swift | `score.py` |
+  |---|---|---|
+  | Made in | 0.41 s | 2.6 s (numpy) |
+  | Integrated | −16.0 LUFS (ffmpeg agrees: −16.0) | −15.4 LUFS |
+  | True peak | −2.6 dBTP (ffmpeg: −2.6) | −1.2 dBTP |
+  | Centroid | 397 Hz | 411 Hz |
+  | Bands (<120, <500, <2k, above) | 35.0, 40.3, 23.4, 1.3 % | 34.4, 40.0, 24.1, 1.5 % |
+  | Closing: black, words, slide, line, logo | +5.5, −0.2, −5.1, −10.3, −12.2 dB | +5.1, −0.2, −6.0, −10.8, −12.6 dB |
+
+  A band from `low` to `high` is a high-pass then a low-pass, not scipy's 4th-order band-pass; the closing
+  and the bands still land within 1 dB and 1 point.
+- **The cue sheet from the plan.** The Supabase docs film's document (captured live, 1080p plan) gives the same
+  105 cues and 9 chords as `score.py`, at its levels, on its frames, with three differences:
+  - **Keys and results follow the engine's own typing** (`HumanTyping`), not the hand-made film's key times.
+  - **The whoosh peaks at the camera's measured speed peak**, 11.903 s (36 frame widths a second), where the
+    hand-made film guessed 11.97.
+  - **Every cue's moment is the frame that shows it** (rule 5): a key at 4.0669 s sounds at 4.1, the frame its
+    letter first shows. Notes inside a bar or a rolled chord keep their offset from that frame. The opening's
+    second glass no longer comes 12 ms after the first.
+- **Whips are found from the camera, not its moves.** Its speed across the frame is sampled at 240 Hz; a whip
+  is faster than 5 frame widths a second, and starts and lands where it's down to 1 % of its peak. So keyed
+  cameras, whip moves and whip seams all count. At 2 widths a second, the camera following a selection (about
+  3) counted too.
+- **Chords.** A whip's landing inside a scene changes the chord, unless it's within 1.5 s of another change
+  (the film's held 1.94 s). Only scenes shorter than 2 s halve the changes; counted with the landings, the
+  film's 1.94 s chord had halved them all.
+- **Enter.** A scene whose field had a selection ends on Enter 0.14 s before it cuts to what it opens; the
+  engine's presses have only arrows.
+- **Results blip only where results show.** A field blips as each word settles only if it grows to 1.5× its
+  empty height. In the first app run, bolt.new's chat prompt, which never grows, popped on all seven of its words.
+- **Speed (M5, Debug).** The Supabase film's plan built in 0.10 s with its sheet; its sound was made in
+  0.34–0.40 s. The preview waits for it: a timing edit makes it again, any other edit reads the cache.
+- **Export.** In a test export, a key cue in AAC landed within 1 ms of where it was made (read through
+  `AVAssetReader`, so the priming is applied). ProRes carries PCM; GIFs make no sound.
+- **From the app.**
+  - `Bolt 6`: a bolt.new launch run (Claude Code, no instructions about sound) exported 26.3 s at 4K with AAC at
+    −16.0 LUFS and −2.5 dBTP. Its audio is the cue sheet's sound sample for sample: 0 samples of lag at the
+    opening hit, a cut, a result, the whip and the closing. The first letter shows on the frame its key sounds
+    (4.867 s).
+  - The approved Supabase docs film, exported by the app's `export_recording` (51 s), against the hand-made film
+    with sound (`~/Desktop/supabase-docs-film-audio-new-ending.mp4`):
+
+    | | Engine | Hand-made |
+    |---|---|---|
+    | Integrated | −16.0 LUFS | −16.0 LUFS |
+    | True peak | −2.5 dBTP | −1.9 dBTP |
+    | Bands | 34.6, 39.1, 24.8, 1.6 % | 33.8, 40.9, 23.7, 1.5 % |
+    | Closing: black, words, slide, line, logo | +5.4, 0.0, −6.0, −10.7, −12.7 dB | +4.8, −0.6, −6.0, −9.6, −11.3 dB |
+
+    The hand-made MP4 differs from `score.py`'s own render by up to 1.3 dB at the logo; the engine is within
+    0.3 dB of `score.py`.
+

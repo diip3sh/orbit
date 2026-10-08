@@ -71,7 +71,11 @@ nonisolated extension AgentToolCatalog {
         the camera hold, push, pan (to [x,y] on the canvas, intensity the zoom it ends at), whip (to [x,y], intensity how much \
         closer, 0.35 s), pullBack, drift (direction left, right, up, down). intensity 1 is the grammar's own amount.
 
-        Operations: set_canvas {canvas}; set_style {style}; set_asset {asset} (adds, or replaces the same id); add_scene \
+        Sound: every video gets a score and quiet effects made from its own timing: a chord a shot, a hit as the first UI \
+        cuts in, keys as text is typed, a whoosh on a whip, Raycast's closing; mastered to -16 LUFS. Write nothing about \
+        sound unless asked: set_sound {sound: {score, effects, scoreLevel, effectsLevel}} turns either off or moves its \
+        level (dB, -24 to 6), e.g. "no typing sounds" effects false, "quieter music" scoreLevel -6.
+        Operations: set_canvas {canvas}; set_style {style}; set_sound {sound}; set_asset {asset} (adds, or replaces the same id); add_scene \
         {scene, index}; set_scene {id, duration, seam, shot, field} (shot replaces the shot); set_layer {id, layer} (a layer of the \
         scene's own: {id, content: {"text": {text, size, face, weight, color}} or {"ui": {asset, width, typingStart, presses \
         [{key down|up, time}]: the selection moving through the results, the camera following}}, transform {position \
@@ -86,11 +90,11 @@ nonisolated extension AgentToolCatalog {
         "bundle":{"type":"string","description":"Path of the .motion bundle from an earlier edit_motion; leave out to start a new video"},
         "name":{"type":"string","description":"A new video's name, e.g. the product's"},
         "operations":{"type":"array","items":{"type":"object","properties":{
-        "op":{"type":"string","enum":["set_canvas","set_style","set_asset","add_scene","set_scene","set_layer","set_moves","move_scene","remove"]},
+        "op":{"type":"string","enum":["set_canvas","set_style","set_sound","set_asset","add_scene","set_scene","set_layer","set_moves","move_scene","remove"]},
         "id":{"type":"string","description":"The scene (or for remove, the scene or asset)"},
         "target":{"type":"string","description":"set_moves, remove: a layer id from the reply, or camera"},
         "index":{"type":"integer","description":"add_scene, move_scene: position from 0"},
-        "canvas":{"type":"object"},"style":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
+        "canvas":{"type":"object"},"style":{"type":"object"},"sound":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
         "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade","glow","dither","ring"]},
         "shot":{"type":"object","description":"{shot: macro|hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard|closing, text, detail, ui, items, region, view}"},
         "field":{"type":"string","enum":["satin","plain","ember","sunlit","bloom","orb","ripple","matrix","warp","swirl","tide","halo"]},

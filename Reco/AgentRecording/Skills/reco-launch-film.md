@@ -222,6 +222,10 @@ Call preview_motion and look at every frame:
 Fix everything in one edit_motion call and preview again; stop after three previews. Then call
 export_recording with the bundle, format h264, resolution 2160.
 
+The sound is made for you from the film's own timing: a chord a shot, a hit as the first UI cuts in, keys
+as text is typed, a whoosh on each whip, and the closing's own score. Write nothing about sound unless the
+user asks.
+
 ## Changing a film from the chat
 
 1. Read the film first with edit_motion and no operations.
@@ -234,5 +238,6 @@ export_recording with the bundle, format h264, resolution 2160.
    | "More motion" | Another stop in a macro, or a `whip` seam |
    | "Another look", "more colour" | Another look from section 5: every scene's field and the seams with it |
    | "Another moment" | A new asset, then capture_ui |
+   | "No sound", "no typing sounds", "quieter music" | One set_sound: score or effects false, or scoreLevel −6 |
 
 3. Preview once. Don't export unless asked.
