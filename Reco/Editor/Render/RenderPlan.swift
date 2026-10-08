@@ -65,6 +65,10 @@ nonisolated struct RenderPlan: Sendable {
     /// preview takes 2 to stay in the 8 ms budget and exports, which aren't real time, take 8.
     /// ponytail: fuse the samples into one Metal kernel if the preview's blur should match the export's.
     var maximumBlurSamples = 8
+
+    /// The part of the recording's frames drawn, in their Core Image pixels, or `nil` for all of it. Everything
+    /// else in the plan (``videoSize``, positions, the camera) is already of the crop.
+    var crop: CGRect?
 }
 
 // MARK: - Building
@@ -82,14 +86,16 @@ extension RenderPlan {
         let signpost = signposter.beginInterval("Build")
         defer { signposter.endInterval("Build", signpost) }
 
-        let videoSize = source.naturalSize
+        let cropPixels = VideoCrop.pixels(of: project.crop, in: source.naturalSize)
+        let videoSize = cropPixels.size
+        let telemetry = source.telemetry?.cropped(to: cropPixels)
         let dynamicRange = target.keepsHDR ? source.dynamicRange : .sdr
         let timeMap = TimeMap(cuts: project.cuts, speeds: project.speeds, sourceDuration: source.duration, frameRate: source.frameRate)
         // The costliest parts, and independent, so they're built alongside the rest. For 10 minutes
         // with 455 zooms, 3,000 clicks and 12,000 keys (M1, Debug), the camera takes 38 ms and the
         // cursor 35; the plan builds in 42 ms instead of 105
-        async let camera = camera(for: project, telemetry: source.telemetry, timeMap: timeMap)
-        async let cursor = source.telemetry.flatMap {
+        async let camera = camera(for: project, telemetry: telemetry, timeMap: timeMap)
+        async let cursor = telemetry.flatMap {
             drawnCursor(
                 for: $0, style: project.cursor, duration: source.duration, videoHeight: videoSize.height, arrow: resources.arrow,
                 loop: project.cursor.loops ? cursorLoop(for: timeMap) : nil, stop: cursorStop(before: project.cursor.stopDuration, for: timeMap)
@@ -102,12 +108,8 @@ extension RenderPlan {
         var keystrokes: [KeystrokeChip] = []
         var labels: [String] = []
         // Rings and chips last their duration on screen whatever the speed, so they're timed on the output
-        if let telemetry = source.telemetry {
-            if project.clickHighlights.effect != .off {
-                clicks = clickMarkers(for: telemetry, style: project.clickHighlights, videoHeight: videoSize.height).compactMap { marker in
-                    timeMap.outputTime(ifKept: marker.time).map { ClickMarker(time: $0, position: marker.position, diameter: marker.diameter) }
-                }
-            }
+        if let telemetry {
+            clicks = outputClickMarkers(for: telemetry, style: project.clickHighlights, videoHeight: videoSize.height, timeMap: timeMap)
             if project.keystrokes.isEnabled, let keyLabels = resources.keyLabels {
                 (keystrokes, labels) = keystrokeChips(for: telemetry, style: project.keystrokes, keyLabels: keyLabels)
                 keystrokes = keystrokes.compactMap { chip in timeMap.outputTime(ifKept: chip.time).map { KeystrokeChip(time: $0, image: chip.image) } }
@@ -134,8 +136,20 @@ extension RenderPlan {
             canvas: canvas,
             dynamicRange: dynamicRange,
             downsamplesSmoothly: target.shorterSide != nil,
-            shutter: project.motionBlur / (target.frameRate ?? source.frameRate), maximumBlurSamples: target.shorterSide == nil ? 2 : 8
+            shutter: project.motionBlur / (target.frameRate ?? source.frameRate), maximumBlurSamples: target.shorterSide == nil ? 2 : 8,
+            crop: videoSize == source.naturalSize ? nil : VideoCrop.coreImageRect(cropPixels, videoHeight: source.naturalSize.height)
         )
+    }
+
+    /// The presses to highlight at their output times, none when highlights are off: rings last their duration on
+    /// screen whatever the speed.
+    nonisolated static func outputClickMarkers(
+        for telemetry: InputTelemetry, style: ClickHighlightStyle, videoHeight: CGFloat, timeMap: TimeMap
+    ) -> [ClickMarker] {
+        guard style.effect != .off else { return [] }
+        return clickMarkers(for: telemetry, style: style, videoHeight: videoHeight).compactMap { marker in
+            timeMap.outputTime(ifKept: marker.time).map { ClickMarker(time: $0, position: marker.position, diameter: marker.diameter) }
+        }
     }
 
     /// The presses to highlight, each placed with the capture geometry in effect at its time.

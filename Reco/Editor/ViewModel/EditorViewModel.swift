@@ -211,17 +211,17 @@ final class EditorViewModel {
     /// The exported frame's size for a shorter side of `resolution` pixels, or the one that keeps the video's
     /// own pixels.
     func exportSize(resolution: Int?) -> CGSize {
-        guard let source else { return .zero }
+        guard let videoSize else { return .zero }
         return CanvasLayout.size(
-            for: source.naturalSize, aspect: project.canvas.aspect, padding: project.canvas.padding,
+            for: videoSize, aspect: project.canvas.aspect, padding: project.canvas.padding,
             shorterSide: exportShorterSide(resolution)
         )
     }
 
     private func exportShorterSide(_ resolution: Int?) -> CGFloat? {
-        guard let source else { return nil }
+        guard let videoSize else { return nil }
         return resolution.map { CGFloat($0) }
-            ?? CanvasLayout.nativeShorterSide(for: source.naturalSize, aspect: project.canvas.aspect, padding: project.canvas.padding)
+            ?? CanvasLayout.nativeShorterSide(for: videoSize, aspect: project.canvas.aspect, padding: project.canvas.padding)
     }
 
     /// Exports the edited video as `<name>-edited` to `destination` and returns where, or `nil` while the

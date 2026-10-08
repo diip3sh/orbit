@@ -280,6 +280,9 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N11 — Crop
 
+**Status (2026-10-08):** built as below; the Background tab's crop pad sets it. Zoom focus is in fractions of the crop, and
+automatic zooms are made again when a crop drag ends. Not yet checked in the running app.
+
 - **What:** crop the recording to a rectangle, for example to hide the menu bar or a sidebar.
 - **How:** a crop in the project, as fractions of the video.
   - `CanvasLayout` treats the crop as the video: output size, shadow and corners.

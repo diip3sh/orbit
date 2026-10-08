@@ -91,6 +91,45 @@ struct RenderPlanTests {
         #expect(points.map(\.point) == [CGPoint(x: 0.5, y: 0.5), CGPoint(x: 0.375, y: 0.5)])
     }
 
+    @Test func aCropIsTheVideoForEverythingInThePlan() async {
+        var project = EditorProject()
+        project.crop = CGRect(x: 0.25, y: 0, width: 0.5, height: 0.5)
+
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: .none)
+
+        // 400…1200 px across and the top 600 px, which is 600…1200 in Core Image's space
+        #expect(plan.videoSize == CGSize(width: 800, height: 600))
+        #expect(plan.crop == CGRect(x: 400, y: 600, width: 800, height: 600))
+        // The first click is 400 px from the left and 240 from the top of the video: the crop's left edge
+        #expect(plan.clicks.first?.position == CGPoint(x: 0, y: 360))
+    }
+
+    @Test func aCroppedFrameShowsOnlyTheCrop() async throws {
+        var project = EditorProject()
+        project.canvas = .plain
+        project.crop = CGRect(x: 0.5, y: 0, width: 0.5, height: 1)
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: nil), resources: .none)
+        // Red on the left half, blue on the right
+        let frame = CIImage(color: .blue).cropped(to: CGRect(x: 0, y: 0, width: 1600, height: 1200))
+        let left = CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: 800, height: 1200))
+
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(
+            nil, Int(plan.canvas.size.width), Int(plan.canvas.size.height), kCVPixelFormatType_32BGRA,
+            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer
+        )
+        let output = try #require(buffer)
+        try FrameRenderer.draw(
+            left.composited(over: frame), at: 1, plan: plan, into: output,
+            context: CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull()])
+        )
+
+        #expect(plan.canvas.size == CGSize(width: 800, height: 1200))
+        let image = CIImage(cvPixelBuffer: output)
+        #expect(image.pixel(at: CGPoint(x: 0, y: 0)) == [0, 0, 255, 255])
+        #expect(image.pixel(at: CGPoint(x: 799, y: 1199)) == [0, 0, 255, 255])
+    }
+
     @Test func buildsTheCameraFromTheZooms() async {
         let project = EditorProject(zooms: [ZoomSegment(range: 1..<9, focus: .fixed(center: CGPoint(x: 0.25, y: 0.25)))])
 

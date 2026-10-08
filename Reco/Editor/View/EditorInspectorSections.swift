@@ -92,9 +92,9 @@ struct ZoomInspectorSection: View {
                     SegmentedChoice(selection: zoom.followsCursor, options: [(true, "Follow Cursor"), (false, "Fixed")])
                     .disabled(telemetry == nil)
                 }
-                if let center = Binding(unwrapping: zoom.fixedCenter), let videoSize = viewModel.source?.naturalSize {
+                if let center = Binding(unwrapping: zoom.fixedCenter), let videoSize = viewModel.videoSize {
                     ZoomFocusPad(
-                        image: viewModel.thumbnail(at: zoom.wrappedValue.range.lowerBound),
+                        image: viewModel.croppedThumbnail(at: zoom.wrappedValue.range.lowerBound),
                         videoSize: videoSize,
                         scale: zoom.wrappedValue.scale,
                         center: center

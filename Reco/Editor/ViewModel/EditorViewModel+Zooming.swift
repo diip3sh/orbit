@@ -57,7 +57,7 @@ extension EditorViewModel {
 
     /// Replaces the automatic zooms with new ones from the telemetry, keeping the manual ones.
     func regenerateZooms() {
-        guard let source, let telemetry = source.telemetry else { return }
+        guard let source, let telemetry = croppedTelemetry else { return }
         let generated = AutoZoomGenerator.segments(for: telemetry, duration: source.duration)
         edit("Regenerate Zooms") { $0.zooms = $0.zooms.regenerated(with: generated) }
     }

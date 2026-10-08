@@ -43,7 +43,8 @@ nonisolated enum FrameRenderer {
     /// The frame with everything on it - clicks, zoom, cursor and keystroke chip - placed on the
     /// canvas and clipped to the video's frame, square-cornered.
     private static func video(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CIImage {
-        var image = frame
+        // The crop moved to the origin (whole pixels, so nothing is resampled) is the video for everything after
+        var image = plan.crop.map { frame.cropped(to: $0).transformed(by: CGAffineTransform(translationX: -$0.minX, y: -$0.minY)) } ?? frame
         for click in ClickMarker.active(in: plan.clicks, at: time, duration: plan.clickDuration) {
             for index in 0..<plan.clickEffect.ringCount {
                 if let progress = plan.clickEffect.progress(ofRing: index, atAge: (time - click.time) / plan.clickDuration) {

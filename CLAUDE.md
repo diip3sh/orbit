@@ -674,6 +674,17 @@ Key facts:
   Debug, 4K with a ring and a chip, load average 4–6: 3 ms p50 plain (7 drawn whole), 3.7–5 ms on
   the default canvas (9 whole), p95 under 7.5 ms. The backdrop takes 4 ms to draw (17 the first time).
 - A transparent background keeps its alpha only in ProRes 4444 (the ProRes tab's 4444 when the canvas is transparent); other formats export it black.
+- **Crop** (N11, 2026-10-08; Background tab, `CropField`/`CropPad`: the frame at the playhead with the crop outlined, edges and
+  corners dragged within 10 pt, inside moves it, Reset): `EditorProject.crop`, fractions of the video from its top-left corner,
+  at least 10% a side (`VideoCrop`). `VideoCrop.pixels(of:in:)` puts it on whole pixels with even sides (the whole video exactly
+  when nothing is cropped), and from there **the crop is the video**: `RenderPlan.videoSize` is its size, so the canvas, export
+  sizes and the stage's shape follow; the plan reads `InputTelemetry.cropped(to:)`, which moves every geometry entry's
+  `contentRect` by the crop's origin and sets `capture.videoSize` to it, so clicks, the cursor, the camera's cursor points and
+  automatic zooms (presses outside the crop are outside the video, which the generator already ignores) are all in the crop
+  with no other change. `FrameRenderer` cuts the frame to `RenderPlan.crop` and moves it to the origin by whole pixels before
+  anything is drawn, so nothing is resampled. Zoom focus is a fraction of the crop: when a crop drag ends, automatic zooms are
+  generated again in the same undo step (not per drag step: ~34 ms for 10 minutes); manual fixed zooms keep their fractions,
+  so they shift with a new crop. The filmstrip and the timeline show the whole frame.
 - HDR frames are drawn without color management too: the plan draws its overlays once in the
   recording's encoding (`OverlayImages.encoded`), SDR white at 203 nits (BT.2408). Their
   semi-transparent parts (the chip's backing, the cursor's shadow, a fading ring) blend in PQ's

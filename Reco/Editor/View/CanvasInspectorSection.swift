@@ -15,7 +15,7 @@ struct CanvasInspectorSection: View {
     @State private var choosesBackgroundImage = false
 
     var body: some View {
-        let videoSize = viewModel.source?.naturalSize ?? CGSize(width: 16, height: 9)
+        let videoSize = viewModel.videoSize ?? CGSize(width: 16, height: 9)
 
         InspectorSection(nil) {
             InspectorField("Aspect Ratio") {
@@ -27,6 +27,8 @@ struct CanvasInspectorSection: View {
                         .aspectRatio(aspect.ratio ?? videoSize.width / max(videoSize.height, 1), contentMode: .fit)
                 }
             }
+
+            CropField(viewModel: viewModel)
 
             InspectorField("Background") {
                 TilePicker(selection: $viewModel.canvas.background, values: CanvasStyle.Background.allCases) { background in
