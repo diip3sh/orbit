@@ -1,0 +1,202 @@
+{
+  "$description": "Reco's theme, in the Design Tokens format (W3C DTCG, as Refero exports it). `color` is the source palette; `role` is what the app uses, each role's `$value` its dark colour (an alias like {color.void} or a hex) and `$extensions.com.reco.theme` its light and Increase Contrast colours. To change themes: replace `color` with the new palette, point the roles at it (and set their light and high-contrast values), then run `scripts/apply-theme.py`, which writes Reco/Assets.xcassets. ThemeContrastTests fails if a role misses WCAG AA contrast or the asset catalog no longer matches this file. `font` and `radius` are read by Typeface.swift and EditorTheme.swift; the tests check they match.",
+  "color": {
+    "void": {
+      "$value": "#08090a",
+      "$type": "color",
+      "$description": "Void — Page canvas, full-bleed backgrounds — the default everything sits on"
+    },
+    "carbon": {
+      "$value": "#0f1011",
+      "$type": "color",
+      "$description": "Carbon — Card surfaces, nav bars — one step above canvas for contained content"
+    },
+    "obsidian": {
+      "$value": "#161718",
+      "$type": "color",
+      "$description": "Obsidian — Elevated surfaces, deeper card panels"
+    },
+    "graphite": {
+      "$value": "#23252a",
+      "$type": "color",
+      "$description": "Graphite — Subtle borders, dividers, ghost button outlines — low-contrast structural edges"
+    },
+    "smoke": {
+      "$value": "#383b3f",
+      "$type": "color",
+      "$description": "Smoke — Hairline borders at higher contrast than graphite — section separators"
+    },
+    "ash": {
+      "$value": "#62666d",
+      "$type": "color",
+      "$description": "Ash — Muted body text, inactive icons, secondary metadata"
+    },
+    "fog": {
+      "$value": "#8a8f98",
+      "$type": "color",
+      "$description": "Fog — Tertiary text, placeholder copy, icon fills"
+    },
+    "mist": {
+      "$value": "#d0d6e0",
+      "$type": "color",
+      "$description": "Mist — Secondary headings, button text on dark surfaces"
+    },
+    "bone": {
+      "$value": "#e5e5e6",
+      "$type": "color",
+      "$description": "Bone — Near-white surface fills, high-contrast button text"
+    },
+    "paper": {
+      "$value": "#ffffff",
+      "$type": "color",
+      "$description": "Paper — Primary headings, hero type, max-contrast emphasis text"
+    },
+    "acid-lime": {
+      "$value": "#e4f222",
+      "$type": "color",
+      "$description": "Acid Lime — Primary action buttons, active nav indicators — electric accent that breaks the monochrome system"
+    },
+    "pulse-green": {
+      "$value": "#27a644",
+      "$type": "color",
+      "$description": "Pulse Green — Green outline accent for tags, dividers, and focused UI edges. Use as a supporting accent, not as a status color"
+    },
+    "coral-red": {
+      "$value": "#eb5757",
+      "$type": "color",
+      "$description": "Coral Red — Red wash for highlight backgrounds, decorative bands, and soft emphasis behind content. Use as a supporting accent, not as a status color"
+    },
+    "signal-teal": {
+      "$value": "#02b8cc",
+      "$type": "color",
+      "$description": "Signal Teal — Decorative accent, informational icon fills"
+    },
+    "iris-violet": {
+      "$value": "#6366f1",
+      "$type": "color",
+      "$description": "Iris Violet — Tag/badge fills — soft chromatic punctuation on tags and labels"
+    },
+    "lavender": {
+      "$value": "#8b5cf6",
+      "$type": "color",
+      "$description": "Lavender — Secondary tag fills, category indicators"
+    }
+  },
+  "role": {
+    "stage": {
+      "$value": "{color.void}",
+      "$type": "color",
+      "$description": "EditorTheme.stage — window grounds: the editor's preview, the Library's grid, Settings",
+      "$extensions": { "com.reco.theme": { "light": "#f7f7f8", "darkHighContrast": "#000000", "lightHighContrast": "#ffffff" } }
+    },
+    "panel": {
+      "$value": "{color.carbon}",
+      "$type": "color",
+      "$description": "EditorTheme.panel — under the timeline",
+      "$extensions": { "com.reco.theme": { "light": "#fcfcfc", "darkHighContrast": "#0f1011", "lightHighContrast": "#ffffff" } }
+    },
+    "surface": {
+      "$value": "{color.carbon}",
+      "$type": "color",
+      "$description": "EditorTheme.surface — cards and floating panels: the capture toolbar, the Quick Access card, the popover",
+      "$extensions": { "com.reco.theme": { "light": "#ffffff", "darkHighContrast": "#0f1011", "lightHighContrast": "#ffffff" } }
+    },
+    "raised": {
+      "$value": "{color.obsidian}",
+      "$type": "color",
+      "$description": "EditorTheme.raised — what floats over a surface: tooltips, the source picker, chosen tabs",
+      "$extensions": { "com.reco.theme": { "light": "#ffffff", "darkHighContrast": "#161718", "lightHighContrast": "#ffffff" } }
+    },
+    "control": {
+      "$value": "{color.graphite}",
+      "$type": "color",
+      "$description": "EditorTheme.control — controls' own fill: secondary buttons, tracks, chips, chosen tiles",
+      "$extensions": { "com.reco.theme": { "light": "#eeeff1", "darkHighContrast": "#2c2f35", "lightHighContrast": "#e4e5e8" } }
+    },
+    "hairline": {
+      "$value": "{color.graphite}",
+      "$type": "color",
+      "$description": "EditorTheme.hairline — lines between areas and around surfaces",
+      "$extensions": { "com.reco.theme": { "light": "#e4e5e8", "darkHighContrast": "#62666d", "lightHighContrast": "#8a8f98" } }
+    },
+    "softHairline": {
+      "$value": "{color.obsidian}",
+      "$type": "color",
+      "$description": "EditorTheme.softHairline — lanes and quieter fills",
+      "$extensions": { "com.reco.theme": { "light": "#eeeff1", "darkHighContrast": "#383b3f", "lightHighContrast": "#d1d3d8" } }
+    },
+    "ink": {
+      "$value": "{color.bone}",
+      "$type": "color",
+      "$description": "EditorTheme.ink — text; at least 7:1 on every surface",
+      "$extensions": { "com.reco.theme": { "light": "#18191b", "darkHighContrast": "#ffffff", "lightHighContrast": "#000000" } }
+    },
+    "dim": {
+      "$value": "{color.fog}",
+      "$type": "color",
+      "$description": "EditorTheme.dim — values, notes and other secondary text; at least 4.5:1",
+      "$extensions": { "com.reco.theme": { "light": "#5d6169", "darkHighContrast": "#d0d6e0", "lightHighContrast": "#2f3237" } }
+    },
+    "faint": {
+      "$value": "#72767d",
+      "$type": "color",
+      "$description": "EditorTheme.faint — structure marks only (ruler ticks, chevrons), never text; at least 3:1. Ash a step lighter: ash itself is 2.66:1 on control",
+      "$extensions": { "com.reco.theme": { "light": "#7d8189", "darkHighContrast": "#8a8f98", "lightHighContrast": "#5d6169" } }
+    },
+    "accent": {
+      "$value": "{color.acid-lime}",
+      "$type": "color",
+      "$description": "EditorTheme.accent (the AccentColor asset, Color.accentColor) — lines, text and marks in the accent: playhead, selection, chosen tab, native controls' tint; at least 3:1. Olive in light, where lime on white is 1.2:1",
+      "$extensions": { "com.reco.theme": { "light": "#6b7500", "darkHighContrast": "#eefa4d", "lightHighContrast": "#545c00" } }
+    },
+    "accentFill": {
+      "$value": "{color.acid-lime}",
+      "$type": "color",
+      "$description": "EditorTheme.accentFill — the accent as a fill (primary buttons, what is on), always with onAccent on it",
+      "$extensions": { "com.reco.theme": { "light": "#e4f222", "darkHighContrast": "#eefa4d", "lightHighContrast": "#d4e20f" } }
+    },
+    "onAccent": {
+      "$value": "{color.void}",
+      "$type": "color",
+      "$description": "EditorTheme.onAccent — text and icons on accentFill; at least 7:1 on it",
+      "$extensions": { "com.reco.theme": { "light": "#08090a", "darkHighContrast": "#000000", "lightHighContrast": "#000000" } }
+    }
+  },
+  "font": {
+    "sans": {
+      "$value": "Inter Variable",
+      "$type": "fontFamily",
+      "$description": "Typeface.sans — every label, title and control. Reco/Fonts/InterVariable.ttf (SIL OFL 1.1); a new family needs its font file there"
+    },
+    "mono": {
+      "$value": "JetBrains Mono",
+      "$type": "fontFamily",
+      "$description": "Typeface.mono — shortcuts, file names, code. Reco/Fonts/JetBrainsMono.ttf (SIL OFL 1.1), in place of the paid Berkeley Mono"
+    }
+  },
+  "radius": {
+    "md": {
+      "$value": "6px",
+      "$type": "dimension",
+      "$description": "EditorTheme.smallRadius — buttons and fields"
+    },
+    "xl": {
+      "$value": "12px",
+      "$type": "dimension",
+      "$description": "EditorTheme.radius — cards and floating panels"
+    },
+    "2xl": {
+      "$value": "16px",
+      "$type": "dimension",
+      "$description": "EditorTheme.largeRadius — large panels"
+    }
+  },
+  "$extensions": {
+    "com.refero.extraction": {
+      "url": "https://linear.app",
+      "siteName": "Linear",
+      "extractedAt": "2026-07-03T02:44:11.708Z",
+      "variant": "extended"
+    }
+  }
+}

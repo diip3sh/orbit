@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 851 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 854 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -650,10 +650,28 @@ slate gradient.
 | `Editor/View/Inspector*.swift`, `EditorInspectorSections.swift`, `TickSlider.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | `EditorInspector` and its sections, which fold away under a dim title (Background's has none, so it never folds), `SwatchGrid` (preset and wallpaper tiles, the chosen one ringed in the accent colour), sliders with their values, switches, and tiles whose highlight slides. Every slider is a `TickSlider`: a track with ticks, accent fill up to a bar at the value, dragged 1:1 from the grab (a press away from the bar takes it there first), VoiceOver adjustable in 20 steps, without a focus ring |
 | `Editor/View/ExportOptions.swift`, `ExportProgressBar.swift` | Export's inspector: format, size and frame rate as `SegmentedChoice` tabs (an option can be disabled), the quality as rows with their estimated sizes, Export and Copy to Clipboard (side by side, or stacked when the column is narrow) pinned under a line; progress |
 
+**Changing the theme:** `theme/theme.tokens.json` is the source of every colour, in the W3C design-token format the
+Linear tokens came in. Its `color` group is the palette as given; its `role` group gives each role above a dark `$value`
+(a hex or an alias such as `{color.void}`) and, in `$extensions.com.reco.theme`, its `light`, `darkHighContrast` and
+`lightHighContrast` values. Edit the file (or replace it with another theme's, keeping the `role` names), run
+`scripts/apply-theme.py`, which rewrites every colour set in `Assets.xcassets/Theme` and `AccentColor`, then run the
+tests: `ThemeContrastTests` checks the new colours' contrast and `ThemeTokenFileTests` that the colour sets, the radii
+(`radius`) and the typefaces (`font`) match the file. Radii and typefaces are read by Swift, not generated: change
+`EditorTheme`'s radii or `Typeface`'s families to match, and put a new font's file in `Reco/Fonts`.
+
+| File | Role |
+|---|---|
+| `theme/theme.tokens.json`, `scripts/apply-theme.py` | The theme's tokens; the generator of the colour sets (aliases resolved, loops and bad values refused) |
+| `RecoTests/ThemeTokens.swift`, `ThemeContrastTests.swift`, `ThemeTokenFileTests.swift` | Reads the token file and the colour sets from the source tree; the contrast rules; the sync checks |
+
 Key facts:
 - Contrast is tested, not eyeballed (`ThemeContrastTests`): in dark, light and both Increase Contrast variants, ink is at
   least 7:1 on every surface, dim 4.5:1, faint (structure marks only, never text) and the accent 3:1, and `onAccent` on the
   lime fill 7:1. Linear's own ash `#62666d` was 2.66:1 on slate, so faint is a step lighter (`#72767d`).
+- The tests read the colours from the token file, not from AppKit: the Increase Contrast variants are compiled into
+  `Assets.car` (`assetutil` lists them), but `NSColor(named:)` resolved under `NSAppearance(named:
+  .accessibilityHighContrastDarkAqua)` returns the normal value (2026-10-08, macOS 27), so a test through AppKit
+  silently checked only dark and light.
 - **An accent fill carries `onAccent`, never white:** white on lime is 1.2:1. That includes system prominent buttons,
   which draw white titles: use `.editorPrimary` instead.
 - **If glass comes back, it animates itself unless told not to.** `glassEffect` grows its shape as it appears (Apple's
@@ -1211,7 +1229,7 @@ should hold but need re-measuring.
 | S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
 | S1 editor phase 6: canvas and export polish | Done; the canvas, gradient presets, wallpapers (and one after relaunch), picture blur, the border, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags) and transparent exports still need a check in the app |
 | S1 editor design: system colors, glass transport, new timeline and inspector | Done; replaced by the Linear theme |
-| Linear theme (`feat/linear-theme`): tokens, light palette, Inter + JetBrains Mono, solid surfaces app-wide | Done 2026-10-08; built, 851 tests; needs a look in the app in light, dark and Increase Contrast |
+| Linear theme (`feat/linear-theme`): tokens, light palette, Inter + JetBrains Mono, solid surfaces app-wide | Done 2026-10-08; built, 854 tests; colours from `theme/theme.tokens.json`; needs a look in the app in light, dark and Increase Contrast |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 | S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |
 | S3 agent bridge (spec 0006): MCP server for coding agents | Done; tested over the real socket (token, `initialize`, `tools/list`, error calls), the `--mcp` process (`AgentBridgeClientTests`), config editors and plans. Not yet tried: real agents connected by hand, a real `record_page` render, Gatekeeper on another Mac |
