@@ -1,0 +1,2 @@
+// Turns a type-checker blow-up into an error naming the expression instead of a job that runs until its timeout
+OTHER_SWIFT_FLAGS = $(inherited) -Xfrontend -solver-expression-time-threshold=30
