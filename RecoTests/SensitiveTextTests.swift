@@ -48,7 +48,8 @@ struct SensitiveTextTests {
     @Test func growsTinyBoxesToTheMinimumInsideTheImage() {
         let box = SensitiveTextFinder.box(fromVision: CGRect(x: 0.99, y: 0, width: 0.005, height: 0.004), minimumSize: 0.02)
 
-        #expect(abs(box.width - 0.02) < 1e-9 && abs(box.height - 0.02) < 1e-9)
+        #expect(abs(box.width - 0.02) < 1e-9)
+        #expect(abs(box.height - 0.02) < 1e-9)
         #expect(box.maxX <= 1 && box.maxY <= 1)
     }
 

@@ -88,8 +88,11 @@ struct CursorPathTests {
 
             // Settled by 1.5 s. Positions are held until the next, which trails by up to a 60 Hz sample more
             let frequency = try #require(smoothing.frequency)
-            let lag = 100 + 600 * 1.5 - path.position(at: 1.5).x
-            #expect(lag > 600 * 2 / frequency && lag < 600 * (2 / frequency + 1.0 / 60))
+            let lag: Double = 100 + 600 * 1.5 - path.position(at: 1.5).x
+            let settled: Double = 600 * 2 / frequency
+            let sample: Double = 600 / 60
+            #expect(lag > settled)
+            #expect(lag < settled + sample)
             // And comes to rest where the cursor did
             #expect(abs(path.position(at: 4).x - 1300) < 0.01)
         }

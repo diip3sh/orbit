@@ -287,17 +287,19 @@ struct RenderPlanTests {
         // The last kept frame is the one before 9 s
         let loop = RenderPlan.cursorLoop(for: TimeMap(cuts: [9..<10], sourceDuration: 10, frameRate: 60))
 
+        let lastFrame: Double = 539.0 / 60
         #expect(loop.start == 0)
-        #expect(abs(loop.glide.upperBound - 539.0 / 60) < 1e-9)
-        #expect(abs(loop.glide.lowerBound - (539.0 / 60 - CursorPath.loopDuration)) < 1e-9)
+        #expect(abs(loop.glide.upperBound - lastFrame) < 1e-9)
+        #expect(abs(loop.glide.lowerBound - (lastFrame - CursorPath.loopDuration)) < 1e-9)
     }
 
     @Test func theCursorLoopStaysInsideTheLastKeptRange() {
         // Kept: 0..<1 and a last range of 0.4 s, shorter than the glide
         let loop = RenderPlan.cursorLoop(for: TimeMap(cuts: [1..<9.6], sourceDuration: 10, frameRate: 60))
 
+        let lastFrame: Double = 10 - 1.0 / 60
         #expect(abs(loop.glide.lowerBound - 9.6) < 1e-9)
-        #expect(abs(loop.glide.upperBound - (10 - 1.0 / 60)) < 1e-9)
+        #expect(abs(loop.glide.upperBound - lastFrame) < 1e-9)
     }
 
     @Test func theCursorStopsItsDurationOfOutputBeforeTheLastFrame() throws {
@@ -307,7 +309,8 @@ struct RenderPlanTests {
         #expect(RenderPlan.cursorStop(before: 0, for: timeMap) == nil)
         let stop = try #require(RenderPlan.cursorStop(before: 3, for: timeMap))
         // 479/60 - 3 of output is past the cut, so 2 s later in source
-        #expect(abs(stop - (479.0 / 60 - 3 + 2)) < 1e-9)
+        let expected: Double = 479.0 / 60 - 3 + 2
+        #expect(abs(stop - expected) < 1e-9)
         // Longer than the video, it holds from the first frame
         #expect(RenderPlan.cursorStop(before: 20, for: timeMap) == 0)
     }
@@ -324,7 +327,8 @@ struct RenderPlanTests {
         let looping = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: .none)
 
         #expect(plain.cursor?.position(at: 9.9) != plain.cursor?.position(at: 0))
-        #expect(looping.cursor?.position(at: 10 - 1.0 / 60) == looping.cursor?.position(at: 0))
+        let lastFrame: Double = 10 - 1.0 / 60
+        #expect(looping.cursor?.position(at: lastFrame) == looping.cursor?.position(at: 0))
     }
 
     @Test func buildsTheChosenCursorImages() async {
