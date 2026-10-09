@@ -40,16 +40,16 @@ final class QuickAccessController {
 
     nonisolated static let margin: CGFloat = 16
 
-    /// The editor's tool strip, and the row of Copy and Save under the shot
+    /// The editor's tool strip, with Copy and Save at its end
     nonisolated static let annotationBarHeight: CGFloat = 32
 
-    /// The narrowest editor: room for the tool strip
-    nonisolated static let minAnnotationWidth: CGFloat = 620
+    /// The narrowest editor: room for the tool strip (about 570 pt) and Copy and Save (about 200)
+    nonisolated static let minAnnotationWidth: CGFloat = 800
 
     /// The card grown into the editor (spec 0015) for a shot of `pointSize`: the shot at its size on screen, shrunk to
-    /// fit `visibleFrame` less the margins, the edge, the strip and the actions, and at least `minAnnotationWidth`.
+    /// fit `visibleFrame` less the margins, the edge and the strip, and at least `minAnnotationWidth`.
     nonisolated static func annotationCardSize(for pointSize: CGSize, in visibleFrame: CGRect) -> CGSize {
-        let bars = 2 * annotationBarHeight + 2 * inset
+        let bars = annotationBarHeight + inset
         let roomWidth = visibleFrame.width - 2 * margin - 2 * inset
         let roomHeight = visibleFrame.height - 2 * margin - 2 * inset - bars
         guard pointSize.width > 0, pointSize.height > 0, roomWidth > 0, roomHeight > 0 else { return maxCardSize }

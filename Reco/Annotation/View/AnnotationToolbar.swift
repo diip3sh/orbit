@@ -5,11 +5,11 @@
 
 import SwiftUI
 
-/// The strip above the shot: the tools, the colour and line width, Undo and Redo, and Done.
+/// The strip above the shot: the tools, the colour and line width, Undo, Redo and Delete. The card puts Copy and
+/// Save after it.
 struct AnnotationToolbar: View {
 
     let editor: AnnotationEditor
-    let done: () -> Void
 
     @State private var showsColors = false
 
@@ -38,11 +38,6 @@ struct AnnotationToolbar: View {
                 .keyboardShortcut(.delete, modifiers: [])
                 .disabled(editor.selection == nil || editor.isEditingText)
                 .help("Delete the selected mark (⌫)")
-            Spacer(minLength: EditorTheme.smallSpacing)
-            Button("Done", action: done)
-                .buttonStyle(.editorSecondary)
-                .controlSize(.small)
-                .help("Back to the card, with the marks on the shot")
         }
         .labelStyle(.iconOnly)
         .buttonStyle(AnnotationToolButtonStyle(isOn: false))

@@ -309,16 +309,18 @@ it was only the way in, so Esc on an area selection closes that state and leaves
 - **Annotate** (N13, spec 0015, 2026-10-08; `pencil.tip`, first of the top-right icons): grows the card into an editor at the
   shot's size fitted to the screen (`QuickAccessController.annotationCardSize(for:in:)`, the refit keeps the corner it grew
   from) with a tool strip (Select, Arrow, Line, Rectangle, Ellipse, Text, Highlighter, Step, Blur, Pixelate, Spotlight, Crop; V A L
-  R O T H N B P S C; eight colours, three widths, undo/redo, Done) over the shot and Copy and Save under it. Marks are vectors in
+  R O T H N B P S C; eight colours, three widths, undo/redo, delete) over the shot with Copy and Save at its end (2026-10-09, in place of Done
+  and a row of them under the shot: they flatten the marks and close the card from the editor; the narrowest editor is 800 pt).
+  Marks are vectors in
   the shot's points (`Annotation`, pure); `AnnotationRenderer` draws them with Core Graphics for the canvas (scaled by the view)
   and the output alike; blur, pixelate and spotlight are pixels through `MaskRenderer` (`AnnotationDocument.effects`), rendered
   into the editor's `base` when they change. `AnnotationEditor` (`@MainActor @Observable`) holds the document, a history of
   documents for undo, the tool, colour, width, the draft being dragged, the text being typed and the crop draft; the canvas
   keys a press on its `startLocation`, since a gesture SwiftUI cancels never ends (instant synthetic drags, measured with
-  cliclick, left `onEnded` uncalled). Done shrinks the card back showing the marked shot (`compose()`: plain → flattened →
+  cliclick, left `onEnded` uncalled). Esc shrinks the card back showing the marked shot (`compose()`: plain → flattened →
   framed; `AnnotationFlattener.flatten` draws at the shot's pixels off the main actor, drops the HDR copy, cuts the crop) and the
   marks stay editable until the card closes; Copy, Save, Pin and drag-out flatten first (`flattenIfAnnotating`). Checked by hand
-  2026-10-09: arrow, rectangle and two steps drawn on a card, Done, Save; the PNG shows them where they were drawn.
+  2026-10-09: arrow, rectangle and two steps drawn on a card, back to the card, Save; the PNG shows them where they were drawn.
 
 | File | Role |
 |---|---|

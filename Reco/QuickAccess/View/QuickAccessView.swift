@@ -58,7 +58,8 @@ struct QuickAccessView: View {
     }
 }
 
-/// The card grown into the editor (spec 0015): the tool strip, the shot with its marks, and Copy and Save under it.
+/// The card grown into the editor (spec 0015): the tool strip with Copy and Save at its end, which flatten the marks
+/// and close the card from here, then the shot with its marks. Esc goes back to the card instead.
 private struct QuickAccessAnnotation: View {
 
     let model: QuickAccessViewModel
@@ -66,15 +67,15 @@ private struct QuickAccessAnnotation: View {
 
     var body: some View {
         VStack(spacing: QuickAccessController.inset) {
-            AnnotationToolbar(editor: editor) {
-                Task { await model.finishAnnotating() }
+            HStack(spacing: 0) {
+                AnnotationToolbar(editor: editor)
+                Spacer(minLength: EditorTheme.smallSpacing)
+                QuickAccessActions(model: model)
             }
             .frame(height: QuickAccessController.annotationBarHeight)
             AnnotationCanvas(editor: editor)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            QuickAccessActions(model: model)
-                .frame(height: QuickAccessController.annotationBarHeight)
         }
         .environment(\.colorScheme, .dark)
     }
@@ -108,6 +109,7 @@ private struct QuickAccessPreview: View {
             // Always shown, so ⌘C and ⌘S work without the pointer on the card
             .overlay(alignment: .bottom) {
                 QuickAccessActions(model: model)
+                    .padding(6)
             }
             .overlay {
                 if let feedback = model.feedback, feedback.isToast {
@@ -185,7 +187,6 @@ private struct QuickAccessActions: View {
         }
         // Two equal ways out of the card: secondary's accent text over the shot read as a disabled Copy
         .buttonStyle(.editorPrimary)
-        .padding(6)
     }
 }
 
