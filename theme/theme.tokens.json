@@ -217,9 +217,9 @@
       }
     },
     "hairline": {
-      "$value": "{color.bistre-border}",
+      "$value": "#ffffff14",
       "$type": "color",
-      "$description": "EditorTheme.hairline — lines between areas and around surfaces",
+      "$description": "EditorTheme.hairline — lines between areas and around surfaces. Dark: white at 8%, a see-through ring as the web's box-shadow borders, in place of bistre border's black edge (picked 2026-10-09 against 6% and 12%)",
       "$extensions": {
         "com.reco.theme": {
           "light": "{lightColor.chalk}",

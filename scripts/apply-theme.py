@@ -4,8 +4,8 @@
 Usage: scripts/apply-theme.py [theme/theme.tokens.json]
 
 Each role in the file's `role` group becomes a colour set with four appearances: its `$value` for dark, and the
-`light`, `darkHighContrast` and `lightHighContrast` values in `$extensions.com.reco.theme`. Values are hex colours
-or aliases to another token (`{color.void}`). `accent` is the asset catalog's AccentColor; every other role is
+`light`, `darkHighContrast` and `lightHighContrast` values in `$extensions.com.reco.theme`. Values are hex colours,
+`#rrggbb` or `#rrggbbaa` with alpha as in CSS, or aliases to another token (`{color.void}`). `accent` is the asset catalog's AccentColor; every other role is
 `Assets.xcassets/Theme/<Role>.colorset`, which Swift reads as `Color(.<role>)`.
 """
 
@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "Reco" / "Assets.xcassets"
 VARIANTS = ("light", "darkHighContrast", "lightHighContrast")
-HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+HEX = re.compile(r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")
 ALIAS = re.compile(r"^\{([^}]+)\}$")
 
 
@@ -25,7 +25,7 @@ def resolve(tokens, value, seen=()):
     match = ALIAS.match(value)
     if not match:
         if not HEX.match(value):
-            sys.exit(f"✗ {value!r} is neither #rrggbb nor an alias like {{color.void}}")
+            sys.exit(f"✗ {value!r} is neither #rrggbb, #rrggbbaa nor an alias like {{color.void}}")
         return value.lower()
     path = match.group(1)
     if path in seen:
@@ -45,7 +45,7 @@ def component(hex_value):
             "red": "0x" + hex_value[1:3].upper(),
             "green": "0x" + hex_value[3:5].upper(),
             "blue": "0x" + hex_value[5:7].upper(),
-            "alpha": "1.000",
+            "alpha": f"{int(hex_value[7:9] or 'ff', 16) / 255:.3f}",
         },
     }
 

@@ -38,7 +38,8 @@ enum EditorTheme {
     /// Marks that only structure, like ruler ticks and section titles' chevrons (fog text `#7f7e77`).
     static let faint = Color(.faint)
 
-    /// Lines between areas and around pictures (bistre border `#161615`, darker than the surfaces).
+    /// Lines between areas and around pictures. In dark mode white at 8% (`#ffffff14`), a lighter ring like a web
+    /// `box-shadow: 0 0 0 1px`, where bistre `#161615` read as a black outline.
     static let hairline = Color(.hairline)
 
     /// Lanes and quieter edges (slate matte `#2e2e2b`).

@@ -819,8 +819,11 @@ Key facts:
 Since 2026-10-08 every window and floating panel wears design tokens extracted by Refero; dark mode's are herding.app's
 (2026-10-09, in place of Linear's): warm olive-charcoal solid surfaces one step apart (page void `#1c1c1a` for window grounds,
 graphite card `#232320` for panels and cards, ash step `#35352f` for what floats over them and for control fills, slate matte
-`#2e2e2b` for lanes), text in three tones (off-white ink `#fffffe`, sand label `#a3a29c`, fog text `#7f7e77`), bistre `#161615`
-hairlines darker than the surfaces instead of boxes, Inter for every label (herding's Styrene is a paid typeface) and JetBrains
+`#2e2e2b` for lanes), text in three tones (off-white ink `#fffffe`, sand label `#a3a29c`, fog text `#7f7e77`), hairlines
+instead of boxes (white at 8%, `#ffffff14`, since 2026-10-09: a light ring like the web's `box-shadow: 0 0 0 1px`, where
+herding's bistre `#161615` drew a black outline; 6% vanished on page void and 12% read as a grey line, compared side by side;
+the dot grid's dots and the divider fills use it too, so they are faint light marks now; `scripts/apply-theme.py` takes
+`#rrggbbaa` for it), Inter for every label (herding's Styrene is a paid typeface) and JetBrains
 Mono for shortcuts, file names and code, and spray wash `#3fe0a6` as the one accent, with page void on it. Pewter `#45453e`
 and stone `#3e3e38` aren't used: sand label on them is 3.8:1 and 4.2:1. Light mode (2026-10-08) takes the light end of Default's tokens (default.com, also by
 Refero): bone `#f2f2f2` for window grounds and control fills, snow `#ffffff` for panels and cards, chalk `#cececf`
