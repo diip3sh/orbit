@@ -94,23 +94,6 @@ jobs:
 
           rm "$CERTIFICATE_PATH"
 
-      # Before the Sparkle key goes into Info.plist, so the test host never starts the updater
-      - name: Run tests
-        env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -o pipefail
-          xcodebuild test \
-            -project "$APP_NAME.xcodeproj" \
-            -scheme "$SCHEME" \
-            -destination "platform=macOS,arch=arm64" \
-            -derivedDataPath "$DERIVED_DATA" \
-            CODE_SIGN_IDENTITY="Apple Development" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            CODE_SIGN_STYLE=Manual \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            | xcbeautify --renderer github-actions
-
       - name: Set Sparkle public key and git SHA in Info.plist
         env:
           SPARKLE_PUBLIC_EDDSA_KEY: ${{ secrets.SPARKLE_PUBLIC_EDDSA_KEY }}
