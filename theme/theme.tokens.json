@@ -311,6 +311,42 @@
           "lightHighContrast": "{lightColor.snow}"
         }
       }
+    },
+    "success": {
+      "$value": "#34d399",
+      "$type": "color",
+      "$description": "EditorTheme.success — a status that is working, as an agent that is connected; at least 4.5:1 as text. Emerald (Tailwind's 400 in dark, 700 in light)",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "#047857",
+          "darkHighContrast": "#6ee7b7",
+          "lightHighContrast": "#065f46"
+        }
+      }
+    },
+    "warning": {
+      "$value": "#fb923c",
+      "$type": "color",
+      "$description": "EditorTheme.warning — a status that needs the user, as an agent not connected or out of date; at least 4.5:1 as text. Ember (Tailwind's orange 400 in dark, 700 in light)",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "#c2410c",
+          "darkHighContrast": "#fdba74",
+          "lightHighContrast": "#9a3412"
+        }
+      }
+    },
+    "danger": {
+      "$value": "#fb7185",
+      "$type": "color",
+      "$description": "EditorTheme.danger — an action that takes something away, as Disconnect; at least 4.5:1 as text, on the control fill too. Rose (Tailwind's 400 in dark, 700 in light)",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "#be123c",
+          "darkHighContrast": "#fda4af",
+          "lightHighContrast": "#9f1239"
+        }
+      }
     }
   },
   "font": {

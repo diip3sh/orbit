@@ -52,6 +52,12 @@ enum EditorTheme {
     static let accentFill = Color(.accentFill)
     static let onAccent = Color(.onAccent)
 
+    /// Status text: working (emerald, e.g. Connected), needing the user (ember, e.g. Not connected). Danger (rose) is
+    /// an action that takes something away, as Disconnect. All three read as text on every surface and the control fill.
+    static let success = Color(.success)
+    static let warning = Color(.warning)
+    static let danger = Color(.danger)
+
     /// The main button (Export, play), with its hover and its text.
     static let primary = accentFill
     static let primaryHover = accentFill.opacity(0.85)

@@ -23,7 +23,7 @@ struct AgentsSettingsView: View {
             Section("Server") {
                 LabeledContent("Status") {
                     Text(viewModel.serverStatus)
-                        .foregroundStyle(viewModel.hasServerError ? .red : EditorTheme.ink)
+                        .foregroundStyle(viewModel.hasServerError ? EditorTheme.danger : EditorTheme.ink)
                 }
                 LabeledContent("Agents connected now", value: viewModel.server.sessionCount, format: .number)
                 LabeledContent("Latest render", value: viewModel.renderSummary)
@@ -34,10 +34,16 @@ struct AgentsSettingsView: View {
                     LabeledContent(row.kind.displayName) {
                         HStack {
                             Text(row.statusText)
-                                .foregroundStyle(EditorTheme.dim)
+                                .foregroundStyle(statusColor(of: row.state))
                             if let title = row.actionTitle {
-                                Button(title) {
+                                Button {
                                     viewModel.perform(row)
+                                } label: {
+                                    if row.state == .connected {
+                                        Text(title).foregroundStyle(EditorTheme.danger)
+                                    } else {
+                                        Text(title)
+                                    }
                                 }
                             }
                         }
@@ -55,6 +61,14 @@ struct AgentsSettingsView: View {
             Button("OK") {}
         } message: {
             Text(viewModel.errorMessage ?? "")
+        }
+    }
+
+    private func statusColor(of state: AgentConnectionState) -> Color {
+        switch state {
+        case .connected: EditorTheme.success
+        case .notConnected, .outdated: EditorTheme.warning
+        case .notInstalled: EditorTheme.dim
         }
     }
 

@@ -873,6 +873,9 @@ Key facts:
   `Assets.car` (`assetutil` lists them), but `NSColor(named:)` resolved under `NSAppearance(named:
   .accessibilityHighContrastDarkAqua)` returns the normal value (2026-10-08, macOS 27), so a check through AppKit
   silently covers only dark and light.
+- **Status colours** (2026-10-09) are roles too, outside herding's palette: `success` emerald, `warning` ember (orange),
+  `danger` rose, Tailwind's 400 in dark and 700 in light (a step further with Increase Contrast), each at least 4.5:1 as
+  text on every surface and the control fill (rose on dark control: 4.6:1).
 - **An accent fill carries `onAccent`, never a fixed colour:** it is page void on spray wash in dark (white on it is 1.7:1) and white on iris in light. That includes system prominent buttons,
   which draw white titles: use `.editorPrimary` instead.
 - **If glass comes back, it animates itself unless told not to.** `glassEffect` grows its shape as it appears (Apple's
@@ -1044,7 +1047,7 @@ Key facts (measured on an M5, macOS 26.5, spec 0005):
 
 Coding agents (Claude Code, Codex, OpenCode, Cursor, Gemini CLI, Claude Desktop, Grok Build) record a
 web page from its address. **Settings → Agents** finds the installed ones and adds a server named `reco` to
-each one's own settings, only when the user clicks Connect (it writes the bridge token there). The agent then calls three MCP tools: `inspect_page` (selectors and boxes of a
+each one's own settings, only when the user clicks Connect (it writes the bridge token there). Each row's status is coloured: Connected emerald (`EditorTheme.success`), Not connected and Out of date ember (`warning`), Not found dim; Disconnect is rose (`danger`). The agent then calls three MCP tools: `inspect_page` (selectors and boxes of a
 page), `record_page` (hover, click and scroll steps rendered like spec 0005, opened in the editor) and
 `render_status`. Started with `--mcp`, the app only pipes stdio to the running app's Unix socket, and
 starts the app first if needed.
