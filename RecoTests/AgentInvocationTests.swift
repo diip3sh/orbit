@@ -160,6 +160,7 @@ extension AgentInvocationTests {
         #expect(run.arguments.contains("WebSearch,WebFetch,Skill,Read"))
         #expect(run.arguments.prefix { $0 != "--permission-mode" }.suffix(5) == ["mcp__reco__*", "WebSearch", "WebFetch", "Skill", "Read(./.claude/skills/**)"])
         #expect(launch.prompt.contains("choose Reco's skill for this film") && launch.prompt.contains("reco-motion-design"))
+        #expect(launch.prompt.contains("reco-story-film") && run.files[".claude/skills/reco-story-film/SKILL.md"] == AgentSkill.storyFilm)
         #expect(!launch.prompt.contains(AgentSkill.launchFilmMethod))
 
         let walkthrough = try invocation(.claudeCode)
@@ -177,12 +178,30 @@ extension AgentInvocationTests {
         #expect(AgentSkill.launchFilm.hasPrefix("---\nname: reco-launch-film\ndescription: "))
         #expect(AgentSkill.launchFilmMethod.hasPrefix("# A launch film, Reco's way"))
         #expect(AgentSkill.motionDesign.hasPrefix("---\nname: reco-motion-design\ndescription: "))
-        #expect(AgentSkill.files.count == 2 + AgentSkill.motionDesignReferences.count)
+        #expect(AgentSkill.storyFilm.hasPrefix("---\nname: reco-story-film\ndescription: "))
+        #expect(AgentSkill.files.count == 3 + AgentSkill.motionDesignReferences.count + AgentSkill.storyFilmReferences.count)
         #expect(AgentSkill.files.values.allSatisfy { !$0.isEmpty })
         // Each reference the method names is there
         for name in AgentSkill.motionDesignReferences {
             #expect(AgentSkill.motionDesign.contains("reference/\(name).md"))
         }
+        for name in AgentSkill.storyFilmReferences {
+            #expect(AgentSkill.storyFilm.contains("reference/\(name).md"))
+        }
+    }
+
+    /// The story film's example, the reference rebuilt, is a document the grammar takes as it is, with nothing for the lint
+    /// to find, its scenes whole beats of the groove.
+    @Test func theStoryFilmExampleIsAValidDocument() throws {
+        let example = try #require(AgentSkill.files[".claude/skills/reco-story-film/reference/example.md"])
+        let start = try #require(example.range(of: "```json\n"))
+        let end = try #require(example.range(of: "\n```", range: start.upperBound..<example.endIndex))
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(example[start.upperBound..<end.lowerBound].utf8))
+        try document.validate()
+        #expect(document.canvas.field == .aurora && document.sound.style == .groove && document.style.gradient?.count == 5)
+        let beat = 60.0 / 170
+        #expect(document.scenes.allSatisfy { abs($0.duration / beat - ($0.duration / beat).rounded()) < 0.01 })
+        #expect(MotionLint.findings(in: document).isEmpty)
     }
 
     /// Motion design's whole example is a document the grammar takes as it is, with nothing for the lint to find.

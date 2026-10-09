@@ -676,3 +676,40 @@ inline float2 onPanel(float2 pixel, float3 rowX, float3 rowY, float3 rowW) {
     return float4(1.0 - (1.0 - color) * (1.0 - smoke), 1.0);
 }
 #endif
+
+#ifdef auroraField_ONLY
+/// Lovable's ground (spec 0015): soft lights summed, read through `ramp` (``AuroraSetup``: black, navy, then the brand's
+/// gradient, 0 to `shape.w` of reach across its `shape.x` pixels). `frame`: the output's width and height, seconds into
+/// the shot. `view`: the camera's zoom and shift (output pixels, y up) as the ground follows it. `l0`–`l4`: each light's
+/// middle (fractions of the frame, y down), radius across (frame heights) and strength, drifting a little so a held shot's
+/// light isn't a still. `e0`–`e2`: each light's elongation and angle (degrees, clockwise), two a vector.
+[[stitchable]] float4 auroraField(
+    coreimage::sampler ramp, float4 frame, float4 view, float4 l0, float4 l1, float4 l2, float4 l3, float4 l4,
+    float4 e0, float4 e1, float4 e2, float4 shape, coreimage::destination dest
+) {
+    float2 size = frame.xy;
+    float2 framed = (dest.coord() - 0.5 * size - view.yz) / view.x;
+    float2 q = float2(framed.x, -framed.y) / size.y;
+    float aspect = size.x / size.y;
+    float t = frame.z;
+    float4 lights[5] = { l0, l1, l2, l3, l4 };
+    float2 shapes[5] = { e0.xy, e0.zw, e1.xy, e1.zw, e2.xy };
+    float reach = 0.0;
+    for (int i = 0; i < 5; i++) {
+        float phase = float(i) * 1.7;
+        float2 drift = 0.03 * float2(sin(0.21 * t + phase), cos(0.17 * t + 1.3 * phase));
+        float2 center = (lights[i].xy - 0.5) * float2(aspect, 1.0) + drift;
+        float2 off = q - center;
+        float turn = shapes[i].y * 0.0174532925;
+        float along = (off.x * cos(turn) + off.y * sin(turn)) / (lights[i].z * shapes[i].x);
+        float across = (off.y * cos(turn) - off.x * sin(turn)) / lights[i].z;
+        float strength = lights[i].w * (1.0 + 0.05 * sin(0.29 * t + phase));
+        reach += strength * exp(-along * along - across * across);
+    }
+    float u = clamp(reach / shape.w, 0.0, 1.0) * (shape.x - 1.0) + 0.5;
+    float3 color = ramp.sample(ramp.transform(float2(u, 0.5))).rgb;
+    // A level of noise against banding in its long, smooth ramps
+    float noise = fract(sin(dot(floor(dest.coord()), float2(12.9898, 78.233))) * 43758.5453) - 0.5;
+    return float4(max(color + noise / 255.0, 0.0), 1.0);
+}
+#endif

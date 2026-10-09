@@ -12,7 +12,7 @@ nonisolated enum MotionLint {
 
     nonisolated enum Rule: String, Sendable {
         case readingTime, textSize, safeArea, contrast, firstMove, simultaneousMoves, exitLength
-        case sceneLengths, typingRate, stillness, hookLength, endingLength, rollLength, busyField, material, look
+        case sceneLengths, typingRate, stillness, hookLength, endingLength, rollLength, busyField, material, look, beats
     }
 
     nonisolated struct Finding: Equatable, Sendable {
@@ -28,7 +28,9 @@ nonisolated enum MotionLint {
     static let designStillness = 0.72
 
     /// The moves that make a scene motion design.
-    private static let designMoves: Set<MotionMove.Kind> = [.letters, .kinetic, .pop, .press, .click, .burst, .ripple, .scroll, .morph, .spin, .flood]
+    private static let designMoves: Set<MotionMove.Kind> = [
+        .letters, .kinetic, .pop, .press, .click, .burst, .ripple, .scroll, .morph, .spin, .flood, .voice, .reply, .shimmer, .wash, .scatter, .show, .hide
+    ]
 
     /// Typing faster than the fastest reference (25 characters a second) reads as a paste.
     static let fastestTyping = 25.0
@@ -38,7 +40,10 @@ nonisolated enum MotionLint {
 
     /// Moves that act on a layer already shown: they don't delay when it can be read. A burst and a ripple start
     /// their own layers, which count for them.
-    private static let actions: Set<MotionMove.Kind> = [.exit, .click, .press, .spin, .morph, .flood, .scroll, .burst, .ripple]
+    /// Reveals read along as they're typed.
+    private static let typedReveals: Set<MotionMove.Kind> = [.type, .kinetic, .voice]
+
+    private static let actions: Set<MotionMove.Kind> = [.exit, .click, .press, .spin, .morph, .flood, .scroll, .burst, .ripple, .shimmer, .wash, .hide]
 
     static func findings(in document: MotionDocument, sizes: [String: CGSize] = [:]) -> [Finding] {
         let expanded = DocumentExpansion.expanded(document, sizes: sizes)
@@ -49,11 +54,14 @@ nonisolated enum MotionLint {
                 live[asset.id] = plan.duration
             }
         }
+        findings += beatFindings(document)
         for (scene, source) in zip(expanded.scenes, document.scenes) {
             let context = MoveContext(sceneDuration: scene.duration, canvas: document.canvas.size)
             let layers = timed(scene.layers, in: context, group: nil)
             findings += textFindings(layers, scene: scene, canvas: document.canvas, context: context)
-            findings += timingFindings(layers, scene: scene, isEndCard: source.shot?.kind.isEnding == true, live: live)
+            // The last scene may hold: a logo on its own as the light goes out
+            let isEndCard = source.shot?.kind.isEnding == true || (document.scenes.count > 1 && source.id == document.scenes.last?.id)
+            findings += timingFindings(layers, scene: scene, isEndCard: isEndCard, onBeat: SoundRules.beat(document.sound.style) != nil, live: live)
             if source.shot?.kind == .hook, let text = source.shot?.text, ReadingTime.words(in: text) > 6 {
                 findings.append(Finding(rule: .hookLength, scene: scene.id, message: "A hook is six words at most; this one has \(ReadingTime.words(in: text))."))
             }
@@ -103,13 +111,13 @@ nonisolated enum MotionLint {
         }
     }
 
-    /// One look a film: its scenes' fields from one family (satin, light or dither; plain and the halo go
+    /// One look a film: its scenes' fields from one family (satin, light, dither or aurora; plain and the halo go
     /// with any), and a seam in a field's language only into a scene of that language. A new technique a
     /// shot is a generated video's tell (`docs/references/style-guide.md`). A cut keeps the ground: bolt.new's
     /// cut in closer on its prompt jumped from a blob of light to two corners of it.
     private static func lookFindings(_ document: MotionDocument) -> [Finding] {
         var findings: [Finding] = []
-        let looks: Set<MotionField.Family> = [.satin, .light, .dither]
+        let looks: Set<MotionField.Family> = [.satin, .light, .dither, .aurora]
         var first: (family: MotionField.Family, scene: String)?
         var before: MotionField?
         for scene in document.scenes where scene.shot?.kind != .closing {
@@ -178,6 +186,9 @@ nonisolated enum MotionLint {
         /// The group it's in: its layers start as one staggered move.
         let group: String?
 
+        /// The group it's placed in, the innermost: its position is from that group's.
+        var parent: String?
+
         let moves: [TimedMove]
 
         /// When a text layer is fully shown, and its character count.
@@ -185,7 +196,7 @@ nonisolated enum MotionLint {
         var characters = 0
     }
 
-    private static func timed(_ layers: [MotionLayer], in context: MoveContext, group: String?) -> [TimedLayer] {
+    private static func timed(_ layers: [MotionLayer], in context: MoveContext, group: String?, parent: String? = nil) -> [TimedLayer] {
         layers.flatMap { layer -> [TimedLayer] in
             var context = context
             if case .text(let text) = layer.content {
@@ -196,30 +207,35 @@ nonisolated enum MotionLint {
                 return TimedMove(kind: move.kind, start: timing.start, end: timing.start + timing.duration)
             }
             var timed = TimedLayer(layer: layer, group: group, moves: moves)
+            timed.parent = parent
             timed.characters = context.characters
-            timed.shown = moves.filter { !actions.contains($0.kind) }.map(\.end).max() ?? 0
+            // Typed text is read as it's typed: Lovable cut away from its voice line 0.1 s after the last letter
+            timed.shown = moves.filter { !actions.contains($0.kind) }.map { typedReveals.contains($0.kind) ? $0.start : $0.end }.max() ?? 0
             // A group's layers (a cascade's rows, a roll's words) move as one staggered whole
             if case .group(let children) = layer.content {
-                return [timed] + self.timed(children, in: context, group: group ?? layer.id)
+                return [timed] + self.timed(children, in: context, group: group ?? layer.id, parent: layer.id)
             }
             return [timed]
         }
     }
 
-    private static func timingFindings(_ layers: [TimedLayer], scene: MotionScene, isEndCard: Bool, live: [String: Double]) -> [Finding] {
+    /// `onBeat`: the film is cut to a beat, where a scene's first move lands on its cut (Lovable's tiles and words, the
+    /// Spotify Jam's pill): waiting 0.1 s left the ground alone on screen at every cut of an Orca film.
+    private static func timingFindings(_ layers: [TimedLayer], scene: MotionScene, isEndCard: Bool, onBeat: Bool, live: [String: Double]) -> [Finding] {
         var findings: [Finding] = []
         let cameraMoves = scene.camera.moves.map { MoveExpansion.timing(of: $0, in: MoveContext(sceneDuration: scene.duration, canvas: .zero)) }
         let cameraMovesAtCut = cameraMoves.contains { $0.start < 0.3 } || scene.seam == .cutOnMotion
         // A burst's and a ripple's own layers carry their start; a group and its layers are one thing
         let starts = layers.flatMap { layer in
             let isGroup = if case .group = layer.layer.content { true } else { false }
-            return layer.moves.filter { $0.kind != .burst && $0.kind != .ripple }.map { move in
+            // A shimmer, a wash and a swap aren't entrances: Lovable's end words shimmer from the cut they land on
+            return layer.moves.filter { ![.burst, .ripple, .shimmer, .wash, .show, .hide].contains($0.kind) }.map { move in
                 (start: move.start, key: layer.group ?? (isGroup ? layer.layer.id : layer.layer.id + "\(move.start)"))
             }
         }.sorted { $0.start < $1.start }
 
         if let first = starts.first?.start {
-            if first < 0.1 {
+            if first < 0.1, !onBeat {
                 findings.append(Finding(rule: .firstMove, scene: scene.id, message: "Motion starts at the cut (\(first.formatted()) s): start 0.1–0.3 s after it."))
             } else if first > 0.3, !cameraMovesAtCut {
                 findings.append(Finding(rule: .firstMove, scene: scene.id, message: "Nothing moves for \(first.formatted()) s after the cut: start 0.1–0.3 s after it."))
@@ -296,8 +312,10 @@ nonisolated enum MotionLint {
                 findings.append(Finding(rule: .textSize, scene: scene.id, layer: id, message: "Text under 32 px at 1080p isn't read on a phone."))
             }
             // A control's label is read against the control and at a glance, with the click that changes it
-            let control = self.control(under: timed, at: timed.shown, in: layers, context: context)
-            let contrast = LayoutRules.contrast(text.color, control?.filled == true ? control?.color ?? canvas.background : canvas.background)
+            let controls = self.controls(under: timed, at: timed.shown, in: layers, context: context)
+            let control = controls.last
+            // Read against the nearest fill under it: a chip's translucent tint shows the tile under it
+            let contrast = LayoutRules.contrast(text.color, controls.last { $0.filled }?.color ?? canvas.background)
             if contrast < LayoutRules.minimumContrast(forSize: text.size, canvas: canvas.size) {
                 let ratio = contrast.formatted(.number.precision(.fractionLength(1)))
                 findings.append(Finding(rule: .contrast, scene: scene.id, layer: id, message: "Contrast \(ratio):1 against the background is too low."))
@@ -308,26 +326,29 @@ nonisolated enum MotionLint {
                 let needed = ReadingTime.hold(for: text.text).formatted(.number.precision(.fractionLength(1)))
                 findings.append(Finding(rule: .readingTime, scene: scene.id, layer: id, message: "Held \(held) s once shown; \"\(text.text)\" needs \(needed) s."))
             }
-            // At rest, as laid out: top-level layers only, whose position is on the canvas
+            // At rest, as laid out: top-level layers only, whose position is on the canvas. A voice line follows its caret
+            // and runs off to the left on purpose (spec 0015)
             let size = TextImage(text, scale: 0).size
             let transform = timed.layer.transform
             let frame = CGRect(
                 x: transform.position.x - transform.anchor.x * size.width * transform.scale, y: transform.position.y - transform.anchor.y * size.height * transform.scale,
                 width: size.width * transform.scale, height: size.height * transform.scale
             )
-            if scene.layers.contains(where: { $0.id == id }), transform.rotation == .zero, transform.position.z == 0, !safe.contains(frame.insetBy(dx: 1, dy: 1)) {
+            let isVoice = timed.layer.moves.contains { $0.kind == .voice }
+            if scene.layers.contains(where: { $0.id == id }), !isVoice, transform.rotation == .zero, transform.position.z == 0, !safe.contains(frame.insetBy(dx: 1, dy: 1)) {
                 findings.append(Finding(rule: .safeArea, scene: scene.id, layer: id, message: "Text reaches outside the safe area (90% of the frame)."))
             }
         }
         return findings
     }
 
-    /// The rectangle `text` sits in at `time`, where its morphs have taken it then, beside it in the same group or at the
-    /// top: a pill's label (spec 0014). Its colour then, and whether it's filled or an outline.
-    private static func control(under text: TimedLayer, at time: Double, in layers: [TimedLayer], context: MoveContext) -> Control? {
-        guard case .text(let content) = text.layer.content else { return nil }
+    /// The rectangles `text` sits in at `time`, bottom first, where their morphs have taken them then, beside it in the same
+    /// group or at the top: a pill's label (spec 0014), a tile's name and its chip. Their colours then, and whether each is
+    /// filled or an outline.
+    private static func controls(under text: TimedLayer, at time: Double, in layers: [TimedLayer], context: MoveContext) -> [Control] {
+        guard case .text(let content) = text.layer.content else { return [] }
         let middle = centre(of: text.layer, size: TextImage(content, scale: 0).size, at: time, context: context)
-        let shapes = layers.filter { $0.group == text.group && $0.layer.id != text.layer.id }.compactMap { timed -> Control? in
+        let shapes = layers.filter { $0.parent == text.parent && $0.layer.id != text.layer.id }.compactMap { timed -> Control? in
             // On screen then: come in, not gone
             let entrance = timed.moves.filter { !actions.contains($0.kind) }.map(\.start).min() ?? 0
             let exit = timed.moves.filter { $0.kind == .exit }.map(\.start).min() ?? .infinity
@@ -338,7 +359,7 @@ nonisolated enum MotionLint {
             let box = CGRect(x: place.x - state.size.width / 2, y: place.y - state.size.height / 2, width: state.size.width, height: state.size.height)
             return Control(box: box, color: state.color, filled: state.stroke == 0 && state.color.alpha >= 0.5)
         }
-        return shapes.last { $0.box.contains(middle) }
+        return shapes.filter { $0.box.contains(middle) }
     }
 
     /// A rectangle as a label sees it: where it is, its colour, and whether that's a fill or only an outline.
@@ -357,5 +378,27 @@ nonisolated enum MotionLint {
             x: base.x + (place[.positionX] ?? []).reduce(0) { $0 + $1.value(at: time) } + (0.5 - anchor.x) * size.width * layer.transform.scale,
             y: base.y + (place[.positionY] ?? []).reduce(0) { $0 + $1.value(at: time) } + (0.5 - anchor.y) * size.height * layer.transform.scale
         )
+    }
+}
+
+// MARK: - Beats
+
+nonisolated extension MotionLint {
+
+    /// Under a beat, every scene is a whole number of beats, so its cuts land on them: a cut off the grid moves a drop or a
+    /// break by up to half a beat (spec 0015).
+    private static func beatFindings(_ document: MotionDocument) -> [Finding] {
+        guard let style = SoundRules.beat(document.sound.style) else { return [] }
+        let (beat, frame) = (style.beat, 1 / Double(document.canvas.frameRate))
+        return document.scenes.compactMap { scene in
+            let beats = scene.duration / beat
+            guard abs(beats - beats.rounded()) * beat > frame else { return nil }
+            let (shorter, longer) = (max(beats.rounded(.down), 1) * beat, beats.rounded(.up) * beat)
+            return Finding(
+                rule: .beats, scene: scene.id,
+                message: "\(seconds(scene.duration)) s isn't a whole number of \(beat.formatted(.number.precision(.fractionLength(3)))) s beats: make it "
+                    + "\(shorter.formatted(.number.precision(.fractionLength(3)))) or \(longer.formatted(.number.precision(.fractionLength(3)))) s."
+            )
+        }
     }
 }

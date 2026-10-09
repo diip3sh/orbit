@@ -45,7 +45,7 @@ nonisolated extension SoundVoices {
 
     /// One cycle of a saw whose harmonic k is e^(−k·f/brightness)/k, up to 16 of them and none past 7 kHz,
     /// with its first sample again at the end for interpolation.
-    private static func wavetable(_ frequency: Double, brightness: Double) -> [Float] {
+    static func wavetable(_ frequency: Double, brightness: Double) -> [Float] {
         let phases = vDSP.ramp(withInitialValue: 0.0, increment: 2 * .pi / Double(tableLength), count: tableLength + 1)
         let harmonics = max(min(16, Int(7000 / frequency)), 1)
         return vDSP.doubleToFloat((1...harmonics).reduce(into: [Double](repeating: 0, count: tableLength + 1)) { table, harmonic in
@@ -55,7 +55,7 @@ nonisolated extension SoundVoices {
     }
 
     /// `table` read at `cycles` (a phase in cycles a sample), linearly interpolated.
-    private static func read(_ table: [Float], cycles: [Double]) -> [Float] {
+    static func read(_ table: [Float], cycles: [Double]) -> [Float] {
         var fractions = [Double](repeating: 0, count: cycles.count)
         vDSP_vfracD(cycles, 1, &fractions, 1, vDSP_Length(cycles.count))
         let positions = vDSP.doubleToFloat(fractions)
@@ -72,7 +72,20 @@ nonisolated extension SoundVoices {
         let attack = vDSP.square(vDSP.clip(vDSP.multiply(1 / max(chord.attack, 1e-4), times), to: 0...1))
         let swell = vForce.pow(bases: [Double](repeating: 10, count: times.count), exponents: vDSP.multiply(chord.swell / 20, vDSP.clip(vDSP.multiply(1 / hold, times), to: 0...1)))
         let release = vForce.cos(vDSP.multiply(.pi / 2, vDSP.clip(vDSP.multiply(1 / max(chord.release, 1e-4), vDSP.add(-hold, times)), to: 0...1)))
-        return vDSP.doubleToFloat(vDSP.multiply(vDSP.multiply(attack, swell), release))
+        let shape = vDSP.multiply(vDSP.multiply(attack, swell), release)
+        return vDSP.doubleToFloat(chord.pump.map { vDSP.multiply(shape, ducking($0, times: times)) } ?? shape)
+    }
+
+    /// A sidechain's gain: down by the pump's depth within 5 ms of each period's start, back up on a smoothstep over 70 %
+    /// of it, so the pad breathes with the kick.
+    private static func ducking(_ pump: SoundCueSheet.Pump, times: [Double]) -> [Double] {
+        var since = [Double](repeating: 0, count: times.count)
+        vDSP_vfracD(vDSP.multiply(1 / pump.period, times), 1, &since, 1, vDSP_Length(times.count))
+        let seconds = vDSP.multiply(pump.period, since)
+        let back = vDSP.clip(vDSP.multiply(1 / (0.7 * pump.period), seconds), to: 0...1)
+        let recovered = vDSP.multiply(vDSP.square(back), vDSP.add(3, vDSP.multiply(-2, back)))
+        let down = vDSP.clip(vDSP.multiply(1 / 0.005, seconds), to: 0...1)
+        return vDSP.add(1, vDSP.multiply(-pump.depth, vDSP.multiply(down, vDSP.add(1, vDSP.multiply(-1, recovered)))))
     }
 
     /// Noise from 160 Hz to 2.4 kHz, breathing 25 % every 11 s, in over 1.2 s. Its RMS is 1.

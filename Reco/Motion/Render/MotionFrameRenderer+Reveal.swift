@@ -5,7 +5,7 @@
 
 import CoreImage
 
-/// Text revealed part by part: typed, wiped, rising, words, letters springing in (spec 0011, 0014).
+/// Text revealed part by part: typed, wiped, rising, words, letters springing in, voice and replies (spec 0011, 0014, 0015).
 nonisolated extension MotionFrameRenderer {
 
     /// A text layer's parts shown as far as `reveal` has got at `time`: each whole, or partly, by
@@ -44,6 +44,9 @@ nonisolated extension MotionFrameRenderer {
         if reveal.style == .kinetic, layer.accent != nil {
             shown = kinetic(shown, image: image, of: layer, by: reveal, at: time)
         }
+        if reveal.tintsInGradient {
+            shown = voiced(shown, image: image, of: layer, by: reveal, at: time)
+        }
         return shown.cropped(to: extent)
     }
 
@@ -66,8 +69,10 @@ nonisolated extension MotionFrameRenderer {
     ) -> CIImage? {
         let (eased, line, scale) = (progress.eased, part.height, layer.rasterScale)
         switch style {
-        case .type, .kinetic:
+        case .type, .kinetic, .voice:
             return nil
+        case .reply:
+            return piece.fading(to: eased)
         case .wipe:
             // Sharpens as it fades in: 8% of its line, 9.8 px for a 1080p headline (at most 10 on text)
             return piece.applyingGaussianBlur(sigma: (1 - eased) * line * 0.08 * scale).fading(to: eased)

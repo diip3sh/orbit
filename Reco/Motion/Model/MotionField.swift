@@ -29,6 +29,9 @@ nonisolated enum MotionField: String, Codable, CaseIterable, Sendable {
     case tide
     /// A ring of smoke round the middle: the end card's logo moment.
     case halo
+    /// Black with the brand's gradient light round a dark middle, smooth, from a corner or two, in a new place
+    /// every shot: Lovable's ground (spec 0015), under type and rebuilt UI alike.
+    case aurora
     /// Black satin out of focus under one broad light, a lit plane's edge across a corner: dark,
     /// premium UI in macro (New Raycast's ground).
     case satin
@@ -46,6 +49,8 @@ nonisolated enum MotionField: String, Codable, CaseIterable, Sendable {
         case dither
         /// Paper's smoke ring: a logo's moment, at home in any look but satin's.
         case smoke
+        /// Lovable's smooth gradient light: cut, never a seam of its own.
+        case aurora
         case plain
     }
 
@@ -55,6 +60,7 @@ nonisolated enum MotionField: String, Codable, CaseIterable, Sendable {
         case .matrix, .warp, .swirl, .tide: .dither
         case .halo: .smoke
         case .satin: .satin
+        case .aurora: .aurora
         case .plain: .plain
         }
     }

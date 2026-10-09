@@ -232,6 +232,45 @@ struct MotionAgentTests {
         #expect(findings.count == 1 && findings.first?.hasPrefix("late") == true)
     }
 
+    /// A line of code running off the frame's right edge is found; the same line framed whole, or seen in macro, isn't.
+    @Test func theDesignCheckFindsTextOffTheFrame() async throws {
+        func plan(across: Double, depth: Double) async throws -> MotionPlan {
+            let document = try JSONDecoder().decode(MotionDocument.self, from: Data(#"""
+            {
+              "version": 1,
+              "scenes": [{ "id": "pane", "duration": 2, "camera": { "position": [960, 540, \#(depth)] }, "layers": [
+                { "id": "a", "content": { "text": { "text": "I'll make the summary shorter and keep the checklist", "size": 60 } },
+                  "transform": { "position": [\#(across), 540, 0] } }
+              ] }]
+            }
+            """#.utf8))
+            return await MotionPlan.build(document, bundle: URL.temporaryDirectory)
+        }
+        let cut = DesignCheck.cutText(in: try await plan(across: 1400, depth: 0), scenes: ["pane"])
+        #expect(cut.count == 1 && cut.first?.hasPrefix("pane") == true)
+        #expect(DesignCheck.cutText(in: try await plan(across: 960, depth: 0), scenes: ["pane"]).isEmpty)
+        #expect(DesignCheck.cutText(in: try await plan(across: 1400, depth: 1248), scenes: ["pane"]).isEmpty)
+    }
+
+    /// Line numbers left at one place are found; a swapped label, one at a time, and numbers in a column aren't.
+    @Test func theDesignCheckFindsTextOverText() async throws {
+        func plan(_ layers: String) async throws -> MotionPlan {
+            let document = try JSONDecoder().decode(MotionDocument.self, from: Data(#"""
+            {"version": 1, "scenes": [{"id": "diff", "duration": 2, "layers": [\#(layers)]}]}
+            """#.utf8))
+            return await MotionPlan.build(document, bundle: URL.temporaryDirectory)
+        }
+        let number = { (text: String, down: Int, moves: String) in
+            #"{"id": "n\#(text)", "content": {"text": {"text": "\#(text)", "size": 34}}, "transform": {"position": [400, \#(down), 0]}, "moves": [\#(moves)]}"#
+        }
+        let stacked = try await plan([number("41", 540, ""), number("42", 540, "")].joined(separator: ","))
+        #expect(DesignCheck.overlappingText(in: stacked, scenes: ["diff"]) == ["diff: two texts are drawn over each other; give each its own place."])
+        let column = try await plan([number("41", 470, ""), number("42", 540, "")].joined(separator: ","))
+        #expect(DesignCheck.overlappingText(in: column, scenes: ["diff"]).isEmpty)
+        let swapped = try await plan([number("41", 540, #"{"move": "hide", "start": 1}"#), number("42", 540, #"{"move": "show", "start": 1}"#)].joined(separator: ","))
+        #expect(DesignCheck.overlappingText(in: swapped, scenes: ["diff"]).isEmpty)
+    }
+
     private func image(_ draw: (CGContext) -> Void) throws -> CGImage {
         let space = try #require(CGColorSpace(name: CGColorSpace.sRGB))
         let context = try #require(CGContext(

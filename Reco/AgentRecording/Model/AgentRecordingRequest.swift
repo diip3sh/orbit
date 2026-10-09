@@ -108,7 +108,9 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         \(AgentSkill.launchFilmName) for the product's real UI up close, typed into and toured (the default); \
         \(AgentSkill.motionDesignName) when the user asks for motion design, a UI animation or a concept film, or names \
         movements such as morphs, a flood, a burst or kinetic type, and for a consumer app whose story is one flow through \
-        its UI. For a film of 45 s or more, or when the user asks for both, load both.
+        its UI; \(AgentSkill.storyFilmName) when the user asks for a story, one person's request, Lovable's style or type \
+        in a gradient, and for a product driven by a prompt, chat or agents whose answers are things it makes. For a film \
+        of 45 s or more, or when the user asks for two, load both.
         """
 
     /// How a motion video is changed from its window's chat.
@@ -181,7 +183,8 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         parts.append(Self.motionChangePlaybook)
         parts.append(agent == .claudeCode
             ? "For anything beyond a small tweak (a new scene, a new look, making it better), first load the skill the video is made with: "
-                + "\(AgentSkill.motionDesignName) if its scenes are shapes and type that morph, else \(AgentSkill.launchFilmName)."
+                + "\(AgentSkill.storyFilmName) if a person's words are typed big in it (voice moves), \(AgentSkill.motionDesignName) if its scenes are shapes and type "
+                + "that morph, else \(AgentSkill.launchFilmName)."
             : "For anything beyond a small tweak, this is how Reco makes a launch film:\n\n" + AgentSkill.launchFilmMethod)
         parts.append("""
             Use only the reco MCP tools. Don't ask questions; decide yourself. When it's done, reply in one or two short sentences \

@@ -248,7 +248,11 @@ final class WebPageRenderer: NSObject {
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 loading = continuation
-                webView.load(URLRequest(url: url))
+                if let page = Self.imagePage(for: url) {
+                    webView.loadHTMLString(page, baseURL: url)
+                } else {
+                    webView.load(URLRequest(url: url))
+                }
             }
         } onCancel: {
             Task { @MainActor [weak self] in

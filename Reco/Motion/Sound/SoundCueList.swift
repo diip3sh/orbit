@@ -14,6 +14,9 @@ nonisolated struct SoundCueList {
     /// Pops so far, each a step up the scale from the last.
     private var pops = 0
 
+    /// Under a groove the music carries kinetic and voice type: no key a letter (spec 0015).
+    var dropsKineticKeys = false
+
     init(frameRate: Int) {
         self.frameRate = frameRate
     }
@@ -123,7 +126,7 @@ nonisolated extension SoundCueList {
                     guard timing.start < scene.duration, scene.start + timing.start < end else { continue }
                     cue(move, at: scene.start + timing.start, lasting: timing.duration, in: context)
                 }
-                if let reveal = planned.reveal, reveal.style == .kinetic, case .text(let text) = layer.content {
+                if let reveal = planned.reveal, reveal.style == .kinetic || reveal.style == .voice, !dropsKineticKeys, case .text(let text) = layer.content {
                     keys(text.text, revealed: reveal, from: scene.start, before: min(end, scene.start + scene.duration))
                 }
             }
@@ -147,6 +150,9 @@ nonisolated extension SoundCueList {
                 add(.glass(note: glass.notes[note], length: glass.length, brightness: 1.2), .effects, at: time, level: glass.levels[note],
                     pan: glass.pans[note], send: glass.send)
             }
+        case .scatter where move.target == nil:
+            // A collage thrown out of its stack: a whoosh at its fastest, early in the throw
+            add(.whoosh, .effects, at: time + duration * 0.3, level: SoundRules.whooshLevel - 6, send: 0.2)
         case .scroll:
             let distance = move.target.map { hypot($0.x - context.position.x, $0.y - context.position.y) } ?? 0
             if distance / duration / max(context.canvas.height, 1) > SoundRules.scrollWhoosh {

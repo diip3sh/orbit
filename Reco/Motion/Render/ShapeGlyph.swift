@@ -67,7 +67,32 @@ nonisolated enum ShapeGlyph {
         case .search:
             path.addEllipse(in: CGRect(x: 0.18, y: 0.18, width: 0.5, height: 0.5))
             lines([(0.61, 0.61), (0.82, 0.82)])
+        case .chevron, .mic, .terminal, .branch:
+            addInterfaceGlyph(kind, to: path)
         }
         return (path, .stroke)
+    }
+
+    /// A story film's UI glyphs (spec 0015), stroked: a dropdown's chevron, a microphone, a terminal's prompt, a git branch.
+    private static func addInterfaceGlyph(_ kind: ShapeContent.Kind, to path: CGMutablePath) {
+        let lines = { (points: [(Double, Double)]) in path.addLines(between: points.map { CGPoint(x: $0.0, y: $0.1) }) }
+        switch kind {
+        case .mic:
+            path.addRoundedRect(in: CGRect(x: 0.37, y: 0.12, width: 0.26, height: 0.46), cornerWidth: 0.13, cornerHeight: 0.13)
+            path.addArc(center: CGPoint(x: 0.5, y: 0.44), radius: 0.24, startAngle: 0, endAngle: .pi, clockwise: false)
+            lines([(0.5, 0.68), (0.5, 0.86)])
+        case .terminal:
+            lines([(0.18, 0.3), (0.4, 0.5), (0.18, 0.7)])
+            lines([(0.5, 0.72), (0.82, 0.72)])
+        case .branch:
+            path.addEllipse(in: CGRect(x: 0.2, y: 0.1, width: 0.18, height: 0.18))
+            path.addEllipse(in: CGRect(x: 0.2, y: 0.72, width: 0.18, height: 0.18))
+            path.addEllipse(in: CGRect(x: 0.62, y: 0.22, width: 0.18, height: 0.18))
+            lines([(0.29, 0.28), (0.29, 0.72)])
+            path.move(to: CGPoint(x: 0.71, y: 0.4))
+            path.addCurve(to: CGPoint(x: 0.29, y: 0.66), control1: CGPoint(x: 0.71, y: 0.58), control2: CGPoint(x: 0.29, y: 0.5))
+        default:
+            lines([(0.25, 0.38), (0.5, 0.63), (0.75, 0.38)])
+        }
     }
 }

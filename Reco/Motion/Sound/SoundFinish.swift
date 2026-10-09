@@ -63,7 +63,7 @@ nonisolated enum SoundFinish {
     }
 
     /// 1, then a quarter cosine down to 0 over the last ``fadeOut``.
-    private static func fade(count: Int) -> [Float] {
+    static func fade(count: Int) -> [Float] {
         let length = min(SoundSignal.count(fadeOut), count)
         let tail = vForce.cos(vDSP.ramp(withInitialValue: Float(0), increment: .pi / 2 / Float(length), count: length))
         return [Float](repeating: 1, count: count - length) + tail

@@ -31,6 +31,7 @@ nonisolated struct MotionDocument: Equatable, Sendable {
         guard canvas.size.width >= 16, canvas.size.height >= 16 else { throw .invalidCanvas }
         guard (1...120).contains(canvas.frameRate), (0...1).contains(canvas.fieldStrength) else { throw .invalidCanvas }
         guard MotionSound.levels.contains(sound.scoreLevel), MotionSound.levels.contains(sound.effectsLevel) else { throw .invalidSound }
+        try validateStyle()
         guard !scenes.isEmpty else { throw .noScenes }
         let assetIDs = try validatedAssetIDs()
         var sceneIDs = Set<String>()
@@ -49,6 +50,11 @@ nonisolated struct MotionDocument: Equatable, Sendable {
             try validate(scene.layers, ids: &layerIDs, assets: assetIDs)
             try validateShotMoves(of: index)
         }
+    }
+
+    /// The style's gradient, if it has one, is 2 to 5 colours.
+    private func validateStyle() throws(MotionDocumentError) {
+        guard style.gradient.map({ (2...5).contains($0.count) }) ?? true else { throw .invalidGradient }
     }
 
     /// Each of a scene's ``MotionScene/shotMoves`` names its shot's camera or one of its layers,

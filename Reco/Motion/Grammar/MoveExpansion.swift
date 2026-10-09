@@ -136,8 +136,8 @@ nonisolated enum MoveExpansion {
         if move.kind.isCamera {
             return MoveEffect(tracks: cameraTracks(of: move, start: start, duration: duration, in: context))
         }
-        let amount = move.intensity ?? 1
-        let unit = context.unit
+        guard !MotionMove.Kind.storyKinds.contains(move.kind) else { return MoveEffect(tracks: storyTracks(of: move, start: start, duration: duration, in: context)) }
+        let (amount, unit) = (move.intensity ?? 1, context.unit)
         var effect = MoveEffect()
         func add(_ property: MotionProperty, _ begin: Double, _ end: Double, easing: MotionEasing) {
             effect.tracks[property, default: []].append(ramp(property, (begin, end), start: start, duration: duration, easing: easing))
@@ -152,11 +152,12 @@ nonisolated enum MoveExpansion {
             add(.blur, 10 * unit * amount, 0, easing: .enter)
         case .exit:
             effect.tracks = exitTracks(of: move, start: start, duration: duration, in: context)
-        case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan, .whip, .burst, .ripple, .morph, .flood, .scroll:
+        case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan, .whip, .burst, .ripple, .morph, .flood, .scroll, .shimmer, .wash, .show, .hide, .scatter:
             // A roll, a cascade, a burst and a ripple become other layers' moves (``DocumentExpansion``); a morph, a
-            // flood and a scroll a shape's states and the layer's place, with the others before and after (``ShapeMorph``)
+            // flood and a scroll a shape's states and the layer's place, with the others before and after (``ShapeMorph``);
+            // a story's moves are expanded above
             break
-        case .blurWipe, .lineMask, .wordByWord, .type, .letters, .kinetic:
+        case .blurWipe, .lineMask, .wordByWord, .type, .letters, .kinetic, .voice, .reply:
             effect.reveal = reveal(move, start: start, duration: duration, in: context)
         case .pop:
             effect.tracks[.opacity] = [ramp(.opacity, (0, 1), start: start, duration: min(0.1, duration), easing: .enterFast)]
@@ -341,7 +342,12 @@ nonisolated enum MoveExpansion {
         case .focus, .detach: return 0.6
         case .stateChange: return 0.2
         case .letters: return letterStagger * Double(max(context.characters - 1, 0)) + letterDuration
-        case .kinetic: return Double(context.characters) / kineticRate
+        case .kinetic, .voice: return Double(context.characters) / kineticRate
+        case .reply: return replyStagger * Double(max(context.words - 1, 0)) + replyFade
+        case .wash: return washDuration
+        case .shimmer: return rest
+        case .show, .hide: return 1e-3
+        case .scatter: return scatterDuration
         case .morph: return morphDuration
         // The film's dip (0.17 s) and its fill past the frame (0.4 s)
         case .flood: return ShapeMorph.floodDip + ShapeMorph.floodFill
@@ -371,8 +377,11 @@ nonisolated enum MoveExpansion {
         switch move.kind {
         case .type:
             return TextReveal(style: .type, start: start, stagger: duration / characters, partDuration: 0)
-        case .kinetic:
-            return TextReveal(style: .kinetic, start: start, stagger: duration / characters, partDuration: 0)
+        case .kinetic, .voice:
+            return TextReveal(style: move.kind == .voice ? .voice : .kinetic, start: start, stagger: duration / characters, partDuration: 0)
+        case .reply:
+            let part = min(replyFade, duration)
+            return TextReveal(style: .reply, start: start, stagger: (duration - part) / Double(max(context.words - 1, 1)), partDuration: part)
         case .letters:
             let part = min(letterDuration, duration)
             return TextReveal(style: .letter, start: start, stagger: (duration - part) / max(characters - 1, 1), partDuration: part)

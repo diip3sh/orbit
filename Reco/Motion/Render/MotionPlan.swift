@@ -69,6 +69,12 @@ nonisolated struct MotionPlan: Sendable {
         /// A kinetic reveal's caret, and its newest letters' colour.
         var accent: RGBAColor?
 
+        /// The brand's gradient, which a voice or reply's newest words, a shimmer and a wash are drawn in (spec 0015).
+        var gradient: [RGBAColor] = []
+
+        /// The gradient over its pixels: shimmers and washes, its own and its groups'.
+        var tints: [LayerTint] = []
+
         /// When a pointer clicks it.
         var clicks: [Click] = []
 
@@ -119,9 +125,10 @@ nonisolated struct MotionPlan: Sendable {
         /// How the scene comes in over the one before, drawn under it meanwhile.
         var transition: SeamExpansion.Transition?
 
-        /// How an opening macro's control comes in over its ground alone, a breath in
-        /// (``ShotLayout/macroBreath``): in a light or dither film, its look's seam.
+        /// How an opening macro's control comes in over its ground alone, a breath in (``ShotLayout/macroBreath``): in a
+        /// light or dither film, its look's seam. Any other opening arrives in the seam named on it, its ground swelled in.
         var arrival: SeamExpansion.Transition?
+        var arrivesAt = ShotLayout.macroBreath
 
         /// How long it's drawn past its end, under the next scene's transition.
         var overlap = 0.0
@@ -230,9 +237,9 @@ nonisolated struct MotionPlan: Sendable {
         )
     }
 
-    /// Where every drawn layer of `scene` lands at `time` in it, farthest first; layers out of
-    /// sight, transparent or behind the camera are left out.
-    func placements(of scene: Scene, at time: Double) -> [Placement] {
+    /// Where every drawn layer of `scene` lands at `time` in it, farthest first; layers out of sight, transparent or behind
+    /// the camera are left out. Opacity is read at `shown`, the frame's own time under a shutter: a swap inside one drew both.
+    func placements(of scene: Scene, at time: Double, shown: Double? = nil) -> [Placement] {
         let camera = camera(of: scene, at: time)
         let aperture = scene.cameraValue(.aperture, at: time)
         let focus = scene.cameraValue(.focus, at: time) + camera.focalLength - camera.dolly
@@ -252,7 +259,7 @@ nonisolated struct MotionPlan: Sendable {
             // A morphing shape changes size about its anchor
             let size = layer.size(at: time)
             let matrix = world * transform.matrix(size: size)
-            let opacity = (layer.parent.map { opacities[$0] } ?? 1) * min(max(layer.value(.opacity, at: time), 0), 1)
+            let opacity = (layer.parent.map { opacities[$0] } ?? 1) * min(max(layer.value(.opacity, at: shown ?? time), 0), 1)
             worlds.append(matrix)
             opacities.append(opacity)
 
@@ -350,8 +357,8 @@ extension MotionPlan {
                 start: start,
                 duration: scene.duration,
                 field: field,
-                palette: FieldPalette(field, accent: document.style.accent, background: document.canvas.background),
-                layers: flattened(scene.layers, parent: nil, sizes: sizes, context: context),
+                palette: FieldPalette(field, style: document.style, background: document.canvas.background),
+                layers: painted(flattened(scene.layers, parent: nil, sizes: sizes, context: context), with: document.style.brandGradient),
                 camera: tracks(scene.camera.keyframes),
                 cameraBase: Dictionary(uniqueKeysWithValues: MotionProperty.camera.map { ($0, scene.camera.base($0, canvas: canvas)) })
             )

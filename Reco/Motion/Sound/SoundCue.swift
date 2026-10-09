@@ -10,7 +10,7 @@ import Foundation
 nonisolated struct SoundCue: Codable, Equatable, Sendable {
 
     /// The voices, each after the hand-made Supabase film's (`score.py`, round 6).
-    nonisolated enum Voice: Codable, Equatable, Sendable {
+    nonisolated enum Voice: Codable, Hashable, Sendable {
         /// A struck glass: near-harmonic partials, the high ones dying first; `brightness` scales them.
         case glass(note: Double, length: Double, brightness: Double)
 
@@ -34,10 +34,39 @@ nonisolated struct SoundCue: Codable, Equatable, Sendable {
 
         /// Noise swept up from `low` Hz to `high`, rising into the moment it marks.
         case riser(length: Double, low: Double, high: Double, power: Double)
+
+        // A beat score's (spec 0015)
+
+        /// A drum, each hit drawn afresh from its seed.
+        case drum(Drum)
+
+        /// A sub bass note, an 808's: gliding onto `note` from the note `from`, or dropping onto it from 2 semitones up.
+        case sub(note: Double, from: Double?, length: Double)
+
+        /// House's plucked bass: a short saw over its own sub.
+        case bass(note: Double, length: Double)
+
+        /// A chord of plucked saws whose highs die first, as a closing filter would: house's stab.
+        case stab(notes: [Double], length: Double)
+
+        /// A chord on an electric piano: two-operator FM, its brightness dying with the note.
+        case keys(notes: [Double], length: Double)
+
+        /// A sung "ah" sliding from one note to another, then held with vibrato.
+        case vox(from: Double, onto: Double, length: Double)
     }
 
-    nonisolated enum Key: String, Codable, Sendable {
+    nonisolated enum Key: String, Codable, Hashable, Sendable {
         case letter, space, arrow, enter
+    }
+
+    nonisolated enum Drum: String, Codable, Hashable, Sendable {
+        /// Drum and bass's: tight, its pitch dropping fast. House's: rounder, longer.
+        case kick, houseKick
+        case snare, clap
+        /// Closed and open.
+        case hat, openHat
+        case crash
     }
 
     /// Which of the document's switches and levels it follows (``MotionSound``).

@@ -60,6 +60,59 @@ nonisolated enum DesignCheck {
         }
     }
 
+    /// A camera at least this close is a macro on a control, where the frame crops the rest of the box, as Lovable's did.
+    static let macroMagnification = 2.0
+
+    /// How far past the frame's edge text may reach unnoticed, as a share of the frame.
+    static let cutTolerance = 0.01
+
+    /// The scenes of `plan` whose text runs off the frame in their middle: the first Orca films cut a terminal's lines
+    /// at both sides, a row of agents at its ends and a dialog at its top. A voice line runs off on purpose, and a macro
+    /// crops what's round its control.
+    static func cutText(in plan: MotionPlan, scenes: [String]) -> [String] {
+        let frame = CGRect(origin: .zero, size: plan.canvas)
+            .insetBy(dx: -plan.canvas.width * cutTolerance, dy: -plan.canvas.height * cutTolerance)
+        return zip(plan.scenes, scenes).compactMap { scene, id in
+            let time = scene.duration / 2
+            guard plan.camera(of: scene, at: time).magnification < macroMagnification else { return nil }
+            let isCut = plan.placements(of: scene, at: time).contains { placement in
+                let layer = scene.layers[placement.layer]
+                guard !layer.parts.isEmpty, layer.reveal?.style != .voice, placement.opacity >= 0.5 else { return false }
+                return placement.corners.contains { !frame.contains($0) }
+            }
+            return isCut ? "\(id): text runs off the frame; show the whole thing, or put the camera on one control at 2× or closer." : nil
+        }
+    }
+
+    /// The scenes of `plan` with one text drawn over another as they end, everything arrived: an Orca film left a diff's
+    /// five line numbers at one place, mid-card. A text counts as over another when its middle is inside it.
+    static func overlappingText(in plan: MotionPlan, scenes: [String]) -> [String] {
+        zip(plan.scenes, scenes).compactMap { scene, id in
+            let texts = plan.placements(of: scene, at: scene.duration * settled).filter { placement in
+                !scene.layers[placement.layer].parts.isEmpty && placement.opacity >= 0.5
+            }.map(\.corners)
+            let middles = texts.map { corners in
+                CGPoint(x: corners.map(\.x).reduce(0, +) / Double(corners.count), y: corners.map(\.y).reduce(0, +) / Double(corners.count))
+            }
+            let overlaps = texts.indices.contains { index in
+                middles.indices.contains { other in other != index && contains(texts[index], middles[other]) }
+            }
+            return overlaps ? "\(id): two texts are drawn over each other; give each its own place." : nil
+        }
+    }
+
+    /// How far into a scene its texts are checked against each other: they've arrived, and nothing has left yet.
+    static let settled = 0.9
+
+    /// Whether a convex quad holds `point`: on the same side of all its edges.
+    private static func contains(_ corners: [CGPoint], _ point: CGPoint) -> Bool {
+        let sides = corners.indices.map { index in
+            let (start, end) = (corners[index], corners[(index + 1) % corners.count])
+            return (end.x - start.x) * (point.y - start.y) - (end.y - start.y) * (point.x - start.x)
+        }
+        return sides.allSatisfy { $0 >= 0 } || sides.allSatisfy { $0 <= 0 }
+    }
+
     /// A quad's area by the shoelace formula.
     private static func area(of corners: [CGPoint]) -> Double {
         let twice = corners.indices.reduce(0.0) { sum, index in

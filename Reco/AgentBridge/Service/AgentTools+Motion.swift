@@ -76,6 +76,8 @@ extension AgentTools {
             let summary = MotionSummary(document, bundle: bundle, sizes: UILiftCache.sizes(of: document, in: bundle))
             let findings = DesignCheck.findings(in: frames, at: moments, accent: document.style.accent)
                 + DesignCheck.bareOpenings(in: plan, scenes: document.scenes.map(\.id))
+                + DesignCheck.cutText(in: plan, scenes: document.scenes.map(\.id))
+                + DesignCheck.overlappingText(in: plan, scenes: document.scenes.map(\.id))
             var status = MotionToolStatus(
                 status: .done, frames: shown.map { MotionToolStatus.Frame(scene: $0.scene, time: $0.time) }, findings: findings, lint: summary.findings
             )

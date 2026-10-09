@@ -18,6 +18,9 @@ nonisolated struct MotionMove: Equatable, Sendable {
         case blurWipe, lineMask, wordByWord, type, roll
         // Text only, motion design (spec 0014): letters springing in; typed behind a caret in the accent
         case letters, kinetic
+        // Text only, story films (spec 0015): what someone says typed big in the brand's gradient, following its caret; a
+        // chat reply's words arriving in it
+        case voice, reply
         // UI and any layer
         case rise, slideIn, tilt, focus, detach, stateChange
         // Motion design, any layer: a pop in, a press, a pointer clicking it, particles out of it, rings out of it,
@@ -25,6 +28,11 @@ nonisolated struct MotionMove: Equatable, Sendable {
         case pop, press, click, burst, ripple, scroll, morph, spin
         // Motion design, a rectangle: out past the frame's corners
         case flood
+        // Story films (spec 0015), any layer: the brand's gradient running through it, sweeping across it (a group's
+        // layers too); there from its start, gone from its start
+        case shimmer, wash, show, hide
+        // Groups: their layers flying out from its middle to their places
+        case scatter
         // Groups: their layers one after another
         case cascade
         // Cameras
@@ -34,8 +42,11 @@ nonisolated struct MotionMove: Equatable, Sendable {
             [.hold, .push, .pan, .pullBack, .drift, .whip].contains(self)
         }
 
+        /// Story films' moves on any layer (``MoveExpansion/storyTracks(of:start:duration:in:)``).
+        static let storyKinds: Set<Kind> = [.shimmer, .wash, .show, .hide, .scatter]
+
         var needsText: Bool {
-            [.blurWipe, .lineMask, .wordByWord, .type, .roll, .letters, .kinetic].contains(self)
+            [.blurWipe, .lineMask, .wordByWord, .type, .roll, .letters, .kinetic, .voice, .reply].contains(self)
         }
     }
 
@@ -87,7 +98,8 @@ nonisolated struct MotionMove: Equatable, Sendable {
 nonisolated extension MotionMove {
 
     private var hasValidNumbers: Bool {
-        let isNegative = [start, duration, intensity, radius, stroke].contains { $0.map { !$0.isFinite || $0 < 0 } ?? false }
+        // A spin's intensity may be negative: it turns the other way, as a bento's tiles straighten from either side
+        let isNegative = [start, duration, kind == .spin ? intensity.map(abs) : intensity, radius, stroke].contains { $0.map { !$0.isFinite || $0 < 0 } ?? false }
         let isEmpty = size.map { !($0.width > 0 && $0.height > 0 && $0.width.isFinite && $0.height.isFinite) } ?? false
         return !isNegative && !isEmpty && duration != 0 && intensity != 0
     }
@@ -103,6 +115,7 @@ nonisolated extension MotionMove {
         switch kind {
         case let kind where kind.needsText && !isText: return "\(kind.rawValue) needs a text layer."
         case .cascade where !isGroup: return "cascade needs a group: its layers enter one after another."
+        case .scatter where !isGroup && target == nil: return "scatter needs a group: its layers fly out from its middle."
         case .morph, .flood: return shapeProblem(on: content)
         default: return missingField
         }

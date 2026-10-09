@@ -75,6 +75,7 @@ nonisolated struct MotionEdit: Codable, Equatable, Sendable {
         var text: RGBAColor?
         var dim: RGBAColor?
         var accent: RGBAColor?
+        var gradient: [RGBAColor]?
         var face: TextContent.Face?
         var alignment: TextContent.Alignment?
     }
@@ -84,6 +85,7 @@ nonisolated struct MotionEdit: Codable, Equatable, Sendable {
         var effects: Bool?
         var scoreLevel: Double?
         var effectsLevel: Double?
+        var style: MotionSound.Style?
     }
 
     /// The undo step's name, as the Edit menu shows it.
@@ -152,6 +154,7 @@ nonisolated extension MotionEdit {
             document.style.text = change.text ?? document.style.text
             document.style.dim = change.dim ?? document.style.dim
             document.style.accent = change.accent ?? document.style.accent
+            document.style.gradient = change.gradient ?? document.style.gradient
             document.style.face = change.face ?? document.style.face
             document.style.alignment = change.alignment ?? document.style.alignment
         default:
@@ -160,6 +163,7 @@ nonisolated extension MotionEdit {
             document.sound.effects = change.effects ?? document.sound.effects
             document.sound.scoreLevel = change.scoreLevel ?? document.sound.scoreLevel
             document.sound.effectsLevel = change.effectsLevel ?? document.sound.effectsLevel
+            document.sound.style = change.style ?? document.sound.style
         }
     }
 

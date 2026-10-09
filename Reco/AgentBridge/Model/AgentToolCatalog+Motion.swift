@@ -17,18 +17,23 @@ nonisolated extension AgentToolCatalog {
         capture_ui and preview_motion.
 
         Video: canvas {size [1920,1080], frameRate 60, background "#rrggbb", field, fieldStrength, pacing}, style {text, dim, accent: \
-        "#rrggbb"; face sans|serif|mono; alignment leading|center} from inspect_page's brand, assets, scenes. Pacing \
+        "#rrggbb"; gradient ["#rrggbb", 2–5 colours: the brand's gradient, cool end first]; face sans|serif|mono; alignment \
+        leading|center} from inspect_page's brand, assets, scenes. Pacing \
         driftAndCut: 3–5 s shots, the camera drifting at constant speed, hard cuts (Linear). beats: 1–2 s beats, eased \
         camera moves (Raycast). Field, what scenes are drawn over, one look a film: plain (the background colour, the default: \
         the product's UI crisp on its own ground, as Linear's films); satin (black satin out of focus, lit afresh for each \
         scene, a slab of matte glass across a wide one's corner, monochrome: dark UI in macro, as Raycast's); the light \
         look's grainy light in the accent's hue: ember (two corners), sunlit (a wave from below), bloom (a blob in the \
         middle), orb (a lit sphere), ripple (rings from the middle); the dither look's ordered dots in the accent: matrix \
-        (a lit sphere), warp (liquid streaks), swirl (arms turning), tide (a wave from below); halo (a ring of smoke). Light, \
-        dither and halo go under a macro's glass, never under type.
+        (a lit sphere), warp (liquid streaks), swirl (arms turning), tide (a wave from below); halo (a ring of smoke); \
+        aurora (black with soft lights in the brand's gradient from a corner or two, in a new place every scene, the last \
+        ringing a dark middle and going out before the end: Lovable's; under type and rebuilt UI alike). Light, dither and \
+        halo go under a macro's glass, or under type toned down (fieldStrength 0.45).
 
         Asset: {id, url, selector, viewport [w,h] (default [1440,900]), hide [selectors], glass}: an element of a real page, \
         lifted alone with its rounded corners: a product screenshot, an app mockup, a card, a logo; never a whole section. \
+        A url to an image (.svg, .png, .jpg, .webp) is lifted with selector img: a brand's mark from \
+        https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/<slug>.svg with bare true, sharp at any size. \
         With steps (record_page's hover, click, type, scroll; selectors on that page) and duration it is live: a take of the \
         element playing from its scene's start. glass true (stills): lifted without its own fill, border and shadow, on a \
         panel of dark glass with a rim of light, lit as its shot is: a control in macro over satin. bare true (stills): its \
@@ -64,7 +69,8 @@ nonisolated extension AgentToolCatalog {
         cutOnMotion (carries the camera's speed on), zoomThrough, blurCut, push, fade (rare); in a look's language, over \
         the whole frame: glow (light: a front of grainy light out of the next scene's field's shape, 0.9 s), dither \
         (dither: the frame turned to the accent's dots from its edges in, then into the next scene, 0.8 s), ring (a ring \
-        of smoke opening from the middle, the next scene inside it, 1 s: into a closing).
+        of smoke opening from the middle, the next scene inside it, 1 s: into a closing). Glow or dither on the first scene, \
+        in its look: the ground swells in from black and the scene arrives in the seam by 1.4 s.
         Moves {move, start, duration, intensity, direction, words, region, to}: text fadeUp, blurIn, blurWipe (letters sharpen \
         left to right), lineMask (lines rise out of a mask), wordByWord (words fade up one after another), type, roll (words: \
         the last word replaced in turn), exit; any layer rise, tilt, focus (region), detach, stateChange; a group cascade; \
@@ -79,15 +85,28 @@ nonisolated extension AgentToolCatalog {
         {color, stroke for soft bands inside a rectangle}; \
         letters and kinetic (text: springing in; typed behind an accent caret); scroll {to} (with cascade, rows build as \
         they come into view).
+        Story films (the reco-story-film skill has recipes): glyph kinds chevron, mic, terminal, branch too; voice (text: \
+        what someone says, typed big at 13 characters a second, the newest words in style.gradient behind a thin caret, \
+        centred as it grows and then following its caret at 70 % of the width, with its group if it has one); reply (text: \
+        words arriving 0.15 s apart, each in the gradient, then white); shimmer (the gradient running through a layer's \
+        pixels from start for duration, the scene's rest by default); wash (the gradient sweeping across a layer or a \
+        group's layers, 1.2 s: a prompt sent); scatter (a group: its layers thrown out of a stack in its middle to their \
+        places); show and hide (there from, gone from, start: contents swapping on a beat). A camera {position [x, y, z]} \
+        starts a scene close: z = 1728 × (1 − 1/zoom) at 1080p (3.5× is 1234). A click within 0.6 s of its scene's start \
+        has the pointer there from the cut; in a close scene the pointer is as large as the camera shows it.
 
-        Sound: every video gets a score and quiet effects made from its own timing: a chord a shot, a hit as the first UI \
-        cuts in, keys as text is typed, a whoosh on a whip, Raycast's closing; mastered to -16 LUFS. Write nothing about \
-        sound unless asked: set_sound {sound: {score, effects, scoreLevel, effectsLevel}} turns either off or moves its \
-        level (dB, -24 to 6), e.g. "no typing sounds" effects false, "quieter music" scoreLevel -6.
+        Sound: every video gets a score and quiet effects made from its own timing. sound.style picks the score: ambient \
+        (the default: a chord a shot, a hit as the first UI cuts in, Raycast's closing), groove (170 BPM drum and bass, \
+        Lovable's: an intro without drums, a drop at the first cut two bars in, a break under a scene of big type alone, \
+        drums out under the end words) or house (125 BPM, the Spotify Jam's, from the first frame). A beat fits its tempo \
+        to the cuts: put cuts on beats (groove 0.353 s, house 0.48 s). Write nothing else about sound unless asked: \
+        set_sound {sound: {style, score, effects, scoreLevel, effectsLevel}} picks the style, turns either part off or \
+        moves its level (dB, -24 to 6), e.g. "no typing sounds" effects false, "quieter music" scoreLevel -6.
         Operations: set_canvas {canvas}; set_style {style}; set_sound {sound}; set_asset {asset} (adds, or replaces the same id); add_scene \
         {scene, index}; set_scene {id, duration, seam, shot, field} (shot replaces the shot); set_layer {id, layer} (a layer of the \
-        scene's own: {id, content: {"text": {text, size, face, weight, color}} or {"ui": {asset, width, typingStart, presses \
-        [{key down|up, time}]: the selection moving through the results, the camera following}}, transform {position \
+        scene's own: {id, content: {"text": {text, size, face, weight, color}} or {"ui": {asset, width, tint, typingStart, \
+        presses [{key down|up, time}]: the selection moving through the results, the camera following}} (tint: the lift in \
+        that one colour, a black mark made white), transform {position \
         [x,y,z]}, moves}); set_moves {id, target, moves} (target a layer id from the reply, or camera: replaces \
         all its moves, a shot's layer keeping its place; copy the moves you keep from the reply); move_scene {id, index}; \
         remove {id, target} (a scene, an asset, or a scene's layer; a shot's layer goes back to the shot's moves). Times are \
@@ -106,7 +125,7 @@ nonisolated extension AgentToolCatalog {
         "canvas":{"type":"object"},"style":{"type":"object"},"sound":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
         "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade","glow","dither","ring"]},
         "shot":{"type":"object","description":"{shot: macro|hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard|closing, text, detail, ui, items, region, view}"},
-        "field":{"type":"string","enum":["satin","plain","ember","sunlit","bloom","orb","ripple","matrix","warp","swirl","tide","halo"]},
+        "field":{"type":"string","enum":["satin","plain","ember","sunlit","bloom","orb","ripple","matrix","warp","swirl","tide","halo","aurora"]},
         "moves":{"type":"array","items":{"type":"object"}}},
         "required":["op"],"additionalProperties":false}}},
         "required":["operations"],"additionalProperties":false}

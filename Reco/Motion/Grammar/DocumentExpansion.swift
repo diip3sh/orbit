@@ -95,6 +95,11 @@ nonisolated enum DocumentExpansion {
             coloured.color = expansion.style.accent ?? expansion.style.text
             return coloured
         }
+        // The group keeps its scatter, which moves nothing of its own, for the sound of the throw
+        if let scatter = layer.moves.first(where: { $0.kind == .scatter }), case .group(let children) = layer.content,
+           !children.contains(where: { $0.moves.contains { $0.kind == .scatter } }) {
+            layer.content = .group(scattered(children, by: scatter))
+        }
         if let cascade = layer.moves.first(where: { $0.kind == .cascade }), case .group(let rows) = layer.content {
             layer.moves.removeAll { $0.kind == .cascade }
             layer.content = .group(cascaded(rows, by: cascade, in: layer, expansion: expansion))
@@ -133,6 +138,20 @@ nonisolated enum DocumentExpansion {
             rise.intensity = cascade.intensity
             row.moves.insert(rise, at: 0)
             return row
+        }
+    }
+
+    /// Each layer of a scattered group thrown out from its middle in turn (``MoveExpansion/scatterStagger`` apart), turning
+    /// one way then the other, a little more every third.
+    private static func scattered(_ children: [MotionLayer], by scatter: MotionMove) -> [MotionLayer] {
+        let start = scatter.start ?? MoveExpansion.entranceStart
+        return children.enumerated().map { index, child in
+            var child = child
+            var flight = MotionMove(.scatter, start: start + Double(index) * MoveExpansion.scatterStagger, duration: scatter.duration)
+            flight.target = .zero
+            flight.intensity = (index.isMultiple(of: 2) ? 1 : -1) * (0.7 + 0.15 * Double(index % 3)) * (scatter.intensity ?? 1)
+            child.moves.insert(flight, at: 0)
+            return child
         }
     }
 

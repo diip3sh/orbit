@@ -11,8 +11,12 @@ nonisolated extension MotionFrameRenderer {
     /// The pointers clicking `scene`'s layers at `time`, over them (spec 0014).
     static func pointers(of scene: MotionPlan.Scene, at time: Double, plan: MotionPlan) -> CIImage {
         guard let pointer = plan.pointer else { return .empty() }
+        // As large as the camera shows the canvas: in a macro the hand is as close as the button it presses
+        let magnification = plan.camera(of: scene, at: time).magnification
         return clickTargets(of: scene, at: time, plan: plan).reduce(CIImage.empty()) { image, target in
-            target.clicks.compactMap { pointer.image(of: $0, on: target.corners, at: time, canvas: plan.canvas, outputScale: plan.outputScale) }
+            target.clicks.compactMap {
+                pointer.image(of: $0, on: target.corners, at: time, canvas: plan.canvas, outputScale: plan.outputScale, magnification: magnification)
+            }
                 .reduce(image) { $1.composited(over: $0) }
         }
     }

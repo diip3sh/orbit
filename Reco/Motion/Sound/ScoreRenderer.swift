@@ -26,13 +26,19 @@ nonisolated enum ScoreRenderer {
         if let air = sheet.air {
             mix.place(.stereo(SoundVoices.air(air, seed: 0xA112)), at: air.start, level: air.level, send: 0)
         }
+        var patches: [SoundVoices.Patch: SoundVoices.Sound] = [:]
         for cue in sheet.cues {
-            mix.place(SoundVoices.sound(of: cue), at: cue.start, level: cue.level, pan: cue.pan, send: Float(cue.send))
+            let patch = SoundVoices.Patch(cue)
+            let sound = patch.flatMap { patches[$0] } ?? SoundVoices.sound(of: cue)
+            if let patch {
+                patches[patch] = sound
+            }
+            mix.place(sound, at: cue.start, level: cue.level, pan: cue.pan, send: Float(cue.send))
         }
         let wet = SoundRoom.wet(mix.send, stop: sheet.roomStop.map(SoundSignal.count))
         let room = StereoSound(left: vDSP.add(multiplication: (wet.left, SoundRoom.level), mix.dry.left),
                                right: vDSP.add(multiplication: (wet.right, SoundRoom.level), mix.dry.right))
-        return SoundFinish.finished(room)
+        return sheet.finish.map { SoundFinish.finished(room, to: $0) } ?? SoundFinish.finished(room)
     }
 
     /// The dry sound and what's sent to the room, built up cue by cue.

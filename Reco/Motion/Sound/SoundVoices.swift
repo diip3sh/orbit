@@ -17,7 +17,7 @@ nonisolated enum SoundVoices {
     }
 
     static func sound(of cue: SoundCue) -> Sound {
-        var random = SeededRandom(seed: cue.seed)
+        var random = SeededRandom(seed: Patch(cue)?.seed ?? cue.seed)
         let pitch = SoundSignal.frequency(ofNote:)
         switch cue.voice {
         case .glass(let note, let length, let brightness): return .mono(glass(pitch(note), length: length, brightness: brightness, random: &random))
@@ -28,13 +28,37 @@ nonisolated enum SoundVoices {
         case .swish(let length): return .stereo(swish(length: length, random: &random))
         case .whoosh: return .stereo(whoosh(random: &random))
         case .riser(let length, let low, let high, let power): return .stereo(riser(length: length, low: low, high: high, power: power, random: &random))
+        case .drum, .sub, .bass, .stab, .keys, .vox: return beat(cue.voice, random: &random)
+        }
+    }
+
+    /// A beat score's sound as a sampler holds it (spec 0015): the same note or drum the same every time it's played,
+    /// a drum in one of ``drumTakes`` takes, so a render makes each once. Making every hit afresh took 0.9 s of a 45 s
+    /// house film's 1.4 in Debug.
+    nonisolated struct Patch: Hashable, Sendable {
+        let voice: SoundCue.Voice
+        let take: UInt64
+
+        static let drumTakes: UInt64 = 4
+
+        /// `cue`'s patch; `nil` for the score's and effects' own sounds, each drawn afresh from its seed.
+        init?(_ cue: SoundCue) {
+            switch cue.voice {
+            case .drum: (voice, take) = (cue.voice, cue.seed % Self.drumTakes)
+            case .sub, .bass, .stab, .keys, .vox: (voice, take) = (cue.voice, 0)
+            default: return nil
+            }
+        }
+
+        var seed: UInt64 {
+            0x5A3D_1E00 &+ take
         }
     }
 
     // MARK: - Tones
 
     /// An overtone: its frequency's ratio to the note's, its amplitude, and its decay's time constant.
-    private struct Partial {
+    struct Partial {
         let ratio: Double
         let amplitude: Double
         let decay: Double
@@ -45,7 +69,7 @@ nonisolated enum SoundVoices {
     }
 
     /// Partials with random phases, each decaying on its own time constant.
-    private static func partials(_ frequency: Double, _ partials: [Partial], times: [Double], random: inout SeededRandom) -> [Float] {
+    static func partials(_ frequency: Double, _ partials: [Partial], times: [Double], random: inout SeededRandom) -> [Float] {
         partials.reduce(into: [Float](repeating: 0, count: times.count)) { sum, partial in
             let tone = SoundSignal.sine(frequency * partial.ratio, count: times.count, phase: random.uniform(0...(2 * .pi)))
             sum = vDSP.add(sum, vDSP.multiply(Float(partial.amplitude), vDSP.multiply(tone, SoundSignal.decay(times, partial.decay))))
@@ -119,7 +143,7 @@ nonisolated enum SoundVoices {
     // MARK: - Air
 
     /// Two channels of noise through `section`.
-    private static func stereoNoise(_ count: Int, _ section: SoundSignal.Section, random: inout SeededRandom) -> StereoSound {
+    static func stereoNoise(_ count: Int, _ section: SoundSignal.Section, random: inout SeededRandom) -> StereoSound {
         StereoSound(left: SoundSignal.filtered(SoundSignal.noise(count, seed: random.next()), section),
                     right: SoundSignal.filtered(SoundSignal.noise(count, seed: random.next()), section))
     }
@@ -171,7 +195,7 @@ nonisolated enum SoundVoices {
     }
 
     /// `sound` scaled so its largest sample on either side is 1.
-    private static func finished(_ sound: StereoSound) -> StereoSound {
+    static func finished(_ sound: StereoSound) -> StereoSound {
         let peak = sound.peak
         return peak > 0 ? sound.scaled(1 / peak) : sound
     }

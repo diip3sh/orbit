@@ -99,12 +99,13 @@ What makes it good, and what yours must have:
 
 ## Sound
 
-The score and effects are made from the film's own timing:
+Give the document `"sound": {"style": "house"}`: a 125 BPM four-on-the-floor score like the reference's, fitted to your
+cuts. Put your cuts on its 0.48 s beat. Effects come from the film's own timing:
 
 - a blip on each pop, a key on each press and click, a riser and hit on a flood, glass on a burst;
 - keys under kinetic type, a whoosh on a fast scroll.
 
-Write nothing about sound unless the user asks.
+Write nothing else about sound unless the user asks.
 
 ## From the chat
 

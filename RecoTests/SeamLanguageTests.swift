@@ -118,6 +118,29 @@ struct SeamLanguageTests {
         #expect(content.typingStart == arrives + ShotLayout.macroTypingDelay)
     }
 
+    /// Any other opening arrives in the seam named on it, as its ground has swelled in: the ground alone before then.
+    @Test func anOpeningArrivesInTheSeamNamedOnIt() async throws {
+        let json = #"""
+            {"version": 1, "canvas": {"field": "warp", "fieldStrength": 0.45}, "style": {"accent": "#ffffff"},
+             "scenes": [{"id": "box", "duration": 3, "seam": "dither", "layers": [
+                {"id": "card", "content": {"shape": {"size": [1920, 1080], "color": "#ff0000"}}, "transform": {"position": [960, 540, 0]}}]}]}
+            """#
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(json.utf8))
+        let plan = await MotionPlan.build(document, bundle: URL.temporaryDirectory, shorterSide: 135)
+        let red = { (time: Double) in
+            let bytes = try Self.bytes(of: MotionFrameRenderer.image(at: time, plan: plan))
+            return stride(from: 0, to: bytes.count, by: 4).count { bytes[$0] > 200 && bytes[$0 + 1] < 60 }
+        }
+
+        #expect(plan.scenes[0].arrival?.seam == .dither && plan.scenes[0].arrivesAt == MotionFrameRenderer.groundSwell)
+        #expect(try red(0.3) == 0)
+        #expect(try red(MotionFrameRenderer.groundSwell + SeamExpansion.ditherDuration + 0.1) == 240 * 135)
+
+        var cut = document
+        cut.scenes[0].seam = .cut
+        #expect(await MotionPlan.build(cut, bundle: URL.temporaryDirectory).scenes[0].arrival == nil)
+    }
+
     /// Paper's looks compete with type over them, not with a macro's glass.
     @Test func aBusyFieldBelongsUnderGlass() throws {
         let json = #"""

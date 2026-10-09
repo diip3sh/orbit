@@ -61,10 +61,23 @@ extension MotionPlan {
         case .image(let image):
             return picture(at: bundle.appending(path: image.path), pixels: CGSize(width: size.width * scale, height: size.height * scale))
         case .lifted(let lifted):
-            return lifts[lifted.asset].flatMap { picture(at: $0.url, pixels: CGSize(width: size.width * scale, height: size.height * scale)) }
+            let lift = lifts[lifted.asset].flatMap { picture(at: $0.url, pixels: CGSize(width: size.width * scale, height: size.height * scale)) }
+            return lifted.tint.flatMap { tint in lift.map { tinted($0, tint) } } ?? lift
         case .group:
             return nil
         }
+    }
+
+    /// `image` in `color` alone, through its alpha (a ``UIContent/tint``). The matrix works on unpremultiplied colour, so
+    /// its bias is the colour itself.
+    nonisolated static func tinted(_ image: CIImage, _ color: RGBAColor) -> CIImage {
+        image.applyingFilter("CIColorMatrix", parameters: [
+            "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: color.alpha),
+            "inputBiasVector": CIVector(x: color.red, y: color.green, z: color.blue, w: 0)
+        ])
     }
 
     /// A rounded rectangle `size` canvas pixels large at `scale` pixels per canvas pixel.

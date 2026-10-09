@@ -312,7 +312,8 @@ struct MotionGrammarTests {
                 { "id": "c", "content": { "text": { "text": "Typed much too quickly here" } }, "transform": { "position": [960, 300, 0] },
                   "moves": [{ "move": "type", "start": 0.05, "duration": 0.5 }] }
               ]
-            }
+            },
+            { "id": "end", "duration": 3.6, "shot": { "shot": "endCard", "text": "Made with Reco", "detail": "reco.app" } }
           ]
         }
         """#.utf8))
@@ -324,7 +325,8 @@ struct MotionGrammarTests {
     }
 
     @Test func readingTimeGrowsWithWords() {
-        #expect(ReadingTime.hold(for: "Ship") == ReadingTime.shortestHold)
+        #expect(ReadingTime.hold(for: "Ship") == ReadingTime.oneWordHold)
+        #expect(ReadingTime.hold(for: "Ship it") == ReadingTime.shortestHold)
         #expect(abs(ReadingTime.hold(for: "one two three four five six seven eight nine ten") - 10 / 3.1) < 1e-9)
     }
 

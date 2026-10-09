@@ -1258,6 +1258,93 @@ Key facts:
   rows `div:nth-of-type(n) > [data-encore-id=listRow]` at a phone viewport) matched its frames beat for beat; that document is
   the skill's example. Spotify's nav logo lifts with a grey box behind it even bare: open question.
 
+### S10 — Story films and score styles (`remotion`, spec 0015)
+
+A third kind of launch film, after Lovable's chat launch (`~/Movies/Reco/references/lovable-launch.mp4`). One person's
+request is told through the product's own prompt: their voice typed big in the brand's gradient, the product's controls
+clicked in macro, and its answers arriving as things over the `aurora` ground, cut to a 170 BPM beat. Agents get it as a
+third skill, `reco-story-film`. The score has styles: `ambient` (spec 0013's pads, the default), `groove` (Lovable's
+drum and bass) and `house` (the Spotify Jam's). The motion-design skill writes `house`.
+
+| File | Role |
+|---|---|
+| `Motion/Model/MotionField.swift`, `Render/AuroraSetup.swift`, `FieldKernels.metal.txt` (`auroraField`) | `aurora`: soft lights summed and read through a ramp from black via navy into the brand's gradient; a setup per scene, the last ringing a dark middle |
+| `Motion/Model/StyleTokens.swift` | `gradient` (2–5 colours, cool end first) and `brandGradient` (its own, three steps from the accent, or silver) |
+| `Motion/Model/MotionMove.swift`, `Grammar/MoveExpansion+Story.swift`, `TextReveal.swift` | `voice`, `reply`, `shimmer`, `wash`, `scatter`, `show`, `hide` |
+| `Motion/Render/MotionPlan+Layers.swift`, `LayerTint.swift` | A voice line's follow track (on its group if it's in one); tints, a group's wash going to its layers |
+| `Motion/Render/MotionFrameRenderer+Story.swift` | New words in the gradient behind a thin caret, shimmers, washes, gradients from one stretched ramp |
+| `Motion/Render/MotionPointer.swift`, `ShapeGlyph.swift` | The hand scaled by the camera's magnification and carried over a cut; `chevron`, `mic`, `terminal`, `branch` glyphs |
+| `Motion/Model/MotionSound.swift`, `Sound/BeatGrid.swift`, `BeatForm.swift`, `BeatScore.swift`, `SoundRules+Beat.swift`, `SoundVoices+Beat.swift`, `SoundFinish+Beat.swift` | `sound.style`; a grid fitted to the cuts, the form from the scenes, the arrangement, the voices, the −14 LUFS finish |
+| `AgentRecording/Skills/reco-story-film*.md`, `Model/AgentSkill.swift` | The skill, its references (the film, recipes, the reference rebuilt as an example) |
+
+Key facts:
+- **The reference, measured.**
+  - Its ground is black in 55–77 % of a frame and lit in 10–25 %.
+  - Voice is typed at 12–16 characters a second; the newest words stay in the gradient for 0.8 s.
+  - A wash takes 1.2 s; reply words arrive 0.1–0.2 s apart; a scatter throws out a stack in 0.45 s.
+  - Macro shots are 3.6× with the hand as large as the pill.
+  - Its music is 170 BPM drum and bass in F♯ at −15.8 LUFS: an intro without drums, a break under the big statement,
+    drums out under the end words. The Spotify Jam's is 125 BPM house, F♯add9 ↔ A♯m7, −14.3 LUFS.
+- **The aurora.** A dark ellipse lit round its edge drew a ring round every frame; the film's light comes from one or two
+  places, so it's soft lights summed. Six setups were fitted to six of the film's frames by how much each lights. The
+  light goes out over the video's last 2 s, and the first scene's light grows in over 0.6 s.
+- **Voice.** Centred on its anchor while it grows, then the caret is held at 70 % of the width. It's drawn sharp: its
+  follow, motion-blurred, doubled its letters. The lint reads typed text as it's typed, since Lovable cut away 0.1 s
+  after the last letter.
+- **Ramps.** A 1-pixel ramp scaled 100,000 times taller had its region of interest rounded to nothing ("No need to
+  render"), so a ramp is clamped instead. Gradients cropped side by side left a hairline at each seam.
+- **Beat scores.**
+  - A score is cues, so the sheet stays the cache key; ambient sheets encode exactly as before.
+  - The tempo is fitted within ±3 % so the most cuts land within 25 ms of a beat. A cut off the grid moves a drop by up
+    to half a beat, so the skills put cuts on beats.
+  - A logo's mark (a shape up to a quarter of the canvas) counts as words, so the end words make the outro, at most
+    four bars.
+- **Sound, measured.** Both styles detect their tempo, their band levels are within 1–2 dB of the references' bodies,
+  and they finish at −14 LUFS, ≤ −1 dBTP. Nobody has listened to them yet.
+- **Speed.** The Lovable rebuild (24 s) exports at 1080p in 10–17 s; its score renders in 0.4 s (M5, Debug).
+- **Look-dev.** The look-dev is in `~/Movies/Reco/quality/story/`: `Lovable Rebuild.motion`, the skill's example.
+- **Lint under a beat.**
+  - `beats` flags a scene more than a frame off a whole number of beats; the Spotify example's scenes were moved onto
+    the 0.48 s grid.
+  - A scene's first move may land on its cut. The 0.1 s wait left the ground alone at every cut of the first Orca film.
+- **The first Orca film from the app.** The run (Claude Code, default model) took 19 min and made a 38.5 s 4K film in
+  20 scenes, every one whole beats. Its frames showed:
+  - the logo lifted without `bare` sat on a black box;
+  - a whole diff at 900 px had 10 px code;
+  - task rows spun in smeared.
+
+  The skill now says to lift the logo bare, to show dense panes close (text at least 28 px), and to cascade rows.
+- **Run again** (`Orca 2`, 19.5 min, 37.1 s at 4K, 18 scenes). Every cut opens on content, the logo is clean, and the
+  diff and terminals read. It added the 27 agent chips and a "Wants to run `pnpm migrate latest`" approval, and its
+  groove breaks under "Ready for release.". A copy is on the Desktop as `Orca ADE.mp4`.
+- **The user's verdict on it: "really bad" next to Lovable's.** Its answers were lifted panes (a terminal and a diff run off
+  both sides, 27 agent chips cut at their ends), a docs `img` blurred at 4K, a mockup lifted mid-animation (grey loading
+  bars), the box's type two thirds of Lovable's, no colour, and a ground of rings in blue to mint.
+- **A rebuild by hand** (`~/Movies/Reco/quality/story/Orca Rebuild.motion`, `Orca vs Lovable stills.png`) set the bar the
+  skill now teaches: the box at Lovable's size, the agents as a bento in their brand colours with their marks, the files
+  as a collage of coloured cards, the diff rebuilt at 34 px, end words with a glow.
+- **Marks.** An image address (`.svg`, `.png`, …) is lifted from a page of that one `img`
+  (`WebPageRenderer.imagePage`): opened as itself, an SVG is an XML document and the lift script failed. A `ui` layer's
+  `tint` draws the lift in one colour, so Simple Icons' black marks sit white on their tiles.
+- **The aurora's lights are elongated** (`elongation`, `angle`), refitted to the film's seven frames in OKLab with the
+  ramp's core: colour error 0.011–0.034 from 0.07–0.23. Round lights drew rings. The navy never climbs past the
+  gradient's first colour, or two lights meeting drew a bright line. A monochrome brand gets violet, electric blue, ice.
+- **A third run from the app** with the new skill (10 min, 30.4 s at 4K, `~/Desktop/Orca ADE v3.mp4`) made the agents'
+  bento with their marks, the diff at 34 px, five PRs as a collage and "Merge all" in macro, every answer whole.
+- `DesignCheck.cutText` names text off the frame unless the camera is 2× or closer or it's a voice line. Contrast is read
+  against the nearest fill in the text's own group (nested groups compared other tiles' shapes).
+- **The user found v3 still short**, and asked for Orca's own theme and Reco's shaders, with only Lovable's motion. The
+  skill now takes the look from the brand: the product's theme (ground, surfaces, borders, fonts, status colours) over one
+  of Reco's looks (dither, light, the aurora only for a gradient brand, satin). Its seams mark three turns: the opening,
+  the first answer and the end words, then `ring` into the logo on `halo`. A black and white brand gets `warp` at 0.45
+  and a grey-into-white gradient.
+  - A first scene that isn't a macro arrives in the seam named on it, after the ground swells in (`Scene.arrivesAt`).
+  - Under a shutter, opacity is read at the frame's own time (`placements(of:at:shown:)`): a hide/show swap drew both labels.
+  - `DesignCheck.overlappingText` names a text drawn over another.
+  - The fourth run from the app (`~/Movies/Reco/Orca 4-edited.mp4`, 10.5 min, 33.5 s at 4K) chose all of this
+    unprompted. Its flaw: a diff's line numbers were stacked at one place. The fifth (`Orca 5`, copied to
+    `~/Desktop/Orca ADE v4.mp4`, 10.5 min, 33.2 s) had none.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -1333,6 +1420,7 @@ should hold but need re-measuring.
 | S7 motion quality (spec 0012) | Motion reel picked. Q2.1 fields ported, then rejected by the user as pasted behind the old video; directions picked from launch films (Raycast, Nothing OS 5.0, 3D layers). L1a–c built (satin, coverage mattes, typing cursor rules, parallax, motion blur), but the user found the test shot "really bad" next to Raycast. L0: still frames matched to Raycast's (glass for lifted UI, hero scale, a better ground), then a 24 s Supabase docs film in that look rendered as a look-dev pass outside the engine. The user approved the film; its port into the engine has begun: phases 1 (satin, grain), 2 (glass, sharp macro) and 3 (typing, caret, results) done, matching the film at 47–64 dB; phase 4 captures UI behind a click and typing states live (Supabase's search, matching the film's lifts); phase 5 the selection, the camera following it, the whip's blur; phase 6 the `closing` shot; the whole film now made by the app from one document, matching the approved one where the site is the same. L4/Q4: the film's grammar named (`macro` views, `whip` move and seam, mockup typing) and its method shipped as the `reco-launch-film` skill; Launch Video runs on linear.app from the address make macro films on glass over satin. Looks: light and dither grounds (Paper's other shapes) and seams in their language (`glow`, `dither`, `ring`), the agent choosing the look from the brand. Next: the user's verdict on them |
 | S8 motion sound (spec 0013) | S1–S4 done: cue sheet from the plan, voices, room, finish, loudness, cache, preview and export, `set_sound`, the Sound section; the Supabase film's sheet matches the hand-made score. Next: the user's listening round (S5) |
 | S9 motion design (spec 0014) | D1–D5 done: morphs, floods, pops, clicks, bursts, ripples, letters, kinetic type, scrolls; their sounds; the `reco-motion-design` skill with references read on demand; look-dev matching the Spotify Jam reference. D6: a Spotify film made from the app (9 min, 30 s 4K, every named movement). D7: smoother after the user's review (letters, flood, bands, sharp particles, pointer, spin, chained pans, stillness lint, skill and example rebuilt). Next: the user's verdict |
+| S10 story films and score styles (spec 0015) | Reference measured (picture and music; the Spotify Jam's music too); `aurora`, the brand gradient, voice, reply, shimmer, wash, scatter, show/hide, UI glyphs, the hand in macro; `groove` and `house` scores fitted to the cuts; the `reco-story-film` skill; the reference rebuilt in the engine and checked frame by frame; `beats` lint. Orca ADE made from the app twice; the user found it "really bad". Rebuilt by hand to Lovable's bar (stills checked), and the engine (elongated aurora lights, SVG marks with `tint`, text-off-frame check) and skill (answers as coloured things, Lovable's type sizes) changed to match. A third run from the app follows the new recipes. The user found it short still: the look now comes from the product's theme over Reco's shader looks (Orca: `warp` dither, its seams, the halo), Lovable giving only the motion; the shutter swap fix, the opening's arrival, and the overlapping-text check. Next: the user's verdict, a listening round |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

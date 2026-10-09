@@ -16,21 +16,42 @@ nonisolated struct FieldPalette: Equatable, Sendable {
     /// In the order the field's shader takes them.
     var colors: [RGBAColor]
 
-    init(_ field: MotionField, accent: RGBAColor?, background: RGBAColor) {
-        guard let look = Self.look(for: field) else {
-            back = background
-            colors = []
+    /// `field`'s colours in `style`: the aurora's are its dark middle's stops into the brand's gradient
+    /// (``AuroraSetup/core``), the others' from the accent.
+    init(_ field: MotionField, style: StyleTokens, background: RGBAColor) {
+        guard field == .aurora else {
+            self.init(field, accent: style.accent, background: background)
             return
         }
-        let brand = accent.map(OKLCH.init)
-        let hasHue = (brand?.chroma ?? 0) >= Self.leastBrandChroma
-        let hue = hasHue ? brand?.hue ?? Self.neutralHue : Self.neutralHue
-        let lead = hasHue ? min(brand?.chroma ?? 0, look.leadChroma) : Self.neutralChroma
-        let color = { (stop: Stop) in
-            OKLCH(lightness: stop.lightness, chroma: lead * stop.chromaShare, hue: (hue + stop.hueOffset + 360).truncatingRemainder(dividingBy: 360)).rgba
+        let gradient = style.brandGradient
+        let first = OKLCH(gradient[0])
+        // The navy climbs to the gradient's first colour and never past it: a darker first colour made the ramp dip, and
+        // two lights meeting drew a thin bright line
+        let climb = min(first.lightness / (AuroraSetup.core.last?.lightness ?? 1), 1)
+        let core = AuroraSetup.core.map { OKLCH(lightness: $0.lightness * climb, chroma: first.chroma * $0.chromaShare, hue: first.hue).rgba }
+        self.init(back: RGBAColor(red: 0, green: 0, blue: 0, alpha: 1), colors: core + gradient)
+    }
+
+    private init(back: RGBAColor, colors: [RGBAColor]) {
+        self.back = back
+        self.colors = colors
+    }
+
+    init(_ field: MotionField, accent: RGBAColor?, background: RGBAColor) {
+        if field == .aurora {
+            self.init(field, style: StyleTokens(accent: accent), background: background)
+        } else if let look = Self.look(for: field) {
+            let brand = accent.map(OKLCH.init)
+            let hasHue = (brand?.chroma ?? 0) >= Self.leastBrandChroma
+            let hue = hasHue ? brand?.hue ?? Self.neutralHue : Self.neutralHue
+            let lead = hasHue ? min(brand?.chroma ?? 0, look.leadChroma) : Self.neutralChroma
+            let color = { (stop: Stop) in
+                OKLCH(lightness: stop.lightness, chroma: lead * stop.chromaShare, hue: (hue + stop.hueOffset + 360).truncatingRemainder(dividingBy: 360)).rgba
+            }
+            self.init(back: color(look.back), colors: look.stops.map(color))
+        } else {
+            self.init(back: background, colors: [])
         }
-        back = color(look.back)
-        colors = look.stops.map(color)
     }
 
     /// The picked palette `field` takes: Paper's other shapes take their shader's pick's, the grain's

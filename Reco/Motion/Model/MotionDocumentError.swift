@@ -17,6 +17,7 @@ nonisolated enum MotionDocumentError: LocalizedError, Equatable {
     case invalidAsset(String)
     case unknownAsset(String)
     case invalidSound
+    case invalidGradient
 
     /// Asset id and what's wrong with its steps.
     case invalidSteps(String, String)
@@ -40,6 +41,7 @@ nonisolated enum MotionDocumentError: LocalizedError, Equatable {
         case .invalidAsset(let id): "Asset \"\(id)\" needs a web address (http or https) and a viewport of at least 16 pixels each way."
         case .unknownAsset(let id): "Layer \"\(id)\" shows an asset the document doesn't list."
         case .invalidSound: "The sound's levels must be −24 to 6 dB."
+        case .invalidGradient: "The style's gradient needs 2 to 5 colours."
         case .invalidSteps(let id, let reason): "Asset \"\(id)\": \(reason)"
         case .invalidMove(let id, let reason): "A move on \"\(id)\": \(reason)"
         case .invalidShot(let id, let reason): "Scene \"\(id)\"'s shot: \(reason)"

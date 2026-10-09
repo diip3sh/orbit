@@ -8,7 +8,8 @@ import ImageIO
 
 /// The pointer a click shows (spec 0014): the system's arrow rising in from below, its pointing hand once it's over
 /// what it clicks, pressing with it, then fading. Drawn over a scene's layers at its target's middle, wherever the
-/// target has moved. Measured on the Spotify Jam film: the arrow comes up from below the frame, fast and slowing, about
+/// target has moved, as large as the camera shows the canvas (Lovable's macro shots: the hand as close as the pill it
+/// presses). Measured on the Spotify Jam film: the arrow comes up from below the frame, fast and slowing, about
 /// 0.3 s before it lands (0.76, 0.65 and 0.6 of the frame's height 0.2, 0.13 and 0.07 s before), blurred by its speed,
 /// and turns to the hand on arrival; the hand is 8 % of the frame's height (46 of 576 px).
 nonisolated struct MotionPointer: Sendable {
@@ -25,6 +26,9 @@ nonisolated struct MotionPointer: Sendable {
     static let landing = 0.15
 
     static let fade = 0.25
+
+    /// A press this early in its scene has the pointer there from the cut.
+    static let carriedOver = 0.6
 
     /// The hand's drawn height as a share of the canvas's; the arrow at the same points to pixels.
     static let height = 0.08
@@ -59,7 +63,8 @@ nonisolated struct MotionPointer: Sendable {
     /// Where the pointer of `click` on a layer whose quad is `corners` (canvas points, top-left origin) has its tip at `time`
     /// in the scene, and how opaque it is; `nil` while it isn't on screen.
     static func tip(of click: MotionPlan.Click, on corners: [CGPoint], at time: Double, canvas: CGSize) -> (point: CGPoint, opacity: Double)? {
-        let lands = click.press - landing
+        // A press early in its shot was carried over the cut: Lovable's hand is on the pill as its macro cuts in
+        let lands = click.press < carriedOver ? -1 : click.press - landing
         let appears = lands - travel
         guard corners.count == 4, time >= appears, time <= click.leaves + fade else { return nil }
         let middle = CGPoint(x: corners.map(\.x).reduce(0, +) / 4, y: corners.map(\.y).reduce(0, +) / 4)
@@ -78,13 +83,13 @@ nonisolated struct MotionPointer: Sendable {
 
     /// The pointer of `click` on a layer whose quad is `corners` (canvas points, top-left origin) at `time` in the
     /// scene, in output pixels from the bottom-left; `nil` while it isn't on screen.
-    func image(of click: MotionPlan.Click, on corners: [CGPoint], at time: Double, canvas: CGSize, outputScale: Double) -> CIImage? {
+    func image(of click: MotionPlan.Click, on corners: [CGPoint], at time: Double, canvas: CGSize, outputScale: Double, magnification: Double = 1) -> CIImage? {
         guard let (position, opacity) = Self.tip(of: click, on: corners, at: time, canvas: canvas) else { return nil }
-        let sprite = time < click.press - Self.landing - 0.05 ? arrow : hand
+        let sprite = time < click.press - Self.landing - 0.05 && click.press >= Self.carriedOver ? arrow : hand
         let pressing = time - (click.press - 0.04)
         let press = pressing > 0 && pressing < 0.2 ? 1 - Self.pressDepth * sin(.pi * pressing / 0.2) : 1
         // Both sprites at the hand's points to pixels, so the arrow is the hand's size as on screen
-        let pixels = Self.height * canvas.height / handHeight * sprite.pointsPerPixel * outputScale * press
+        let pixels = Self.height * canvas.height / handHeight * sprite.pointsPerPixel * outputScale * press * magnification
         let placement = CGAffineTransform(translationX: -sprite.hotspot.x, y: -sprite.hotspot.y)
             .concatenating(CGAffineTransform(scaleX: pixels, y: pixels))
             .concatenating(CGAffineTransform(translationX: position.x * outputScale, y: (canvas.height - position.y) * outputScale))

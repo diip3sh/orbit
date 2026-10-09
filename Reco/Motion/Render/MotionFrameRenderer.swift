@@ -88,11 +88,11 @@ nonisolated enum MotionFrameRenderer {
                 frame = previous.fading(to: 1 - progress).composited(over: frame)
             }
         }
-        // An opening's control coming in over its ground alone
-        if let arrival = plan.scenes[index].arrival, case let since = sceneTime - ShotLayout.macroBreath, since >= 0, since < arrival.duration {
-            frame = FieldRenderer.seam(
-                arrival, between: (ground(index, at: sceneTime, plan: plan).composited(over: background), frame.composited(over: background)),
-                progress: arrival.progress(at: since), at: time, size: bounds.size
+        // An opening's control coming in over its ground alone, which is all there is before it
+        if let arrival = plan.scenes[index].arrival, case let since = sceneTime - plan.scenes[index].arrivesAt, since < arrival.duration {
+            let ground = ground(index, at: sceneTime, plan: plan).composited(over: background)
+            frame = since < 0 ? ground : FieldRenderer.seam(
+                arrival, between: (ground, frame.composited(over: background)), progress: arrival.progress(at: since), at: time, size: bounds.size
             )
         }
         return frame.composited(over: background).cropped(to: bounds)
@@ -111,7 +111,7 @@ nonisolated enum MotionFrameRenderer {
         let scene = plan.scenes[index]
         let field = ground(index, at: time, plan: plan)
         var image = CIImage.empty()
-        var placements = plan.placements(of: scene, at: time)
+        var placements = plan.placements(of: scene, at: time, shown: sharp)
         if sharp != time, scene.layers.contains(where: \.isSharp) {
             placements = sharpened(placements, at: plan.placements(of: scene, at: sharp), of: scene)
         }
@@ -120,6 +120,9 @@ nonisolated enum MotionFrameRenderer {
             guard var content = content(of: &layer, at: time, take: frames[MotionPlan.LayerKey(scene: index, layer: placement.layer)]) else { continue }
             if let reveal = layer.reveal {
                 content = revealed(content, of: layer, by: reveal, at: time)
+            }
+            if !layer.tints.isEmpty {
+                content = shimmered(content, layer: layer, at: time, sceneDuration: scene.duration)
             }
             if let region = layer.region, case let dim = layer.value(.dim, at: time), dim > 0 {
                 if let focusedImage = layer.focusedImage {
@@ -133,6 +136,9 @@ nonisolated enum MotionFrameRenderer {
             var room = placement
             room.corners = placement.roomCorners ?? placement.corners
             var layerImage = drawn(content, layer: layer, at: room, time: time, plan: plan)
+            if layer.tints.contains(where: { $0.kind == .wash }) {
+                layerImage = washed(layerImage, layer: layer, at: time) { over in washBounds(of: over, in: scene, placements: placements, plan: plan) }
+            }
             // On glass: over its panel, clipped to it, and the panel's shadow under both
             if let panel = GlassRenderer.panel(under: layer, at: placement, lit: SatinSetup.forShot(scene.fieldShot).glass, over: field, plan: plan) {
                 let faded = { (image: CIImage) in placement.opacity < 1 ? image.fading(to: placement.opacity) : image }
@@ -146,6 +152,15 @@ nonisolated enum MotionFrameRenderer {
         let blur = scene.cameraValue(.blur, at: time) * plan.outputScale
         guard blur >= 0.3 else { return image.composited(over: field) }
         return image.clampedToExtent().applyingGaussianBlur(sigma: blur).cropped(to: bounds).composited(over: field)
+    }
+
+    /// The output pixels the layer `over` and its group's layers cover in `placements`.
+    private static func washBounds(of over: Int, in scene: MotionPlan.Scene, placements: [MotionPlan.Placement], plan: MotionPlan) -> CGRect? {
+        let points = placements.filter { scene.isLayer($0.layer, within: over) }.flatMap(\.corners)
+        guard let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),
+              let minY = points.map(\.y).min(), let maxY = points.map(\.y).max() else { return nil }
+        let scale = plan.outputScale
+        return CGRect(x: minX * scale, y: (plan.canvas.height - maxY) * scale, width: (maxX - minX) * scale, height: (maxY - minY) * scale)
     }
 
     /// A layer's own pixels at `time`: its live take's frame (`take`), its field as typed, its shape as morphed (with its
@@ -176,8 +191,10 @@ nonisolated enum MotionFrameRenderer {
             scene.field, palette: scene.palette, at: scene.start + time, size: plan.outputSize, preview: plan.isPreview,
             shot: shot(of: scene, at: time, plan: plan)
         )
-        if plan.fieldStrength < 1 {
-            field = field.fading(to: plan.fieldStrength).composited(over: CIImage(color: plan.background)).cropped(to: field.extent)
+        // The aurora's light goes out before the end, leaving the logo on black
+        let strength = plan.fieldStrength * (scene.field == .aurora ? AuroraSetup.light(at: scene.start + time, length: plan.duration) : 1)
+        if strength < 1 {
+            field = field.fading(to: strength).composited(over: CIImage(color: plan.background)).cropped(to: field.extent)
         }
         guard scene.arrival != nil, time < groundSwell else { return field }
         return field.fading(to: MotionEasing.enter.progress(max(time, 0) / groundSwell, duration: groundSwell))
@@ -198,7 +215,7 @@ nonisolated enum MotionFrameRenderer {
         return FieldRenderer.Shot(
             index: scene.fieldShot, start: scene.start,
             shift: CGVector(dx: (landed.x - middle.x) * plan.outputScale, dy: (landed.y - middle.y) * plan.outputScale),
-            zoom: zoom.isFinite && zoom > 0 ? zoom : 1
+            zoom: zoom.isFinite && zoom > 0 ? zoom : 1, isLast: scene.start == plan.scenes.last?.start
         )
     }
 

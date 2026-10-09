@@ -14,6 +14,10 @@ nonisolated struct UIContent: Codable, Equatable, Sendable {
     /// In canvas pixels; when left out, the element's CSS width, so a CSS pixel is a canvas pixel.
     var width: Double?
 
+    /// The lift drawn in this one colour through its alpha: a brand's mark (black as published) made white on a
+    /// coloured tile. Left out, its own colours.
+    var tint: RGBAColor?
+
     /// When the asset's text starts being typed, in seconds into the scene; before, its field shows
     /// empty with the caret blinking. Left out, it's never typed.
     var typingStart: Double?

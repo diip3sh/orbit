@@ -23,7 +23,19 @@ nonisolated struct TextReveal: Equatable, Sendable {
         case letter
         /// Characters appear whole behind a caret in the accent, the newest in the accent too (spec 0014).
         case kinetic
+        /// Characters appear whole behind a thin caret, the newest in the brand's gradient (spec 0015).
+        case voice
+        /// Words fade in one after another, the newest in the brand's gradient (spec 0015).
+        case reply
     }
+
+    /// Whether its newest parts are drawn in the brand's gradient, turning to the text's colour over ``tintLength``.
+    var tintsInGradient: Bool {
+        style == .voice || style == .reply
+    }
+
+    /// How long a new word stays in the gradient: Lovable's "making" turned white about 0.8 s after it was typed.
+    static let tintLength = 0.8
 
     let style: Style
     let start: Double

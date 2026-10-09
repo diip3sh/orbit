@@ -18,6 +18,9 @@ nonisolated struct ShapeContent: Equatable, Sendable {
         /// Glyphs stroked in the colour, ``ShapeContent/stroke`` wide (a tenth of the size by default). Drawn here
         /// rather than taken from SF Symbols, whose licence doesn't cover other products' films.
         case plus, check, cross, arrow, search, play, pause
+        /// UI glyphs for story films (spec 0015): a dropdown's chevron (pointing down), a microphone, a terminal's prompt, a
+        /// git branch.
+        case chevron, mic, terminal, branch
     }
 
     var kind = Kind.rectangle

@@ -21,8 +21,13 @@ extension MotionPlan {
 
     /// Each seam's camera tracks on the scenes either side of it, and its transition.
     nonisolated static func addSeams(of document: MotionDocument, to scenes: inout [Scene]) {
-        if let first = scenes.first, document.scenes.first?.shot?.kind == .macro {
-            scenes[0].arrival = SeamExpansion.arrival(on: first.field).map { language($0, into: first.field, document: document) }
+        if let first = scenes.first, let opening = document.scenes.first, let arrival = SeamExpansion.arrival(on: first.field) {
+            if opening.shot?.kind == .macro {
+                scenes[0].arrival = language(arrival, into: first.field, document: document)
+            } else if opening.seam == arrival.seam {
+                scenes[0].arrival = language(arrival, into: first.field, document: document)
+                scenes[0].arrivesAt = MotionFrameRenderer.groundSwell
+            }
         }
         for index in scenes.indices.dropFirst() {
             let (before, after) = (document.scenes[index - 1], document.scenes[index])
@@ -45,7 +50,7 @@ extension MotionPlan {
         guard let family = transition.seam.family else { return transition }
         var transition = transition
         transition.look = field.family == family ? field : MotionField.allCases.first { $0.family == family } ?? .plain
-        transition.palette = FieldPalette(transition.look, accent: document.style.accent, background: document.canvas.background)
+        transition.palette = FieldPalette(transition.look, style: document.style, background: document.canvas.background)
         return transition
     }
 

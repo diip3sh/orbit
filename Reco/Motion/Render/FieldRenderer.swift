@@ -26,6 +26,9 @@ nonisolated enum FieldRenderer {
 
         /// How many times larger the planes show than as the scene began.
         var zoom = 1.0
+
+        /// Whether it's the video's last scene: the aurora rings its middle there (``AuroraSetup/ending``).
+        var isLast = false
     }
 
     /// How much of the camera's move a field follows, as ground far behind the planes would: pinned to
@@ -83,7 +86,7 @@ nonisolated enum FieldRenderer {
     ]
 
     /// Reco's own, drawn in stages instead of as one look: satin, its grain, glass, the seams.
-    private static let ownKernels = ["satinGround", "satinFinish", "filmGrainNoise", "filmGrain", "glassPanel", "glowSeam", "ditherSeam", "ringSeam"]
+    private static let ownKernels = ["auroraField", "satinGround", "satinFinish", "filmGrainNoise", "filmGrain", "glassPanel", "glowSeam", "ditherSeam", "ringSeam"]
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "FieldRenderer")
 
@@ -135,6 +138,9 @@ nonisolated enum FieldRenderer {
         let plain = CIImage(color: ciColor(palette.back)).cropped(to: extent)
         if field == .satin {
             return satin(SatinSetup.forShot(shot.index), palette: palette, at: time - shot.start, size: size, shot: shot) ?? plain
+        }
+        if field == .aurora {
+            return aurora(AuroraSetup.forShot(shot.index, isLast: shot.isLast), palette: palette, at: time, size: size, shot: shot) ?? plain
         }
         guard let look = looks[field], let kernel = kernels[look.kernel] else { return plain }
         // Reference pixels per output pixel, and drawn pixels per output pixel. Dither stays whole:
@@ -315,5 +321,69 @@ nonisolated extension FieldRenderer {
     /// pixels, y down.
     private static func satinView(of shot: Shot, at share: Double) -> CIVector {
         CIVector(x: pow(shot.zoom, share), y: share * shot.shift.dx, z: share * shot.shift.dy, w: 0)
+    }
+}
+
+// MARK: - Aurora
+
+nonisolated extension FieldRenderer {
+
+    /// How many stops the aurora's ramp is read from: smooth at 4K, whose shorter side spans about 1.2 radii.
+    static let auroraRampPixels = 1024
+
+    /// `setup` at `time` seconds into the video: its soft lights summed and read through the ramp of `palette`'s stops
+    /// (``AuroraSetup/core`` into the brand's gradient), following the camera as ground far behind the planes.
+    private static func aurora(_ setup: AuroraSetup, palette: FieldPalette, at time: Double, size: CGSize, shot: Shot) -> CIImage? {
+        guard let kernel = kernels["auroraField"], let ramp = auroraRamp(palette) else { return nil }
+        let since = time - shot.start
+        // The video's first shot: its light comes in from nothing
+        let swell = shot.start == 0 && shot.index == 0 ? MotionEasing.enter.progress(min(since / AuroraSetup.swell.length, 1), duration: 1) : 1
+        let lights = (0..<AuroraSetup.mostLights).map { index in
+            guard index < setup.lights.count else { return CIVector(x: 0, y: 0, z: 1, w: 0) }
+            let light = setup.lights[index]
+            let radius = light.radius * (AuroraSetup.swell.from + (1 - AuroraSetup.swell.from) * swell)
+            return CIVector(x: light.center.x, y: light.center.y, z: radius, w: light.strength * swell)
+        }
+        let shaped = (0..<AuroraSetup.mostLights + 1).map { index in
+            index < setup.lights.count ? (setup.lights[index].elongation, setup.lights[index].angle) : (1.0, 0.0)
+        }
+        let shapes = stride(from: 0, to: AuroraSetup.mostLights, by: 2).map { index in
+            CIVector(x: shaped[index].0, y: shaped[index].1, z: shaped[index + 1].0, w: shaped[index + 1].1)
+        }
+        let arguments: [Any] = [
+            ramp,
+            CIVector(x: size.width, y: size.height, z: since, w: 0),
+            CIVector(x: pow(shot.zoom, groundParallax), y: groundParallax * shot.shift.dx, z: -groundParallax * shot.shift.dy, w: 0)
+        ] + lights + shapes + [CIVector(x: Double(auroraRampPixels), y: 0, z: 0, w: AuroraSetup.rampEnd)]
+        let rampExtent = ramp.extent
+        return kernel.apply(extent: CGRect(origin: .zero, size: size), roiCallback: { _, _ in rampExtent }, arguments: arguments)
+    }
+
+    /// The aurora's stops spread along a row of ``auroraRampPixels``, mixed in linear light and stored encoded, as the
+    /// kernels draw: the core's at ``AuroraSetup/core``'s positions, the gradient's across ``AuroraSetup/brandSpan``.
+    private static func auroraRamp(_ palette: FieldPalette) -> CIImage? {
+        let coreCount = AuroraSetup.core.count
+        guard palette.colors.count > coreCount else { return nil }
+        let brand = palette.colors.count - coreCount
+        let span = AuroraSetup.brandSpan
+        let positions = AuroraSetup.core.map(\.position)
+            + (0..<brand).map { span.lowerBound + (span.upperBound - span.lowerBound) * Double($0) / Double(max(brand - 1, 1)) }
+        let linear = { (value: Double) in value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4) }
+        let encoded = { (value: Double) in value <= 0.0031308 ? value * 12.92 : 1.055 * pow(max(value, 0), 1 / 2.4) - 0.055 }
+        let stops = palette.colors.map { [linear($0.red), linear($0.green), linear($0.blue)] }
+        var pixels = [Float](repeating: 1, count: auroraRampPixels * 4)
+        for index in 0..<auroraRampPixels {
+            let radius = AuroraSetup.rampEnd * Double(index) / Double(auroraRampPixels - 1)
+            let upper = positions.firstIndex { $0 >= radius } ?? positions.count - 1
+            let lower = max(upper - 1, 0)
+            let share = upper == lower ? 1 : min(max((radius - positions[lower]) / (positions[upper] - positions[lower]), 0), 1)
+            for channel in 0..<3 {
+                pixels[index * 4 + channel] = Float(encoded(stops[lower][channel] + (stops[upper][channel] - stops[lower][channel]) * share))
+            }
+        }
+        let data = pixels.withUnsafeBufferPointer { Data(buffer: $0) }
+        return CIImage(
+            bitmapData: data, bytesPerRow: auroraRampPixels * 16, size: CGSize(width: auroraRampPixels, height: 1), format: .RGBAf, colorSpace: nil
+        ).clampedToExtent().cropped(to: CGRect(x: 0, y: 0, width: auroraRampPixels, height: 1))
     }
 }

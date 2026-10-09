@@ -15,10 +15,21 @@ nonisolated extension SoundCueSheet {
         var sheet = SoundCueSheet(length: Double(plan.frameCount) / Double(plan.frameRate))
         guard !document.sound.isSilent, !plan.scenes.isEmpty else { return sheet }
         let closing = ClosingCues(plan: plan, document: document)
-        let end = min(closing?.start ?? sheet.length, sheet.length)
-        let whips = cameraWhips(in: plan, until: end)
+        if let style = SoundRules.beat(document.sound.style) {
+            sheet.scoreBeat(style, isHouse: document.sound.style == .house, plan: plan, document: document, closing: closing)
+        } else {
+            sheet.scoreAmbient(plan: plan, document: document, closing: closing)
+        }
+        sheet.chords = sheet.chords.filter { $0.start < sheet.length }
+        return sheet.following(document.sound)
+    }
+
+    /// Spec 0013's score: a chord a shot, a hit as the first UI cuts in, Raycast's closing.
+    private mutating func scoreAmbient(plan: MotionPlan, document: MotionDocument, closing: ClosingCues?) {
+        let end = min(closing?.start ?? length, length)
+        let whips = Self.cameraWhips(in: plan, until: end)
         var cues = SoundCueList(frameRate: plan.frameRate)
-        let opening = firstUI(in: plan, document: document, before: end)
+        let opening = Self.firstUI(in: plan, document: document, before: end)
         if let opening {
             cues.opening(at: opening)
         }
@@ -26,17 +37,67 @@ nonisolated extension SoundCueSheet {
         cues.typing(in: plan, document: document, before: end)
         cues.design(in: plan, document: document, before: end)
         cues.whips(whips)
-        sheet.chords = bodyChords(of: plan, whips: whips, until: end, closes: closing != nil)
-        sheet.air = end > 0 ? Air(start: 0, end: end, level: SoundRules.airLevel) : nil
+        chords = Self.bodyChords(of: plan, whips: whips, until: end, closes: closing != nil)
+        air = end > 0 ? Air(start: 0, end: end, level: SoundRules.airLevel) : nil
         if let closing {
             closing.add(to: &cues)
-            sheet.chords += closing.chords(until: sheet.length)
-            sheet.roomStop = closing.start
+            chords += closing.chords(until: length)
+            roomStop = closing.start
         }
         // Effects are refused inside a closing: a sound on a word read as noise at every level tried
-        sheet.cues = cues.list.filter { $0.part == .score || $0.time < end }.sorted { $0.time < $1.time }
-        sheet.chords = sheet.chords.filter { $0.start < sheet.length }
-        return sheet.following(document.sound)
+        self.cues = cues.list.filter { $0.part == .score || $0.time < end }.sorted { $0.time < $1.time }
+    }
+
+    /// Spec 0015's: drums, bass and chords on a grid fitted to the cuts, in the parts the film's scenes lay out, the
+    /// effects lower under them, mastered louder.
+    private mutating func scoreBeat(_ style: BeatStyle, isHouse: Bool, plan: MotionPlan, document: MotionDocument, closing: ClosingCues?) {
+        let shots = Self.shots(of: plan, document: document)
+        // Drums from the first frame need a beat there
+        let grid = BeatGrid.fitted(to: (style.intro.isEmpty ? [0] : []) + shots.dropFirst().map(\.start), tempo: style.tempo)
+        let ending = closing.map { (start: $0.start, hit: $0.logo ?? $0.slide) }
+        let form = isHouse ? BeatForm.house(shots, grid: grid, closing: ending) : BeatForm.groove(shots, grid: grid, closing: ending)
+        let score = BeatScore(style: style, grid: grid, form: form)
+        let end = min(closing?.start ?? length, length)
+        var cues = SoundCueList(frameRate: plan.frameRate)
+        cues.dropsKineticKeys = !isHouse
+        cues.cuts(of: plan, document: document, before: end, except: nil)
+        cues.typing(in: plan, document: document, before: end)
+        cues.design(in: plan, document: document, before: end)
+        cues.whips(Self.cameraWhips(in: plan, until: end))
+        let effects = cues.list.filter { $0.part == .effects && $0.time < end }.map { cue in
+            var cue = cue
+            cue.level += SoundRules.effectsUnderBeat
+            // A pop within 20 ms of a sixteenth lands on it
+            if case .blip = cue.voice, abs(grid.nearestSixteenth(cue.time) - cue.time) <= SoundRules.popSnap {
+                cue.time = grid.nearestSixteenth(cue.time)
+            }
+            return cue
+        }
+        chords = score.chords
+        self.cues = (effects + score.cues).sorted { $0.time < $1.time }
+        finish = SoundRules.beatFinish
+    }
+
+    /// The scenes as a beat's form reads them: words alone are text or a logo (an image, UI or still shape no bigger than
+    /// ``SoundRules/logoShare`` of the canvas).
+    static func shots(of plan: MotionPlan, document: MotionDocument) -> [BeatForm.Shot] {
+        plan.scenes.enumerated().map { index, scene in
+            let contents = document.scenes.indices.contains(index) ? MotionPlan.contents(of: document.scenes[index].layers) : []
+            let fits = { (layer: MotionPlan.Layer, share: Double) in
+                layer.size.width <= share * plan.canvas.width && layer.size.height <= share * plan.canvas.height
+            }
+            let shown = contents.contains { if case .group = $0 { false } else if case .shape = $0 { false } else { true } }
+            let words = contents.count == scene.layers.count && shown
+                && zip(contents, scene.layers).allSatisfy { content, layer in
+                    switch content {
+                    case .text, .group: true
+                    case .image, .lifted: fits(layer, SoundRules.logoShare)
+                    // A logo's mark is often a shape: the rebuilt Lovable lockup's heart was 70 px, a 13th of the frame's height
+                    case .shape: layer.morph == nil && fits(layer, SoundRules.logoShare)
+                    }
+                }
+            return BeatForm.Shot(start: scene.start, end: scene.start + scene.duration, isWords: words)
+        }
     }
 
     /// The sheet with the document's switches and levels applied.
