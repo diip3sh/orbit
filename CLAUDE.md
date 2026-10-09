@@ -1224,7 +1224,8 @@ tinted with it at 70% and no fill under it, so the desktop shows through (`captu
 in a key and a non-key panel (macOS 27): at 100% it read as a solid fill over a dark desktop (a fill under the glass
 did too), at 50% the `onAccent` text sank into the dark behind it. Glass drops its tint while its window isn't key,
 `.glassProminent` too, and setting `controlActiveState` doesn't bring it back; the bar loses key to the area overlay or
-another app, so then (`controlActiveState` isn't `.key`) it is the solid fill instead. A record badge is cut out of its
+another app, so then (`controlActiveState` isn't `.key`) it is the solid fill instead, as with Reduce Transparency on and
+before macOS 26, where a switch's fill steps down under the pointer and the press (`fillOpacity`). A record badge is cut out of its
 mode's icon (`blendMode(.destinationOut)`), since no solid colour matches the glass under it.
 
 **Choosing what to record** opens the mode's own control straight away, whether from a mode icon

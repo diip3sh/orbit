@@ -132,11 +132,14 @@ final class QuickAccessViewModel {
     /// Copies the full image as PNG, confirms on the button, then closes
     func copy() async {
         await flattenIfAnnotating()
+        // One value for both: a redaction or background landing during the encode would otherwise be saved
+        // without having been copied
+        let copied = screenshot
         do {
-            let png = try await ScreenshotService.pngData(of: screenshot.image)
+            let png = try await ScreenshotService.pngData(of: copied.image)
             ImagePasteboard.copy(png: png, to: pasteboard)
             confirmThenClose(.copied)
-            await didCopy(screenshot)
+            await didCopy(copied)
         } catch {
             logger.error("Couldn't encode the screenshot to copy: \(error.localizedDescription)")
             show(.copyFailed)

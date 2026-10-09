@@ -53,7 +53,10 @@ private struct CaptureToolbarButton: View {
             .frame(minWidth: 36, minHeight: 36)
             .contentShape(shape)
             .background(fill, in: shape)
-            .captureToolbarLive(isOn == true, in: shape, isInteractive: isEnabled)
+            .captureToolbarLive(
+                isOn == true, in: shape, isInteractive: isEnabled,
+                fillOpacity: configuration.isPressed ? 0.7 : isLit ? 0.9 : 1
+            )
             .opacity(isEnabled ? 1 : 0.4)
             .onHover { isHovered = $0 }
             .editorMotion(configuration.isPressed ? nil : EditorTheme.quickMotion, value: isLit)
@@ -69,7 +72,7 @@ private struct CaptureToolbarButton: View {
         return isLit ? EditorTheme.ink : EditorTheme.dim
     }
 
-    /// Off and plain controls only: on is the live glass, which answers hover and the press itself
+    /// Off and plain controls only: on is the live surface, which steps its own fill (`fillOpacity`)
     private var fill: Color {
         guard isOn != true, isEnabled else { return .clear }
         let rest = isOn == false ? 0.06 : 0
