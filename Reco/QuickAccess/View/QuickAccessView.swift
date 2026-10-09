@@ -70,7 +70,9 @@ private struct QuickAccessAnnotation: View {
             HStack(spacing: 0) {
                 AnnotationToolbar(editor: editor)
                 Spacer(minLength: EditorTheme.smallSpacing)
+                // Two equal ways out of the editor: secondary's accent text read as a disabled Copy
                 QuickAccessActions(model: model)
+                    .buttonStyle(.editorPrimary)
             }
             .frame(height: QuickAccessController.annotationBarHeight)
             AnnotationCanvas(editor: editor)
@@ -109,6 +111,7 @@ private struct QuickAccessPreview: View {
             // Always shown, so ⌘C and ⌘S work without the pointer on the card
             .overlay(alignment: .bottom) {
                 QuickAccessActions(model: model)
+                    .buttonStyle(QuickAccessGlassButtonStyle())
                     .padding(6)
             }
             .overlay {
@@ -169,7 +172,7 @@ private struct QuickAccessControls: View {
     }
 }
 
-/// Copy and Save along the bottom edge
+/// Copy and Save along the bottom edge, in the style their place gives them
 private struct QuickAccessActions: View {
 
     let model: QuickAccessViewModel
@@ -185,8 +188,25 @@ private struct QuickAccessActions: View {
             }
             .keyboardShortcut("s", modifiers: .command)
         }
-        // Two equal ways out of the card: secondary's accent text over the shot read as a disabled Copy
-        .buttonStyle(.editorPrimary)
+    }
+}
+
+/// Copy and Save over the shot: on macOS 26 untinted glass, as Safari's toolbar over a page, so the shot shows
+/// through and the system picks the label's colour for what is behind it. The accent's prominent glass read as a
+/// solid pill over the shot. Before macOS 26, the solid accent capsule.
+private struct QuickAccessGlassButtonStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        if #available(macOS 26, *) {
+            Button(role: configuration.role, action: configuration.trigger) {
+                configuration.label
+                    .font(.theme(weight: .medium))
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+        } else {
+            Button(configuration).buttonStyle(.editorPrimary)
+        }
     }
 }
 
