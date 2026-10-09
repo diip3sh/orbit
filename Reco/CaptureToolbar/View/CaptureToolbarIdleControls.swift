@@ -53,19 +53,20 @@ struct CaptureToolbarIdleControls: View {
         Button {
             Task { await viewModel.performAction() }
         } label: {
-            // Its key in the label, so it needs no tooltip
+            // Its key in the label, so it needs no tooltip; none while the key does nothing
             HStack(spacing: EditorTheme.tightSpacing) {
-                Text(viewModel.mode.actionTitle)
-                Text(CaptureToolbarShortcut.action.symbol)
-                    .font(.theme(.body, weight: .semibold, .mono))
-                    .foregroundStyle(EditorTheme.onAccent.opacity(0.6))
-                    .accessibilityHidden(true)
+                Text(viewModel.actionTitle)
+                if viewModel.canPerformAction {
+                    Text(CaptureToolbarShortcut.action.symbol)
+                        .font(.theme(.body, weight: .semibold, .mono))
+                        .foregroundStyle(EditorTheme.onAccent.opacity(0.6))
+                        .accessibilityHidden(true)
+                }
             }
         }
         .buttonStyle(.captureToolbarAction)
         .keyboardShortcut(CaptureToolbarShortcut.action.key, modifiers: [])
         .disabled(!viewModel.canPerformAction)
-        .captureToolbarPill(tint: CaptureToolbarView.live)
     }
 
     private func modeGroup(_ modes: [CaptureToolbarMode]) -> some View {
@@ -76,14 +77,14 @@ struct CaptureToolbarIdleControls: View {
                     // Choosing a mode also opens what records it, so Record isn't a step on the way
                     Task { await viewModel.pick(mode) }
                 } label: {
-                    CaptureModeIcon(mode: mode, ground: isSelected ? CaptureToolbarView.live : CaptureToolbarView.ground)
+                    CaptureModeIcon(mode: mode)
                         .accessibilityLabel(mode.title)
                 }
                 .buttonStyle(.captureToolbar(isSelected: isSelected))
                 .background {
                     if isSelected {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(CaptureToolbarView.live)
+                        Color.clear
+                            .captureToolbarLive(in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .matchedGeometryEffect(id: "mode", in: selection)
                     }
                 }

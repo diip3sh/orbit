@@ -827,7 +827,7 @@ turned down: white on it is 3.7:1). Every colour is a colour set in `Assets.xcas
 dark, a light and an Increase Contrast variant of each, so the app still follows the user's appearance; no window forces
 one (the notch shelf excepted: it is black under the notch). The menu bar popover stays native, as before the theme: the
 system font, label colours and accent on `.ultraThinMaterial`. No Liquid Glass and no materials, except the primary
-button (tinted glass, below) and Raycast's see-through columns: the Library's sidebar and the editor's and Web Recording's inspectors show the desktop blurred
+button (tinted glass, below), the capture toolbar's live controls (tinted glass, see Capture toolbar) and Raycast's see-through columns: the Library's sidebar and the editor's and Web Recording's inspectors show the desktop blurred
 (`translucentColumn()`: an `NSVisualEffectView` behind the window, tinted with `panel` at 45%, not yet checked by eye), which
 is why editor windows aren't opaque and have a clear background, and their content draws its own ground. Native controls (Settings' forms, switches, pickers, the shortcut
 recorder) stay native and take the accent through `.tint`; AppKit controls follow the user's own accent instead when it isn't
@@ -1212,7 +1212,14 @@ one it was left on; a selection made elsewhere opens the recording one on its mo
 **Record Screen…** open them, from the popover or their global shortcuts ⇧⌘1 / ⇧⌘2 (`showScreenshotToolbar`,
 `showRecordingToolbar`, Settings → Shortcuts → Capture Toolbar; idle only, like the rows). What is live, chosen or on is the accent fill (`CaptureToolbarView.live`, with `onAccent` content): the action's
 pill, the mode's highlight (sliding to the one chosen), switches that are on (filled, dark icon); a switch that is
-off keeps a faint fill so it still reads as one.
+off keeps a faint fill so it still reads as one. On macOS 26, while the bar is key, each of them is Liquid Glass
+tinted with it at 70% and no fill under it, so the desktop shows through (`captureToolbarLive(_:in:isInteractive:)`,
+2026-10-09; interactive on the action and the switches). The tint was picked from ScreenCaptureKit captures of the bar
+in a key and a non-key panel (macOS 27): at 100% it read as a solid fill over a dark desktop (a fill under the glass
+did too), at 50% the `onAccent` text sank into the dark behind it. Glass drops its tint while its window isn't key,
+`.glassProminent` too, and setting `controlActiveState` doesn't bring it back; the bar loses key to the area overlay or
+another app, so then (`controlActiveState` isn't `.key`) it is the solid fill instead. A record badge is cut out of its
+mode's icon (`blendMode(.destinationOut)`), since no solid colour matches the glass under it.
 
 **Choosing what to record** opens the mode's own control straight away, whether from a mode icon
 (`pick(_:)`) or from Record (`performAction()`), both through `chooseSource(for:)`: Reco's picker for a window
@@ -1251,7 +1258,8 @@ by half the picker's height and back down on every close.
 Confirm/Cancel buttons of its own** (`presentAreaSelection(showsActions: false)`, from the toolbar only;
 the menu and shortcut paths keep them): the bar rises one level above the overlay
 (`CaptureToolbarController.selectionLevel`, `.screenSaver + 1`) so it stays clickable, Record is disabled until
-an area is drawn and then takes it (`AreaSelectionOverlay.isPresented`/`canConfirm`/`confirm()`), and
+an area is drawn, reading **Select an Area** in dim text on a plain pill without its key (`CaptureToolbarViewModel.actionTitle`;
+a disabled action is never on the accent: a faded label there read as a broken button), and then takes it (`AreaSelectionOverlay.isPresented`/`canConfirm`/`confirm()`), and
 switching mode or closing the bar cancels the selection (`cancel()`). Return and Esc still work, on the
 overlay's own key handling. During the take the bar
 shows what it records (fixed until it ends) and the live pill: the time in red, on a red-tinted pill, dim while paused, pause,

@@ -17,7 +17,7 @@ struct CaptureToolbarButtonStyle: ButtonStyle {
     }
 }
 
-/// The toolbar's action, Capture or Record, on its live-tinted pill.
+/// The toolbar's action, Capture or Record, as its own live pill.
 struct CaptureToolbarActionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         CaptureToolbarActionButton(configuration: configuration)
@@ -53,6 +53,7 @@ private struct CaptureToolbarButton: View {
             .frame(minWidth: 36, minHeight: 36)
             .contentShape(shape)
             .background(fill, in: shape)
+            .captureToolbarLive(isOn == true, in: shape, isInteractive: isEnabled)
             .opacity(isEnabled ? 1 : 0.4)
             .onHover { isHovered = $0 }
             .editorMotion(configuration.isPressed ? nil : EditorTheme.quickMotion, value: isLit)
@@ -68,11 +69,9 @@ private struct CaptureToolbarButton: View {
         return isLit ? EditorTheme.ink : EditorTheme.dim
     }
 
+    /// Off and plain controls only: on is the live glass, which answers hover and the press itself
     private var fill: Color {
-        if isOn == true {
-            return CaptureToolbarView.live.opacity(configuration.isPressed ? 0.7 : isHovered ? 0.9 : 1)
-        }
-        guard isEnabled else { return .clear }
+        guard isOn != true, isEnabled else { return .clear }
         let rest = isOn == false ? 0.06 : 0
         return EditorTheme.ink.opacity(configuration.isPressed ? 0.14 : isHovered ? 0.1 : rest)
     }
@@ -84,12 +83,23 @@ private struct CaptureToolbarActionButton: View {
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
-        configuration.label
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        let label = configuration.label
             .font(.theme(.body, weight: .semibold))
-            .foregroundStyle(EditorTheme.onAccent)
+            .foregroundStyle(isEnabled ? EditorTheme.onAccent : EditorTheme.dim)
             .padding(.horizontal, EditorTheme.mediumSpacing + EditorTheme.tightSpacing)
             .frame(minHeight: 36)
-            .contentShape(.rect(cornerRadius: 12, style: .continuous))
-            .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
+
+        if isEnabled {
+            label
+                .opacity(configuration.isPressed ? 0.7 : 1)
+                // The pill's inset, as `captureToolbarPill`, so it lines up with the groups beside it
+                .padding(4)
+                .contentShape(shape)
+                .captureToolbarLive(in: shape, isInteractive: true)
+        } else {
+            // Not live until it can run: a faded label on the accent read as a broken action
+            label.captureToolbarPill()
+        }
     }
 }

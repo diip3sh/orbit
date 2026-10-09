@@ -6,11 +6,10 @@
 import SwiftUI
 
 /// A mode's picture, as in the system's Screenshot toolbar: recording modes carry a record badge in
-/// the bottom-right corner, cut out of the picture under it.
+/// the bottom-right corner, cut out of the picture under it. Cut, not painted over in a colour: the chosen
+/// mode's highlight is glass, which no solid colour matches.
 struct CaptureModeIcon: View {
     let mode: CaptureToolbarMode
-    /// What the badge is cut out of: the highlight when the mode is chosen, the bar otherwise
-    var ground = CaptureToolbarView.ground
 
     private var resource: ImageResource {
         switch mode {
@@ -29,9 +28,11 @@ struct CaptureModeIcon: View {
                         .overlay(Circle().padding(3))
                         .frame(width: 10, height: 10)
                         .padding(1.5)
-                        .background(ground, in: .circle)
+                        .background { Circle().blendMode(.destinationOut) }
                         .offset(x: 4, y: 3)
                 }
             }
+            // Keeps the cut inside the icon, so what is behind the button shows through it
+            .compositingGroup()
     }
 }

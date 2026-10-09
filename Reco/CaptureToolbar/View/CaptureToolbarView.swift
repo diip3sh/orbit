@@ -22,11 +22,11 @@ struct CaptureToolbarView: View {
     let onDrag: () -> Void
     let onDragEnd: () -> Void
 
-    /// The bar's ground, also what the mode badges are cut out of
+    /// The bar's ground
     static let ground = EditorTheme.surface
 
-    /// What is live, chosen or switched on, as a fill: the action, the mode, options in use. Whatever sits
-    /// on it is `EditorTheme.onAccent`.
+    /// What is live, chosen or switched on: the action, the mode, options in use, as tinted glass over it
+    /// (`captureToolbarLive`). Whatever sits on it is `EditorTheme.onAccent`.
     static let live = EditorTheme.accentFill
 
     /// A take in progress: its time and pill, red as the system's own recording indicators, so it
