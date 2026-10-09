@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// The agent chat's message box: a pill for what the video should show, or a change to the last take, with
+/// The agent chat's message box: a field for what the video should show, or a change to the last take, with
 /// Send (Stop while the agent works), and under it New Chat and a few things to start from.
 struct AgentChatComposer: View {
     let model: AgentRecordingViewModel
@@ -13,13 +13,12 @@ struct AgentChatComposer: View {
 
     @State private var message = ""
     @FocusState private var isFocused: Bool
-    @Environment(\.colorSchemeContrast) private var contrast
 
     private static let suggestions = ["Tour the whole page", "Hover the main menu", "Click the main button", "Scroll to the end"]
 
     var body: some View {
         VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
-            let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: EditorTheme.smallRadius, style: .continuous)
             HStack(alignment: .bottom, spacing: EditorTheme.smallSpacing) {
                 TextField(placeholder, text: $message, axis: .vertical)
                     .textFieldStyle(.plain)
@@ -47,7 +46,7 @@ struct AgentChatComposer: View {
             .padding(.leading, EditorTheme.mediumSpacing)
             .padding(.trailing, EditorTheme.tightSpacing)
             .padding(.vertical, EditorTheme.tightSpacing)
-            .background(Color.primary.opacity(0.06), in: shape)
+            .background(EditorTheme.surface, in: shape)
             .overlay {
                 shape.strokeBorder(outline)
                     .editorMotion(EditorTheme.quickMotion, value: isFocused)
@@ -71,8 +70,8 @@ struct AgentChatComposer: View {
 
             if page == nil {
                 Text("Load a page first: type its address above the preview.")
-                    .font(.caption)
-                    .foregroundStyle(contrast == .increased ? EditorTheme.dim : EditorTheme.faint)
+                    .font(.theme(.caption))
+                    .foregroundStyle(EditorTheme.dim)
             }
         }
         .padding(EditorTheme.spacing)
@@ -83,7 +82,7 @@ struct AgentChatComposer: View {
         if isFocused {
             return EditorTheme.accent.opacity(0.6)
         }
-        return contrast == .increased ? EditorTheme.dim : EditorTheme.softHairline
+        return EditorTheme.hairline
     }
 
     /// A first message describes the video; later ones change it.

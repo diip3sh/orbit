@@ -41,7 +41,7 @@ struct TickSlider: View {
             let barX = fraction * width
 
             ZStack(alignment: .leading) {
-                shape.fill(EditorTheme.softHairline)
+                shape.fill(EditorTheme.control)
 
                 Rectangle()
                     .fill(EditorTheme.accent.opacity(0.28))

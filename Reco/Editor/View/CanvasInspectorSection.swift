@@ -69,7 +69,7 @@ struct CropField: View {
                 if viewModel.crop != VideoCrop.full {
                     Button("Reset", action: viewModel.resetCrop)
                         .buttonStyle(.borderless)
-                        .font(.caption)
+                        .font(.theme(.caption))
                         .transition(.opacity)
                 }
             }

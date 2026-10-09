@@ -41,6 +41,7 @@ struct RecoApp: App {
         // Settings window
         Settings {
             SettingsView(settings: viewModel.settings, updaterService: updaterService, agentBridge: appDelegate.agentBridge)
+                .themed()
         }
     }
 }

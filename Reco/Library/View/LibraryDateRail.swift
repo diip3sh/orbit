@@ -88,7 +88,7 @@ private struct LibraryDateRailDate: View {
     /// The title alone, with no chip behind it.
     private var label: some View {
         Text(title)
-            .font(.title3.weight(.medium))
+            .font(.theme(.title3, weight: .medium))
             .foregroundStyle(EditorTheme.ink)
             .lineLimit(1)
             .fixedSize()

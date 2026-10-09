@@ -130,13 +130,13 @@ struct ExportOptions: View {
                     .transition(.opacity)
             } else if let exported = session.exported {
                 VStack(alignment: .leading, spacing: EditorTheme.tightSpacing) {
-                    Label("Exported \(Text(exported.lastPathComponent).monospaced())", systemImage: "checkmark.circle.fill")
-                        .font(.callout)
+                    Label("Exported \(Text(exported.lastPathComponent).font(.theme(.callout, .mono)))", systemImage: "checkmark.circle.fill")
+                        .font(.theme(.callout))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if let bytes = session.exportedBytes {
                         Text(Int64(bytes).formatted(.byteCount(style: .file)))
-                            .font(.caption)
+                            .font(.theme(.caption))
                             .foregroundStyle(EditorTheme.dim)
                     }
                 }
@@ -144,13 +144,13 @@ struct ExportOptions: View {
             } else {
                 if session.copied {
                     Label("Copied to Clipboard", systemImage: "checkmark.circle.fill")
-                        .font(.callout)
+                        .font(.theme(.callout))
                         .transition(.opacity)
                 }
                 if let error = session.error {
                     Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
                         .symbolRenderingMode(.multicolor)
-                        .font(.callout)
+                        .font(.theme(.callout))
                         .transition(.opacity)
                 }
             }
@@ -179,7 +179,7 @@ struct ExportOptions: View {
                 buttons
                 if let bytes = session.estimatedBytes() {
                     Text("Estimated max size — \(Text(bytes.formatted(.byteCount(style: .file))).monospacedDigit())")
-                        .font(.caption)
+                        .font(.theme(.caption))
                         .foregroundStyle(EditorTheme.dim)
                         .frame(maxWidth: .infinity)
                         .contentTransition(.opacity)
@@ -232,6 +232,7 @@ private struct ActionLabel: View {
             HStack(spacing: EditorTheme.tightSpacing) {
                 Text(title)
                 Text(keys)
+                    .font(.theme(weight: .medium, .mono))
                     .opacity(0.5)
                     .accessibilityHidden(true)
             }
@@ -275,8 +276,8 @@ private extension ExportQuality {
     }
 }
 
-/// One quality level: its name over what it is for and, on the right, the size the file will have, a lighter fill
-/// sliding to the one chosen.
+/// One quality level: its name over what it is for and, on the right, the size the file will have, the control
+/// fill ringed in the accent sliding to the one chosen.
 private struct QualityRow: View {
     let title: LocalizedStringKey
     let summary: LocalizedStringKey
@@ -294,18 +295,18 @@ private struct QualityRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(title)
-                        .font(.callout.weight(.medium))
+                        .font(.theme(.callout, weight: .medium))
                     Spacer()
                     if let bytes {
                         Text("≈ \(bytes.formatted(.byteCount(style: .file)))")
-                            .font(.caption)
+                            .font(.theme(.caption))
                             .monospacedDigit()
                             .foregroundStyle(EditorTheme.dim)
                             .contentTransition(.numericText())
                     }
                 }
                 Text(summary)
-                    .font(.caption)
+                    .font(.theme(.caption))
                     .foregroundStyle(EditorTheme.dim)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -315,10 +316,11 @@ private struct QualityRow: View {
             .background {
                 if isSelected {
                     shape
-                        .fill(.primary.opacity(0.1))
+                        .fill(EditorTheme.control)
+                        .strokeBorder(EditorTheme.accent)
                         .matchedGeometryEffect(id: "highlight", in: highlight)
                 } else {
-                    shape.fill(.primary.opacity(isHovered ? 0.05 : 0))
+                    shape.fill(EditorTheme.ink.opacity(isHovered ? 0.05 : 0))
                 }
             }
             .contentShape(shape)

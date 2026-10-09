@@ -7,8 +7,9 @@
 
 import SwiftUI
 
-/// The inspector's tabs as icons on one track, a line between groups; the chosen one's fill slides to
-/// it, as in ``SegmentedChoice``. A tab with nothing to edit is dimmed and says why in its tooltip.
+/// The inspector's tabs as icons on one track, a line between groups; the chosen one's raised fill slides to
+/// it, as in ``SegmentedChoice``, and its icon is in the accent. A tab with nothing to edit is dimmed and says
+/// why in its tooltip.
 struct InspectorTabBar: View {
     @Binding var selection: InspectorTab
     let isAvailable: (InspectorTab) -> Bool
@@ -21,8 +22,9 @@ struct InspectorTabBar: View {
             ForEach(tabs.indices, id: \.self) { index in
                 let tab = tabs[index]
                 if index > 0, tab.group != tabs[index - 1].group {
+                    // Faint: a hairline is the track's own colour in dark
                     Rectangle()
-                        .fill(EditorTheme.hairline)
+                        .fill(EditorTheme.faint)
                         .frame(width: 1, height: 16)
                         .padding(.horizontal, 2)
                 }
@@ -30,7 +32,7 @@ struct InspectorTabBar: View {
             }
         }
         .padding(2)
-        .background(EditorTheme.softHairline, in: .capsule)
+        .background(EditorTheme.control, in: .capsule)
         .editorMotion(EditorTheme.quickMotion, value: selection)
     }
 
@@ -42,13 +44,13 @@ struct InspectorTabBar: View {
         } label: {
             Label(tab.title, systemImage: tab.symbol)
                 .labelStyle(.iconOnly)
-                .foregroundStyle(isSelected ? EditorTheme.ink : EditorTheme.dim)
+                .foregroundStyle(isSelected ? EditorTheme.accent : EditorTheme.dim)
                 .frame(maxWidth: .infinity, minHeight: 26)
                 .background {
                     if isSelected {
                         Capsule()
-                            .fill(EditorTheme.stage)
-                            .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
+                            .fill(EditorTheme.raised)
+                            .strokeBorder(EditorTheme.hairline)
                             .matchedGeometryEffect(id: "highlight", in: highlight)
                     }
                 }

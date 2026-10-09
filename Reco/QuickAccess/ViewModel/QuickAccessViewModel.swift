@@ -93,6 +93,7 @@ final class QuickAccessViewModel {
 
     private let previewPixelSize: CGFloat
     private let saveScreenshot: @MainActor (Screenshot) async -> Bool
+    private let didCopy: @MainActor (Screenshot) async -> Void
     let background: @MainActor () -> ScreenshotBackground
     private let pasteboard: NSPasteboard
     /// Holds the drag-out file under the save name; unique per card so two cards never share a file
@@ -106,16 +107,19 @@ final class QuickAccessViewModel {
     /// - Parameters:
     ///   - preview: The shot drawn at most `previewPixelSize` on its longer side; a replaced shot's is drawn the same
     ///   - save: Saves into the output folder and reports failures itself; returns whether it saved
+    ///   - didCopy: Told after the shot was put on the pasteboard
     ///   - background: The background Add Background puts the shot on, read when it's clicked
     init(
         screenshot: Screenshot, preview: CGImage, previewPixelSize: CGFloat, save: @escaping @MainActor (Screenshot) async -> Bool,
-        background: @escaping @MainActor () -> ScreenshotBackground, pasteboard: NSPasteboard = .general
+        didCopy: @escaping @MainActor (Screenshot) async -> Void, background: @escaping @MainActor () -> ScreenshotBackground,
+        pasteboard: NSPasteboard = .general
     ) {
         self.screenshot = screenshot
         plainScreenshot = screenshot
         self.preview = preview
         self.previewPixelSize = previewPixelSize
         self.saveScreenshot = save
+        self.didCopy = didCopy
         self.background = background
         self.pasteboard = pasteboard
         writeDragFile()
@@ -128,10 +132,14 @@ final class QuickAccessViewModel {
     /// Copies the full image as PNG, confirms on the button, then closes
     func copy() async {
         await flattenIfAnnotating()
+        // One value for both: a redaction or background landing during the encode would otherwise be saved
+        // without having been copied
+        let copied = screenshot
         do {
-            let png = try await ScreenshotService.pngData(of: screenshot.image)
+            let png = try await ScreenshotService.pngData(of: copied.image)
             ImagePasteboard.copy(png: png, to: pasteboard)
             confirmThenClose(.copied)
+            await didCopy(copied)
         } catch {
             logger.error("Couldn't encode the screenshot to copy: \(error.localizedDescription)")
             show(.copyFailed)

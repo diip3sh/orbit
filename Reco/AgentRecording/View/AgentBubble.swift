@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// A chat bubble's shape and fill: the agent's light and outlined, the user's in the accent colour, an
+/// A chat bubble's shape and fill: the agent's a surface with a hairline edge, the user's the control fill, an
 /// activity card quieter than both.
 struct AgentBubble: ViewModifier {
     enum Role {
@@ -14,26 +14,24 @@ struct AgentBubble: ViewModifier {
 
     let role: Role
 
-    @Environment(\.colorSchemeContrast) private var contrast
-
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: EditorTheme.largeRadius, style: .continuous)
         content
             .padding(.horizontal, EditorTheme.mediumSpacing)
             .padding(.vertical, EditorTheme.smallSpacing)
             .background(fill, in: shape)
             .overlay {
                 if role == .assistant {
-                    shape.strokeBorder(contrast == .increased ? EditorTheme.dim : EditorTheme.hairline)
+                    shape.strokeBorder(EditorTheme.hairline)
                 }
             }
     }
 
     private var fill: Color {
         switch role {
-        case .assistant: Color.primary.opacity(0.06)
-        case .user: EditorTheme.accent
-        case .activity: Color.primary.opacity(0.04)
+        case .assistant: EditorTheme.surface
+        case .user: EditorTheme.control
+        case .activity: EditorTheme.softHairline
         }
     }
 }

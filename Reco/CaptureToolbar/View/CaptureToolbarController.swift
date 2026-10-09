@@ -15,7 +15,7 @@ private final class CaptureToolbarPanel: NSPanel {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
-        // The glass draws its own edge and shadow; the window's would outline the whole rectangle
+        // The pills draw their own edge; the window's shadow would outline the whole rectangle
         hasShadow = false
         level = .floating
         isReleasedWhenClosed = false
@@ -172,7 +172,7 @@ final class CaptureToolbarController {
             onDrag: { [weak self] in self?.drag() },
             onDragEnd: { [weak self] in self?.endDrag() }
         )
-        let hostingView = FirstMouseHostingView(rootView: AnyView(view))
+        let hostingView = FirstMouseHostingView(rootView: AnyView(view.themed()))
         // The panel is sized here, and narrows only after the bar's animation
         hostingView.sizingOptions = []
         panel.contentView = hostingView
@@ -412,7 +412,7 @@ extension CaptureToolbarController {
     private func makeTooltipPanel() -> NSPanel {
         let panel = CaptureTooltipPanel()
         panel.level = level
-        let hostingView = NSHostingView(rootView: CaptureToolbarTooltipView(tooltips: tooltips))
+        let hostingView = NSHostingView(rootView: CaptureToolbarTooltipView(tooltips: tooltips).themed())
         // The panel is sized here, from the text the tooltips state holds
         hostingView.sizingOptions = []
         panel.contentView = hostingView

@@ -41,6 +41,8 @@ struct EditorView: View {
                 }
                 // The timeline leaves below the window's edge, not over it
                 .clipped()
+                // Solid under the stage and timeline only: the inspector shows the desktop
+                .editorWindowBackground()
                 // A `.recostyle` file dropped on the editor is kept with the saved styles and applied
                 .dropDestination(for: URL.self) { urls, _ in
                     guard let url = urls.first(where: { $0.pathExtension == StylePreset.fileExtension }) else { return false }
@@ -58,6 +60,7 @@ struct EditorView: View {
                         }
                     }
                     .transition(.opacity)
+                    .translucentColumn()
                     .inspectorColumnWidth(min: 300, ideal: EditorInspector.idealWidth, max: 460)
                 }
                 .toolbar { toolbar }
@@ -84,7 +87,14 @@ struct EditorView: View {
         // with only a minimum, the "Opening…" spinner made that minimum the root's largest size too, and
         // SwiftUI shrank the window to it (900×592) as it opened, whatever size it was given
         .frame(minWidth: 900, maxWidth: .infinity, minHeight: 560, maxHeight: .infinity)
-        .editorWindowBackground()
+        .foregroundStyle(EditorTheme.ink)
+        .background {
+            // Opening, or the error: the whole window's ground
+            if viewModel.source == nil {
+                EditorTheme.stage
+                    .ignoresSafeArea()
+            }
+        }
         .editorMotion(.smooth, value: viewModel.source == nil)
         .task {
             await viewModel.load()
@@ -99,6 +109,7 @@ struct EditorView: View {
         .padding(.horizontal, EditorTheme.largeSpacing)
         .padding(.top, EditorTheme.smallSpacing)
         .padding(.bottom, EditorTheme.spacing)
+        .background(EditorTheme.panel)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(EditorTheme.hairline)
@@ -150,8 +161,10 @@ struct EditorView: View {
                 Button("Inspector", systemImage: "sidebar.trailing") {
                     showsInspector.toggle()
                 }
+                .buttonStyle(.editorIcon)
                 .help(showsInspector ? "Hide the inspector" : "Show the inspector")
             }
+            .hidingSharedBackground()
         }
     }
 

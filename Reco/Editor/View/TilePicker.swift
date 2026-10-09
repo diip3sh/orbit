@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// A row of tiles, each a picture over a name; the selection's lighter fill slides to the tile picked.
+/// A row of tiles, each a picture over a name; the control fill slides to the tile picked.
 struct TilePicker<Value: Hashable, Picture: View>: View {
     @Binding var selection: Value
     let values: [Value]
@@ -27,7 +27,7 @@ struct TilePicker<Value: Hashable, Picture: View>: View {
                         picture(value)
                             .frame(height: 22)
                         Text(name(value))
-                            .font(.caption2)
+                            .font(.theme(.caption2))
                             .lineLimit(1)
                             .foregroundStyle(isSelected ? EditorTheme.ink : EditorTheme.dim)
                     }
@@ -36,11 +36,11 @@ struct TilePicker<Value: Hashable, Picture: View>: View {
                     .background {
                         if isSelected {
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(.primary.opacity(0.1))
+                                .fill(EditorTheme.control)
                                 .matchedGeometryEffect(id: "highlight", in: highlight)
                         } else {
                             RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(EditorTheme.softHairline)
+                                .strokeBorder(EditorTheme.hairline)
                         }
                     }
                     .contentShape(.rect)

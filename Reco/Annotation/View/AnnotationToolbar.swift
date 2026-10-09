@@ -5,11 +5,11 @@
 
 import SwiftUI
 
-/// The strip above the shot: the tools, the colour and line width, Undo and Redo, and Done.
+/// The strip above the shot: the tools, the colour and line width, Undo, Redo and Delete. The card puts Copy and
+/// Save after it.
 struct AnnotationToolbar: View {
 
     let editor: AnnotationEditor
-    let done: () -> Void
 
     @State private var showsColors = false
 
@@ -38,11 +38,6 @@ struct AnnotationToolbar: View {
                 .keyboardShortcut(.delete, modifiers: [])
                 .disabled(editor.selection == nil || editor.isEditingText)
                 .help("Delete the selected mark (⌫)")
-            Spacer(minLength: EditorTheme.smallSpacing)
-            Button("Done", action: done)
-                .buttonStyle(.editorSecondary)
-                .controlSize(.small)
-                .help("Back to the card, with the marks on the shot")
         }
         .labelStyle(.iconOnly)
         .buttonStyle(AnnotationToolButtonStyle(isOn: false))
@@ -66,7 +61,7 @@ struct AnnotationToolbar: View {
         } label: {
             Circle()
                 .fill(Color(cgColor: editor.color.cgColor))
-                .overlay { Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1) }
+                .overlay { Circle().strokeBorder(EditorTheme.hairline, lineWidth: 1) }
                 .frame(width: 16, height: 16)
         }
         .help("Color")
@@ -80,7 +75,7 @@ struct AnnotationToolbar: View {
                         Circle()
                             .fill(Color(cgColor: color.cgColor))
                             .overlay {
-                                Circle().strokeBorder(color == editor.color ? EditorTheme.accent : .white.opacity(0.3), lineWidth: 2)
+                                Circle().strokeBorder(color == editor.color ? EditorTheme.accent : EditorTheme.hairline, lineWidth: 2)
                             }
                             .frame(width: 22, height: 22)
                     }
@@ -103,7 +98,7 @@ struct AnnotationToolbar: View {
             }
         } label: {
             Capsule()
-                .fill(.white)
+                .fill(EditorTheme.ink)
                 .frame(width: 16, height: min(editor.lineWidth, 8) / 2 + 1)
         }
         .menuStyle(.button)
@@ -141,12 +136,12 @@ private struct AnnotationToolButton: View {
 
     var body: some View {
         configuration.label
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(.white)
+            .font(.theme(weight: .medium))
+            .foregroundStyle(isOn ? EditorTheme.onAccent : EditorTheme.ink)
             .frame(width: 28, height: 28)
             .background {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isOn ? AnyShapeStyle(EditorTheme.accent) : AnyShapeStyle(.white.opacity(isHovered || configuration.isPressed ? 0.18 : 0)))
+                RoundedRectangle(cornerRadius: EditorTheme.smallRadius, style: .continuous)
+                    .fill(isOn ? EditorTheme.accentFill : EditorTheme.ink.opacity(isHovered || configuration.isPressed ? 0.08 : 0))
             }
             .contentShape(.rect)
             .opacity(isEnabled ? 1 : 0.35)

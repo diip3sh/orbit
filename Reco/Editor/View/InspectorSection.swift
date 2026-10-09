@@ -50,7 +50,7 @@ struct InspectorSection<Content: View, Footer: View>: View {
                     content
                         .opacity(isEnabled ? 1 : 0.4)
                     footer
-                        .font(.caption)
+                        .font(.theme(.caption))
                         .foregroundStyle(EditorTheme.dim)
                         .fixedSize(horizontal: false, vertical: true)
                 }

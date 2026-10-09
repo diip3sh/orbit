@@ -7,7 +7,8 @@ import SwiftUI
 
 /// The notch shelf (spec 0013): a black shape at the top of the screen that is the notch (or a pill),
 /// peeks a little when the pointer is on it, and grows into a strip of the newest screenshots when it stays.
-/// Pure black like the notch, in light and dark appearance alike, so the content uses the dark scheme.
+/// Pure black like the notch, in light and dark appearance alike, so the content uses the dark scheme (and the
+/// theme's dark values).
 ///
 /// Size, radii and shadow all follow two flags under one spring each (`NotchMotion`), so the shape visibly
 /// grows out of the notch. With Reduce Motion nothing moves: the shape changes at once and the content
@@ -77,11 +78,12 @@ private struct NotchShelfHeader: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: EditorTheme.tightSpacing) {
             Text("Screenshots")
-                .font(.subheadline.bold())
+                .font(.theme(.subheadline, weight: .bold))
+                .foregroundStyle(EditorTheme.ink)
             if let count, count > 0 {
                 Text(count, format: .number)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.theme(.subheadline))
+                    .foregroundStyle(EditorTheme.dim)
             }
         }
         .frame(height: 20)
@@ -94,8 +96,8 @@ private struct NotchShelfStrip: View {
     var body: some View {
         if let items = viewModel.items, items.isEmpty {
             Text("No screenshots yet")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.theme(.subheadline))
+                .foregroundStyle(EditorTheme.dim)
                 .frame(maxWidth: .infinity, maxHeight: NotchShelfTile.size.height)
         } else {
             ScrollView(.horizontal) {
@@ -138,24 +140,24 @@ private struct NotchShelfTile: View {
         let shape = RoundedRectangle(cornerRadius: 10)
 
         ZStack {
-            Color.white.opacity(0.08)
+            EditorTheme.control
             if let thumbnail {
                 Image(decorative: thumbnail, scale: 2)
                     .resizable()
                     .scaledToFill()
             }
-            Color.black.opacity(isPressed ? 0.25 : 0)
+            EditorTheme.stage.opacity(isPressed ? 0.25 : 0)
             if isCopied {
-                Color.black.opacity(0.6)
+                EditorTheme.stage.opacity(0.6)
                 Label("Copied", systemImage: "checkmark")
-                    .font(.caption.bold())
-                    .foregroundStyle(.white)
+                    .font(.theme(.caption, weight: .bold))
+                    .foregroundStyle(EditorTheme.ink)
             }
         }
         .frame(width: Self.size.width, height: Self.size.height)
         .clipShape(shape)
         // Hover rings the tile in the accent instead of washing out the picture
-        .overlay(shape.strokeBorder(isHovered ? Color.accentColor : .white.opacity(0.12), lineWidth: isHovered ? 2 : 1))
+        .overlay(shape.strokeBorder(isHovered ? EditorTheme.accent : EditorTheme.hairline, lineWidth: isHovered ? 2 : 1))
         .scaleEffect(isPressed ? 0.96 : 1)
         .contentShape(shape)
         // The hosting view's coordinates, which the pointer is in

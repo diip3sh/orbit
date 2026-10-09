@@ -6,8 +6,7 @@
 import SwiftUI
 
 /// The capture toolbar: every control for a screenshot or a take, on screen rather than in the menu bar
-/// popover, in groups of dark glass. Dark in both appearances, as it floats over whatever is on screen.
-/// Dragged from anywhere between its controls; reports its own size so the panel fits it, and the bar's
+/// popover, in groups of solid surfaces. Dragged from anywhere between its controls; reports its own size so the panel fits it, and the bar's
 /// own so the panel knows where the bar sits inside it.
 ///
 /// The picker for a window or a display is drawn in this same view, above the bar, rather than in a
@@ -23,18 +22,18 @@ struct CaptureToolbarView: View {
     let onDrag: () -> Void
     let onDragEnd: () -> Void
 
-    /// The bar's ground, also what the mode badges are cut out of
-    static let ground = Color(white: 0.1)
+    /// The bar's ground
+    static let ground = EditorTheme.surface
 
-    /// What is live, chosen or switched on: the take's time, the action, the mode, options in use. The
-    /// system accent colour, so the bar follows the user's theme.
-    static let live = Color.accentColor
+    /// What is live, chosen or switched on: the action, the mode, options in use, as tinted glass over it
+    /// (`captureToolbarLive`). Whatever sits on it is `EditorTheme.onAccent`.
+    static let live = EditorTheme.accentFill
 
     /// A take in progress: its time and pill, red as the system's own recording indicators, so it
     /// never reads as just another option that's on
     static let recording = Color.red
 
-    /// Room around the bar for its glass's edge and shadow
+    /// Room around the bar for its entrance blur
     static let margin: CGFloat = 12
 
     /// How out of focus the bar pops in from. Under `margin`, so the blur's spread stays in the window.
@@ -80,34 +79,32 @@ struct CaptureToolbarView: View {
 
     /// The bar itself: the groups of pills, and what a drag moves
     private var bar: some View {
-        EditorGlassGroup {
-            HStack(spacing: EditorTheme.smallSpacing) {
-                switch phase {
-                case .idle:
-                    CaptureToolbarIdleControls(viewModel: viewModel)
-                case .countingDown:
-                    countdown
-                case .recording:
-                    CaptureToolbarLiveControls(recorder: recorder)
-                case .saving:
-                    HStack(spacing: EditorTheme.smallSpacing) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Saving…")
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, EditorTheme.mediumSpacing)
-                    .frame(minHeight: 36)
-                    .captureToolbarPill()
+        HStack(spacing: EditorTheme.smallSpacing) {
+            switch phase {
+            case .idle:
+                CaptureToolbarIdleControls(viewModel: viewModel)
+            case .countingDown:
+                countdown
+            case .recording:
+                CaptureToolbarLiveControls(recorder: recorder)
+            case .saving:
+                HStack(spacing: EditorTheme.smallSpacing) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Saving…")
+                        .foregroundStyle(EditorTheme.dim)
                 }
+                .padding(.horizontal, EditorTheme.mediumSpacing)
+                .frame(minHeight: 36)
+                .captureToolbarPill()
             }
-            .coordinateSpace(.named(Self.barSpaceName))
         }
+        .coordinateSpace(.named(Self.barSpaceName))
         // One group of controls replaces the last: the branches cross-fade (the default transition) and
         // the bar's width follows. Nothing scales and nothing moves sideways — this happens on every
         // start and stop, many times a day, so it stays a state change rather than a performance.
         .editorMotion(value: phase)
-        .environment(\.colorScheme, .dark)
+        .foregroundStyle(EditorTheme.ink)
         .environment(tooltips)
         // Between and around the controls is where the bar is grabbed
         .contentShape(.rect)

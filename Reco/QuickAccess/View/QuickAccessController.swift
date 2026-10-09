@@ -23,7 +23,7 @@ final class QuickAccessController {
     /// The smallest card: room for Copy ⌘C and Save ⌘S side by side, and the corner buttons above them
     nonisolated static let minCardSize = CGSize(width: 200, height: 120)
 
-    /// The glass edge around the preview, which is also where the card is dragged
+    /// The surface's edge around the preview, which is also where the card is dragged
     nonisolated static let inset: CGFloat = 8
 
     /// The card for a screenshot of `pointSize`: the shot fitted inside `maxCardSize` less the edge,
@@ -40,16 +40,16 @@ final class QuickAccessController {
 
     nonisolated static let margin: CGFloat = 16
 
-    /// The editor's tool strip, and the row of Copy and Save under the shot
+    /// The editor's tool strip, with Copy and Save at its end
     nonisolated static let annotationBarHeight: CGFloat = 32
 
-    /// The narrowest editor: room for the tool strip
-    nonisolated static let minAnnotationWidth: CGFloat = 620
+    /// The narrowest editor: room for the tool strip (about 570 pt) and Copy and Save (about 200)
+    nonisolated static let minAnnotationWidth: CGFloat = 800
 
     /// The card grown into the editor (spec 0015) for a shot of `pointSize`: the shot at its size on screen, shrunk to
-    /// fit `visibleFrame` less the margins, the edge, the strip and the actions, and at least `minAnnotationWidth`.
+    /// fit `visibleFrame` less the margins, the edge and the strip, and at least `minAnnotationWidth`.
     nonisolated static func annotationCardSize(for pointSize: CGSize, in visibleFrame: CGRect) -> CGSize {
-        let bars = 2 * annotationBarHeight + 2 * inset
+        let bars = annotationBarHeight + inset
         let roomWidth = visibleFrame.width - 2 * margin - 2 * inset
         let roomHeight = visibleFrame.height - 2 * margin - 2 * inset - bars
         guard pointSize.width > 0, pointSize.height > 0, roomWidth > 0, roomHeight > 0 else { return maxCardSize }
@@ -72,6 +72,7 @@ final class QuickAccessController {
     private(set) var closedScreenshot: Screenshot?
 
     @ObservationIgnored private let save: @MainActor (Screenshot) async -> Bool
+    @ObservationIgnored private let didCopy: @MainActor (Screenshot) async -> Void
     @ObservationIgnored private let background: @MainActor () -> ScreenshotBackground
     @ObservationIgnored let pins = PinController()
     @ObservationIgnored private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "QuickAccess")
@@ -89,9 +90,14 @@ final class QuickAccessController {
 
     /// - Parameters:
     ///   - save: Saves a screenshot into the output folder, returning whether it did
+    ///   - didCopy: Told after a screenshot was put on the pasteboard
     ///   - background: The background a card's Add Background puts the shot on (Settings → Screenshots)
-    init(save: @escaping @MainActor (Screenshot) async -> Bool, background: @escaping @MainActor () -> ScreenshotBackground) {
+    init(
+        save: @escaping @MainActor (Screenshot) async -> Bool, didCopy: @escaping @MainActor (Screenshot) async -> Void,
+        background: @escaping @MainActor () -> ScreenshotBackground
+    ) {
         self.save = save
+        self.didCopy = didCopy
         self.background = background
     }
 
@@ -117,7 +123,9 @@ final class QuickAccessController {
                 logger.error("Couldn't draw a preview of the screenshot")
                 return
             }
-            let model = QuickAccessViewModel(screenshot: screenshot, preview: preview, previewPixelSize: maxPixelSize, save: save, background: background)
+            let model = QuickAccessViewModel(
+                screenshot: screenshot, preview: preview, previewPixelSize: maxPixelSize, save: save, didCopy: didCopy, background: background
+            )
             present(model, on: screen, pointer: besidePointer ? pointer : nil)
         }
     }
@@ -130,6 +138,7 @@ final class QuickAccessController {
         case .copy:
             do {
                 ImagePasteboard.copy(png: try await ScreenshotService.pngData(of: screenshot.image))
+                await didCopy(screenshot)
             } catch {
                 logger.error("Couldn't encode the screenshot to copy: \(error.localizedDescription)")
                 show(screenshot)
@@ -244,7 +253,7 @@ final class QuickAccessController {
         )
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        // No window shadow: it outlines the whole rectangle around the rounded glass, which has its own edge
+        // No window shadow: it outlines the whole rectangle around the rounded card, which has its own edge
         panel.hasShadow = false
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -257,7 +266,7 @@ final class QuickAccessController {
         dragger.panel = panel
         dragger.onFlick = { [weak model] in model?.close() }
         anchor = Self.anchor(for: frame, pointer: grownFrom)
-        panel.contentView = NSHostingView(rootView: QuickAccessView(model: model, dragger: dragger, anchor: anchor))
+        panel.contentView = NSHostingView(rootView: QuickAccessView(model: model, dragger: dragger, anchor: anchor).themed())
         // Key, so ⌘C and ⌘S copy and save the new screenshot until another window is clicked
         panel.makeKeyAndOrderFront(nil)
         self.panel = panel

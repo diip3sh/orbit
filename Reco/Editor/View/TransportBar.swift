@@ -108,8 +108,7 @@ struct TransportBar: View {
                     Text("/ \(Self.format(duration))")
                         .foregroundStyle(EditorTheme.dim)
                 }
-                .font(.callout)
-                .monospaced()
+                .font(.theme(.callout).monospacedDigit())
                 .lineLimit(1)
                 .fixedSize()
             }

@@ -15,7 +15,7 @@ struct AgentChatRow: View {
         case .request(let entry):
             Text(entry.text)
                 .textSelection(.enabled)
-                .foregroundStyle(.white)
+                .foregroundStyle(EditorTheme.ink)
                 .agentBubble(.user)
                 .agentSide(.trailing)
                 .accessibilityLabel("You: \(entry.text)")
@@ -57,7 +57,7 @@ private struct AgentToolStep: View {
                 AgentToolState(state: state)
                     .frame(width: 14, height: 14)
                 Text(entry.text)
-                    .font(.callout)
+                    .font(.theme(.callout))
                     .foregroundStyle(state == .failed ? EditorTheme.ink : EditorTheme.dim)
                     .fixedSize(horizontal: false, vertical: true)
             }

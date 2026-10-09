@@ -41,7 +41,8 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 965 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing). `RecoTests` keeps no tests (all
+  removed 2026-10-09): write the ones a change needs there, run them, then delete them.
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -115,7 +116,7 @@ or indirection that doesn't pay for itself in an AVFoundation app.
 
 | Layer | Holds | Rules |
 |---|---|---|
-| Core (`Model/`, pure helpers in `Service/`) | Value types and pure functions: time mapping, geometry, pauses, dedup, auto-zoom, smoothing, settings rules | `nonisolated`, `Sendable`, no side effects or singletons, fully unit tested. E.g. `RecordingPauses`, `CursorShapeTracker`, `InputTelemetry.videoPixel` |
+| Core (`Model/`, pure helpers in `Service/`) | Value types and pure functions: time mapping, geometry, pauses, dedup, auto-zoom, smoothing, settings rules | `nonisolated`, `Sendable`, no side effects or singletons, so they're easy to unit test. E.g. `RecordingPauses`, `CursorShapeTracker`, `InputTelemetry.videoPixel` |
 | Shell (`Service/`) | One service per system boundary: ScreenCaptureKit, AVAssetWriter, event taps, files | Thin: gather input, call the core, apply the result. Explicit isolation: `@MainActor`, or `nonisolated` + a lock |
 | `ViewModel/` | `@MainActor @Observable` state and intents | Calls services; no rules that belong in the core |
 | `View/` | Layout | Reads view-model state, calls intents; no logic |
@@ -135,7 +136,9 @@ or indirection that doesn't pay for itself in an AVFoundation app.
 - Match the surrounding code. Name things by meaning. Comments say *why*, and record measured facts
   with their numbers (like `shadowTopFraction`) so nobody re-derives them.
 - Done means: zero compiler warnings, all tests pass, SwiftLint clean on touched files, new logic
-  has tests, and docs (this file, specs) match the code.
+  checked by tests, and docs (this file, specs) match the code.
+- Tests written to check a change are deleted once they pass, unless the user asks to keep them
+  (2026-10-09): they are for checking the work, not to pile up in `RecoTests`.
 
 ### Performance
 
@@ -245,7 +248,7 @@ recorded (area, window, or display) and the seconds in the menu bar. `reco://tog
 | File | Role |
 |---|---|
 | `Service/RecordingCountdown.swift` | `@Observable` tick loop (`remaining`), cancellable, injectable one-second sleep for tests |
-| `View/CountdownOverlay.swift`, `View/CountdownView.swift` | Click-through, non-activating `.screenSaver` dark panel with the number on a 150 pt disc of the capture toolbar's dark glass (`captureToolbarPill(in:)`) that grows in from its centre (`panelPresentation`) and counts with `numericText`; Esc as a temporary global hotkey |
+| `View/CountdownOverlay.swift`, `View/CountdownView.swift` | Click-through, non-activating `.screenSaver` dark panel with the number on a solid 150 pt surface disc with the floating shadow (`editorSurface(in:floats:)`; the 200 pt panel leaves it room) that grows in from its centre (`panelPresentation`) and counts with `numericText`; Esc as a temporary global hotkey |
 | `Model/CountdownDuration.swift` | Setting enum (`SettingsStore.countdownDuration`) |
 | `ViewModel/RecorderViewModel.swift` | `// MARK: - Countdown` extension: `startRecordingWithCountdown()`, `cancelCountdown()`; `toggleRecording(countdown:)` |
 
@@ -264,7 +267,7 @@ A CleanShot-style card for each screenshot. After Capture Area it opens beside t
 ended, on the pointer's sides facing away from the captured area (`Screenshot.region`,
 `panelFrame(in:size:pointer:awayFrom:)`). Otherwise it opens in the bottom-left corner of the screen under the
 mouse (clear of notifications and the menu bar popover, top-right). The card takes the screenshot's shape
-(`cardSize(for:)`: fitted in 260×220, never enlarged, at least 200×120) on an 8 pt glass edge. **Copy ⌘C** and
+(`cardSize(for:)`: fitted in 260×220, never enlarged, at least 200×120) on an 8 pt solid edge. **Copy ⌘C** and
 **Save ⌘S** (the shortcut shown dimmed in the button) always sit along its bottom edge; under the pointer the shot
 dims and shows Close, **Add Background** (N14), **Hide Sensitive Info** (N9), **Recognize Text** and **Pin** as small icons in its corners. The card takes key when it appears, without
 activating the app, so the shortcuts work until another window is clicked; typing goes to the card meanwhile.
@@ -274,7 +277,7 @@ bottom-left without a region) and shrinks back there when closed, copied, saved 
 was grabbed (`PanelDragger`), and a flick that projects past the screen's edge (`GesturePhysics.flickExit`)
 throws it off at the release speed and closes it; a slow drag stays where dropped, a flick inwards too. Drag the shot into
 any app to drop the image. The card and the capture toolbar have no window shadow: it outlines
-the rectangle around their rounded glass. Nothing is written until **Save**. The card stays until
+the rectangle around their rounded surface, and their panels have no room for a drawn one. Nothing is written until **Save**. The card stays until
 closed, copied, saved, pinned, or replaced by the next screenshot. **Esc** closes it, like the Close button and
 a flick: the panel is key while it shows, so `QuickAccessView` handles it (`.onExitCommand`), not the window.
 `AppDelegate` wires `ScreenshotController.onWillCapture` to `hide()` so the card never lands in the next shot, and
@@ -283,7 +286,10 @@ cancelled or fails. The capture toolbar is hidden the same way but **isn't** bro
 it was only the way in, so Esc on an area selection closes that state and leaves the screen as it was.
 
 - **Copy** (C14): PNG data only; the button turns to ✓ Copied as the card starts closing, so it confirms during the
-  fade. **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed
+  fade. With **Settings → Screenshots → History → Save Copied Screenshots** on (`SettingsStore.savesCopiedScreenshots`,
+  off by default; 2026-10-09) the copy is also saved, like Save, so it stays in the folder and the Library instead of
+  expiring from the history: `ScreenshotController.didCopy(_:)`, which the card's Copy and `?then=copy` both call through
+  `QuickAccessController`'s `didCopy`. A failed save sends Screenshot Failed; the copy stands. **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed
   notification is sent. **Recognize Text** (C7): the
   image's text to the clipboard, or, when it holds QR codes or barcodes, their payloads (N16: `TextRecognizer.codes`, Vision's
   `DetectBarcodesRequest` alongside the text request; Code Copied). **Hide Sensitive Info** (N9): pixelates emails, phone numbers,
@@ -306,16 +312,18 @@ it was only the way in, so Esc on an area selection closes that state and leaves
 - **Annotate** (N13, spec 0015, 2026-10-08; `pencil.tip`, first of the top-right icons): grows the card into an editor at the
   shot's size fitted to the screen (`QuickAccessController.annotationCardSize(for:in:)`, the refit keeps the corner it grew
   from) with a tool strip (Select, Arrow, Line, Rectangle, Ellipse, Text, Highlighter, Step, Blur, Pixelate, Spotlight, Crop; V A L
-  R O T H N B P S C; eight colours, three widths, undo/redo, Done) over the shot and Copy and Save under it. Marks are vectors in
+  R O T H N B P S C; eight colours, three widths, undo/redo, delete) over the shot with Copy and Save at its end (2026-10-09, in place of Done
+  and a row of them under the shot: they flatten the marks and close the card from the editor; the narrowest editor is 800 pt).
+  Marks are vectors in
   the shot's points (`Annotation`, pure); `AnnotationRenderer` draws them with Core Graphics for the canvas (scaled by the view)
   and the output alike; blur, pixelate and spotlight are pixels through `MaskRenderer` (`AnnotationDocument.effects`), rendered
   into the editor's `base` when they change. `AnnotationEditor` (`@MainActor @Observable`) holds the document, a history of
   documents for undo, the tool, colour, width, the draft being dragged, the text being typed and the crop draft; the canvas
   keys a press on its `startLocation`, since a gesture SwiftUI cancels never ends (instant synthetic drags, measured with
-  cliclick, left `onEnded` uncalled). Done shrinks the card back showing the marked shot (`compose()`: plain → flattened →
+  cliclick, left `onEnded` uncalled). Esc shrinks the card back showing the marked shot (`compose()`: plain → flattened →
   framed; `AnnotationFlattener.flatten` draws at the shot's pixels off the main actor, drops the HDR copy, cuts the crop) and the
   marks stay editable until the card closes; Copy, Save, Pin and drag-out flatten first (`flattenIfAnnotating`). Checked by hand
-  2026-10-09: arrow, rectangle and two steps drawn on a card, Done, Save; the PNG shows them where they were drawn.
+  2026-10-09: arrow, rectangle and two steps drawn on a card, back to the card, Save; the PNG shows them where they were drawn.
 
 | File | Role |
 |---|---|
@@ -326,7 +334,7 @@ it was only the way in, so Esc on an area selection closes that state and leaves
 | `QuickAccess/View/QuickAccessController.swift`, `QuickAccessPanel.swift` | Non-activating borderless `.floating` dark panel (key on appearing, `hidesOnDeactivate = false`), enter/exit through `panelPresentation` (`exitDelay` before ordering out; leaving panels are tracked so `hide()` clears them too), placement (`panelFrame`), owns the card's view model and the pins |
 | `QuickAccess/ViewModel/QuickAccessViewModel.swift` | One screenshot's intents and feedback, the drag-out file; reports up through `onClose`/`onPin`/`onReshape` |
 | `Screenshot/Model/ScreenshotBackground.swift`, `UniformBorders.swift`, `Screenshot/Service/ScreenshotFramer.swift`, `Model/SettingsStore+ScreenshotBackground.swift`, `View/ScreenshotSettingsView.swift` | The background setting and Auto Balance's trim (pure); the shot drawn on the canvas; the Settings → Screenshots tab (HDR, history, background) |
-| `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorGlass` (16 pt radius), hover scrim and controls (Copy and Save both `.editorPrimary`: secondary's accent text over the shot read as a disabled Copy; dark corner icons), a solid toast; icons are 1.5 pt line
+| `QuickAccess/View/QuickAccessView.swift`, `PanelDragger.swift` | Card layout on `editorSurface` (16 pt radius), hover scrim (the stage colour at 45%) and controls (Copy and Save over the shot are untinted system glass on macOS 26, `QuickAccessGlassButtonStyle`, as Safari's toolbar over a page: the shot shows through and the system picks the label's colour, where the accent's prominent glass read as a solid pill; captured 2026-10-09, macOS 27, white labels over a photo in both appearances and over a white page on glass the system darkens to grey, lower contrast there; the solid accent before macOS 26; in the annotation editor's strip, on a solid surface, they stay `.editorPrimary`, since secondary's accent text read as a disabled Copy; corner icons on the control fill), a solid toast; icons are 1.5 pt line
 SVGs in `Assets.xcassets/LineIcons` as template vectors, drawn by `LineIcon` in `CornerButtonStyle`'s dark circles (both shared with pins): Hugeicons
 stroke-rounded (MIT) cancel, checkmark circle, scan text and pin, as in the capture toolbar (the app's icons are SF Symbols and Hugeicons only); a `DragGesture` on the edge drives `PanelDragger` (screen coordinates, `VelocityTracker`, flick exit), `.onDrag` on the shot; in the editor, the strip, the canvas and the actions in one column |
 | `QuickAccess/View/PinController.swift`, `PinView.swift` | One `.floating` panel per pin at the shot's point size fitted to the screen (`frame(for:at:in:)`), aspect-locked resize, drag anywhere, 8 pt rounded corners with a faint edge, the card's close button on hover; appears from and closes into its bottom-left corner (`panelPresentation`, a `PanelPresence` per pin); a right-click sets its opacity (100, 75, 50, 25%: the panel's `alphaValue`, shadow included) or makes it click-through (`ignoresMouseEvents`), and the menu bar's **Unlock Pins**, shown while any pin is click-through, takes clicks on all of them again |
@@ -806,14 +814,30 @@ Key facts:
   the saved styles when none is open; dropped on the editor (`dropDestination` for URLs) it's imported the same way.
   Each editor reads the list when it opens and after its own changes; another window's save shows up in the next editor.
 
-### S1 — Editor design (`feat/editor-shell`)
+### S1 — Editor design (`feat/editor-shell`, theme `feat/linear-theme`)
 
-The editor, Library and Web Recording windows use the system's colors, so they follow the user's appearance (light
-or dark) and accent color: the window background (80%) the desktop frosts through, text in the label
-tones (ink, dim, faint), separators instead of boxes, and the accent
-(`EditorTheme.accent`, `Color.accentColor`; the asset catalog's AccentColor is empty) for the Export button, the playhead,
-the selection and the sliders' fill. No panel forces an appearance (a dark-only studio look was considered from the
-Pinterest moodboard on 2026-10-05 and turned down). The preview sits on a faint dot grid; the inspector (toolbar toggle) holds every
+Since 2026-10-08 every window and floating panel wears design tokens extracted by Refero; dark mode's are herding.app's
+(2026-10-09, in place of Linear's): warm olive-charcoal solid surfaces one step apart (page void `#1c1c1a` for window grounds,
+graphite card `#232320` for panels and cards, ash step `#35352f` for what floats over them and for control fills, slate matte
+`#2e2e2b` for lanes), text in three tones (off-white ink `#fffffe`, sand label `#a3a29c`, fog text `#7f7e77`), hairlines
+instead of boxes (white at 8%, `#ffffff14`, since 2026-10-09: a light ring like the web's `box-shadow: 0 0 0 1px`, where
+herding's bistre `#161615` drew a black outline; 6% vanished on page void and 12% read as a grey line, compared side by side;
+the dot grid's dots and the divider fills use it too, so they are faint light marks now; `scripts/apply-theme.py` takes
+`#rrggbbaa` for it), Inter for every label (herding's Styrene is a paid typeface) and JetBrains
+Mono for shortcuts, file names and code, and spray wash `#3fe0a6` as the one accent, with page void on it. Pewter `#45453e`
+and stone `#3e3e38` aren't used: sand label on them is 3.8:1 and 4.2:1. Light mode (2026-10-08) takes the light end of Default's tokens (default.com, also by
+Refero): bone `#f2f2f2` for window grounds and control fills, snow `#ffffff` for panels and cards, chalk `#cececf`
+hairlines, void `#0b0c0e` text, steel darkened to `#6b6b73` for dim text (steel `#71717a` is 4.3:1 on bone), fog
+`#858687` for faint marks, and iris `#314ef0` as the accent and its fill, with white on it (Signal Blue `#3b82f6` was
+turned down: white on it is 3.7:1). Every colour is a colour set in `Assets.xcassets/Theme` (and `AccentColor`) with a
+dark, a light and an Increase Contrast variant of each, so the app still follows the user's appearance; no window forces
+one (the notch shelf excepted: it is black under the notch). The menu bar popover stays native, as before the theme: the
+system font, label colours and accent on `.ultraThinMaterial`. No Liquid Glass and no materials, except the primary
+button (tinted glass, below), the capture toolbar's live controls (tinted glass, see Capture toolbar) and Raycast's see-through columns: the Library's sidebar and the editor's and Web Recording's inspectors show the desktop blurred
+(`translucentColumn()`: an `NSVisualEffectView` behind the window, tinted with `panel` at 45%, not yet checked by eye), which
+is why editor windows aren't opaque and have a clear background, and their content draws its own ground. Native controls (Settings' forms, switches, pickers, the shortcut
+recorder) stay native and take the accent through `.tint`; AppKit controls follow the user's own accent instead when it isn't
+Multicolor. This replaced the system colours and glass of 2026-09-28 to 2026-10-07. The preview sits on a dot grid; the inspector (toolbar toggle) holds every
 setting on the right, and the transport (cut, zoom, ⌫; frame steps and play; the time) sits in the timeline's header,
 without glass. A chip row under the preview in place of the inspector was tried on 2026-10-05 and turned down: the
 settings stay visible in the column. Nothing else is colored: clicks, keys and zooms are greys, and the default canvas is a
@@ -821,10 +845,11 @@ slate gradient.
 
 | File | Role |
 |---|---|
-| `Editor/View/EditorTheme.swift` | System colors by role, spacing on a 4-point grid, and the motion tokens: `motion` (spring, response 0.35, critically damped: every state change), `quickMotion` (0.15: hover, release), `momentumMotion` (damping 0.8: only after a flick), `fadeMotion` (Reduce Motion's cross-fade) and `release(velocity:distance:)` (a drag's release speed handed to a spring) |
-| `Editor/View/View+EditorGlass.swift`, `EditorGlassGroup.swift` | Liquid Glass on macOS 26 (`glassEffect`, `GlassEffectContainer`), a material with a hairline before; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on (`nil` skips it); `withMotion { }` is the same for code with no environment; Increase Contrast adds a `dim` edge to every glass surface |
-| `Editor/View/EditorBackdrop.swift`, `StageDotGrid.swift` | The frosted desktop behind the window; the dot grid behind the preview, fading out before the stage's edges |
-| `Editor/View/EditorButtonStyle.swift` | The two text buttons, Liquid Glass capsules (`glassEffect(_:in: .capsule)`, interactive): `.editorPrimary`, glass tinted with the accent colour and white text, only for the one action a place leads to (Export…, export's Export and then Share…, Render, the card's Copy and Save); `.editorSecondary`, clear glass with accent text and its icon white on a 20 pt accent disc, for every other text button. Icons come from the button's `Label(_:image:)`: `Assets.xcassets/ButtonIcons`, Phosphor Bold (MIT) from Iconify as 14 pt template PNGs (`button-export`, `-share`, `-folder`, `-close`, `-retry`, `-agent`, `-settings`, `-render`). Solid with Reduce Transparency, a material before macOS 26, an edge with Increase Contrast; the press scales to 0.97 on the frame it lands, only hover and release ease |
+| `Editor/View/EditorTheme.swift`, `Assets.xcassets/Theme` | Colours by role (`stage`, `panel`, `surface`, `raised`, `control`, `ink`, `dim`, `faint`, `hairline`, `softHairline`, `accent` for lines and text, `accentFill` with `onAccent` on it), radii (6 buttons and fields, 12 cards and panels, 16), spacing on a 4-point grid, and the motion tokens: `motion` (spring, response 0.35, critically damped: every state change), `quickMotion` (0.15: hover, release), `momentumMotion` (damping 0.8: only after a flick), `fadeMotion` (Reduce Motion's cross-fade) and `release(velocity:distance:)` (a drag's release speed handed to a spring) |
+| `Editor/View/View+EditorSurface.swift` | `editorSurface(in:fill:floats:)`, a solid fill with a hairline edge (`floats`: the token's xl shadow, which needs 20 pt of room in its window); `themed()`, the accent and typeface every window root applies; `editorWindowBackground()`; `editorMotion(value:)` animates unless Reduce Motion is on (`nil` skips it); `withMotion { }` is the same for code with no environment |
+| `Editor/View/Font+Theme.swift`, `Typeface.swift`, `Fonts/` | `Font.theme(_:weight:_:)` and `NSFont.theme`: a text style in Inter or JetBrains Mono, both variable fonts (SIL OFL 1.1, licences beside them) registered by `ATSApplicationFontsPath`. Sizes are macOS's own per style (so layouts keep their room) except title (20) and large title (24), from the token scale; medium and semibold are Linear's 510 and 590 on the `wght` axis. Rendered video overlays (keystroke chip) keep the system font |
+| `Editor/View/StageDotGrid.swift` | The dot grid behind the preview, fading out before the stage's edges |
+| `Editor/View/EditorButtonStyle.swift` | The two text buttons: `.editorPrimary` (`EditorPrimaryButtonStyle`), the system's `.glassProminent` capsule tinted with the accent fill, `onAccent` text, large control size (2026-10-09, after Parker Ortolani's "Tinted Liquid Glass"; a custom `.glassEffect(.regular.tint(…))` behind the label barely showed the tint, and none inside the toolbar's glass; the solid fill before macOS 26; the system style handles hover, press, Reduce Transparency and Increase Contrast; its contrast isn't tested, since glass takes in what's behind it), only for the one action a place leads to (Export…, export's Export and then Share…, Render, Copy and Save in the annotation editor's strip); `.editorSecondary`, the control fill with a 6 pt radius, a hairline edge and ink text, for every other text button. Icons come from the button's `Label(_:image:)`: `Assets.xcassets/ButtonIcons`, Phosphor Bold (MIT) from Iconify as 14 pt template PNGs (`button-export`, `-share`, `-folder`, `-close`, `-retry`, `-agent`, `-settings`, `-render`); the press scales to 0.97 on the frame it lands, only hover and release ease |
 | `View/PanelPresentation.swift`, `PanelPresence.swift` | `panelPresentation(isPresented:anchor:motion:blur:)`: a floating panel fades and, with `blur`, pops in where it is from that many points out of focus — no direction, where a scale has one, since the corner furthest from the anchor travels the most and the eye reads the panel as growing from that corner (the capture toolbar and its picker use `blur`; the card, pins, agent bar and countdown use the scale). Only opacity, blur and scale are animated, so a window resize in the same update isn't. Opacity only with Reduce Motion; `exitDelay` is how long its window stays; `PanelPresence` carries the flag for controllers whose view model can't |
 | `View/MenuRowButtonStyle.swift` | `.menuRow` for the popover's rows, and `MenuRowHighlight`: Control Center's highlight (not on `MenuBarToggle` rows, whose switch is the only control), a 10 pt continuous rounded fill the row's full height, 6 pt in from the sides, 0.1 on hover, 0.16 the moment it's pressed, dimmed when disabled |
 | `Model/GesturePhysics.swift` | Pure: `project` (momentum), `rubberband`/`rubberbanded` (resistance past a boundary), `relativeVelocity`, `velocityMatchedDuration`, `flickExit`, and `VelocityTracker` (the last 0.1 s of a drag) |
@@ -835,16 +860,39 @@ slate gradient.
 | `Editor/View/Inspector*.swift`, `EditorInspectorSections.swift`, `TickSlider.swift`, `TilePicker.swift`, `CanvasInspectorSection.swift` | `EditorInspector` and its sections, which fold away under a dim title (Background's has none, so it never folds), `SwatchGrid` (preset and wallpaper tiles, the chosen one ringed in the accent colour), sliders with their values, switches, and tiles whose highlight slides. Every slider is a `TickSlider`: a track with ticks, accent fill up to a bar at the value, dragged 1:1 from the grab (a press away from the bar takes it there first), VoiceOver adjustable in 20 steps, without a focus ring |
 | `Editor/View/ExportOptions.swift`, `ExportProgressBar.swift` | Export's inspector: format, size and frame rate as `SegmentedChoice` tabs (an option can be disabled), the quality as rows with their estimated sizes, Export and Copy to Clipboard (side by side, or stacked when the column is narrow) pinned under a line; progress |
 
+**Changing the theme:** `theme/theme.tokens.json` is the source of every colour, in the W3C design-token format the
+Linear tokens came in. Its `color` group is the dark palette as given (herding.app's since 2026-10-09, Linear's before), `lightColor` the light one (Default's); its `role` group gives each role above a dark `$value`
+(a hex or an alias such as `{color.void}`) and, in `$extensions.com.reco.theme`, its `light`, `darkHighContrast` and
+`lightHighContrast` values. Edit the file (or replace it with another theme's, keeping the `role` names), run
+`scripts/apply-theme.py`, which rewrites every colour set in `Assets.xcassets/Theme` and `AccentColor`, then check the
+colours' contrast against the rules below and that the radii (`radius`) and typefaces (`font`) still match the file:
+no test checks them. Radii and typefaces are read by Swift, not generated: change
+`EditorTheme`'s radii or `Typeface`'s families to match, and put a new font's file in `Reco/Fonts`.
+
+| File | Role |
+|---|---|
+| `theme/theme.tokens.json`, `scripts/apply-theme.py` | The theme's tokens; the generator of the colour sets (aliases resolved, loops and bad values refused) |
+
 Key facts:
-- Glass only on controls over the stage, never on the timeline (content) or over the live video:
-  each glass shape costs a sampling pass on the GPU the compositor also uses.
-- **Glass animates itself unless told not to.** `glassEffect` grows its shape as it appears (Apple's
-  own transition, `GlassEffectTransition` in SwiftUICore with `.matchedGeometry`, `.materialize` and
-  `.identity`), so a surface with its own entrance gets a *second* motion on top — for the capture
-  toolbar's pills that read as the controls sliding in diagonally, whatever the panel's own animation
-  did. Every `captureToolbarPill` therefore sets `.glassEffectTransition(.identity)` and leaves the
-  entrance to its caller (the bar's blur pop-in, the countdown disc's settle).
-- The inspectors keep the system `.inspector`, which macOS 26 draws as glass, so it has no background.
+- Contrast is measured with the WCAG formula, not eyeballed: in dark, light and both Increase Contrast variants, ink is at
+  least 7:1 on every surface, dim 4.5:1, faint (structure marks only, never text) and the accent 3:1, and `onAccent` on the
+  accent fill 4.5:1 (7:1 with Increase Contrast; white on iris is 6:1).
+- Measure the colours from the token file, not through AppKit: the Increase Contrast variants are compiled into
+  `Assets.car` (`assetutil` lists them), but `NSColor(named:)` resolved under `NSAppearance(named:
+  .accessibilityHighContrastDarkAqua)` returns the normal value (2026-10-08, macOS 27), so a check through AppKit
+  silently covers only dark and light.
+- **Status colours** (2026-10-09) are roles too, outside herding's palette: `success` emerald, `warning` ember (orange),
+  `danger` rose, Tailwind's 400 in dark and 700 in light (a step further with Increase Contrast), each at least 4.5:1 as
+  text on every surface and the control fill (rose on dark control: 4.6:1).
+- **An accent fill carries `onAccent`, never a fixed colour:** it is page void on spray wash in dark (white on it is 1.7:1) and white on iris in light. That includes system prominent buttons,
+  which draw white titles: use `.editorPrimary` instead.
+- **If glass comes back, it animates itself unless told not to.** `glassEffect` grows its shape as it appears (Apple's
+  own transition, `GlassEffectTransition` in SwiftUICore with `.matchedGeometry`, `.materialize` and `.identity`), so a
+  surface with its own entrance gets a *second* motion on top: the capture toolbar's glass pills read as the controls
+  sliding in diagonally until they set `.glassEffectTransition(.identity)` (2026-10-05).
+- The inspectors keep the system `.inspector`; their content and the Library's sidebar list (`scrollContentBackground(.hidden)`)
+  take `translucentColumn()` (`Editor/View/BehindWindowBlur.swift`). The window's ground (`editorWindowBackground()`) is on the
+  main content only, never the root: anything opaque under a column hides the desktop.
 - Text is ink by default, so it doesn't dim when disabled: `InspectorSection` fades disabled content.
 - Editor windows take their minimum size from SwiftUI (`sizingOptions = .minSize`), so anything laid out in points of
   a measured width (filmstrip tiles, lane blocks) sits in a `frame(minWidth: 0, …)`: without it the timeline's last
@@ -859,18 +907,17 @@ Key facts:
 - Avoid what reads as generated: no gradients or glows in the chrome, no second accent, no cards
   and badges where a native control works, no all-caps titles, hover as a fill step (no lifts or
   scaling).
-- Two visual families, one motion system: the system-native popover and Settings, and this studio
-  look (editor, Recordings, Web Recording, the agent bar and the floating capture panels: Quick Access card,
-  pins, capture toolbar and its picker, countdown). These share the toolbar's dark glass and the system
-  accent colour for what is chosen or the action; a take in progress is red.
+- One visual family, one motion system: every window and floating panel (editor, Library, Web Recording, the agent
+  bar, Quick Access card, pins, capture toolbar and its picker, countdown, Settings) on the same surfaces, with
+  the accent for what is chosen or the action; a take in progress is red, a status colour outside the tokens.
 - Motion follows the apple-design skill: respond on press, move 1:1 from the grab point, springs that start
   from the current value, bounce only after a flick, symmetric enter and exit from the source. Timeline
   clip and trim-handle drags resist past the ends (`rubberbanded`) and release into `release(velocity:distance:)`,
   so what the timeline refuses springs home from where it was shown; the zoom focus pad keeps the offset
   from where its outline was grabbed.
 - Area selection fades its dim in over 0.12 s on the first drag (instant with Reduce Motion), and its
-  Confirm and Cancel are system buttons (glass on macOS 26, Confirm tinted with the accent colour) with Return
-  and Esc as key equivalents.
+  Confirm and Cancel are AppKit push buttons (Confirm's bezel the accent fill, its title `onAccent`) with Return
+  and Esc as key equivalents. The dim, border and handles it draws over the screen stay black and white.
 - Skipped on purpose: Settings, the menu bar label, the export sheet, momentum on timeline edits, rubber-banding
   area selection, pin flick, scrubbing.
 - Clips in a lane (`TimelineLane`: zooms, web cursor and scroll clips) are window-coloured chips on a hairline and
@@ -879,7 +926,7 @@ Key facts:
 - Optional bindings use `Binding(unwrapping:)` (`View/Binding+Unwrapping.swift`), never `Binding($optional)`: views
   under an `if let` read the binding once more after a selected clip or zoom is deleted, and `Binding(_:)`'s
   force-unwrap crashed the app (three crashes on 2026-10-02, one mid agent run).
-- `ImageRenderer` can't draw glass content, AppKit controls, `ScrollView`s or the player, and
+- `ImageRenderer` can't draw system glass (the inspector, the sidebar), AppKit controls, `ScrollView`s or the player, and
   `screencapture`/`cacheDisplay` need permission or miss SwiftUI; check the look in the app.
 
 ### C1 — Screenshots
@@ -1008,7 +1055,7 @@ Key facts (measured on an M5, macOS 26.5, spec 0005):
 
 Coding agents (Claude Code, Codex, OpenCode, Cursor, Gemini CLI, Claude Desktop, Grok Build) record a
 web page from its address. **Settings → Agents** finds the installed ones and adds a server named `reco` to
-each one's own settings, only when the user clicks Connect (it writes the bridge token there). The agent then calls three MCP tools: `inspect_page` (selectors and boxes of a
+each one's own settings, only when the user clicks Connect (it writes the bridge token there). Each row's status is coloured: Connected emerald (`EditorTheme.success`), Not connected and Out of date ember (`warning`), Not found dim; Disconnect is rose (`danger`). The agent then calls three MCP tools: `inspect_page` (selectors and boxes of a
 page), `record_page` (hover, click and scroll steps rendered like spec 0005, opened in the editor) and
 `render_status`. Started with `--mcp`, the app only pipes stdio to the running app's Unix socket, and
 starts the app first if needed.
@@ -1035,11 +1082,16 @@ Key facts:
   first line, and never logged.
 - `record_page` and `render_status` wait 45 s, `inspect_page` 40 s: under the 60 s tool timeout of Codex
   and Claude Desktop. A longer render is followed with `render_status`.
+- **An agent never takes focus** (2026-10-08): pages are inspected and rendered in an offscreen window, and a finished
+  movie (the bridge's, and every Web Recording render, the chat's included) goes through
+  `EditorWindowManager.openWhenReady(_:)`: in front while Reco is the active app, otherwise its editor is ordered behind
+  every window (`orderBack`, no activation) and **Recording Ready** is posted (`sendRecordingReadyNotification`, Edit and
+  Show in Finder; a click brings the editor forward). A recording the user stops still opens in front, as before.
 - Windsurf is left out (config path unverifiable). `CODEX_HOME`, `GROK_HOME`, XDG and `OPENCODE_CONFIG`
   aren't followed (they could be now); `opencode.jsonc` isn't handled.
 - Edited JSON keeps its content but its key order becomes sorted. Files with comments are refused.
 - The test host is Reco, so its server takes `agent.sock` from a running Reco while tests run.
-- The `--mcp` client is covered by `AgentBridgeClientTests`: the test host starts another copy of itself.
+- A test of the `--mcp` client can have the test host start another copy of itself.
 - Config files are written through a temporary file next to the target, then `rename(2)`.
 
 ### S4 — Agent recording (`feat/agent-bridge`, spec 0007)
@@ -1048,7 +1100,8 @@ The agent is part of the one Web Recording window (**New Web Recording…**, and
 at the toolbar's leading edge opens the chat panel on the left. The shortcut **Record with AI Agent** (Settings → Shortcuts →
 Web Recording, no default) and the failure notification's action open the same window with the panel open
 (`EditorWindowManager.showAgentChat()`, S5); the menu bar and the Library have no row of their own. The Spotlight-style bar it used to open was removed on 2026-10-02. Reco runs the agent's command line headlessly with only its own
-three MCP tools allowed; the agent records through the bridge (S3) and the editor opens. While it
+three MCP tools allowed; the agent records through the bridge (S3) and the editor opens (behind the user's work, with a
+notification, when Reco isn't in front). While it
 runs the bar and the menu bar (a sparkle, "AI", then the render's percent) show it; **Cancel** stops
 the command line. A failure shows its reason with **Retry** in the bar and in a notification.
 
@@ -1085,7 +1138,7 @@ Key facts:
 - "Set Up Agents…" sends `showSettingsWindow:` (`openSettings` belongs to a scene) after writing the
   Agents tab to the `settingsTab` default.
 - The panel's motion follows the apple-design skill: one `isPresented` flag drives a bounce-free spring,
-  so closing and reopening mid-animation retargets; Reduce Motion cross-fades, Reduce Transparency is solid.
+  so closing and reopening mid-animation retargets; Reduce Motion cross-fades.
 
 ### S5 — Agent chat (`feat/ui-polish`, spec 0008)
 
@@ -1112,11 +1165,10 @@ the time on the right; Render is the accent button, like Export. The stage has n
   their own bottom corner (opacity only with Reduce Motion).
 - **Tests and a running Reco:** the test host is Reco, so a test run takes the bridge's socket from the
   running app. An agent run going at the time loses Reco, and its `--mcp` client starts a second copy.
-  Don't run tests during an agent run; relaunch Reco after testing. `AgentToolsTests` render into a
-  temporary folder (they used to fill `~/Movies/Reco` with 1 s movies).
-- `aPageThatCantBeLoadedFailsTheRenderWithAReason` and `aFailedRenderDoesntBlockTheNextOne` fail on this
-  Mac (macOS 26.6) with or without the chat changes: rendering `http://localhost:1` succeeds instead of
-  failing. Not yet looked into.
+  Don't run tests during an agent run; relaunch Reco after testing. Tests that render write into a
+  temporary folder, not `~/Movies/Reco`.
+- Rendering `http://localhost:1` succeeded instead of failing on this Mac (macOS 26.6), so a page that can't load
+  may not fail its render. Not yet looked into.
 
 ### S6 — Walkthrough editor (`feat/ui-polish`, `feat/walkthrough-show`, spec 0009)
 
@@ -1157,16 +1209,24 @@ are in Settings → Video, the audio codec in Settings → Audio.
 
 Replaces the pre-record overlay and the popover's recording rows: a floating bar at the bottom centre of the
 screen under the pointer, above the Dock, in the system Screenshot toolbar's order. Idle, its groups sit as
-dark Liquid Glass pills. The screenshot toolbar: close and a settings menu (Show Cursor, Settings…) in one pill;
+solid surface pills with a hairline edge. The screenshot toolbar: close and a settings menu (Show Cursor, Settings…) in one pill;
 Capture Screen / Window / Area; and **Capture ↩**. The recording toolbar: close and settings; Record Screen /
 Window / Area; the options (a countdown chip with its value, then system audio, microphone and camera as
 switches); and **Record ↩**, its key in its label. Each
 always opens on its area mode (`CaptureToolbarViewModel.open(records:)`, `CaptureToolbarMode.initial`), never the
 one it was left on; a selection made elsewhere opens the recording one on its mode. **Take Screenshot…** and
 **Record Screen…** open them, from the popover or their global shortcuts ⇧⌘1 / ⇧⌘2 (`showScreenshotToolbar`,
-`showRecordingToolbar`, Settings → Shortcuts → Capture Toolbar; idle only, like the rows). What is live, chosen or on is the system accent colour (`CaptureToolbarView.live`): the action's
-pill, the mode's highlight (sliding to the one chosen), switches that are on (filled, white icon); a switch that is
-off keeps a faint fill so it still reads as one.
+`showRecordingToolbar`, Settings → Shortcuts → Capture Toolbar; idle only, like the rows). What is live, chosen or on is the accent fill (`CaptureToolbarView.live`, with `onAccent` content): the action's
+pill, the mode's highlight (sliding to the one chosen), switches that are on (filled, dark icon); a switch that is
+off keeps a faint fill so it still reads as one. On macOS 26, while the bar is key, each of them is Liquid Glass
+tinted with it at 70% and no fill under it, so the desktop shows through (`captureToolbarLive(_:in:isInteractive:)`,
+2026-10-09; interactive on the action and the switches). The tint was picked from ScreenCaptureKit captures of the bar
+in a key and a non-key panel (macOS 27): at 100% it read as a solid fill over a dark desktop (a fill under the glass
+did too), at 50% the `onAccent` text sank into the dark behind it. Glass drops its tint while its window isn't key,
+`.glassProminent` too, and setting `controlActiveState` doesn't bring it back; the bar loses key to the area overlay or
+another app, so then (`controlActiveState` isn't `.key`) it is the solid fill instead, as with Reduce Transparency on and
+before macOS 26, where a switch's fill steps down under the pointer and the press (`fillOpacity`). A record badge is cut out of its
+mode's icon (`blendMode(.destinationOut)`), since no solid colour matches the glass under it.
 
 **Choosing what to record** opens the mode's own control straight away, whether from a mode icon
 (`pick(_:)`) or from Record (`performAction()`), both through `chooseSource(for:)`: Reco's picker for a window
@@ -1175,7 +1235,7 @@ only switches mode, and Record takes the display the bar is on (`CaptureSourcePi
 `currentDisplayID`, the first display if that one is gone). A choice then starts the countdown. The picker is the
 windows as thumbnails above the bar in one row, at most four tiles wide (`CaptureSourceGrid.maximumColumns`), the
 rest scrolled to sideways under the frost's edges, each with its app icon, title and app name, on a light frost of its own
-(`pickerBackdrop()`; solid with Reduce Transparency) and **nothing else** — no panel with a title, no button.
+(`pickerBackdrop()`, the raised surface) and **nothing else** — no panel with a title, no button.
 Each picture is the window at its own shape, fitted into the tile and sitting on its name, with the ring around
 the picture itself (`CaptureSourcePicture`): a 16:10 box behind it left wide and tall windows small inside a
 bigger frame. One highlight (`CaptureSourcePicker.highlighted`) is on the first tile when they land, and the
@@ -1205,7 +1265,8 @@ by half the picker's height and back down on every close.
 Confirm/Cancel buttons of its own** (`presentAreaSelection(showsActions: false)`, from the toolbar only;
 the menu and shortcut paths keep them): the bar rises one level above the overlay
 (`CaptureToolbarController.selectionLevel`, `.screenSaver + 1`) so it stays clickable, Record is disabled until
-an area is drawn and then takes it (`AreaSelectionOverlay.isPresented`/`canConfirm`/`confirm()`), and
+an area is drawn, reading **Select an Area** in dim text on a plain pill without its key (`CaptureToolbarViewModel.actionTitle`;
+a disabled action is never on the accent: a faded label there read as a broken button), and then takes it (`AreaSelectionOverlay.isPresented`/`canConfirm`/`confirm()`), and
 switching mode or closing the bar cancels the selection (`cancel()`). Return and Esc still work, on the
 overlay's own key handling. During the take the bar
 shows what it records (fixed until it ends) and the live pill: the time in red, on a red-tinted pill, dim while paused, pause,
@@ -1241,7 +1302,7 @@ and a white stop square, for any start (menu, shortcut, `reco://`); it goes once
   0.12 s, out 0.08 s), with Reduce Motion too, since nothing moves. While hovered the text follows what the
   control does (Pause ↔ Resume, On ↔ Off), swapped in place. The window is sized from the bubble measured for
   its text (`CaptureToolbarTooltipView.size(for:)`), and placed from the bar's own frame, not its window's
-  (which reaches the 12 pt margin past it, and the picker), so the tail's tip is 6 pt clear of the glass. Dragging the bar keeps tooltips away until
+  (which reaches the 12 pt margin past it, and the picker), so the tail's tip is 6 pt clear of the pill. Dragging the bar keeps tooltips away until
   the pointer moves again, and a screenshot's instant hide takes the tooltip with it.
 
 | File | Role |
@@ -1254,12 +1315,12 @@ and a white stop square, for any start (menu, shortcut, `reco://`); it goes once
 | `CaptureToolbar/ViewModel/CaptureSourcePicker.swift`, `View/CaptureSourcePickerView.swift` | Open/pick/cancel, thumbnails filled in as each is drawn; `hasSomethingToShow`, the panel and its bare tiles. A pick goes through `RecorderViewModel.selectContent(_:)`, the same path as the system picker's |
 | `CaptureToolbar/ViewModel/CaptureToolbarTooltips.swift` | The hovered control and its text: rest delay and warm period, hover, retext while hovered, unhover after a switch grace, suppressed while dragging, and `pointsUp` when the bar sits at the top of the screen |
 | `CaptureToolbar/View/CaptureToolbarTooltip.swift` | The tooltip modifier every control takes (dwell delay, live text, mid-x in the bar's coordinate space), the Dock-style bubble with its tail, and its fade |
-| `CaptureToolbar/View/CaptureToolbarController.swift` | Non-activating borderless panel, no shadow (glass draws its own), shown and hidden by the recorder's state, sized to the bar plus the picker while it is up (widened at once, narrowed after the exit), drag and momentum, the tooltip's window above the hovered control, and the picker's mount and exit |
+| `CaptureToolbar/View/CaptureToolbarController.swift` | Non-activating borderless panel, no shadow (the pills' hairline edges stand in for one), shown and hidden by the recorder's state, sized to the bar plus the picker while it is up (widened at once, narrowed after the exit), drag and momentum, the tooltip's window above the hovered control, and the picker's mount and exit |
 | `CaptureToolbar/View/CaptureToolbarView.swift` | The picker above the bar, then idle / counting down (with Cancel) / recording / saving, all in the studio's dark scheme; reports the window's and the bar's own sizes |
 | `CaptureToolbar/View/CaptureToolbarIdleControls.swift`, `CaptureToolbarLiveControls.swift` | The idle groups with the sliding mode highlight; the live indicators and pill |
 | `CaptureToolbar/View/CaptureToolbarOptions.swift`, `CaptureToolbarMoreMenu.swift` | Countdown chip menu; system audio / mic / camera switches; Show Cursor and Settings… |
 | `CaptureToolbar/View/CaptureToolbarShortcut.swift` | The keys the bar answers while it has key, and how tooltips write them |
-| `CaptureToolbar/View/CaptureToolbarPill.swift`, `CaptureToolbarButtonStyle.swift`, `ToolbarIcon.swift`, `CaptureModeIcon.swift` | The glass pill (solid with Reduce Transparency, defined edge with Increase Contrast), the press/hover/isOn button styles, the icons |
+| `CaptureToolbar/View/CaptureToolbarPill.swift`, `CaptureToolbarButtonStyle.swift`, `ToolbarIcon.swift`, `CaptureModeIcon.swift` | The pill (`editorSurface` in the surface colour, or a status tint), the press/hover/isOn button styles, the icons |
 
 - The bar is left out of display and area recordings because it is on screen when the filter is built and
   Show Reco is off by default (`ContentFilterRules`); with Show Reco on it is recorded. Screenshots hide it
@@ -1268,20 +1329,27 @@ and a white stop square, for any start (menu, shortcut, `reco://`); it goes once
 ### S7 — Library, the main window (`feat/ui-polish`, spec 0010)
 
 **Library…** in the menu bar, and clicking Reco in the Dock (`applicationShouldHandleReopen`), open Reco's
-main window, which stays open unlike the popover: a sidebar (All, Recordings, Web Recordings, Exports,
-Screenshots, with counts), a grid of pictures, search, and **New** (Capture Area/Window/Screen, Record
+main window, which stays open unlike the popover, laid out like Eagle (2026-10-08): a see-through sidebar (All,
+Recordings, Web Recordings, Exports, Screenshots, with counts), the title bar's "Library" and the shown count
+(`navigationTitle`/`navigationSubtitle`, bridged with `sceneBridgingOptions = [.toolbars, .title]`), a masonry grid of
+pictures, and in the toolbar search, **Filter** (Shape: Any, Landscape, Portrait, Square; Sort By: Newest First, Oldest
+First, Name; its icon fills while a shape is chosen) and **New** (Capture Area/Window/Screen, Record
 Area…, Record Window or Display…, New Web Recording…). A click opens a movie in the
 editor and a screenshot in Preview; the context menu shows in Finder, copies (a screenshot as PNG, a movie
 as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`. The grid is under date
-headers, newest first: Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
+headers, newest first (or oldest first; sorted by name it is one grid without headers): Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
 list the screenshot history folder (spec 0012). Down the right edge the dates repeat as a rail
 (`LibraryDateRail`), adapted from Chánh Đại's Line Nav: only a short line per date, 10 pt apart, that lengthens
 and brightens for the date at the top of the grid and for the one under the pointer, whose title shows to the
 line's left, over the grid, in large text with no background; a click scrolls the grid to it. The grid reserves only the lines'
 44 pt and hides the rail for a single date. The grid sits on the content colour (`controlBackgroundColor`): on the
-window's own colour it matched the sidebar within a few levels (55 against 57 in dark mode). Tiles are 16:10
-pictures that fill their frame (screenshots too, cropped), 10 pt continuous corners and a faint edge, with the
-name and, dimmed, the kind's symbol and the date under them. Which date is current is
+window's own colour it matched the sidebar within a few levels (55 against 57 in dark mode). Tiles are pictures only,
+at their own shape (`MasonryLayout`: columns at least 200 pt wide, each tile in the shortest column so far,
+`MasonryPlacement`), 16:10 until the shape is read; a movie has a play badge, the name shows on hover, VoiceOver reads
+name and date. Shapes are read once per item before the list shows (`LibraryStore.aspectRatios(of:)`: an image's header
+with its EXIF orientation, a movie's video track with its transform), and thumbnails are drawn at that shape, 640 px
+wide, up to 1280 tall. Square is within 5% (`LibraryOrientation`); with a shape chosen, an unreadable item is left out.
+Which date is current is
 `LibraryDateGroup.active(in:headerTops:topLine:)`, fed by each header's own offset — a lazy grid measures
 only the headers it has built, so an unmeasured date is one below the fold and is skipped.
 
@@ -1289,6 +1357,7 @@ only the headers it has built, so an unmeasured date is one below the fold and i
 |---|---|
 | `Library/Model/LibraryItem.swift` | Pure: kinds by name and type (`Reco_Web_` web, `-edited` export, `Reco_Screenshot_` PNG), companions, `LibrarySection` |
 | `Library/Model/LibraryDateGroup.swift` | Pure: `groups(of:now:calendar:)`, the date headers, and `active(in:headerTops:topLine:)`, which date the rail marks |
+| `Library/Model/LibraryOrientation.swift`, `LibrarySort.swift`, `MasonryPlacement.swift`, `Library/View/MasonryLayout.swift` | Pure: the Filter's shapes and orders, the grid's columns and slots; the SwiftUI `Layout` on them |
 | `Library/Service/LibraryStore.swift` | Lists the recordings, screenshot and history folders (a folder read once when two are the same; a history name also saved is listed from the screenshot folder), thumbnails (movie frame or `CGImageSource`), trash |
 | `Library/Service/FolderWatcher.swift` | `DispatchSource` vnode writes on all three folders, 0.3 s settle, so new saves show at once (a folder that doesn't exist yet isn't watched until the window is reopened; the history folder is made at launch) |
 | `Library/ViewModel/LibraryViewModel.swift`, `Library/View/` | Sections, search, intents; `Actions` wired in `AppDelegate`; window in `EditorWindowManager.showLibrary()` |
@@ -1410,11 +1479,12 @@ should hold but need re-measuring.
 | S1 editor phase 4: auto-zoom, zoom lane, camera | Done; auto-zoom placement, full-frame-rate transitions and editing zooms on the timeline still need a check in the app on real recordings |
 | S1 editor phase 5: cursor | Done; smoothing, shapes, idle hiding and the 4K render budget (measured under load) still need a check in the app on real recordings |
 | S1 editor phase 6: canvas and export polish | Done; the canvas, gradient presets, wallpapers (and one after relaunch), picture blur, the border, a background picture after relaunch, HDR recordings (ProRes too, whose frames carry the tags) and transparent exports still need a check in the app |
-| S1 editor design: system colors, glass transport, new timeline and inspector | Done; glass, hover and animations still need a look in the app on macOS 26 and 15 |
+| S1 editor design: system colors, glass transport, new timeline and inspector | Done; replaced by the Linear theme |
+| Linear theme (`feat/linear-theme`): tokens, light mode from Default's tokens, Inter + JetBrains Mono, solid surfaces app-wide | Done 2026-10-08; built, 982 tests; colours from `theme/theme.tokens.json`; needs a look in the app in light, dark and Increase Contrast |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 | S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |
-| S3 agent bridge (spec 0006): MCP server for coding agents | Done; tested over the real socket (token, `initialize`, `tools/list`, error calls), the `--mcp` process (`AgentBridgeClientTests`), config editors and plans. Not yet tried: real agents connected by hand, a real `record_page` render, Gatekeeper on another Mac |
-| S7 Library (spec 0010): main window | Done and tested (`LibraryTests`); the window itself still needs a look in the app |
+| S3 agent bridge (spec 0006): MCP server for coding agents | Done; tested over the real socket (token, `initialize`, `tools/list`, error calls), the `--mcp` process, config editors and plans. Not yet tried: real agents connected by hand, a real `record_page` render, Gatekeeper on another Mac |
+| S7 Library (spec 0010): main window | Done and tested; the window itself still needs a look in the app |
 | S4 agent recording (spec 0007): Record with AI Agent bar, no App Sandbox | Done and tested with fakes and real `/bin/sh` processes; the login-shell environment was read on this Mac (0.86 s). Not yet tried: any real agent run, the panel in the app (focus, Esc, picker menus, Reduce Motion/Transparency), the update from the sandboxed release (migration), Codex |
 
 What to build next, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

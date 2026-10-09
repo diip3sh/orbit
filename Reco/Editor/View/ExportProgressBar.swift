@@ -21,14 +21,23 @@ struct ExportProgressBar: View {
                 Text(title)
                 Spacer()
                 Text(progress, format: .percent.precision(.fractionLength(0)))
-                    .monospaced()
+                    .monospacedDigit()
                     .contentTransition(.numericText(value: progress))
                     .foregroundStyle(EditorTheme.dim)
             }
-            .font(.callout)
-            ProgressView(value: progress)
-                .progressViewStyle(.linear)
-                .labelsHidden()
+            .font(.theme(.callout))
+            Capsule()
+                .fill(EditorTheme.control)
+                .overlay {
+                    Rectangle()
+                        .fill(EditorTheme.accent)
+                        .scaleEffect(x: min(max(progress, 0), 1), anchor: .leading)
+                }
+                .clipShape(.capsule)
+                .frame(height: 4)
+                .accessibilityRepresentation {
+                    ProgressView(value: progress)
+                }
         }
         .editorMotion(.smooth(duration: 0.3), value: progress)
     }

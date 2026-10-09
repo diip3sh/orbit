@@ -40,12 +40,11 @@ struct InspectorSlider: View {
                         value = defaultValue
                     }
                     .buttonStyle(.borderless)
-                    .font(.caption)
+                    .font(.theme(.caption))
                     .transition(.opacity)
                 }
                 label(value)
-                    .font(.caption)
-                    .monospaced()
+                    .font(.theme(.caption).monospacedDigit())
                     .foregroundStyle(EditorTheme.dim)
             }
             TickSlider(title: title, value: $value, range: range, valueLabel: label(value))

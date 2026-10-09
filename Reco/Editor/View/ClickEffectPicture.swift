@@ -17,14 +17,14 @@ struct ClickEffectPicture: View {
             Image(systemName: "circle.slash")
         case .circle:
             Circle()
-                .fill(.primary.opacity(0.2))
-                .overlay(Circle().strokeBorder(.primary, lineWidth: 1.5))
+                .fill(EditorTheme.ink.opacity(0.2))
+                .overlay(Circle().strokeBorder(EditorTheme.ink, lineWidth: 1.5))
                 .frame(width: 16, height: 16)
         case .ripple:
             Circle()
-                .strokeBorder(.primary.opacity(0.5), lineWidth: 1.5)
+                .strokeBorder(EditorTheme.ink.opacity(0.5), lineWidth: 1.5)
                 .frame(width: 20, height: 20)
-                .overlay(Circle().strokeBorder(.primary, lineWidth: 1.5).frame(width: 10, height: 10))
+                .overlay(Circle().strokeBorder(EditorTheme.ink, lineWidth: 1.5).frame(width: 10, height: 10))
         }
     }
 }

@@ -56,12 +56,10 @@ struct WebStage: View {
                 .editorMotion(value: [camera.scale, camera.focus.x, camera.focus.y])
                 .clipShape(shape)
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { pageSize = $0 }
-                // The page sits in the window like the browser it stands for: an edge and a soft
-                // shadow, not lifted off a backdrop
+                // The page sits in the window like the browser it stands for: an edge, not lifted off a backdrop
                 .overlay {
                     shape.strokeBorder(viewModel.isPicking ? EditorTheme.accent : EditorTheme.hairline, lineWidth: viewModel.isPicking ? 2 : 1)
                 }
-                .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
                 .aspectRatio(viewport, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -88,7 +86,7 @@ struct WebStage: View {
                     }
                     .padding(.leading, EditorTheme.mediumSpacing)
                     .padding(EditorTheme.tightSpacing)
-                    .editorGlass(in: .capsule)
+                    .editorSurface(in: .capsule)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }

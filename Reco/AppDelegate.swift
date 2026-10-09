@@ -31,12 +31,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
     lazy var quickAccess = QuickAccessController(
         save: { [screenshots] screenshot in await screenshots.save(screenshot) },
+        didCopy: { [screenshots] screenshot in await screenshots.didCopy(screenshot) },
         background: { [settings = viewModel.settings] in settings.screenshotBackground }
     )
     private lazy var notchShelf = NotchShelfController(settings: viewModel.settings)
 
-    /// Serves the tools coding agents record web pages with; a movie it renders opens in the editor.
-    lazy var agentBridge = AgentBridgeServer(tools: AgentTools(settings: viewModel.settings) { [editorWindows] url in editorWindows.open(url) })
+    /// Serves the tools coding agents record web pages with; a movie it renders opens in the editor, behind the
+    /// user's work unless Reco is in front.
+    lazy var agentBridge = AgentBridgeServer(tools: AgentTools(settings: viewModel.settings) { [editorWindows] url in editorWindows.openWhenReady(url) })
 
     /// Runs coding agents on a request typed into the Record with AI Agent panel.
     lazy var agentRecording = AgentRecordingViewModel(
@@ -54,8 +56,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ColorPanelPlacement.start()
         notchShelf.start()
         agentBridge.start()
-        viewModel.notificationService.editRecording = editorWindows.open
-        viewModel.onRecordingFinished = editorWindows.open
+        viewModel.notificationService.editRecording = { [editorWindows] url in editorWindows.open(url) }
+        viewModel.onRecordingFinished = { [editorWindows] url in editorWindows.open(url) }
+        editorWindows.announceReady = { [notifications = viewModel.notificationService] url in notifications.sendRecordingReadyNotification(fileURL: url) }
         editorWindows.agentRecording = agentRecording
         editorWindows.libraryActions = LibraryViewModel.Actions(
             captureArea: { [screenshots] in Task { await screenshots.captureArea() } },

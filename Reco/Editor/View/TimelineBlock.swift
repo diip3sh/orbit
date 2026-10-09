@@ -5,8 +5,8 @@
 
 import SwiftUI
 
-/// A clip on a timeline lane: its span with a label when there's room. At rest a chip in the window's
-/// colour on a hairline, so it stands off the lane; selected, the accent.
+/// A clip on a timeline lane: its span with a label when there's room. A chip in the control fill on a
+/// hairline, so it stands off the lane; selected, ringed in the accent.
 struct TimelineBlock<Label: View>: View {
     let isSelected: Bool
     let isDragged: Bool
@@ -18,7 +18,7 @@ struct TimelineBlock<Label: View>: View {
         let shape = RoundedRectangle(cornerRadius: 6)
 
         shape
-            .fill(isSelected ? EditorTheme.accent.opacity(0.2) : EditorTheme.stage)
+            .fill(EditorTheme.control)
             .overlay {
                 shape.strokeBorder(
                     isSelected ? EditorTheme.accent : isHovered || isDragged ? EditorTheme.faint : EditorTheme.hairline,
@@ -27,8 +27,7 @@ struct TimelineBlock<Label: View>: View {
             }
             .overlay {
                 label
-                    .font(.caption2)
-                    .monospaced()
+                    .font(.theme(.caption2).monospacedDigit())
                     .foregroundStyle(isSelected || isHovered ? EditorTheme.ink : EditorTheme.dim)
                     .lineLimit(1)
                     .padding(.horizontal, EditorTheme.smallSpacing)

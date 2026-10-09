@@ -206,7 +206,6 @@ struct MicrophoneExpandablePicker: View {
 
 // MARK: - Video Settings Section
 
-
 // MARK: - Camera Expandable Picker
 
 /// A camera picker with device-style rows, matching the microphone picker pattern

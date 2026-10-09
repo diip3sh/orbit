@@ -8,7 +8,7 @@
 import SwiftUI
 
 /// A round icon button whose icon brightens from dim to ink under the pointer. The prominent one
-/// is filled off-white, for the transport's play button.
+/// is the primary button's accent fill with an `onAccent` icon, for the transport's play button.
 struct EditorIconButtonStyle: ButtonStyle {
     var isProminent = false
 
@@ -55,6 +55,6 @@ private struct EditorIconButton: View {
         if isProminent {
             return isLit ? EditorTheme.primaryHover : EditorTheme.primary
         }
-        return .primary.opacity(isEnabled && configuration.isPressed ? 0.12 : isLit ? 0.06 : 0)
+        return EditorTheme.ink.opacity(isEnabled && configuration.isPressed ? 0.12 : isLit ? 0.06 : 0)
     }
 }

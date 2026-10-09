@@ -67,11 +67,28 @@ final class EditorWindowManager: NSObject {
         self.settings = settings
     }
 
-    /// Opens the editor for a recording in the output folder, or brings its window forward.
-    func open(_ videoURL: URL) {
+    /// Tells the user a movie that opened behind their work is ready; set by `AppDelegate`
+    var announceReady: ((URL) -> Void)?
+
+    /// Opens a movie that finished rendering on its own (an agent's, or the Web Recording window's) without
+    /// interrupting: in front while Reco is the active app, otherwise behind the user's windows, announced.
+    func openWhenReady(_ videoURL: URL) {
+        guard !NSApp.isActive else {
+            open(videoURL)
+            return
+        }
+        open(videoURL, activates: false)
+        announceReady?(videoURL)
+    }
+
+    /// Opens the editor for a recording in the output folder, or brings its window forward. Without
+    /// `activates`, the window goes behind every other and Reco stays in the background.
+    func open(_ videoURL: URL, activates: Bool = true) {
         let videoURL = videoURL.standardizedFileURL
         if let window = editors[videoURL]?.window {
-            activate(window)
+            if activates {
+                activate(window)
+            }
             return
         }
 
@@ -79,7 +96,7 @@ final class EditorWindowManager: NSObject {
         let accessesOutputDirectory = settings.startAccessingOutputDirectory()
 
         let viewModel = EditorViewModel(videoURL: videoURL)
-        let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel))
+        let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel).themed())
         // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
         hostingController.sizingOptions = .minSize
         // The name field, export and inspector buttons are SwiftUI toolbar items. The title isn't bridged: the
@@ -100,7 +117,11 @@ final class EditorWindowManager: NSObject {
 
         // A regular app gets a Dock icon, ⌘-Tab and the main menu with Undo and Redo
         NSApp.setActivationPolicy(.regular)
-        activate(window)
+        if activates {
+            activate(window)
+        } else {
+            window.orderBack(nil)
+        }
     }
 
     /// A `.recostyle` file opened from Finder (spec 0004, S19): applied in the key editor window, or an open one;
@@ -132,9 +153,10 @@ final class EditorWindowManager: NSObject {
             actions: libraryActions,
             openMovie: openMovie
         )
-        let hostingController = NSHostingController(rootView: LibraryView(viewModel: viewModel))
+        let hostingController = NSHostingController(rootView: LibraryView(viewModel: viewModel).themed())
         hostingController.sizingOptions = .minSize
-        hostingController.sceneBridgingOptions = [.toolbars]
+        // The section's title and its count, which macOS 26 shows large in the toolbar
+        hostingController.sceneBridgingOptions = [.toolbars, .title]
         let window = makeWindow(hostingController, title: "Reco", size: NSSize(width: 1100, height: 720))
         library = Library(window: window, viewModel: viewModel, watcher: FolderWatcher(), accessesOutputDirectory: accessesOutputDirectory)
 
@@ -172,9 +194,9 @@ final class EditorWindowManager: NSObject {
     private func makeWebRecording() -> WebRecording {
         let viewModel = WebRecordingViewModel(settings: settings) { [weak self] url in
             self?.agentRecording?.didRender(url)
-            self?.open(url)
+            self?.openWhenReady(url)
         }
-        let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel, agent: agentRecording))
+        let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel, agent: agentRecording).themed())
         hostingController.sizingOptions = .minSize
         hostingController.sceneBridgingOptions = [.toolbars]
         let window = makeWindow(hostingController, title: "Web Recording", size: NSSize(width: 1533, height: 943))
@@ -191,7 +213,10 @@ final class EditorWindowManager: NSObject {
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
         window.toolbarStyle = .unified
-        window.backgroundColor = .windowBackgroundColor
+        // See-through, so the inspectors and the Library's sidebar can show the desktop (`translucentColumn`); the
+        // content paints its own solid ground
+        window.isOpaque = false
+        window.backgroundColor = .clear
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         window.delegate = self

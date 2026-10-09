@@ -62,6 +62,40 @@ nonisolated enum LibraryStore {
         return try? await generator.image(at: .zero).image
     }
 
+    /// Each item's width over height as it shows, read side by side; one that can't be read is left out.
+    @concurrent
+    static func aspectRatios(of items: [LibraryItem]) async -> [LibraryItem: Double] {
+        await withTaskGroup { group in
+            for item in items {
+                group.addTask { (item, await aspectRatio(of: item)) }
+            }
+            var ratios: [LibraryItem: Double] = [:]
+            for await (item, ratio) in group {
+                ratios[item] = ratio
+            }
+            return ratios
+        }
+    }
+
+    /// A screenshot's or GIF's pixels from its header, a movie's from its video track with its transform.
+    private static func aspectRatio(of item: LibraryItem) async -> Double? {
+        guard item.isMovie else {
+            guard let source = CGImageSourceCreateWithURL(item.url as CFURL, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? Double,
+                  let height = properties[kCGImagePropertyPixelHeight] as? Double,
+                  width > 0, height > 0 else { return nil }
+            // EXIF orientations 5 to 8 turn the picture a quarter
+            let isTurned = (properties[kCGImagePropertyOrientation] as? Int ?? 1) >= 5
+            return isTurned ? height / width : width / height
+        }
+        guard let track = try? await AVURLAsset(url: item.url).loadTracks(withMediaType: .video).first,
+              let geometry = try? await track.load(.naturalSize, .preferredTransform) else { return nil }
+        let shown = geometry.0.applying(geometry.1)
+        guard shown.width != 0, shown.height != 0 else { return nil }
+        return abs(shown.width / shown.height)
+    }
+
     private static func contents(of folder: URL) throws -> [(url: URL, type: UTType?, date: Date)] {
         let keys: [URLResourceKey] = [.contentTypeKey, .creationDateKey]
         let urls: [URL]

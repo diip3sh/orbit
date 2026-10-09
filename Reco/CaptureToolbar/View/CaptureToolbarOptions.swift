@@ -53,7 +53,7 @@ struct CaptureToolbarCountdownMenu: View {
                 Text(duration == .off ? "Off" : "\(duration.rawValue)s")
                     .monospacedDigit()
                 Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.semibold))
+                    .font(.theme(.caption2, weight: .semibold))
                     .accessibilityHidden(true)
             }
         }

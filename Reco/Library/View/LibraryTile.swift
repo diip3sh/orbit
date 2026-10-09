@@ -5,58 +5,66 @@
 
 import SwiftUI
 
-/// One item in the Library's grid: its picture, what kind it is, its name and when it was saved.
-/// Clicking opens it; the context menu and the ••• button on hover reveal, copy or trash it.
+/// One item in the Library's grid: its picture at its own shape, a play mark on a movie, and its name while
+/// pointed at. Clicking opens it; the context menu and the ••• button on hover reveal, copy or trash it.
 struct LibraryTile: View {
     let item: LibraryItem
+
+    /// Width over height, `nil` until read (or unreadable), when the tile is a recording's usual 16:10.
+    let aspectRatio: Double?
     let thumbnail: CGImage?
     let viewModel: LibraryViewModel
 
     @State private var isHovered = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: EditorTheme.radius, style: .continuous)
 
         Button {
             viewModel.open(item)
         } label: {
-            VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
-                EditorTheme.softHairline
-                    .aspectRatio(16 / 10, contentMode: .fit)
-                    .overlay {
-                        if let thumbnail {
-                            // Every picture fills its tile, so the grid reads as one even sheet
-                            Image(decorative: thumbnail, scale: 1)
-                                .resizable()
-                                .scaledToFill()
+            EditorTheme.control
+                .aspectRatio(aspectRatio ?? 16 / 10, contentMode: .fit)
+                .overlay {
+                    if let thumbnail {
+                        // Fills the tile: a picture of the same shape fits it exactly, a first frame of another
+                        // shape (before the shape was read) is cropped rather than letterboxed
+                        Image(decorative: thumbnail, scale: 1)
+                            .resizable()
+                            .scaledToFill()
+                            .transition(.opacity)
+                    }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    HStack(spacing: EditorTheme.tightSpacing) {
+                        if item.isMovie {
+                            Image(systemName: "play.fill")
+                                .font(.caption2)
+                                .foregroundStyle(EditorTheme.ink)
+                                .frame(width: 24, height: 24)
+                                .editorSurface(in: .circle, fill: EditorTheme.raised)
+                                .accessibilityHidden(true)
+                        }
+                        if isHovered {
+                            Text(item.name)
+                                .font(.theme(.caption, weight: .medium))
+                                .foregroundStyle(EditorTheme.ink)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .padding(.horizontal, EditorTheme.smallSpacing)
+                                .frame(height: 24)
+                                .editorSurface(in: .capsule, fill: EditorTheme.raised)
                                 .transition(.opacity)
                         }
                     }
-                    .clipShape(shape)
-                    // A faint edge, so a picture as light as the window still has one
-                    .overlay {
-                        shape.strokeBorder(isHovered ? EditorTheme.faint : EditorTheme.softHairline)
-                    }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.name)
-                        .font(.callout)
-                        .foregroundStyle(EditorTheme.ink)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    HStack(spacing: EditorTheme.tightSpacing) {
-                        Image(systemName: item.kind.symbol)
-                            .imageScale(.small)
-                            .accessibilityHidden(true)
-                        Text(item.date, format: .dateTime.month(.abbreviated).day().hour().minute())
-                            .monospacedDigit()
-                    }
-                    .font(.caption)
-                    .foregroundStyle(EditorTheme.dim)
+                    .padding(EditorTheme.smallSpacing)
                 }
-                .padding(.horizontal, 2)
-            }
-            .contentShape(.rect)
+                .clipShape(shape)
+                // A hairline edge, so a picture as dark as the window still has one
+                .overlay {
+                    shape.strokeBorder(isHovered ? EditorTheme.faint : EditorTheme.hairline)
+                }
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
@@ -67,9 +75,9 @@ struct LibraryTile: View {
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(EditorTheme.ink)
                     .frame(width: 24, height: 24)
-                    .background(.black.opacity(0.55), in: .circle)
+                    .editorSurface(in: .circle, fill: EditorTheme.raised)
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
@@ -87,6 +95,8 @@ struct LibraryTile: View {
         .editorMotion(.smooth, value: thumbnail != nil)
         .help(item.url.lastPathComponent)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(item.name)
+        .accessibilityValue(Text(item.date, format: .dateTime.month(.abbreviated).day().hour().minute()))
         .accessibilityAddTraits(.isButton)
     }
 }

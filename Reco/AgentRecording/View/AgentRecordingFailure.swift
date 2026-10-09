@@ -18,7 +18,7 @@ struct AgentRecordingFailure: View {
                     .foregroundStyle(EditorTheme.dim)
                     .accessibilityHidden(true)
                 Text(reason)
-                    .font(.callout)
+                    .font(.theme(.callout))
                     .lineLimit(4)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -29,7 +29,7 @@ struct AgentRecordingFailure: View {
             .buttonStyle(.editorSecondary)
         }
         .padding(EditorTheme.mediumSpacing)
-        .background(Color.primary.opacity(0.06), in: .rect(cornerRadius: 14, style: .continuous))
+        .editorSurface(in: .rect(cornerRadius: EditorTheme.radius, style: .continuous))
         .agentSide(.leading)
         .accessibilityElement(children: .contain)
     }

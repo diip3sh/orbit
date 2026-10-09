@@ -19,7 +19,7 @@ struct WebRecordingInspector: View {
                         }
                         InspectorField("Target") {
                             TextField("Target", text: clip.target.selector.orEmpty, prompt: Text("CSS selector"))
-                                .monospaced()
+                                .font(.theme(.body, .mono))
                             Button(viewModel.isPicking ? "Stop Picking" : "Pick in Page", systemImage: "scope") {
                                 viewModel.togglePicking()
                             }
@@ -33,7 +33,7 @@ struct WebRecordingInspector: View {
                         }
                         InspectorField("Show") {
                             TextField("Show", text: clip.show.orEmpty, prompt: Text("CSS selector to zoom on"))
-                                .monospaced()
+                                .font(.theme(.body, .mono))
                         }
                         InspectorField("Zoom") {
                             SegmentedChoice(selection: clip.zoom, options: [(nil, "Off")] + WebCamera.scales.map { (Double?.some($0), "\($0.formatted())×") })

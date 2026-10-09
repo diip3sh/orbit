@@ -17,15 +17,19 @@ struct LibraryView: View {
                 Label(section.title, systemImage: section.symbol)
                     .badge(viewModel.count(in: section))
             }
+            .scrollContentBackground(.hidden)
+            .translucentColumn()
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
         } detail: {
             LibraryGrid(viewModel: viewModel)
-                // Solid, where the window's own colour matched the sidebar's within a few levels (55 against
-                // 57 in dark mode), so the two read as one surface
+                // Solid, so it reads apart from the sidebar's blurred desktop
                 .background(LibraryGrid.background)
         }
         .searchable(text: $viewModel.search, placement: .toolbar, prompt: "Search by name")
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                LibraryFilterMenu(orientation: $viewModel.orientation, sort: $viewModel.sort)
+            }
             ToolbarItem(placement: .primaryAction) {
                 LibraryNewMenu(actions: viewModel.actions)
             }
@@ -41,11 +45,8 @@ private struct LibraryGrid: View {
     /// The coordinate space the date headers measure themselves in, for the rail's active date.
     static let gridSpace = "libraryGrid"
 
-    /// The content area's colour: white in light mode, the darkest grey in dark mode.
-    static let background = Color(nsColor: .controlBackgroundColor)
-
-    /// Columns at least this wide, filling the row; tiles sit closer side by side than date to date.
-    private static let columns = [GridItem(.adaptive(minimum: 200), spacing: EditorTheme.spacing, alignment: .top)]
+    /// The content area's colour: the window's ground.
+    static let background = EditorTheme.stage
 
     /// Each date header's distance below the top of the grid, by ``LibraryDateGroup/id``. Only the
     /// headers a lazy grid has built have one, and one below the fold is treated as not reached yet.
@@ -54,6 +55,8 @@ private struct LibraryGrid: View {
     var body: some View {
         let shown = viewModel.shown
         let groups = viewModel.shownGroups
+        // Down the right edge while there are dates to go between
+        let showsRail = viewModel.sort.groupsByDate && groups.count > 1
 
         Group {
             if viewModel.items == nil, let error = viewModel.error {
@@ -72,41 +75,45 @@ private struct LibraryGrid: View {
                 ProgressView()
                     .controlSize(.small)
             } else if shown.isEmpty {
-                if viewModel.search.isEmpty {
-                    ContentUnavailableView(viewModel.section.title, systemImage: viewModel.section.symbol, description: Text(viewModel.section.emptyMessage))
-                } else {
+                if !viewModel.search.isEmpty {
                     ContentUnavailableView.search(text: viewModel.search)
+                } else if let orientation = viewModel.orientation {
+                    ContentUnavailableView(
+                        "No \(orientation.title) Items",
+                        systemImage: orientation.symbol,
+                        description: Text("Choose Any Shape in Filter to see everything in \(viewModel.section.title).")
+                    )
+                } else {
+                    ContentUnavailableView(viewModel.section.title, systemImage: viewModel.section.symbol, description: Text(viewModel.section.emptyMessage))
                 }
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVGrid(columns: Self.columns, spacing: EditorTheme.largeSpacing) {
-                            ForEach(groups) { group in
-                                Section {
-                                    ForEach(group.items) { item in
-                                        LibraryTile(item: item, thumbnail: viewModel.thumbnails[item.url], viewModel: viewModel)
-                                            .task {
-                                                await viewModel.loadThumbnail(for: item)
-                                            }
+                        LazyVStack(alignment: .leading, spacing: EditorTheme.largeSpacing) {
+                            if viewModel.sort.groupsByDate {
+                                ForEach(groups) { group in
+                                    VStack(alignment: .leading, spacing: EditorTheme.mediumSpacing) {
+                                        Text(group.title)
+                                            .font(.theme(.headline))
+                                            .foregroundStyle(EditorTheme.ink)
+                                            // Where the rail scrolls to, and what it measures
+                                            .id(group.id)
+                                            .background { headerTop(of: group) }
+                                        LibraryMasonry(items: group.items, viewModel: viewModel)
                                     }
-                                } header: {
-                                    Text(group.title)
-                                        .font(.headline)
-                                        .foregroundStyle(EditorTheme.ink)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        // Where the rail scrolls to, and what it measures
-                                        .id(group.id)
-                                        .background { headerTop(of: group) }
                                 }
+                            } else {
+                                LibraryMasonry(items: shown, viewModel: viewModel)
                             }
                         }
                         .padding(EditorTheme.largeSpacing)
                         // The rail floats over the grid, so the last column keeps clear of it
-                        .padding(.trailing, groups.count > 1 ? LibraryDateRail.width : 0)
+                        .padding(.trailing, showsRail ? LibraryDateRail.width : 0)
                     }
                     .coordinateSpace(name: Self.gridSpace)
+                    .softTopEdge()
                     .overlay(alignment: .trailing) {
-                        if groups.count > 1 {
+                        if showsRail {
                             LibraryDateRail(groups: groups, active: activeDate) { date in
                                 withMotion {
                                     proxy.scrollTo(date, anchor: .top)
@@ -124,7 +131,8 @@ private struct LibraryGrid: View {
                     .padding(EditorTheme.spacing)
             }
         }
-        .navigationTitle(viewModel.section.title)
+        .navigationTitle(viewModel.section.heading)
+        .navigationSubtitle(Text("^[\(shown.count) item](inflect: true)"))
     }
 
     /// The date the grid is looking at: the last one whose header has passed the top, or the first one
@@ -150,6 +158,69 @@ private struct LibraryGrid: View {
     }
 }
 
+/// One date's items (or all of them, in name order) as a masonry grid. Pictures load as their tiles scroll
+/// into view: the masonry isn't lazy, so a month's tiles are all built at once.
+private struct LibraryMasonry: View {
+    let items: [LibraryItem]
+    let viewModel: LibraryViewModel
+
+    var body: some View {
+        // Columns at least this wide, filling the row; tiles sit closer than date to date
+        MasonryLayout(minimumColumnWidth: 200, spacing: EditorTheme.smallSpacing) {
+            ForEach(items) { item in
+                LibraryTile(item: item, aspectRatio: viewModel.aspectRatios[item], thumbnail: viewModel.thumbnails[item.url], viewModel: viewModel)
+                    .onScrollVisibilityChange(threshold: 0.01) { isVisible in
+                        if isVisible {
+                            Task { await viewModel.loadThumbnail(for: item) }
+                        }
+                    }
+            }
+        }
+    }
+}
+
+/// Filter: the pictures' shape, and the grid's order.
+private struct LibraryFilterMenu: View {
+    @Binding var orientation: LibraryOrientation?
+    @Binding var sort: LibrarySort
+
+    var body: some View {
+        Menu {
+            Picker("Shape", selection: $orientation) {
+                Text("Any Shape").tag(LibraryOrientation?.none)
+                ForEach(LibraryOrientation.allCases, id: \.self) { orientation in
+                    Label(orientation.title, systemImage: orientation.symbol).tag(Optional(orientation))
+                }
+            }
+            .pickerStyle(.inline)
+            Picker("Sort By", selection: $sort) {
+                ForEach(LibrarySort.allCases, id: \.self) { sort in
+                    Text(sort.title).tag(sort)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            // Filled while a shape narrows the grid, so a short grid says why
+            Label("Filter", systemImage: orientation == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+        }
+        .menuIndicator(.hidden)
+        .help("Show one shape, and choose the order")
+    }
+}
+
+private extension View {
+
+    /// The grid fades out under the toolbar's glass as it scrolls up, as Finder's does.
+    @ViewBuilder
+    func softTopEdge() -> some View {
+        if #available(macOS 26, *) {
+            scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            self
+        }
+    }
+}
+
 /// New: a screenshot, a screen recording or a web recording.
 private struct LibraryNewMenu: View {
     let actions: LibraryViewModel.Actions
@@ -171,6 +242,7 @@ private struct LibraryNewMenu: View {
         } label: {
             Label("New", systemImage: "plus")
         }
+        .menuIndicator(.hidden)
         .help("Take a screenshot or start a recording")
     }
 }

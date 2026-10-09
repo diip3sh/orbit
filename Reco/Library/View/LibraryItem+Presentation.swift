@@ -18,6 +18,11 @@ extension LibrarySection {
         }
     }
 
+    /// The window's title: the app's own name for everything, else the section's.
+    var heading: String {
+        self == .all ? "Library" : title
+    }
+
     var symbol: String {
         switch self {
         case .all: "square.grid.2x2"
@@ -48,6 +53,37 @@ extension LibraryItem.Kind {
         case .webRecording: "globe"
         case .export: "square.and.arrow.up"
         case .screenshot: "camera.viewfinder"
+        }
+    }
+}
+
+/// How the Filter menu reads.
+extension LibraryOrientation {
+
+    var title: String {
+        switch self {
+        case .landscape: "Landscape"
+        case .portrait: "Portrait"
+        case .square: "Square"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .landscape: "rectangle"
+        case .portrait: "rectangle.portrait"
+        case .square: "square"
+        }
+    }
+}
+
+extension LibrarySort {
+
+    var title: String {
+        switch self {
+        case .newestFirst: "Newest First"
+        case .oldestFirst: "Oldest First"
+        case .name: "Name"
         }
     }
 }

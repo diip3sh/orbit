@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// The Quick Access card: the screenshot in its own shape on a thin glass edge, with Copy and Save along
+/// The Quick Access card: the screenshot in its own shape on a thin surface edge, with Copy and Save along
 /// its bottom, which confirm on the button. Under the pointer it dims and shows Close, Recognize Text and Pin in its corners. Drag the screenshot into
 /// another app; drag the edge to move the card, or flick it away; Esc closes it. It grows from `anchor`, the corner
 /// nearest where it opened.
@@ -41,7 +41,7 @@ struct QuickAccessView: View {
                             .onEnded { _ in dragger.end() }
                     )
             }
-            .editorGlass(in: .rect(cornerRadius: 16))
+            .editorSurface(in: .rect(cornerRadius: 16))
             .onHover { isHovering = $0 }
             .editorMotion(EditorTheme.quickMotion, value: isHovering)
             .panelPresentation(isPresented: model.isPresented, anchor: anchor)
@@ -58,7 +58,8 @@ struct QuickAccessView: View {
     }
 }
 
-/// The card grown into the editor (spec 0015): the tool strip, the shot with its marks, and Copy and Save under it.
+/// The card grown into the editor (spec 0015): the tool strip with Copy and Save at its end, which flatten the marks
+/// and close the card from here, then the shot with its marks. Esc goes back to the card instead.
 private struct QuickAccessAnnotation: View {
 
     let model: QuickAccessViewModel
@@ -66,15 +67,17 @@ private struct QuickAccessAnnotation: View {
 
     var body: some View {
         VStack(spacing: QuickAccessController.inset) {
-            AnnotationToolbar(editor: editor) {
-                Task { await model.finishAnnotating() }
+            HStack(spacing: 0) {
+                AnnotationToolbar(editor: editor)
+                Spacer(minLength: EditorTheme.smallSpacing)
+                // Two equal ways out of the editor: secondary's accent text read as a disabled Copy
+                QuickAccessActions(model: model)
+                    .buttonStyle(.editorPrimary)
             }
             .frame(height: QuickAccessController.annotationBarHeight)
             AnnotationCanvas(editor: editor)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            QuickAccessActions(model: model)
-                .frame(height: QuickAccessController.annotationBarHeight)
         }
         .environment(\.colorScheme, .dark)
     }
@@ -98,29 +101,27 @@ private struct QuickAccessPreview: View {
             .onDrag(model.dragItem)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay {
-                shape.fill(.black.opacity(showsControls ? 0.45 : 0))
+                shape.fill(EditorTheme.stage.opacity(showsControls ? 0.45 : 0))
                     .allowsHitTesting(false)
             }
             .overlay {
                 QuickAccessControls(model: model)
-                    // Light buttons on the dimmed shot in either appearance
-                    .environment(\.colorScheme, .dark)
                     .opacity(showsControls ? 1 : 0)
             }
             // Always shown, so ⌘C and ⌘S work without the pointer on the card
             .overlay(alignment: .bottom) {
                 QuickAccessActions(model: model)
-                    .environment(\.colorScheme, .dark)
+                    .buttonStyle(QuickAccessGlassButtonStyle())
+                    .padding(6)
             }
             .overlay {
                 if let feedback = model.feedback, feedback.isToast {
                     Text(feedback.message)
-                        .font(.caption)
-                        .foregroundStyle(.white)
+                        .font(.theme(.caption))
+                        .foregroundStyle(EditorTheme.ink)
                         .padding(.horizontal, EditorTheme.smallSpacing)
                         .padding(.vertical, EditorTheme.tightSpacing)
-                        // Solid: it sits on the screenshot, which a material would only muddy
-                        .background(.black.opacity(0.75), in: .capsule)
+                        .editorSurface(in: .capsule, fill: EditorTheme.raised)
                         .padding(6)
                         .transition(.opacity.combined(with: .offset(y: 4)))
                 }
@@ -146,7 +147,7 @@ private struct QuickAccessControls: View {
                 Label { Text(model.hasBackground ? "Remove Background" : "Add Background") } icon: {
                     LineIcon(.hugeiconsBackground)
                         // The one control on the card that stays on: the accent says so
-                        .foregroundStyle(model.hasBackground ? AnyShapeStyle(EditorTheme.accent) : AnyShapeStyle(.white))
+                        .foregroundStyle(model.hasBackground ? EditorTheme.accent : EditorTheme.ink)
                 }
             }
             .help(model.hasBackground ? "Remove the background" : "Put the screenshot on the background from Settings")
@@ -171,7 +172,7 @@ private struct QuickAccessControls: View {
     }
 }
 
-/// Copy and Save along the bottom edge
+/// Copy and Save along the bottom edge, in the style their place gives them
 private struct QuickAccessActions: View {
 
     let model: QuickAccessViewModel
@@ -187,9 +188,25 @@ private struct QuickAccessActions: View {
             }
             .keyboardShortcut("s", modifiers: .command)
         }
-        // Two equal ways out of the card: secondary's accent text over the shot read as a disabled Copy
-        .buttonStyle(.editorPrimary)
-        .padding(6)
+    }
+}
+
+/// Copy and Save over the shot: on macOS 26 untinted glass, as Safari's toolbar over a page, so the shot shows
+/// through and the system picks the label's colour for what is behind it. The accent's prominent glass read as a
+/// solid pill over the shot. Before macOS 26, the solid accent capsule.
+private struct QuickAccessGlassButtonStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        if #available(macOS 26, *) {
+            Button(role: configuration.role, action: configuration.trigger) {
+                configuration.label
+                    .font(.theme(weight: .medium))
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+        } else {
+            Button(configuration).buttonStyle(.editorPrimary)
+        }
     }
 }
 
@@ -208,6 +225,7 @@ private struct ShortcutLabel: View {
             HStack(spacing: EditorTheme.tightSpacing) {
                 Text(title)
                 Text(keys)
+                    .font(.theme(weight: .medium, .mono))
                     .opacity(0.5)
                     .accessibilityHidden(true)
             }

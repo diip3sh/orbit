@@ -4,6 +4,7 @@
 //
 
 import AppKit
+import SwiftUI
 
 extension AreaSelectionView {
 
@@ -19,7 +20,7 @@ extension AreaSelectionView {
 
         let text = "\(evenWidth) × \(evenHeight)"
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
+            .font: NSFont.theme(.callout, weight: .medium, .mono),
             .foregroundColor: NSColor.white
         ]
         let attributedString = NSAttributedString(string: text, attributes: attributes)

@@ -14,10 +14,11 @@ taken, and marking it up means another app.
 
 - The card's **Annotate** button (top-right, first) grows the card to the shot's size on screen (shrunk to fit the
   screen) with a tool strip above the shot. The tools: **Select, Arrow, Line, Rectangle, Ellipse, Text, Highlighter,
-  Step, Blur, Pixelate, Spotlight, Crop**, a colour, a line width, Undo and Redo, and **Done**.
+  Step, Blur, Pixelate, Spotlight, Crop**, a colour, a line width, Undo, Redo and Delete, and at its end **Copy** and **Save**, which close the card
+  with the marked shot (2026-10-09, in place of Done).
 - Drag to draw a shape, click to place text or a step, drag to paint a highlight. Select moves a mark; ⌫ deletes the
-  selected one; ⌘Z and ⇧⌘Z undo and redo. Esc leaves the text being typed, or else is Done.
-- Done shrinks the card back, showing the annotated shot. Copy, Save, Pin and drag-out use it, from the small card
+  selected one; ⌘Z and ⇧⌘Z undo and redo. Esc leaves the text being typed, or else goes back to the card.
+- Esc shrinks the card back, showing the annotated shot. Copy, Save, Pin and drag-out use it, from the small card
   or the large one (⌘C and ⌘S work in both). The marks stay editable until the card closes: Annotate again shows them
   on the shot.
 - Marks go on the shot before its background (N14), so they sit inside the frame, and after Hide Sensitive Info (N9),

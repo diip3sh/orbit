@@ -14,7 +14,7 @@ struct AgentChatHeader: View {
         VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
             HStack(spacing: EditorTheme.tightSpacing) {
                 Text("Agent")
-                    .font(.headline)
+                    .font(.theme(.headline))
                 Spacer(minLength: EditorTheme.smallSpacing)
                 if !model.available.isEmpty {
                     Picker("Agent", selection: $model.agent) {
@@ -37,7 +37,7 @@ struct AgentChatHeader: View {
 
             if model.available.isEmpty, let reason = model.unavailableReason ?? (model.isLookingForAgents ? "Looking for agents…" : nil) {
                 Text(reason)
-                    .font(.caption)
+                    .font(.theme(.caption))
                     .foregroundStyle(EditorTheme.dim)
                     .fixedSize(horizontal: false, vertical: true)
                 if model.unavailableReason != nil {

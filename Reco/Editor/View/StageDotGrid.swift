@@ -21,7 +21,7 @@ struct StageDotGrid: View {
                     dots.addEllipse(in: CGRect(x: center.x - Self.dotSize / 2, y: center.y - Self.dotSize / 2, width: Self.dotSize, height: Self.dotSize))
                 }
             }
-            context.fill(dots, with: .color(EditorTheme.faint.opacity(0.5)))
+            context.fill(dots, with: .color(EditorTheme.hairline))
         }
         .mask {
             EllipticalGradient(stops: [.init(color: .black, location: 0.3), .init(color: .clear, location: 1)], endRadiusFraction: 0.72)

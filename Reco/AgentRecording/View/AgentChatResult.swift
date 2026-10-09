@@ -17,15 +17,15 @@ struct AgentChatResult: View {
                     .font(.title3)
                     .foregroundStyle(EditorTheme.accent)
                     .frame(width: 36, height: 36)
-                    .background(EditorTheme.accent.opacity(0.15), in: .rect(cornerRadius: 8, style: .continuous))
+                    .background(EditorTheme.control, in: .rect(cornerRadius: EditorTheme.smallRadius, style: .continuous))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(movie.lastPathComponent)
-                        .font(.callout.weight(.medium))
+                        .font(.theme(.callout, weight: .medium))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Text(Self.subtitle(for: movie, created: Self.creationDate(of: movie), now: .now))
-                        .font(.caption)
+                        .font(.theme(.caption))
                         .foregroundStyle(EditorTheme.dim)
                         .lineLimit(1)
                 }

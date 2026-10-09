@@ -63,7 +63,7 @@ struct EditorTimelineView: View {
             .clipShape(.rect(cornerRadius: 6))
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(EditorTheme.softHairline)
+                    .strokeBorder(EditorTheme.hairline)
             }
 
             if let markers = viewModel.markers {
@@ -82,7 +82,7 @@ struct EditorTimelineView: View {
                 .help("Clicks (top) and keystrokes (bottom)")
             } else if viewModel.source?.telemetryError != nil {
                 Text("No clicks or keystrokes: recorded without input telemetry")
-                    .font(.caption)
+                    .font(.theme(.caption))
                     .foregroundStyle(EditorTheme.dim)
                     .frame(height: Self.lanesHeight)
             }
@@ -105,8 +105,9 @@ struct EditorTimelineView: View {
                 }
                 for cut in timeMap.cuts {
                     let area = span(cut, Self.filmstripTop, size.height - Self.filmstripTop)
-                    context.fill(Path(area), with: .color(.black.opacity(0.6)))
-                    context.fill(Self.hatching(in: area), with: .color(.white.opacity(0.07)))
+                    // Faded towards the timeline's ground, so cuts recede in light as well as dark
+                    context.fill(Path(area), with: .color(EditorTheme.panel.opacity(0.6)))
+                    context.fill(Self.hatching(in: area), with: .color(EditorTheme.ink.opacity(0.07)))
                 }
                 for segment in viewModel.segments {
                     let line = span(segment, Self.filmstripTop, Self.filmstripHeight).divided(atDistance: 1, from: .minXEdge).slice
@@ -136,7 +137,7 @@ struct EditorTimelineView: View {
                     let rate = timeMap.rate(atSource: (segment.lowerBound + segment.upperBound) / 2)
                     if rate != 1 {
                         Text(SpeedRange.label(for: rate))
-                            .font(.caption2.bold())
+                            .font(.theme(.caption2, weight: .bold))
                             .monospacedDigit()
                             .foregroundStyle(.white)
                             .padding(.horizontal, EditorTheme.tightSpacing)

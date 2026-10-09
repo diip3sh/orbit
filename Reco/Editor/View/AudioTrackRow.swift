@@ -21,8 +21,7 @@ struct AudioTrackRow: View {
                     .truncationMode(.middle)
                 Spacer()
                 Text(settings.isMuted ? 0 : settings.volume, format: .percent.precision(.fractionLength(0)))
-                    .font(.caption)
-                    .monospaced()
+                    .font(.theme(.caption).monospacedDigit())
                     .foregroundStyle(EditorTheme.dim)
                 Toggle(
                     "Mute \(name)",
