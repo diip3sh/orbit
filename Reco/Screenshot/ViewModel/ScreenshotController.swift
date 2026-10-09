@@ -163,6 +163,12 @@ final class ScreenshotController {
         }
     }
 
+    /// After a screenshot was copied: saved too when Settings → Screenshots says so, so it stays in the Library
+    func didCopy(_ screenshot: Screenshot) async {
+        guard settings.savesCopiedScreenshots else { return }
+        _ = await save(screenshot)
+    }
+
     /// Checks permission, then lets the user select and capture (nil = cancelled)
     private func capture(then followUp: ScreenshotFollowUp?, _ take: () async throws -> Screenshot?) async {
         guard !isCapturing else { return }

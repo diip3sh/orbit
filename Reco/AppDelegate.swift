@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
     lazy var quickAccess = QuickAccessController(
         save: { [screenshots] screenshot in await screenshots.save(screenshot) },
+        didCopy: { [screenshots] screenshot in await screenshots.didCopy(screenshot) },
         background: { [settings = viewModel.settings] in settings.screenshotBackground }
     )
     private lazy var notchShelf = NotchShelfController(settings: viewModel.settings)

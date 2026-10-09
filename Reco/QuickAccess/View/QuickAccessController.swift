@@ -72,6 +72,7 @@ final class QuickAccessController {
     private(set) var closedScreenshot: Screenshot?
 
     @ObservationIgnored private let save: @MainActor (Screenshot) async -> Bool
+    @ObservationIgnored private let didCopy: @MainActor (Screenshot) async -> Void
     @ObservationIgnored private let background: @MainActor () -> ScreenshotBackground
     @ObservationIgnored let pins = PinController()
     @ObservationIgnored private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "QuickAccess")
@@ -89,9 +90,14 @@ final class QuickAccessController {
 
     /// - Parameters:
     ///   - save: Saves a screenshot into the output folder, returning whether it did
+    ///   - didCopy: Told after a screenshot was put on the pasteboard
     ///   - background: The background a card's Add Background puts the shot on (Settings → Screenshots)
-    init(save: @escaping @MainActor (Screenshot) async -> Bool, background: @escaping @MainActor () -> ScreenshotBackground) {
+    init(
+        save: @escaping @MainActor (Screenshot) async -> Bool, didCopy: @escaping @MainActor (Screenshot) async -> Void,
+        background: @escaping @MainActor () -> ScreenshotBackground
+    ) {
         self.save = save
+        self.didCopy = didCopy
         self.background = background
     }
 
@@ -117,7 +123,9 @@ final class QuickAccessController {
                 logger.error("Couldn't draw a preview of the screenshot")
                 return
             }
-            let model = QuickAccessViewModel(screenshot: screenshot, preview: preview, previewPixelSize: maxPixelSize, save: save, background: background)
+            let model = QuickAccessViewModel(
+                screenshot: screenshot, preview: preview, previewPixelSize: maxPixelSize, save: save, didCopy: didCopy, background: background
+            )
             present(model, on: screen, pointer: besidePointer ? pointer : nil)
         }
     }
@@ -130,6 +138,7 @@ final class QuickAccessController {
         case .copy:
             do {
                 ImagePasteboard.copy(png: try await ScreenshotService.pngData(of: screenshot.image))
+                await didCopy(screenshot)
             } catch {
                 logger.error("Couldn't encode the screenshot to copy: \(error.localizedDescription)")
                 show(screenshot)

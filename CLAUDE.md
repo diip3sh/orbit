@@ -286,7 +286,10 @@ cancelled or fails. The capture toolbar is hidden the same way but **isn't** bro
 it was only the way in, so Esc on an area selection closes that state and leaves the screen as it was.
 
 - **Copy** (C14): PNG data only; the button turns to ✓ Copied as the card starts closing, so it confirms during the
-  fade. **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed
+  fade. With **Settings → Screenshots → History → Save Copied Screenshots** on (`SettingsStore.savesCopiedScreenshots`,
+  off by default; 2026-10-09) the copy is also saved, like Save, so it stays in the folder and the Library instead of
+  expiring from the history: `ScreenshotController.didCopy(_:)`, which the card's Copy and `?then=copy` both call through
+  `QuickAccessController`'s `didCopy`. A failed save sends Screenshot Failed; the copy stands. **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed
   notification is sent. **Recognize Text** (C7): the
   image's text to the clipboard, or, when it holds QR codes or barcodes, their payloads (N16: `TextRecognizer.codes`, Vision's
   `DetectBarcodesRequest` alongside the text request; Code Copied). **Hide Sensitive Info** (N9): pixelates emails, phone numbers,
