@@ -2,7 +2,8 @@
 
 Lovable's film, rebuilt in 24 s and checked against its frames shot by shot. The photos, logo and moodboard tiles are
 shapes here. It is in Lovable's theme over the `aurora`, because Lovable's colour is a gradient: take its structure and
-timing, and your look from your brand (its theme, one of Reco's looks, that look's seams). In your film the marks are
+timing, and your look from your brand (its theme, one of Reco's looks, that look's seams). Its surfaces are flat and it runs
+at 30 fps; yours are glass, at 60. In your film the marks are
 lifted (`ui` layers, tinted) and the answers are rebuilt as tiles and cards (`recipes.md`). Read it for how the parts fit:
 
 | Scene | Beats | What it shows |

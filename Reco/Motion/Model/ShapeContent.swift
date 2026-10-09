@@ -31,6 +31,11 @@ nonisolated struct ShapeContent: Equatable, Sendable {
     /// A rectangle's outline this many canvas pixels wide instead of its fill; a glyph's line width.
     var stroke: Double?
 
+    /// A filled rectangle drawn as a pane of glass in its shape (spec 0015): the field blurred through it, its rim lit, its
+    /// shadow cast; its colour tints it, so a glass card's is a light veil (`#ffffff0f`). Flat cards over a shader's ground
+    /// read as cut-outs.
+    var glass: Bool?
+
     /// Whether it's drawn by ``kind``'s path rather than generated as a rounded rectangle.
     var isGlyph: Bool {
         kind != .rectangle
@@ -42,7 +47,7 @@ nonisolated struct ShapeContent: Equatable, Sendable {
 nonisolated extension ShapeContent: Codable {
 
     private enum CodingKeys: String, CodingKey {
-        case kind, size, cornerRadius, color, stroke
+        case kind, size, cornerRadius, color, stroke, glass
     }
 
     init(from decoder: any Decoder) throws {
@@ -52,6 +57,7 @@ nonisolated extension ShapeContent: Codable {
         cornerRadius = try container.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? 0
         color = try container.decode(RGBAColor.self, forKey: .color)
         stroke = try container.decodeIfPresent(Double.self, forKey: .stroke)
+        glass = try container.decodeIfPresent(Bool.self, forKey: .glass)
     }
 
     /// A rectangle leaves its kind out, as documents written before kinds did.
@@ -64,5 +70,6 @@ nonisolated extension ShapeContent: Codable {
         try container.encode(cornerRadius, forKey: .cornerRadius)
         try container.encode(color, forKey: .color)
         try container.encodeIfPresent(stroke, forKey: .stroke)
+        try container.encodeIfPresent(glass, forKey: .glass)
     }
 }

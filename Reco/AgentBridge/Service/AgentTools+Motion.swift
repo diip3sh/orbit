@@ -77,7 +77,7 @@ extension AgentTools {
             let findings = DesignCheck.findings(in: frames, at: moments, accent: document.style.accent)
                 + DesignCheck.bareOpenings(in: plan, scenes: document.scenes.map(\.id))
                 + DesignCheck.cutText(in: plan, scenes: document.scenes.map(\.id))
-                + DesignCheck.overlappingText(in: plan, scenes: document.scenes.map(\.id))
+                + DesignCheck.overlappingText(in: plan, document: DocumentExpansion.expanded(document, sizes: UILiftCache.sizes(of: document, in: bundle)))
             var status = MotionToolStatus(
                 status: .done, frames: shown.map { MotionToolStatus.Frame(scene: $0.scene, time: $0.time) }, findings: findings, lint: summary.findings
             )

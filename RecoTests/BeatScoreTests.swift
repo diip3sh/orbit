@@ -3,6 +3,7 @@
 //  RecoTests
 //
 
+import Accelerate
 import Foundation
 import Testing
 @testable import Reco
@@ -167,6 +168,24 @@ struct BeatScoreTests {
         #expect(sound == ScoreRenderer.render(plan.sound))
         #expect(abs(Loudness.integrated(sound) - SoundRules.beatFinish.loudness) < 0.5)
         #expect(Loudness.truePeak(sound) <= SoundRules.beatFinish.ceiling + 0.05)
+    }
+
+    /// Chords, claps and open hats are wide (two takes, the second as the side), the middle whole; hats sit to either side;
+    /// a groove's intro has no synthesized voice.
+    @Test func aGrooveIsWideWithoutAVoice() async throws {
+        var random = SeededRandom(seed: 1)
+        for voice in [SoundCue.Voice.keys(notes: [54, 58, 61, 64], length: 1), .stab(notes: [54, 58, 61], length: 0.3), .drum(.clap)] {
+            guard case .stereo(let wide) = SoundVoices.beat(voice, random: &random) else {
+                Issue.record("\(voice) is mono")
+                continue
+            }
+            let (middle, side) = (vDSP.add(wide.left, wide.right), vDSP.subtract(wide.left, wide.right))
+            let width = vDSP.rootMeanSquare(side) / vDSP.rootMeanSquare(middle)
+            #expect(width > 0.25 && width < 1)
+        }
+        let sheet = await MotionPlan.build(try document(story, style: .groove), bundle: URL.temporaryDirectory).sound
+        #expect(!sheet.cues.contains { if case .vox = $0.voice { true } else { false } })
+        #expect(Set(sheet.cues.filter { isDrum($0, .hat) }.map(\.pan)) == [-SoundRules.hatPan, SoundRules.hatPan])
     }
 
     @Test func theStyleIsTheDocumentsAndAmbientByDefault() throws {

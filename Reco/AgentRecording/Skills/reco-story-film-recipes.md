@@ -4,9 +4,14 @@ Every component here was rendered and checked frame by frame. Positions and size
 group's layers are placed from the group's position. Times are seconds into the scene and sit on the 0.353 s beat.
 Write `"weight"` on every text layer.
 
-**The colours below are a black and white developer tool's** (Orca: ground `#08090a`, surfaces `#111214` and `#1b1c1f`,
-tiles `#141518`, borders `#ffffff1f`, dim text `#8a8f98`, green `#3ddc84`, diff green `#0ac864` and red `#e5484d`).
-Replace every one with your product's own theme: its ground, surfaces, border, text, button and status colours.
+**The colours below are a black and white developer tool's** (Orca: ground `#08090a`, dim text `#8a8f98`, green
+`#3ddc84`, diff green `#0ac864` and red `#e5484d`). Replace every one with your product's own theme: its ground, text,
+button and status colours.
+
+**Every surface is glass:** the box, a menu, every tile and card, the result read close, the finish's bar. A surface is a
+filled rectangle with `"glass": true` and a light veil for its colour (`#ffffff0d`), with no shadow and no edge of its
+own: the look's ground shows blurred through it, its rim is lit and it casts its own shadow. Pills and chips on glass are
+`#ffffff14`. A flat, opaque card over a shader's ground reads as a cut-out.
 
 On every cut, something is on screen from the first frame: the thing that carries on from the scene before, still
 (the box, the thread, a pane), or the first new thing popping at 0. Don't hold anything back 0.1 s; the cut is the
@@ -45,17 +50,15 @@ pills 84 tall with 42 px labels, the send disc 88.
 
 ```json
 {"id": "box", "content": {"group": [
-  {"id": "boxFill", "content": {"shape": {"size": [1190, 370], "cornerRadius": 44, "color": "#111214"}}, "transform": {"position": [0, 0, 0]},
-   "shadow": {"opacity": 0.7, "radius": 44, "offset": 14}},
-  {"id": "boxEdge", "content": {"shape": {"size": [1190, 370], "cornerRadius": 44, "color": "#ffffff1f", "stroke": 2}}, "transform": {"position": [0, 0, 0]}},
+  {"id": "boxFill", "content": {"shape": {"size": [1190, 370], "cornerRadius": 44, "color": "#ffffff0d", "glass": true}}, "transform": {"position": [0, 0, 0]}},
   {"id": "hint", "content": {"text": {"text": "Describe a task for your agents…", "size": 50, "weight": "regular", "color": "#6e7178"}},
    "transform": {"position": [-548, -112, 0], "anchor": [0, 0.5]}},
   {"id": "plus", "content": {"shape": {"kind": "plus", "size": [38, 38], "color": "#c8cad0", "stroke": 3.5}}, "transform": {"position": [-530, 115, 0]}},
-  {"id": "ctx", "content": {"shape": {"size": [190, 84], "cornerRadius": 42, "color": "#1b1c1f"}}, "transform": {"position": [-380, 115, 0]}},
+  {"id": "ctx", "content": {"shape": {"size": [190, 84], "cornerRadius": 42, "color": "#ffffff14"}}, "transform": {"position": [-380, 115, 0]}},
   {"id": "ctxGlyph", "content": {"shape": {"kind": "branch", "size": [30, 30], "color": "#a9acb3", "stroke": 2.6}}, "transform": {"position": [-436, 115, 0]}},
   {"id": "ctxLabel", "content": {"text": {"text": "main", "size": 38, "weight": "regular", "color": "#d4d6db", "face": "mono"}},
    "transform": {"position": [-410, 115, 0], "anchor": [0, 0.5]}},
-  {"id": "pill", "content": {"shape": {"size": [330, 84], "cornerRadius": 42, "color": "#1b1c1f"}}, "transform": {"position": [300, 115, 0]}},
+  {"id": "pill", "content": {"shape": {"size": [330, 84], "cornerRadius": 42, "color": "#ffffff14"}}, "transform": {"position": [300, 115, 0]}},
   {"id": "pillLabel", "content": {"text": {"text": "Claude Code", "size": 42, "weight": "regular"}}, "transform": {"position": [163, 115, 0], "anchor": [0, 0.5]}},
   {"id": "chevron", "content": {"shape": {"kind": "chevron", "size": [24, 24], "color": "#ffffff", "stroke": 2.8}}, "transform": {"position": [425, 117, 0]}},
   {"id": "send", "content": {"shape": {"size": [88, 88], "cornerRadius": 44, "color": "#f4f4f5"}}, "transform": {"position": [520, 115, 0]}},
@@ -103,11 +106,12 @@ in view: at 3.6× the frame is 533×300 canvas pixels, so put the camera 100 rig
   - the pill `{"move": "morph", "start": 0.7, "color": "<the new colour>", "duration": 0.12}`;
   - the old label `{"move": "hide", "start": 0.7}`;
   - a second label in the same place `{"move": "show", "start": 0.7}`. Both swap on the same frame.
-- **The finish** (merge, ship, build, deploy): a 1190×240 bar in the box's surface with the work's title (46, `medium`) and
-  a note (34, dim), its button 300×96 at [390, 0] in the product's primary style (a light one: `#f4f4f5`, its label the
-  ground's dark). The camera at 2–2.5× on the button (`[1330, 540, 1040]`, panning to `[1350, 540]`), the click at 0.5,
-  a morph to the done colour (green `#3ddc84`) at 0.7, and "Merged" (dark, 42) with a dark `check` 68 px left of its
-  middle shown in place of "Merge all".
+- **The finish** (merge, ship, build, deploy): a 1190×240 bar of glass with the work's title (46, `medium`) and a note (34,
+  dim), its button 300×96 at [390, 0] in the product's primary style (a light one: `#f4f4f5`, its label the ground's
+  dark). The camera at 2–2.5× on the button (`[1330, 540, 1040]`, panning to `[1350, 540]`), the click at 0.5, a morph to
+  the done colour (green `#3ddc84`) at 0.7, and in place of "Merge all" its done state shown on the same frame: "Merged"
+  (dark, 42) anchored at its left `[0, 0.5]` at [330, 0], and a dark `check` 30 px at [300, 0], clear of the label's first
+  letter. Centred labels of different lengths can't be placed this way: anchor the label, then put the glyph before it.
 
 ## A menu
 
@@ -115,10 +119,8 @@ The product's own choices, as a group popping from its button, with a highlight 
 
 ```json
 {"id": "menu", "content": {"group": [
-  {"id": "menuFill", "content": {"shape": {"size": [780, 580], "cornerRadius": 36, "color": "#111214"}}, "transform": {"position": [0, 0, 0]},
-   "shadow": {"opacity": 0.7, "radius": 44, "offset": 14}},
-  {"id": "menuEdge", "content": {"shape": {"size": [780, 580], "cornerRadius": 36, "color": "#ffffff1f", "stroke": 2}}, "transform": {"position": [0, 0, 0]}},
-  {"id": "hover", "content": {"shape": {"size": [740, 160], "cornerRadius": 26, "color": "#1f2024"}}, "transform": {"position": [0, -175, 0]},
+  {"id": "menuFill", "content": {"shape": {"size": [780, 580], "cornerRadius": 36, "color": "#ffffff0d", "glass": true}}, "transform": {"position": [0, 0, 0]}},
+  {"id": "hover", "content": {"shape": {"size": [740, 160], "cornerRadius": 26, "color": "#ffffff14"}}, "transform": {"position": [0, -175, 0]},
    "moves": [{"move": "morph", "start": 0.71, "to": [0, 0], "duration": 0.18}, {"move": "click", "start": 1.06, "duration": 0.3}]},
   {"id": "row1mark", "content": {"ui": {"asset": "claude", "width": 64, "tint": "#d97757"}}, "transform": {"position": [-300, -175, 0]}},
   {"id": "row1", "content": {"text": {"text": "Claude Code", "size": 46, "weight": "regular"}}, "transform": {"position": [-245, -201, 0], "anchor": [0, 0.5]}},
@@ -189,7 +191,7 @@ show: marks, status, diffs, pictures.
 
 ### A bento of the product's actors
 
-The agents it runs, the models, the people, the integrations. Tiles in the product's surface with its border, each one's
+The agents it runs, the models, the people, the integrations. Tiles of glass, each one's
 mark big in its colour, its name and what it's doing (in mono if that's a branch, task id or path), a status chip. The
 product's own tile in the middle, inverted: its light colour, its logo and the project's name in its dark.
 
@@ -200,9 +202,7 @@ chip, `show` the new, the same moment). The scene's camera `{"move": "push", "st
 
 ```json
 {"id": "aClaude", "content": {"group": [
-  {"id": "aClaudeF", "content": {"shape": {"size": [400, 245], "cornerRadius": 34, "color": "#141518"}}, "transform": {"position": [0, 0, 0]},
-   "shadow": {"opacity": 0.6, "radius": 30, "offset": 10}},
-  {"id": "aClaudeE", "content": {"shape": {"size": [400, 245], "cornerRadius": 34, "color": "#ffffff1a", "stroke": 2}}, "transform": {"position": [0, 0, 0]}},
+  {"id": "aClaudeF", "content": {"shape": {"size": [400, 245], "cornerRadius": 34, "color": "#ffffff0d", "glass": true}}, "transform": {"position": [0, 0, 0]}},
   {"id": "aClaudeL", "content": {"ui": {"asset": "claude", "width": 96, "tint": "#d97757"}}, "transform": {"position": [-120, -42, 0]}},
   {"id": "aClaudeN", "content": {"text": {"text": "Claude Code", "size": 44, "color": "#ffffff", "weight": "semibold"}}, "transform": {"position": [-166, 38, 0], "anchor": [0, 0.5]}},
   {"id": "aClaudeT", "content": {"text": {"text": "login-race", "size": 34, "color": "#8a8f98", "weight": "regular", "face": "mono"}}, "transform": {"position": [-166, 84, 0], "anchor": [0, 0.5]}},
@@ -228,17 +228,16 @@ below the middle, its status chip at [210, 0]. Or a summary: "5 worktrees" (46) 
 ### A collage of its outputs
 
 Files, pull requests, tickets, pages, designs: eight cards 420×250 round the frame's edges, at about (±640, ±300),
-(±200, ±370), each turned −11° to 11°, in the product's surface with its border. Each has its maker's mark (54) at
+(±200, ±370), each turned −11° to 11°, each a card of glass. Each has its maker's mark (54) at
 [-160, -72], an id in mono (34, dim) beside it, its name in mono (34) at [-176, 4], and what changed at [-176, 74]: `+12` in
 green and `−3` in red, 34 px mono `semibold`, with a green `check` at [160, 74]. Keep the middle clear for one line (a
-`reply`, 64–72 px, from 0.7). The group takes `{"move": "scatter", "start": 0.1}` and the scene a camera
+`reply`, 64–72 px, from 0.7). The group takes `{"move": "scatter", "start": 0}`, so the stack is there on the cut and
+thrown at once, and the scene a camera
 `{"move": "push", "start": 0.3, "intensity": 0.5}`.
 
 ```json
 {"id": "d0", "content": {"group": [
-  {"id": "d0F", "content": {"shape": {"size": [420, 250], "cornerRadius": 28, "color": "#141518"}}, "transform": {"position": [0, 0, 0]},
-   "shadow": {"opacity": 0.65, "radius": 30, "offset": 12}},
-  {"id": "d0E", "content": {"shape": {"size": [420, 250], "cornerRadius": 28, "color": "#ffffff1c", "stroke": 2}}, "transform": {"position": [0, 0, 0]}},
+  {"id": "d0F", "content": {"shape": {"size": [420, 250], "cornerRadius": 28, "color": "#ffffff0d", "glass": true}}, "transform": {"position": [0, 0, 0]}},
   {"id": "d0L", "content": {"ui": {"asset": "claude", "width": 54, "tint": "#d97757"}}, "transform": {"position": [-160, -72, 0]}},
   {"id": "d0N", "content": {"text": {"text": "#2491", "size": 34, "color": "#8a8f98", "weight": "medium", "face": "mono"}}, "transform": {"position": [-118, -72, 0], "anchor": [0, 0.5]}},
   {"id": "d0B", "content": {"text": {"text": "fix/login-race", "size": 34, "color": "#ffffff", "weight": "medium", "face": "mono"}}, "transform": {"position": [-176, 4, 0], "anchor": [0, 0.5]}},
@@ -250,11 +249,11 @@ green and `−3` in red, 34 px mono `semibold`, with a green `check` at [160, 74
 
 ### One output read close
 
-A diff, a log, a reply, a result: rebuilt as a card 1540×640 in the box's surface with its border, its source at the top
+A diff, a log, a reply, a result: rebuilt as a card of glass 1540×640, its source at the top
 (mark 46 at [-700, -255], a mono name 36 beside it, `+6` and `−2` at the right), a rule under it, then five lines of mono at
 34 px 70 apart from y −140, their numbers dim at x −680, the text at x −610. A removed line on a red band (`#e5484d24`, text
 `#ff9b9b`, sign `−`), an added one on a green band (`#0ac86424`, text `#8be9b0`, sign `+`), each band 1460×62. A comment
-pill (620×92 in the raised surface, 38 px, `type` from 0.45, a send disc 64) pops on it at [330, 245] and is sent with a
+pill (620×92, `#1b1c1f`, 38 px, `type` from 0.45, a send disc 64) pops on it at [330, 245] and is sent with a
 click and a wash on a beat. The card's group takes `{"move": "rise", "start": 0}`.
 
 ### A bento that swaps

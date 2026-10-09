@@ -23,6 +23,9 @@ nonisolated enum GlassRenderer {
     /// The rim's width in CSS pixels: 0.08 of a cap height, 12 px at 14× on Raycast's pill.
     static let rimWidth = 0.87
 
+    /// A glass shape's rim in canvas pixels: a card seen whole, not a control in macro.
+    static let shapeRim = 2.5
+
     /// The panel under `layer` where `placement` puts it, over `field`, and the shadow it casts, in
     /// output pixels; the layer's content goes over the panel, clipped to it. `nil` for a layer not on
     /// glass, or a panel that can't be drawn.

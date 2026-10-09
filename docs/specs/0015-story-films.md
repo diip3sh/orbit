@@ -244,3 +244,57 @@ coloured marks. Its "Merge all" press drew both labels at once, and its attached
   bento flips to Passed on a beat, five PRs scatter round "Five pull requests, all green", and the diff reads with its
   numbers in their column. "All green. Ship it." leads into "Merged" in macro, then "Ship 100x", "with the", "agent IDE"
   and the logo in the halo. No flaw found in its frames.
+
+### 2026-10-09: the user's notes on v4: smoother, glass, music
+
+The user liked the dither ground and the seams, and asked for three things: the send's wash "does not look smooth", the
+cards are "very basic, could be a bit glassmorphic", the scatter "can be more smooth and high quality"; and the music
+"is not good at all".
+
+- **The wash**, frame by frame against Lovable's: theirs is a curved front of light growing out of the box's corner over
+  about ten frames, the darks kept; ours swept a flat band most of the way in three or four frames and left the box one
+  grey for half a second. It is now a front of the gradient's light out of the bottom-right corner (`washLight` kernel),
+  its edge soft (0.1 widths) and brightest, gliding (0.3, 0.1, 0.25, 1) across 0.66 s, leaving a glow of 0.15, gone by
+  1.2 s. A glass pane is washed after its glass is drawn: its own pixels are only its veil.
+- **Glass cards.** A filled rectangle with `glass` is a pane of glass in its shape (`GlassRenderer` with the shot's
+  glass light, a 2.5 px rim): the look's ground blurred through it, its rim lit, its own shadow; its colour a veil
+  (`#ffffff0d`). The box, menu, tiles, PR cards, diff and finish bar are glass in the recipes.
+- **Smoother.** Story films are drawn at 60 fps: a scatter's cards at 30 fps were smears under a 180° shutter. A scatter's
+  stack is there from the cut: faded in from nothing, the collage opened on 4–5 frames of the ground alone.
+- **Music**, measured against Lovable's track: ours was nearly mono (side 13 dB under the middle, 14–17 above 2 kHz,
+  L/R correlation 0.91, against 7 and 4 dB and 0.67) with a third less of its 250–500 Hz and half its air over 8 kHz, and
+  its intro sang synthesized "ah" swoops. Now chords, claps and open hats are two takes, the second as the side at 0.7
+  or 0.5 (middle 5–6 dB over side in the mids, as theirs), hats sit at ±0.45 with more room, the pad is 3 dB up (250–500
+  Hz 11.9 % against their 12.1 %), the hats 3, and the voice is gone. Overall side 10 dB under, highs 8. `soundVersion` 2.
+  Nobody has listened yet: it needs the user's ear.
+- Look-dev at 1080p60 with glass (`Orca Dither.motion`): 32.8 s exported in 31 s.
+- **Sixth run from the app** with these (`~/Movies/Reco/Orca 6-edited.mp4`, copied to `~/Desktop/Orca ADE v5.mp4`): 10 min,
+  33.2 s, 17 scenes, 18 glass panes; unprompted it put the box, a menu with "Fan out to 5 agents", the tiles, the PRs, the diff
+  and the "Merge all" bar on glass. It exported H.264, which at 4K stops at 30 fps (`AVAssetExportPresetHighestQuality`)
+  whatever the canvas; HEVC exports it at 4K60 (1,991 frames, 68 s on an M5). The skill exports HEVC.
+
+### 2026-10-09: the tick on "Merged", and transition sounds instead of a beat
+
+The user saw v5's check drawn over the "M" of "Merged" (26 s), and found its music "too punchy and weird … the same sound
+everywhere; we need transition sounds".
+
+- **The tick.** The recipe centred "Merged" and put its check 68 px left of the label's middle; at 42 px the label is
+  ~160 px wide, so the check sat on its first letter. The recipe now anchors the label at its left and puts the 30 px
+  check 30 px before it. `DesignCheck.overlappingText` also names a glyph whose box is more than 15 % inside a text's,
+  so preview_motion catches it (it takes the expanded document now, to know which layers are glyphs).
+- **Sound.** Story films leave the groove: the ambient score (a chord a shot, quiet) with a sound for each transition
+  (`SoundCueList+Story`, `SoundRules+Story`):
+  - a dither seam (and the opening's arrival): its dots as tiny square blips, a few each 1/15 s step, scattered over
+    C6–G♯7 across the stereo field, swelling and thinning, then a glass and a soft low hit where it resolves (`bits`);
+  - a glow seam: air rising into its brightest moment and a glass;
+  - the ring into the logo: a swell into the cut, a deep hit, three glasses ringing out;
+  - a wash: a bright shimmer rising with its front and a high glass;
+  - a swap to done (`show`): a two-note chime up a fourth, once however many layers swap together;
+  - a story film's plain cut: a swish alone, 3 dB quieter (a low hit on every cut 2 s apart was the sameness);
+  - a dictated voice types no keys (Lovable's has none).
+  Not yet listened to.
+- **One pointer a scene.** Each click had its own pointer: the menu's two presses 0.5 s apart showed the first hand
+  fading out while an arrow rose from below for the second. A click's pointer now goes as the next one's comes on, and
+  that one glides from where it was, staying the hand (`pointerTurns`); only a pointer coming in from below is the arrow.
+- **Seventh run from the app** (`~/Movies/Reco/Orca 7-edited.mp4`, re-exported with the pointer fix; copied to
+  `~/Desktop/Orca ADE v6.mp4`): 11 min, 32.5 s, HEVC 4K60, `ambient` with the transition sounds. "Merged" clears its check.

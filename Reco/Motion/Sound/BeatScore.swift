@@ -53,13 +53,8 @@ nonisolated struct BeatScore {
             start = from
             index += 1
         }
-        // The reference's intro has pitched swoops (3.8–5.5 s): two, quietly, a bar and three bars in, each over before the drop
-        let swoop = 0.9
-        for bars in [1.0, 3.0] where grid.phase + bars * grid.bar + swoop <= form.drop {
-            let (from, onto) = bars == 1 ? (73.0, 78.0) : (78.0, 76.0)
-            add(.vox(from: from, onto: onto, length: swoop), at: grid.phase + bars * grid.bar, level: style.levels.chords - 4, pan: bars == 1 ? -0.25 : 0.25,
-                send: 0.6)
-        }
+        // The reference's intro has pitched swoops (3.8–5.5 s), but sung by a synthesized voice they read as a toy: the
+        // user found the groove "not good at all". The pad and the riser carry it.
         riser(into: form.drop)
     }
 
@@ -99,10 +94,10 @@ nonisolated struct BeatScore {
         // A fill takes the bar's last beat from the snares
         let fillFrom = half + 12
         for hit in style.snares where steps.contains(hit.step) && inside(hit.step) && !(fills && hit.step >= fillFrom) {
-            add(.drum(.snare), at: time(hit.step), level: levels.snare + hit.level, pan: 0.04, send: 0.18)
+            add(.drum(.snare), at: time(hit.step), level: levels.snare + hit.level, pan: 0.04, send: 0.26)
         }
         for hit in style.claps where steps.contains(hit.step) && inside(hit.step) && !(fills && hit.step >= fillFrom && style.snares.isEmpty) {
-            add(.drum(.clap), at: time(hit.step), level: levels.clap + hit.level, pan: -0.06, send: 0.22)
+            add(.drum(.clap), at: time(hit.step), level: levels.clap + hit.level, send: 0.3)
         }
         if fills {
             let drum: SoundCue.Drum = style.snares.isEmpty ? .clap : .snare
@@ -112,11 +107,12 @@ nonisolated struct BeatScore {
         }
         for hit in style.hats where steps.contains(hit.step) && inside(hit.step) {
             let jitter = random.uniform(-SoundRules.hatJitter.time...SoundRules.hatJitter.time)
+            // Off the middle, the downbeat's to one side and the rest to the other, as a kit's hats sit in a stereo pair
             add(.drum(.hat), at: time(hit.step) + jitter, level: levels.hat + hit.level + random.uniform(-SoundRules.hatJitter.level...0),
-                pan: 0.18, send: 0.05)
+                pan: hit.step.isMultiple(of: 4) ? -SoundRules.hatPan : SoundRules.hatPan, send: 0.14)
         }
         for hit in style.openHats where steps.contains(hit.step) && inside(hit.step) {
-            add(.drum(.openHat), at: time(hit.step), level: levels.openHat + hit.level, pan: -0.15, send: 0.1)
+            add(.drum(.openHat), at: time(hit.step), level: levels.openHat + hit.level, pan: -SoundRules.hatPan, send: 0.14)
         }
         bass(steps: steps, time: time, inside: inside, harmony: harmony, segmentEnd: segment.upperBound)
         let sung = harmony.notes.sorted().map { Double($0 + 12) }
@@ -162,7 +158,8 @@ nonisolated struct BeatScore {
             addPad(style.lift[index % style.lift.count], from: start, to: until, brightness: style.brightness.lift, pumped: false, level: style.levels.pad + 1)
             if !isDip {
                 for step in stride(from: 0, to: 16, by: 2) where start + Double(step) * sixteenth < gap.upperBound - 1e-6 {
-                    add(.drum(.hat), at: start + Double(step) * sixteenth, level: style.levels.hat - (step.isMultiple(of: 4) ? 6 : 3), pan: 0.18, send: 0.08)
+                    add(.drum(.hat), at: start + Double(step) * sixteenth, level: style.levels.hat - (step.isMultiple(of: 4) ? 6 : 3),
+                        pan: step.isMultiple(of: 4) ? -SoundRules.hatPan : SoundRules.hatPan, send: 0.14)
                 }
             }
             start = until

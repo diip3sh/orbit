@@ -78,7 +78,8 @@ nonisolated extension AgentToolCatalog {
         follows a pan in), whip (to [x,y], intensity how much \
         closer, 0.35 s), pullBack, drift (direction left, right, up, down). intensity 1 is the grammar's own amount.
         Motion design (the reco-motion-design skill has recipes): shape layers {size, cornerRadius, color, stroke (an \
-        outline that wide), kind rectangle|triangle|plus|check|cross|arrow|search|play|pause}; a shadow {opacity, radius, \
+        outline that wide), kind rectangle|triangle|plus|check|cross|arrow|search|play|pause, glass (a filled rectangle as a \
+        pane of glass over the field, its color a veil such as #ffffff0d)}; a shadow {opacity, radius, \
         offset 0, color} is a glow; canvas fieldStrength 0–1 tones the field down. Moves: morph {size, radius, color, \
         stroke (0 fills), to [x,y]} from where the last left it; flood (a rectangle out past the frame); pop; press; spin (a \
         quarter turn into place); click (a pointer comes in and presses it, a group too); burst {color} (particles); ripple \

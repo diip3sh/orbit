@@ -41,13 +41,16 @@ nonisolated struct SoundCueList {
     }
 
     /// A quiet swish and thump on every plain cut but the one the first UI cuts in on: never on a whip, a
-    /// seam drawn over both scenes, or into a closing.
-    mutating func cuts(of plan: MotionPlan, document: MotionDocument, before end: Double, except opening: Double?) {
+    /// seam drawn over both scenes, or into a closing. A story film's cuts are the swish alone, quieter: its transitions
+    /// have their own sounds, and a low hit on every cut 2 s apart was the same sound everywhere.
+    mutating func cuts(of plan: MotionPlan, document: MotionDocument, before end: Double, except opening: Double?, soft: Bool = false) {
         let plain: Set<MotionSeam> = [.cut, .blurCut, .zoomThrough, .cutOnMotion]
         for index in plan.scenes.indices.dropFirst() where plan.scenes[index].start < end && document.scenes.indices.contains(index) {
             let time = frame(plan.scenes[index].start)
             guard plain.contains(document.scenes[index].seam), time != opening else { continue }
-            add(.swish(length: SoundRules.cutSwish.length), .effects, at: time, level: SoundRules.cutSwish.level, send: SoundRules.cutSwish.send)
+            add(.swish(length: SoundRules.cutSwish.length), .effects, at: time, level: SoundRules.cutSwish.level + (soft ? SoundRules.softCut : 0),
+                send: SoundRules.cutSwish.send)
+            guard !soft else { continue }
             let thump = SoundRules.cutThump
             add(.thump(high: thump.high, low: thump.low, length: 0.7, decay: thump.decay), .effects, at: time, level: thump.level, send: 0.1)
         }
@@ -126,7 +129,8 @@ nonisolated extension SoundCueList {
                     guard timing.start < scene.duration, scene.start + timing.start < end else { continue }
                     cue(move, at: scene.start + timing.start, lasting: timing.duration, in: context)
                 }
-                if let reveal = planned.reveal, reveal.style == .kinetic || reveal.style == .voice, !dropsKineticKeys, case .text(let text) = layer.content {
+                // A voice is dictated: Lovable's has no key a letter
+                if let reveal = planned.reveal, reveal.style == .kinetic, !dropsKineticKeys, case .text(let text) = layer.content {
                     keys(text.text, revealed: reveal, from: scene.start, before: min(end, scene.start + scene.duration))
                 }
             }
@@ -150,6 +154,8 @@ nonisolated extension SoundCueList {
                 add(.glass(note: glass.notes[note], length: glass.length, brightness: 1.2), .effects, at: time, level: glass.levels[note],
                     pan: glass.pans[note], send: glass.send)
             }
+        case .wash, .show:
+            story(move.kind, at: time)
         case .scatter where move.target == nil:
             // A collage thrown out of its stack: a whoosh at its fastest, early in the throw
             add(.whoosh, .effects, at: time + duration * 0.3, level: SoundRules.whooshLevel - 6, send: 0.2)

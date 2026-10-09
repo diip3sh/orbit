@@ -136,16 +136,19 @@ nonisolated enum MotionFrameRenderer {
             var room = placement
             room.corners = placement.roomCorners ?? placement.corners
             var layerImage = drawn(content, layer: layer, at: room, time: time, plan: plan)
-            if layer.tints.contains(where: { $0.kind == .wash }) {
-                layerImage = washed(layerImage, layer: layer, at: time) { over in washBounds(of: over, in: scene, placements: placements, plan: plan) }
-            }
             // On glass: over its panel, clipped to it, and the panel's shadow under both
+            var shadow: CIImage?
             if let panel = GlassRenderer.panel(under: layer, at: placement, lit: SatinSetup.forShot(scene.fieldShot).glass, over: field, plan: plan) {
                 let faded = { (image: CIImage) in placement.opacity < 1 ? image.fading(to: placement.opacity) : image }
                 layerImage = layerImage.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: panel.body])
-                    .composited(over: faded(panel.body)).composited(over: faded(panel.shadow))
+                    .composited(over: faded(panel.body))
+                shadow = faded(panel.shadow)
             }
-            image = layerImage.composited(over: image)
+            // Over the glass too: a glass pane's own pixels are only its veil
+            if layer.tints.contains(where: { $0.kind == .wash }) {
+                layerImage = washed(layerImage, layer: layer, at: time) { over in washBounds(of: over, in: scene, placements: placements, plan: plan) }
+            }
+            image = (shadow.map { layerImage.composited(over: $0) } ?? layerImage).composited(over: image)
         }
         image = pointers(of: scene, at: time, plan: plan).composited(over: image)
         let bounds = CGRect(origin: .zero, size: plan.outputSize)

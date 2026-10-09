@@ -13,19 +13,45 @@ nonisolated extension MotionFrameRenderer {
         guard let pointer = plan.pointer else { return .empty() }
         // As large as the camera shows the canvas: in a macro the hand is as close as the button it presses
         let magnification = plan.camera(of: scene, at: time).magnification
-        return clickTargets(of: scene, at: time, plan: plan).reduce(CIImage.empty()) { image, target in
-            target.clicks.compactMap {
-                pointer.image(of: $0, on: target.corners, at: time, canvas: plan.canvas, outputScale: plan.outputScale, magnification: magnification)
-            }
-                .reduce(image) { $1.composited(over: $0) }
+        return pointerTurns(of: scene, at: time, plan: plan).compactMap { turn in
+            pointer.image(of: turn.click, on: turn.corners, at: time, canvas: plan.canvas, outputScale: plan.outputScale, magnification: magnification,
+                          from: turn.from)
         }
+        .reduce(CIImage.empty()) { $1.composited(over: $0) }
     }
 
-    /// Where the tips of `scene`'s pointers are at `time`, click by click in the scene's order; `nil` for one not on screen.
+    /// Where the tips of `scene`'s pointers are at `time`, click by click; `nil` for one not on screen.
     static func pointerTips(of scene: MotionPlan.Scene, at time: Double, plan: MotionPlan) -> [CGPoint?] {
         guard plan.pointer != nil else { return [] }
-        return clickTargets(of: scene, at: time, plan: plan).flatMap { target in
-            target.clicks.map { MotionPointer.tip(of: $0, on: target.corners, at: time, canvas: plan.canvas)?.point }
+        return pointerTurns(of: scene, at: time, plan: plan).map { MotionPointer.tip(of: $0.click, on: $0.corners, at: time, canvas: plan.canvas, from: $0.from)?.point }
+    }
+
+    /// A click's turn with the scene's pointer: the quad it's clicked on, and where the pointer comes from.
+    private struct PointerTurn {
+        let click: MotionPlan.Click
+        let corners: [CGPoint]
+        let from: CGPoint?
+    }
+
+    /// `scene`'s clicks in the order they press, one pointer between them: a click's pointer goes as the next one's comes on,
+    /// and that one travels from where it was. Each its own, the menu's two presses 0.5 s apart showed the first hand fading
+    /// out while an arrow rose from below for the second.
+    private static func pointerTurns(of scene: MotionPlan.Scene, at time: Double, plan: MotionPlan) -> [PointerTurn] {
+        let ordered = { (time: Double) in
+            clickTargets(of: scene, at: time, plan: plan).flatMap { target in target.clicks.map { (click: $0, corners: target.corners) } }
+                .sorted { $0.click.press < $1.click.press }
+        }
+        let clicks = ordered(time)
+        return clicks.indices.compactMap { index in
+            if clicks.indices.contains(index + 1), time >= MotionPointer.appears(clicks[index + 1].click) {
+                return nil
+            }
+            guard index > 0 else { return PointerTurn(click: clicks[index].click, corners: clicks[index].corners, from: nil) }
+            // Where the pointer before was as this one came on
+            let handover = MotionPointer.appears(clicks[index].click)
+            let before = ordered(handover).first { $0.click == clicks[index - 1].click }
+            let from = before.flatMap { MotionPointer.tip(of: $0.click, on: $0.corners, at: handover, canvas: plan.canvas)?.point }
+            return PointerTurn(click: clicks[index].click, corners: clicks[index].corners, from: from)
         }
     }
 

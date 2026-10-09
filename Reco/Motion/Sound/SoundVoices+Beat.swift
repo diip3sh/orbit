@@ -16,11 +16,28 @@ nonisolated extension SoundVoices {
         case .drum(let drum): return self.drum(drum, random: &random)
         case .sub(let note, let from, let length): return .mono(sub(pitch(note), from: from.map(pitch), length: length))
         case .bass(let note, let length): return .mono(bass(pitch(note), length: length))
-        case .stab(let notes, let length): return .mono(stab(notes.map(pitch), length: length, random: &random))
-        case .keys(let notes, let length): return .mono(keys(notes.map(pitch), length: length, random: &random))
+        case .stab(let notes, let length): return .stereo(widened(chordWidth, random: &random) { stab(notes.map(pitch), length: length, random: &$0) })
+        case .keys(let notes, let length): return .stereo(widened(chordWidth, random: &random) { keys(notes.map(pitch), length: length, random: &$0) })
         case .vox(let from, let onto, let length): return .mono(vox(from: pitch(from), onto: pitch(onto), length: length, random: &random))
         default: return .mono([])
         }
+    }
+
+    // MARK: - Width
+
+    /// How wide chords, claps and open hats are: their side against their middle. Mono, the groove's mids sat 8–10 dB under it as side
+    /// and its highs 14–17, where Lovable's track holds 4 dB throughout (L/R correlation 0.91 against 0.67).
+    static let chordWidth: Float = 0.7
+    static let clapWidth: Float = 0.5
+
+    /// `voice` played twice, its detune, phases and noise drawn afresh: the first as the middle, the second as the side
+    /// `width` as loud, so the two channels differ as a chorus's do and the middle stays whole in mono.
+    private static func widened(_ width: Float, random: inout SeededRandom, _ voice: (inout SeededRandom) -> [Float]) -> StereoSound {
+        let middle = voice(&random)
+        let other = voice(&random)
+        let side = vDSP.multiply(width, Array(other.prefix(middle.count)) + [Float](repeating: 0, count: max(middle.count - other.count, 0)))
+        let wide = StereoSound(left: vDSP.add(middle, side), right: vDSP.subtract(middle, side))
+        return wide.scaled(1 / max(wide.peak, 1e-6))
     }
 
     // MARK: - Drums
@@ -38,9 +55,9 @@ nonisolated extension SoundVoices {
         // The Spotify Jam's kicks are short blobs 40–130 Hz with gaps between: a long 808 tail was 6 dB too much sub
         case .houseKick: .mono(kick(Kick(low: 50, high: 160, drop: 0.035, hold: 0.03, decay: 0.1, length: 0.3, click: 0.3, drive: 1.6), random: &random))
         case .snare: .mono(snare(random: &random))
-        case .clap: .mono(clap(random: &random))
+        case .clap: .stereo(widened(clapWidth, random: &random) { clap(random: &$0) })
         case .hat: .mono(hat(decay: 0.03, length: 0.12, low: 6000, random: &random))
-        case .openHat: .mono(hat(decay: 0.16, length: 0.45, low: 4500, random: &random))
+        case .openHat: .stereo(widened(clapWidth, random: &random) { hat(decay: 0.16, length: 0.45, low: 4500, random: &$0) })
         case .crash: .stereo(crash(random: &random))
         }
     }

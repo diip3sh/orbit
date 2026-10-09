@@ -86,7 +86,7 @@ nonisolated enum FieldRenderer {
     ]
 
     /// Reco's own, drawn in stages instead of as one look: satin, its grain, glass, the seams.
-    private static let ownKernels = ["auroraField", "satinGround", "satinFinish", "filmGrainNoise", "filmGrain", "glassPanel", "glowSeam", "ditherSeam", "ringSeam"]
+    private static let ownKernels = ["auroraField", "satinGround", "satinFinish", "filmGrainNoise", "filmGrain", "glassPanel", "glowSeam", "ditherSeam", "ringSeam", "washLight"]
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "FieldRenderer")
 

@@ -29,6 +29,7 @@ nonisolated enum SoundVoices {
         case .whoosh: return .stereo(whoosh(random: &random))
         case .riser(let length, let low, let high, let power): return .stereo(riser(length: length, low: low, high: high, power: power, random: &random))
         case .drum, .sub, .bass, .stab, .keys, .vox: return beat(cue.voice, random: &random)
+        case .bits(let length): return .stereo(bits(length: length, random: &random))
         }
     }
 

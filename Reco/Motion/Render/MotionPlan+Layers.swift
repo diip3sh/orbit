@@ -62,8 +62,11 @@ extension MotionPlan {
     }
 
     /// A story film's parts of a layer (spec 0015): a voice line's follow, on its group if it's in one, so a logo beside it
-    /// moves with it; its tints, its own and its groups' washes.
+    /// moves with it; its tints, its own and its groups' washes; a card's glass.
     nonisolated private static func dress(_ planned: inout Layer, as layer: MotionLayer, parent: Int?, in list: inout [Layer], context: MoveContext) {
+        if case .shape(let shape) = layer.content, shape.glass == true, !shape.isGlyph, (shape.stroke ?? 0) == 0 {
+            planned.glass = GlassRenderer.Shape(radius: shape.cornerRadius, rim: GlassRenderer.shapeRim)
+        }
         if let reveal = planned.reveal, reveal.style == .voice {
             let scale = layer.transform.scale
             let origin = parent.map { list[$0].base[.positionX] ?? 0 } ?? 0

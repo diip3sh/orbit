@@ -133,8 +133,86 @@ struct StoryFilmTests {
         #expect(abs(first.value(.positionX, at: 0.2)) < 1e-6 && abs(first.value(.positionY, at: 0.2)) < 1e-6)
         #expect(abs(first.value(.rotationZ, at: 0.2)) > 5 && first.value(.scale, at: 0.2) < 0.6)
         #expect(abs(first.value(.positionX, at: 1) + 300) < 1e-6 && abs(first.value(.scale, at: 1) - 1) < 1e-6)
-        // One after another
+        // One after another, the stack there from the cut
         #expect(abs(layers[2].value(.positionX, at: 0.2 + MoveExpansion.scatterStagger)) < 1e-6)
+        #expect(layers.dropFirst().allSatisfy { $0.value(.opacity, at: 0) == 1 })
+    }
+
+    /// Each transition has its own sound over the ambient chords: the opening's and a seam's dots, the ring's swell, hit and
+    /// glasses into the logo, a wash's shimmer, one chime for everything turning to done; a dictated voice types no keys.
+    @Test func eachTransitionHasItsSound() async throws {
+        let json = ##"""
+            {"version": 1, "canvas": {"field": "warp", "fieldStrength": 0.45, "frameRate": 60}, "style": {"accent": "#ffffff"}, "scenes": [
+              {"id": "open", "duration": 2.118, "seam": "dither", "layers": [{"id": "box", "content": {"shape": {"size": [1190, 370], "color": "#ffffff0d",
+               "glass": true}}, "transform": {"position": [960, 540, 0]}, "moves": [{"move": "wash", "start": 1.4}]}]},
+              {"id": "voice", "duration": 2.471, "layers": [{"id": "said", "content": {"text": {"text": "I've got five bugs", "size": 140}},
+               "transform": {"position": [960, 540, 0]}, "moves": [{"move": "voice", "start": 0, "duration": 1.5}]}]},
+              {"id": "tiles", "duration": 2.824, "seam": "dither", "layers": [
+                {"id": "a", "content": {"text": {"text": "Passed", "size": 32}}, "transform": {"position": [700, 540, 0]}, "moves": [{"move": "show", "start": 2.118}]},
+                {"id": "b", "content": {"text": {"text": "Passed", "size": 32}}, "transform": {"position": [1200, 540, 0]}, "moves": [{"move": "show", "start": 2.118}]}]},
+              {"id": "logo", "duration": 2.824, "seam": "ring", "field": "halo", "layers": [{"id": "name", "content": {"text": {"text": "Orca", "size": 120}},
+               "transform": {"position": [960, 540, 0]}}]}]}
+            """##
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(json.utf8))
+        let plan = await MotionPlan.build(document, bundle: bundle)
+        let cues = plan.sound.cues
+        let near = { (time: Double) in { (cue: SoundCue) in abs(cue.time - time) < 0.02 } }
+
+        #expect(plan.sound.finish == nil && !cues.contains { if case .drum = $0.voice { true } else { false } })
+        let bits = cues.filter { if case .bits = $0.voice { true } else { false } }.map(\.time)
+        #expect(bits.count == 2 && near(MotionFrameRenderer.groundSwell)(cues.first { if case .bits = $0.voice { true } else { false } }!))
+        let tiles = plan.scenes[2].start, logo = plan.scenes[3].start
+        #expect(bits.contains { abs($0 - tiles) < 0.02 })
+        #expect(cues.contains { if case .riser = $0.voice { near(logo)($0) } else { false } } && cues.contains { if case .thump = $0.voice { near(logo)($0) } else { false } })
+        #expect(cues.contains { if case .riser = $0.voice { near(1.4 + SoundRules.washShimmer.crossed)($0) } else { false } })
+        let chimes = cues.filter { if case .blip(let note, _) = $0.voice { note == SoundRules.doneChime.notes[0] } else { false } }
+        #expect(chimes.count == 1 && near(tiles + 2.118)(chimes[0]))
+        #expect(!cues.contains { if case .key = $0.voice { true } else { false } })
+        // Its cuts a quieter swish alone
+        let cut = plan.scenes[1].start
+        #expect(cues.filter(near(cut)).map(\.level) == [SoundRules.cutSwish.level + SoundRules.softCut])
+    }
+
+    /// A scene's clicks share one pointer: the first's goes as the next's comes on, and that one travels from where the first
+    /// was rather than rising from below.
+    @Test func clicksShareOnePointer() async throws {
+        let row = #"[{"id": "row", "content": {"shape": {"size": [600, 120], "color": "333333"}}, "transform": {"position": [960, 540, 0]},"#
+            + #" "moves": [{"move": "click", "start": 0.53}, {"move": "click", "start": 1.06}]}]"#
+        let plan = await MotionPlan.build(try document(row, duration: 2), bundle: bundle)
+        try #require(plan.pointer != nil)
+        let clicks = plan.scenes[0].layers[0].clicks
+        let handover = MotionPointer.appears(clicks[1]) + 0.01
+        let tips = MotionFrameRenderer.pointerTips(of: plan.scenes[0], at: handover, plan: plan).compactMap { $0 }
+        #expect(tips.count == 1)
+        // Still where the first pressed, not below the frame
+        #expect(tips.first.map { $0.y < plan.canvas.height } == true)
+    }
+
+    /// A glass card is a pane over the field in its own shape; an outline or a glyph isn't.
+    @Test func aGlassCardIsAPaneInItsShape() async throws {
+        let card = { (id: String, extra: String) in
+            ##"{"id": "\##(id)", "content": {"shape": {"size": [400, 250], "cornerRadius": 28, "color": "#ffffff0d", "glass": true\##(extra)}}, "##
+                + ##""transform": {"position": [960, 540, 0]}}"##
+        }
+        let layers = await MotionPlan.build(try document("[\(card("pane", "")), \(card("outline", #", "stroke": 2"#))]"), bundle: bundle).scenes[0].layers
+        #expect(layers[0].glass == GlassRenderer.Shape(radius: 28, rim: GlassRenderer.shapeRim))
+        #expect(layers[1].glass == nil)
+    }
+
+    /// A wash's light grows out of the bottom-right corner, where the send is, and is gone at its end.
+    @Test func aWashGrowsOutOfItsCorner() async throws {
+        let box = ##"[{"id": "box", "content": {"group": [{"id": "fill", "content": {"shape": {"size": [1600, 800], "color": "#141414"}}, "##
+            + ##""transform": {"position": [0, 0, 0]}}]},"##
+            + #" "transform": {"position": [960, 540, 0]}, "moves": [{"move": "wash", "start": 0}]}]"#
+        let plan = await MotionPlan.build(try document(box, duration: 2), bundle: bundle, shorterSide: 135)
+        let light = { (time: Double, across: Int, down: Int) in
+            let pixels = try MotionDesignTests.pixels(of: MotionFrameRenderer.image(at: time, plan: plan), size: plan.outputSize)
+            return Int(pixels[(down * Int(plan.outputSize.width) + across) * 4])
+        }
+        // Rows from the top: the bottom-right corner lit first, the top-left still dark
+        #expect(try light(0.15, 214, 112) > light(0.15, 26, 23) + 40)
+        #expect(try light(0.5, 26, 23) > light(0, 26, 23) + 20)
+        #expect(try abs(light(1.25, 26, 23) - light(0, 26, 23)) <= 2)
     }
 
     @Test func aWashGoesToItsGroupsLayersAndAShimmerStaysOnItsOwn() async throws {

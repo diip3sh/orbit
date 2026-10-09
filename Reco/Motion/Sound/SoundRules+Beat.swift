@@ -154,8 +154,9 @@ nonisolated extension SoundRules {
     /// Beat scores are mastered as their references were (Lovable −15.8, Spotify Jam −14.3 LUFS), true peaks under −1 dBTP.
     static let beatFinish = SoundCueSheet.Finish(loudness: -14, ceiling: -1)
 
-    /// Hats move by up to this much in time and level, so no two bars are alike.
+    /// Hats move by up to this much in time and level, so no two bars are alike, and sit this far to either side.
     static let hatJitter = (time: 0.003, level: 1.5)
+    static let hatPan = 0.45
 
     /// A riser into a drop or a return, at most this long.
     static let dropRiser = (length: 2.8, low: 300.0, high: 6000.0, power: 2.2)
@@ -195,7 +196,8 @@ nonisolated extension SoundRules {
         home: BeatStyle.Harmony(notes: [54, 61, 66, 68, 70], bass: 30),
         fill: [BeatStyle.Hit(12, -7), BeatStyle.Hit(13, -6), BeatStyle.Hit(14, -3), BeatStyle.Hit(15, -1)],
         fillBars: 4,
-        levels: BeatStyle.Levels(kick: -5, snare: -12, clap: -14, hat: -15, openHat: -19, crash: -15, bass: -11.5, chords: -11, pad: -19,
+        // The pad 3 dB up and the hats 2: the groove had a third less of the reference's 250–500 Hz and half its air over 8 kHz
+        levels: BeatStyle.Levels(kick: -5, snare: -12, clap: -14, hat: -12, openHat: -17, crash: -15, bass: -11.5, chords: -11, pad: -16,
                                  impact: -8, riser: -18),
         pump: 0.6,
         brightness: BeatStyle.Brightness(intro: 700, body: 1500, lift: 1900, outro: 1300)

@@ -43,7 +43,8 @@ nonisolated extension MoveExpansion {
     }
 
     /// A layer of a scatter, flying from where it was stacked (`from`, in its parent's space: the group's middle) to its
-    /// place, growing past its size and turning into its own angle; `intensity` turns it one way or the other.
+    /// place, growing past its size and turning into its own angle; `intensity` turns it one way or the other. The stack is
+    /// there until it's thrown, as Lovable's pile is on its cut: faded in, the collage opened on the ground alone.
     private static func scatterTracks(
         of move: MotionMove, from: CGPoint, start: Double, duration: Double, in context: MoveContext
     ) -> [MotionProperty: [PropertyTrack]] {
@@ -54,8 +55,7 @@ nonisolated extension MoveExpansion {
             .positionX: [flight(.positionX, from.x - context.position.x, 0, .enter, duration)],
             .positionY: [flight(.positionY, from.y - context.position.y, 0, .enter, duration)],
             .rotationZ: [flight(.rotationZ, scatterTurn * (move.intensity ?? 1), 0, .enter, duration)],
-            .scale: [flight(.scale, scatterFrom, 1, .overshoot, duration)],
-            .opacity: [flight(.opacity, 0, 1, .enterFast, min(0.08, duration))]
+            .scale: [flight(.scale, scatterFrom, 1, .overshoot, duration)]
         ]
     }
 }

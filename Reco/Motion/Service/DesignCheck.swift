@@ -84,21 +84,44 @@ nonisolated enum DesignCheck {
         }
     }
 
-    /// The scenes of `plan` with one text drawn over another as they end, everything arrived: an Orca film left a diff's
-    /// five line numbers at one place, mid-card. A text counts as over another when its middle is inside it.
-    static func overlappingText(in plan: MotionPlan, scenes: [String]) -> [String] {
-        zip(plan.scenes, scenes).compactMap { scene, id in
-            let texts = plan.placements(of: scene, at: scene.duration * settled).filter { placement in
-                !scene.layers[placement.layer].parts.isEmpty && placement.opacity >= 0.5
+    /// The scenes of `plan` with one text drawn over another, or a glyph over text, as they end, everything arrived: an Orca
+    /// film left a diff's five line numbers at one place, mid-card, and another a check on the "M" of "Merged". A text counts
+    /// as over another when its middle is inside it, a glyph when more than ``glyphCover`` of its box is in the text's.
+    /// `document` is the one the plan was built from, its shots laid out (``DocumentExpansion/expanded(_:sizes:)``).
+    static func overlappingText(in plan: MotionPlan, document: MotionDocument) -> [String] {
+        zip(plan.scenes, document.scenes).compactMap { scene, source in
+            let contents = MotionPlan.contents(of: source.layers)
+            let shown = plan.placements(of: scene, at: scene.duration * settled).filter { $0.opacity >= 0.5 }
+            let texts = shown.filter { !scene.layers[$0.layer].parts.isEmpty }.map(\.corners)
+            let glyphs = shown.filter { placement in
+                guard contents.indices.contains(placement.layer), case .shape(let shape) = contents[placement.layer] else { return false }
+                return shape.isGlyph
             }.map(\.corners)
             let middles = texts.map { corners in
                 CGPoint(x: corners.map(\.x).reduce(0, +) / Double(corners.count), y: corners.map(\.y).reduce(0, +) / Double(corners.count))
             }
-            let overlaps = texts.indices.contains { index in
-                middles.indices.contains { other in other != index && contains(texts[index], middles[other]) }
+            if texts.indices.contains(where: { index in middles.indices.contains { $0 != index && contains(texts[index], middles[$0]) } }) {
+                return "\(source.id): two texts are drawn over each other; give each its own place."
             }
-            return overlaps ? "\(id): two texts are drawn over each other; give each its own place." : nil
+            if glyphs.contains(where: { glyph in texts.contains { cover(of: glyph, by: $0) > glyphCover } }) {
+                return "\(source.id): a glyph is drawn over text; move it clear of the text's edge."
+            }
+            return nil
         }
+    }
+
+    /// How much of a glyph's box may be inside a text's: a check on a label's first letter covered a third.
+    static let glyphCover = 0.15
+
+    /// The share of `quad`'s box inside `other`'s.
+    private static func cover(of quad: [CGPoint], by other: [CGPoint]) -> Double {
+        let box = { (corners: [CGPoint]) in
+            CGRect(x: corners.map(\.x).min() ?? 0, y: corners.map(\.y).min() ?? 0,
+                   width: (corners.map(\.x).max() ?? 0) - (corners.map(\.x).min() ?? 0), height: (corners.map(\.y).max() ?? 0) - (corners.map(\.y).min() ?? 0))
+        }
+        let (inner, outer) = (box(quad), box(other))
+        let overlap = inner.intersection(outer)
+        return overlap.isNull || inner.width * inner.height <= 0 ? 0 : overlap.width * overlap.height / (inner.width * inner.height)
     }
 
     /// How far into a scene its texts are checked against each other: they've arrived, and nothing has left yet.

@@ -48,7 +48,7 @@ struct DebugShotTests {
             let document = try JSONDecoder().decode(MotionDocument.self, from: Data(contentsOf: bundle.appending(path: "document.json")))
             let plan = await MotionPlan.build(document, bundle: bundle)
             let ids = document.scenes.map(\.id)
-            print("CHECK \(bundle.lastPathComponent): \(DesignCheck.overlappingText(in: plan, scenes: ids) + DesignCheck.cutText(in: plan, scenes: ids))")
+            print("CHECK \(bundle.lastPathComponent): \(DesignCheck.overlappingText(in: plan, document: DocumentExpansion.expanded(document, sizes: UILiftCache.sizes(of: document, in: bundle))) + DesignCheck.cutText(in: plan, scenes: ids))")
         }
     }
 
@@ -120,7 +120,7 @@ struct DebugShotTests {
               let job = try JSONSerialization.jsonObject(with: data) as? [String: Any], let path = job["bundle"] as? String else { return }
         let bundle = URL(filePath: path)
         let document = try JSONDecoder().decode(MotionDocument.self, from: Data(contentsOf: bundle.appending(path: "document.json")))
-        var settings = ExportSettings(format: .hevc)
+        var settings = ExportSettings(format: (job["format"] as? String).flatMap(ExportFormat.init(rawValue:)) ?? .hevc)
         settings.resolution = job["side"] as? Int ?? 1080
         let clock = ContinuousClock()
         var url: URL?

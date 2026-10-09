@@ -11,7 +11,7 @@ import CryptoKit
 nonisolated enum SoundCache {
 
     /// Changes when the same sheet would sound different, so bundles make theirs again.
-    static let soundVersion = 1
+    static let soundVersion = 2
 
     /// The sounds a bundle keeps, the most recently used: the preview's, an export's at another frame rate,
     /// and the one before an edit; older ones are deleted.

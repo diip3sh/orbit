@@ -60,12 +60,20 @@ nonisolated struct MotionPointer: Sendable {
         return drawn.first.flatMap { first in drawn.last.map { Double($0 - first + 1) } }
     }
 
+    /// When the pointer of `click` comes on: a travel before it lands. A press early in its shot was carried over the cut:
+    /// Lovable's hand is on the pill as its macro cuts in.
+    static func appears(_ click: MotionPlan.Click) -> Double {
+        (click.press < carriedOver ? -1 : click.press - landing) - travel
+    }
+
     /// Where the pointer of `click` on a layer whose quad is `corners` (canvas points, top-left origin) has its tip at `time`
-    /// in the scene, and how opaque it is; `nil` while it isn't on screen.
-    static func tip(of click: MotionPlan.Click, on corners: [CGPoint], at time: Double, canvas: CGSize) -> (point: CGPoint, opacity: Double)? {
-        // A press early in its shot was carried over the cut: Lovable's hand is on the pill as its macro cuts in
-        let lands = click.press < carriedOver ? -1 : click.press - landing
-        let appears = lands - travel
+    /// in the scene, and how opaque it is; `nil` while it isn't on screen. It travels in from `from`, where the scene's
+    /// pointer was for the click before, or else from below the frame.
+    static func tip(
+        of click: MotionPlan.Click, on corners: [CGPoint], at time: Double, canvas: CGSize, from: CGPoint? = nil
+    ) -> (point: CGPoint, opacity: Double)? {
+        let appears = appears(click)
+        let lands = appears + travel
         guard corners.count == 4, time >= appears, time <= click.leaves + fade else { return nil }
         let middle = CGPoint(x: corners.map(\.x).reduce(0, +) / 4, y: corners.map(\.y).reduce(0, +) / 4)
         let onScreen = hypot(corners[3].x - corners[0].x, corners[3].y - corners[0].y)
@@ -73,7 +81,7 @@ nonisolated struct MotionPointer: Sendable {
         if time < lands {
             // From just below the frame, so it needs no fade
             let progress = MotionEasing.enter.progress((time - appears) / travel, duration: travel)
-            let start = CGPoint(x: target.x + 0.02 * canvas.width, y: max(canvas.height * 1.02, target.y + 0.2 * canvas.height))
+            let start = from ?? CGPoint(x: target.x + 0.02 * canvas.width, y: max(canvas.height * 1.02, target.y + 0.2 * canvas.height))
             return (CGPoint(x: start.x + (target.x - start.x) * progress, y: start.y + (target.y - start.y) * progress), 1)
         }
         guard time > click.leaves else { return (target, 1) }
@@ -83,9 +91,13 @@ nonisolated struct MotionPointer: Sendable {
 
     /// The pointer of `click` on a layer whose quad is `corners` (canvas points, top-left origin) at `time` in the
     /// scene, in output pixels from the bottom-left; `nil` while it isn't on screen.
-    func image(of click: MotionPlan.Click, on corners: [CGPoint], at time: Double, canvas: CGSize, outputScale: Double, magnification: Double = 1) -> CIImage? {
-        guard let (position, opacity) = Self.tip(of: click, on: corners, at: time, canvas: canvas) else { return nil }
-        let sprite = time < click.press - Self.landing - 0.05 && click.press >= Self.carriedOver ? arrow : hand
+    func image(
+        of click: MotionPlan.Click, on corners: [CGPoint], at time: Double, canvas: CGSize, outputScale: Double, magnification: Double = 1,
+        from: CGPoint? = nil
+    ) -> CIImage? {
+        guard let (position, opacity) = Self.tip(of: click, on: corners, at: time, canvas: canvas, from: from) else { return nil }
+        // The arrow rising in from below; handed on from a press, it stays the hand, as Lovable's moving down its menu
+        let sprite = from == nil && time < click.press - Self.landing - 0.05 && click.press >= Self.carriedOver ? arrow : hand
         let pressing = time - (click.press - 0.04)
         let press = pressing > 0 && pressing < 0.2 ? 1 - Self.pressDepth * sin(.pi * pressing / 0.2) : 1
         // Both sprites at the hand's points to pixels, so the arrow is the hand's size as on screen

@@ -252,23 +252,29 @@ struct MotionAgentTests {
         #expect(DesignCheck.cutText(in: try await plan(across: 1400, depth: 1248), scenes: ["pane"]).isEmpty)
     }
 
-    /// Line numbers left at one place are found; a swapped label, one at a time, and numbers in a column aren't.
+    /// Line numbers left at one place are found, and a check on a label's first letter; a swapped label, one at a time,
+    /// numbers in a column and a check clear of its label aren't.
     @Test func theDesignCheckFindsTextOverText() async throws {
-        func plan(_ layers: String) async throws -> MotionPlan {
+        func found(_ layers: String) async throws -> [String] {
             let document = try JSONDecoder().decode(MotionDocument.self, from: Data(#"""
             {"version": 1, "scenes": [{"id": "diff", "duration": 2, "layers": [\#(layers)]}]}
             """#.utf8))
-            return await MotionPlan.build(document, bundle: URL.temporaryDirectory)
+            return DesignCheck.overlappingText(in: await MotionPlan.build(document, bundle: URL.temporaryDirectory), document: document)
         }
         let number = { (text: String, down: Int, moves: String) in
             #"{"id": "n\#(text)", "content": {"text": {"text": "\#(text)", "size": 34}}, "transform": {"position": [400, \#(down), 0]}, "moves": [\#(moves)]}"#
         }
-        let stacked = try await plan([number("41", 540, ""), number("42", 540, "")].joined(separator: ","))
-        #expect(DesignCheck.overlappingText(in: stacked, scenes: ["diff"]) == ["diff: two texts are drawn over each other; give each its own place."])
-        let column = try await plan([number("41", 470, ""), number("42", 540, "")].joined(separator: ","))
-        #expect(DesignCheck.overlappingText(in: column, scenes: ["diff"]).isEmpty)
-        let swapped = try await plan([number("41", 540, #"{"move": "hide", "start": 1}"#), number("42", 540, #"{"move": "show", "start": 1}"#)].joined(separator: ","))
-        #expect(DesignCheck.overlappingText(in: swapped, scenes: ["diff"]).isEmpty)
+        #expect(try await found([number("41", 540, ""), number("42", 540, "")].joined(separator: ","))
+            == ["diff: two texts are drawn over each other; give each its own place."])
+        #expect(try await found([number("41", 470, ""), number("42", 540, "")].joined(separator: ",")).isEmpty)
+        #expect(try await found([number("41", 540, #"{"move": "hide", "start": 1}"#), number("42", 540, #"{"move": "show", "start": 1}"#)].joined(separator: ",")).isEmpty)
+
+        let merged = { (check: Int) in
+            #"{"id": "label", "content": {"text": {"text": "Merged", "size": 42}}, "transform": {"position": [1330, 540, 0], "anchor": [0, 0.5]}}, "#
+                + #"{"id": "check", "content": {"shape": {"kind": "check", "size": [30, 30], "color": "000000"}}, "transform": {"position": [\#(check), 540, 0]}}"#
+        }
+        #expect(try await found(merged(1335)) == ["diff: a glyph is drawn over text; move it clear of the text's edge."])
+        #expect(try await found(merged(1300)).isEmpty)
     }
 
     private func image(_ draw: (CGContext) -> Void) throws -> CGImage {

@@ -54,6 +54,11 @@ nonisolated struct SoundCue: Codable, Equatable, Sendable {
 
         /// A sung "ah" sliding from one note to another, then held with vibrato.
         case vox(from: Double, onto: Double, length: Double)
+
+        // A story film's (spec 0015)
+
+        /// A dither seam's dots: tiny square blips across the stereo field, swelling and thinning over its length.
+        case bits(length: Double)
     }
 
     nonisolated enum Key: String, Codable, Hashable, Sendable {

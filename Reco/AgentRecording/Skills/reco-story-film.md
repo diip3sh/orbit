@@ -1,6 +1,6 @@
 ---
 name: reco-story-film
-description: Reco's story film. One person's request is told through the product's own prompt or chat, with the motion of Lovable's chat launch. What they say is typed big, the product's controls are clicked in macro, and its answers arrive as things (tiles, cards, a collage, a result read close), cut to a 170 BPM beat. The look is the product's own theme over one of Reco's shader looks (dither, light, satin, or the aurora for a brand whose colour is a gradient), with seams in that look's language. Use it for a product driven by a prompt, chat, command bar or agents (AI builders, coding agents, assistants), and when the user asks for a story, a customer's journey, Lovable's style or type in a gradient. Its reference files are read one at a time, when a step says so.
+description: Reco's story film. One person's request is told through the product's own prompt or chat, with the motion of Lovable's chat launch. What they say is typed big, the product's controls are clicked in macro, and its answers arrive as things (tiles, cards, a collage, a result read close), cut on a 170 BPM grid with a sound for every transition. The look is the product's own theme over one of Reco's shader looks (dither, light, satin, or the aurora for a brand whose colour is a gradient), with seams in that look's language. Use it for a product driven by a prompt, chat, command bar or agents (AI builders, coding agents, assistants), and when the user asks for a story, a customer's journey, Lovable's style or type in a gradient. Its reference files are read one at a time, when a step says so.
 ---
 
 # A story film, Reco's way
@@ -22,7 +22,7 @@ Two things make it, and they come from different places:
    the thread: "Thinking…" shimmers, the reply arrives word by word.
 4. The answers are things, not screenshots: a bento of the product's actors popping from the middle out, then all
    swapping status on one beat; its outputs thrown out of a stack into a collage; one result read close, a comment sent.
-5. Big type with the logo, and the beat drops out under it.
+5. Big type with the logo.
 6. Macro on the finish: "Merge all", "Ship", "Deploy", pressed.
 7. End words, one a scene on the beats, then the logo.
 
@@ -39,8 +39,12 @@ What makes it good, and what yours must have:
   scatter and swap. Never a page, pane or terminal lifted as a screenshot.
 - **Framed whole.** Every answer sits whole in the frame, centred, 60–80 % of its width, its type at least 34 px. Only a
   macro on one control crops.
-- **Cut to the beat.** The track is 170 BPM: a beat is 0.353 s, a bar 1.412 s. Every scene is a whole number of beats
-  and a cut comes every 1–3 s.
+- **Cut on a beat.** Lovable's cuts land on its 170 BPM track: a beat is 0.353 s, a bar 1.412 s. Every scene is a whole
+  number of beats and a cut comes every 1–3 s, so the cutting has its rhythm.
+- **Transitions you hear.** Under quiet chords that change with the shots, each transition has its own sound: the dots
+  of a dither seam, the light of a glow, the swell and hit of the ring into the logo, a shimmer as the box is sent, a
+  chime as things turn to done, a soft swish on a cut. No drum loop: a beat under every cut was the same sound
+  everywhere.
 - **Something on every cut.** On a cut, the layer that carries on is there on the scene's first frame, or the first new
   thing pops at 0. The ground is never alone after a cut. After one of the look's seams, the seam is the entrance.
 
@@ -54,8 +58,8 @@ Take its motion and timing, never its colours.
 Read the brand from inspect_page (`brand`: colours and fonts) and from its site's own UI, and rebuild everything in it:
 
 - the ground colour (`canvas.background`): the site's own, e.g. `#08090a`;
-- surfaces for the box, menus, tiles and cards: the site's card and raised colours, with its border (often white at
-  8–12 %);
+- surfaces are glass: the box, menus, tiles and cards are panes (`"glass": true` on their fill, a light veil `#ffffff0d`
+  for colour), the look's ground blurred through them, their rims lit; their pills and chips `#ffffff14`;
 - type: its text colour, a dim tone for notes, `face` sans for its UI font and `mono` wherever the product shows code,
   branches, ids or paths;
 - its button style: a light primary button stays light (the send disc, a "Merge all"), a dark one dark;
@@ -156,18 +160,19 @@ something is sent. Nowhere else: the UI keeps its own colours.
    - Does the hand land on what it presses?
 
    Fix everything in one edit_motion call. Stop after three previews.
-8. **Export** with export_recording: format h264, resolution 2160.
+8. **Export** with export_recording: format hevc, resolution 2160, and no frame_rate: the film's own 60 fps (H.264 stops
+   at 30 fps at 4K).
 
 `reference/example.md` is a whole document of this kind: Lovable's film rebuilt, over the aurora because Lovable's colour
 is a gradient. Read it for how the parts fit, and take your look from your brand.
 
 ## Settings
 
-- **Canvas:** `{"size": [1920, 1080], "frameRate": 30, "background": "<the site's ground>", "field": "<the look's field>",
+- **Canvas:** `{"size": [1920, 1080], "frameRate": 60, "background": "<the site's ground>", "field": "<the look's field>",
   "fieldStrength": <the look's>, "pacing": "beats"}`.
 - **Style:** `text` the site's text colour; `accent` the brand's colour (white for a black and white brand); `gradient`
   as above; `face` sans.
-- **Sound:** `{"style": "groove"}`.
+- **Sound:** leave `sound` out: the ambient score and the transitions' sounds. Never `groove` or `house` here.
 - **Sizes** (Lovable's, measured):
   - box 1190×370, corners 44, its hint 50 px; pills 84 tall with 42 px labels; the send disc 88;
   - voice 130–140 px `regular`; a statement with the logo 120–130 px;
@@ -180,6 +185,7 @@ is a gradient. Read it for how the parts fit, and take your look from your brand
 
 - A screenshot of a page, a terminal, a transcript or a docs image as an answer: rebuild it as things.
 - Colours the product doesn't have: Lovable's gradient or aurora on another brand, a violet glow on a black and white one.
+- A flat, opaque card or box over the look's ground: every surface is glass.
 - Two looks in one film, a seam from another look, or more than the four seams above.
 - An answer cut by the frame's edge, or small in a wide empty frame.
 - Text on attachments in a stack, or two labels in one place at once.

@@ -72,34 +72,46 @@ nonisolated extension MotionFrameRenderer {
     static let shimmerPeriod = 2.0
     static let shimmerCrossing = 0.5
 
-    /// `drawn` (a layer in output pixels) with the washes on at `time` over it: a band of the gradient a little wider than
-    /// what it washes, its warm end leading, sweeping in from the right over ``washSweep`` of its length and screened over
-    /// the layer's pixels, then gone over its last third. `bounds` is what each wash spans, in output pixels.
+    /// `drawn` (a layer in output pixels) with the washes on at `time` over it, screened over the layer's pixels: a front of
+    /// the gradient's light growing out of what it washes' bottom-right corner (where its send is), curved, its edge brightest
+    /// and soft, gliding across it over ``washSweep`` of its length and leaving a glow behind, then gone over its last third.
+    /// Lovable's box filled from its corner over about ten frames; a flat band swept in four left the box one grey.
+    /// `bounds` is what each wash spans, in output pixels.
     static func washed(_ drawn: CIImage, layer: MotionPlan.Layer, at time: Double, bounds: (Int) -> CGRect?) -> CIImage {
         layer.tints.filter { $0.kind == .wash && $0.start <= time && time < $0.start + $0.duration }.reduce(drawn) { image, tint in
-            guard layer.gradient.count >= 2, let area = bounds(tint.over), area.width > 0 else { return image }
+            guard layer.gradient.count >= 2, let area = bounds(tint.over), area.width > 0, let kernel = FieldRenderer.kernel(named: "washLight") else {
+                return image
+            }
             let progress = (time - tint.start) / tint.duration
-            let sweep = MotionEasing.enter.progress(min(progress / washSweep, 1), duration: 1)
+            let sweep = washGlide.progress(min(progress / washSweep, 1), duration: 1)
             let fade = min(max((1 - progress) / (1 - washHold), 0), 1)
-            // The band's leading (warm) edge from the right edge to past the left, the band 1.2 widths long
-            let band = area.width * 1.2
-            let leading = area.maxX - sweep * (area.width + 0.2 * area.width)
             // Its cool end to its pink: Lovable's box went blue, violet and pink, never orange
-            let colors = stride(from: 0, through: washReach, by: washReach / 4).map { color(of: layer.gradient, at: $0) }
-            let sheet = gradient(colors, from: leading + band, to: leading, over: area.insetBy(dx: -band, dy: 0))
-            let soft = CIImage(color: .white).cropped(to: CGRect(x: leading, y: area.minY, width: band, height: area.height))
-                .applyingFilter("CIMaskToAlpha").applyingGaussianBlur(sigma: area.width * 0.06).cropped(to: area)
-            let light = sheet.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: soft]).fading(to: washStrength * fade)
-            let screened = light.applyingFilter("CIScreenBlendMode", parameters: [kCIInputBackgroundImageKey: image])
+            let ramp = Self.ramp(stride(from: 0, through: washReach, by: washReach / 4).map { color(of: layer.gradient, at: $0) })
+            let rampExtent = ramp.extent
+            let arguments: [Any] = [
+                ramp, CIVector(x: area.maxX, y: area.minY, z: sweep * hypot(area.width, area.height) * washOvershoot, w: Double(rampPixels)),
+                CIVector(x: area.width * washEdge, y: area.width * washBand, z: washGlow, w: area.width * washDepth)
+            ]
+            guard let light = kernel.apply(extent: area.integral, roiCallback: { _, _ in rampExtent }, arguments: arguments) else { return image }
+            let screened = light.fading(to: washStrength * fade).applyingFilter("CIScreenBlendMode", parameters: [kCIInputBackgroundImageKey: image])
             return screened.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: image]).composited(over: image)
         }
     }
 
-    /// How much of a wash's length its sweep takes, when it starts to go (Lovable's: across in 0.5 s, covered to 0.8 s,
-    /// gone by 1.2), and how strongly it's screened.
-    static let washSweep = 0.45
+    /// How much of a wash's length its sweep takes, when it starts to go (Lovable's: across in 0.5–0.6 s, covered to 0.8 s,
+    /// gone by 1.2), how strongly it's screened, and its front's glide: a soft start, slowing as it reaches the far corner.
+    static let washSweep = 0.55
     static let washHold = 0.66
     static let washStrength = 0.9
+    static let washGlide = MotionEasing.cubicBezier(0.3, 0.1, 0.25, 1)
+
+    /// The front, in widths of what it washes: its soft edge, how deep its bright band is, how deep its colours run; the glow
+    /// it leaves behind; and how far past the far corner it ends, so the edge leaves the box.
+    static let washEdge = 0.1
+    static let washBand = 0.22
+    static let washDepth = 0.7
+    static let washGlow = 0.15
+    static let washOvershoot = 1.2
 
     /// How far along the gradient a wash's colours run.
     static let washReach = 0.55

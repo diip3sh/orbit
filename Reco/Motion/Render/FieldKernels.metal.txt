@@ -713,3 +713,18 @@ inline float2 onPanel(float2 pixel, float3 rowX, float3 rowY, float3 rowW) {
     return float4(max(color + noise / 255.0, 0.0), 1.0);
 }
 #endif
+
+#ifdef washLight_ONLY
+/// A wash's light (spec 0015), as Lovable's box was washed when sent: a front of light growing out of a corner, curved, its
+/// edge brightest and soft, the light it leaves behind falling to a glow, coloured from `ramp` (its last colour at the
+/// front, its first deep behind it). Premultiplied. `front`: the corner (output pixels, y up), the front's radius, the ramp's
+/// width. `shape`: the edge's softness, how deep the bright edge is, the glow left behind, how deep the colours run (pixels).
+[[stitchable]] float4 washLight(coreimage::sampler ramp, float4 front, float4 shape, coreimage::destination dest) {
+    float behind = front.z - distance(dest.coord(), front.xy);
+    float edge = smoothstep(-shape.x, 0.5 * shape.x, behind);
+    float light = edge * (shape.z + (1.0 - shape.z) * exp(-max(behind, 0.0) / shape.y));
+    float u = (1.0 - clamp(max(behind, 0.0) / shape.w, 0.0, 1.0)) * (front.w - 1.0) + 0.5;
+    float3 color = ramp.sample(ramp.transform(float2(u, 0.5))).rgb;
+    return float4(color * light, light);
+}
+#endif

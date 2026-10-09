@@ -29,11 +29,14 @@ nonisolated extension SoundCueSheet {
         let end = min(closing?.start ?? length, length)
         let whips = Self.cameraWhips(in: plan, until: end)
         var cues = SoundCueList(frameRate: plan.frameRate)
-        let opening = Self.firstUI(in: plan, document: document, before: end)
+        // An opening arriving in the seam named on it has the seam's own landing
+        let arrives = plan.scenes.first?.arrival != nil && document.scenes.first?.shot?.kind != .macro
+        let opening = arrives ? nil : Self.firstUI(in: plan, document: document, before: end)
         if let opening {
             cues.opening(at: opening)
         }
-        cues.cuts(of: plan, document: document, before: end, except: opening)
+        cues.cuts(of: plan, document: document, before: end, except: opening, soft: Self.isStory(document))
+        cues.seams(of: plan, before: end)
         cues.typing(in: plan, document: document, before: end)
         cues.design(in: plan, document: document, before: end)
         cues.whips(whips)
@@ -61,6 +64,7 @@ nonisolated extension SoundCueSheet {
         var cues = SoundCueList(frameRate: plan.frameRate)
         cues.dropsKineticKeys = !isHouse
         cues.cuts(of: plan, document: document, before: end, except: nil)
+        cues.seams(of: plan, before: end)
         cues.typing(in: plan, document: document, before: end)
         cues.design(in: plan, document: document, before: end)
         cues.whips(Self.cameraWhips(in: plan, until: end))
@@ -76,6 +80,17 @@ nonisolated extension SoundCueSheet {
         chords = score.chords
         self.cues = (effects + score.cues).sorted { $0.time < $1.time }
         finish = SoundRules.beatFinish
+    }
+
+    /// Whether `document` is a story film (spec 0015): someone's words are typed big in it.
+    static func isStory(_ document: MotionDocument) -> Bool {
+        func voiced(_ layers: [MotionLayer]) -> Bool {
+            layers.contains { layer in
+                if case .group(let children) = layer.content, voiced(children) { return true }
+                return layer.moves.contains { $0.kind == .voice }
+            }
+        }
+        return document.scenes.contains { voiced($0.layers) }
     }
 
     /// The scenes as a beat's form reads them: words alone are text or a logo (an image, UI or still shape no bigger than
