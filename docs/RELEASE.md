@@ -16,7 +16,8 @@ Every push to `main` that touches the app is released automatically by
 
 CI doesn't run the tests (removed 2026-10-09: the runner's Xcode 26 never finished type-checking
 `RecoTests`, 15 minutes against seconds locally, on two PRs and a release run). The pull request
-workflow lints and builds. **The local test run is the only test gate**, so it isn't optional.
+workflow lints and builds. `RecoTests` keeps no tests (all removed 2026-10-09), so **checking the change
+locally is the only gate**, and it isn't optional.
 
 Installed copies read that feed (`SUFeedURL` in `Info.plist`) and offer the new version.
 
@@ -29,7 +30,8 @@ Installed copies read that feed (`SUFeedURL` in `Info.plist`) and offer the new 
 
 A push to `main` reaches users as an update, so check first:
 
-1. All tests pass locally (the `test` command in `CLAUDE.md`). Nothing else runs them.
+1. The change is checked locally: tried in the app, and any tests written for it pass (the `test` command in
+   `CLAUDE.md`) before they're deleted. Nothing else checks it.
 2. SwiftLint is clean on the files you touched.
 3. The code compiles with **Xcode 26.6**. GitHub's `macos-26` runner has no Xcode 27, and its older
    Swift compiler can fail to infer types that Xcode 27 accepts, such as a closure returning a labeled

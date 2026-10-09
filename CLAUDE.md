@@ -41,7 +41,8 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 965 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing). `RecoTests` keeps no tests (all
+  removed 2026-10-09): write the ones a change needs there, run them, then delete them.
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -115,7 +116,7 @@ or indirection that doesn't pay for itself in an AVFoundation app.
 
 | Layer | Holds | Rules |
 |---|---|---|
-| Core (`Model/`, pure helpers in `Service/`) | Value types and pure functions: time mapping, geometry, pauses, dedup, auto-zoom, smoothing, settings rules | `nonisolated`, `Sendable`, no side effects or singletons, fully unit tested. E.g. `RecordingPauses`, `CursorShapeTracker`, `InputTelemetry.videoPixel` |
+| Core (`Model/`, pure helpers in `Service/`) | Value types and pure functions: time mapping, geometry, pauses, dedup, auto-zoom, smoothing, settings rules | `nonisolated`, `Sendable`, no side effects or singletons, so they're easy to unit test. E.g. `RecordingPauses`, `CursorShapeTracker`, `InputTelemetry.videoPixel` |
 | Shell (`Service/`) | One service per system boundary: ScreenCaptureKit, AVAssetWriter, event taps, files | Thin: gather input, call the core, apply the result. Explicit isolation: `@MainActor`, or `nonisolated` + a lock |
 | `ViewModel/` | `@MainActor @Observable` state and intents | Calls services; no rules that belong in the core |
 | `View/` | Layout | Reads view-model state, calls intents; no logic |
@@ -1079,7 +1080,7 @@ Key facts:
   aren't followed (they could be now); `opencode.jsonc` isn't handled.
 - Edited JSON keeps its content but its key order becomes sorted. Files with comments are refused.
 - The test host is Reco, so its server takes `agent.sock` from a running Reco while tests run.
-- The `--mcp` client is covered by `AgentBridgeClientTests`: the test host starts another copy of itself.
+- A test of the `--mcp` client can have the test host start another copy of itself.
 - Config files are written through a temporary file next to the target, then `rename(2)`.
 
 ### S4 — Agent recording (`feat/agent-bridge`, spec 0007)
@@ -1153,11 +1154,10 @@ the time on the right; Render is the accent button, like Export. The stage has n
   their own bottom corner (opacity only with Reduce Motion).
 - **Tests and a running Reco:** the test host is Reco, so a test run takes the bridge's socket from the
   running app. An agent run going at the time loses Reco, and its `--mcp` client starts a second copy.
-  Don't run tests during an agent run; relaunch Reco after testing. `AgentToolsTests` render into a
-  temporary folder (they used to fill `~/Movies/Reco` with 1 s movies).
-- `aPageThatCantBeLoadedFailsTheRenderWithAReason` and `aFailedRenderDoesntBlockTheNextOne` fail on this
-  Mac (macOS 26.6) with or without the chat changes: rendering `http://localhost:1` succeeds instead of
-  failing. Not yet looked into.
+  Don't run tests during an agent run; relaunch Reco after testing. Tests that render write into a
+  temporary folder, not `~/Movies/Reco`.
+- Rendering `http://localhost:1` succeeded instead of failing on this Mac (macOS 26.6), so a page that can't load
+  may not fail its render. Not yet looked into.
 
 ### S6 — Walkthrough editor (`feat/ui-polish`, `feat/walkthrough-show`, spec 0009)
 
@@ -1463,8 +1463,8 @@ should hold but need re-measuring.
 | Linear theme (`feat/linear-theme`): tokens, light mode from Default's tokens, Inter + JetBrains Mono, solid surfaces app-wide | Done 2026-10-08; built, 982 tests; colours from `theme/theme.tokens.json`; needs a look in the app in light, dark and Increase Contrast |
 | C1 screenshots (area, window, screen) | Done, verified on real captures; each shot opens the Quick Access card and is saved only from it |
 | S2 web recordings (spec 0005) | Done and tested; the window's view model was driven end to end on apple.com (pick, render, editor, export). The window itself (buttons, timeline dragging, pick banner) still needs clicking through by hand |
-| S3 agent bridge (spec 0006): MCP server for coding agents | Done; tested over the real socket (token, `initialize`, `tools/list`, error calls), the `--mcp` process (`AgentBridgeClientTests`), config editors and plans. Not yet tried: real agents connected by hand, a real `record_page` render, Gatekeeper on another Mac |
-| S7 Library (spec 0010): main window | Done and tested (`LibraryTests`); the window itself still needs a look in the app |
+| S3 agent bridge (spec 0006): MCP server for coding agents | Done; tested over the real socket (token, `initialize`, `tools/list`, error calls), the `--mcp` process, config editors and plans. Not yet tried: real agents connected by hand, a real `record_page` render, Gatekeeper on another Mac |
+| S7 Library (spec 0010): main window | Done and tested; the window itself still needs a look in the app |
 | S4 agent recording (spec 0007): Record with AI Agent bar, no App Sandbox | Done and tested with fakes and real `/bin/sh` processes; the login-shell environment was read on this Mac (0.86 s). Not yet tried: any real agent run, the panel in the app (focus, Esc, picker menus, Reduce Motion/Transparency), the update from the sandboxed release (migration), Codex |
 
 What to build next, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
