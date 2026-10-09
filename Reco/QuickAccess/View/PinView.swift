@@ -14,9 +14,12 @@ struct PinView: View {
 
     let image: CGImage
     let presence: PanelPresence
+    let setOpacity: (Double) -> Void
+    let clickThrough: () -> Void
     let close: () -> Void
 
     @State private var isHovering = false
+    @State private var opacity = 1.0
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 8)
@@ -38,6 +41,15 @@ struct PinView: View {
             }
             .editorMotion(EditorTheme.quickMotion, value: isHovering)
             .onHover { isHovering = $0 }
+            .contextMenu {
+                Picker("Opacity", selection: $opacity) {
+                    ForEach(PinController.opacities, id: \.self) { Text($0, format: .percent) }
+                }
+                Button("Click Through") { clickThrough() }
+                Divider()
+                Button("Close", action: close)
+            }
+            .onChange(of: opacity) { setOpacity(opacity) }
             .panelPresentation(isPresented: presence.isShown, anchor: .bottomLeading)
             .allowsWindowActivationEvents(true)
     }

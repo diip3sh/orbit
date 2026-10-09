@@ -20,6 +20,9 @@ struct ContentVisibility: Equatable, Sendable {
     /// Whether Reco's own windows are part of the capture.
     let showReco: Bool
 
+    /// Whether Finder's desktop icons are part of the capture.
+    let showDesktopIcons: Bool
+
     /// The bundle identifier of this app, used to recognise its own windows.
     let ownBundleID: String
 }
@@ -33,6 +36,7 @@ extension ContentVisibility {
             showWallpaper: settings.showWallpaper,
             showDock: settings.showDock,
             showReco: settings.showReco,
+            showDesktopIcons: settings.showDesktopIcons,
             ownBundleID: Bundle.main.bundleIdentifier ?? ""
         )
     }

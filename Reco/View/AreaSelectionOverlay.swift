@@ -81,11 +81,12 @@ final class AreaSelectionOverlay {
                     frame: NSRect(origin: .zero, size: screen.frame.size),
                     screen: screen,
                     confirmsOnRelease: confirmsOnRelease,
-                    showsActions: showsActions
+                    showsActions: showsActions,
+                    frozenScreen: screen.displayID.flatMap { frozen[$0] }
                 )
                 overlayView.delegate = self
 
-                panel.show(overlayView, over: screen.displayID.flatMap { frozen[$0] })
+                panel.show(overlayView)
                 if takesFocus {
                     panel.makeKeyAndOrderFront(nil)
                 } else {
@@ -205,10 +206,17 @@ final class AreaSelectionView: NSView {
 
     weak var delegate: AreaSelectionViewDelegate?
 
-    private let screen: NSScreen
+    let screen: NSScreen
     private let confirmsOnRelease: Bool
     private let showsActions: Bool
-    private var selectionRect: CGRect = .zero
+
+    /// The screen as it was when the selection started, shown under the view and magnified by the loupe; `nil` live
+    let frozenScreen: CGImage?
+
+    /// The loupe beside the pointer while an edge is aimed over a frozen screen (``updateLoupe(at:visible:)``)
+    var loupe: LoupeView?
+
+    private(set) var selectionRect: CGRect = .zero
     private var interactionState: InteractionState = .idle
     private var trackingArea: NSTrackingArea?
 
@@ -235,10 +243,11 @@ final class AreaSelectionView: NSView {
 
     // MARK: - Initialization
 
-    init(frame: NSRect, screen: NSScreen, confirmsOnRelease: Bool, showsActions: Bool = true) {
+    init(frame: NSRect, screen: NSScreen, confirmsOnRelease: Bool, showsActions: Bool = true, frozenScreen: CGImage? = nil) {
         self.screen = screen
         self.confirmsOnRelease = confirmsOnRelease
         self.showsActions = showsActions
+        self.frozenScreen = frozenScreen
         super.init(frame: frame)
         setupTrackingArea()
     }
@@ -272,7 +281,7 @@ final class AreaSelectionView: NSView {
     private func setupTrackingArea() {
         let area = NSTrackingArea(
             rect: bounds,
-            options: [.mouseMoved, .activeAlways, .inVisibleRect],
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
@@ -373,10 +382,15 @@ final class AreaSelectionView: NSView {
             break
         }
 
+        updateLoupe(at: clampedPoint, visible: wantsLoupe(at: clampedPoint))
         needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
+        defer {
+            let point = convert(event.locationInWindow, from: nil)
+            updateLoupe(at: point, visible: wantsLoupe(at: point))
+        }
         switch interactionState {
         case .drawing:
             finishDrawing()
@@ -400,6 +414,17 @@ final class AreaSelectionView: NSView {
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         updateCursor(at: point)
+        updateLoupe(at: point, visible: wantsLoupe(at: point))
+    }
+
+    /// The loupe shows while an edge is aimed: before anything is drawn, while drawing or resizing, and over a
+    /// handle. Not while moving the selection or resting on it, where the buttons are
+    private func wantsLoupe(at point: CGPoint) -> Bool {
+        switch interactionState {
+        case .idle, .drawing, .resizing: true
+        case .adjusting: resizeHandle(at: point) != nil
+        case .moving: false
+        }
     }
 
     // MARK: - Drawing
@@ -455,52 +480,6 @@ final class AreaSelectionView: NSView {
             context.addPath(path)
             context.drawPath(using: .fillStroke)
         }
-    }
-
-    private func drawDimensionLabel(in context: CGContext) {
-        let scale = screen.backingScaleFactor
-        let pixelWidth = selectionRect.width * scale
-        let pixelHeight = selectionRect.height * scale
-
-        // Snap to even pixel counts (matches the formula used by RecorderViewModel)
-        let evenWidth = Int(ceil(pixelWidth / 2) * 2)
-        let evenHeight = Int(ceil(pixelHeight / 2) * 2)
-
-        let text = "\(evenWidth) × \(evenHeight)"
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.theme(.callout, weight: .medium, .mono),
-            .foregroundColor: NSColor.white
-        ]
-        let attributedString = NSAttributedString(string: text, attributes: attributes)
-        let size = attributedString.size()
-
-        let padding: CGFloat = 6
-        let backgroundRect = CGRect(
-            x: selectionRect.midX - (size.width + padding * 2) / 2,
-            y: selectionRect.minY - size.height - padding * 2 - 8,
-            width: size.width + padding * 2,
-            height: size.height + padding * 2
-        )
-
-        // Ensure label stays within view bounds
-        var adjustedRect = backgroundRect
-        if adjustedRect.minY < 0 {
-            adjustedRect.origin.y = selectionRect.maxY + 8
-        }
-        adjustedRect.origin.x = max(4, min(adjustedRect.origin.x, bounds.width - adjustedRect.width - 4))
-
-        // Draw background
-        context.setFillColor(NSColor.black.withAlphaComponent(0.7).cgColor)
-        let bgPath = CGPath(roundedRect: adjustedRect, cornerWidth: 4, cornerHeight: 4, transform: nil)
-        context.addPath(bgPath)
-        context.fillPath()
-
-        // Draw text
-        let textPoint = CGPoint(
-            x: adjustedRect.origin.x + padding,
-            y: adjustedRect.origin.y + padding
-        )
-        attributedString.draw(at: textPoint)
     }
 
     // MARK: - Action Buttons

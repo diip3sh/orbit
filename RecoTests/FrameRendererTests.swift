@@ -59,10 +59,11 @@ struct FrameRendererTests {
         let drawn = cursorStyle.flatMap {
             RenderPlan.drawnCursor(for: telemetry ?? cursorTelemetry, style: $0, duration: 10, videoHeight: bounds.height, arrow: nil)
         }
+        let layout = CanvasLayout(style: canvas, videoSize: bounds.size, shorterSide: nil, background: nil)
         return RenderPlan(
             timeMap: TimeMap(cuts: [], sourceDuration: 10, frameRate: 60),
             videoSize: bounds.size,
-            camera: CameraPath(zooms: zooms, cursor: [], duration: 10),
+            camera: CameraPath(zooms: zooms, cursor: [], duration: 10, baseView: layout.baseView),
             cursor: drawn?.path ?? cursor.flatMap { _ in CursorPath(telemetry: cursorTelemetry, style: CursorStyle(), duration: 10, videoHeight: bounds.height) },
             cursorShapes: drawn?.shapes.encoded(in: dynamicRange)
                 ?? cursor.map { CursorShapeTrack(telemetry: cursorTelemetry, duration: 10, arrow: $0).encoded(in: dynamicRange) } ?? .none,
@@ -74,10 +75,29 @@ struct FrameRendererTests {
             clickEffect: clickEffect,
             keystrokes: [KeystrokeChip(time: time, image: 0)],
             chipImages: [OverlayImages.encoded(OverlayImages.chip(label: "⌘C", height: 30), in: dynamicRange)],
-            canvas: CanvasLayout(style: canvas, videoSize: bounds.size, shorterSide: nil, background: nil).encoded(in: dynamicRange),
+            canvas: layout.encoded(in: dynamicRange),
             dynamicRange: dynamicRange,
             shutter: shutter
         )
+    }
+
+    @Test func fillingShowsTheMiddleOfTheFrameInTheCanvassShapeUnstretched() {
+        // 400×300 filling a square: 300×300 of the frame's middle, from x = 50, at 1×
+        let square = CanvasStyle(aspect: .square, fillsFrame: true, padding: 0, cornerRadius: 0, shadow: 0)
+        let red = CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: CGRect(x: 0, y: 0, width: 100, height: 300))
+        let striped = red.composited(over: CIImage(color: .black).cropped(to: bounds))
+        let plan = plan(at: 5, canvas: square)
+        #expect(plan.canvas.size == CGSize(width: 300, height: 300))
+
+        let image = render(striped, at: 5, plan: plan)
+
+        #expect(image.extent == CGRect(x: 0, y: 0, width: 300, height: 300))
+        // The red ends at the frame's x = 100, the output's 50; a stretch to the square would put it at 75
+        #expect(image.pixel(at: CGPoint(x: 48, y: 150)) == [255, 0, 0, 255])
+        #expect(image.pixel(at: CGPoint(x: 52, y: 150)) == [0, 0, 0, 255])
+        #expect(image.pixel(at: CGPoint(x: 74, y: 150)) == [0, 0, 0, 255])
+        // The click's ring at the frame's (100, 200) is at the output's (50, 200), its stroke 16 to 20 px out
+        #expect(image.pixel(at: CGPoint(x: 50, y: 181))[0] > 240)
     }
 
     /// A 200×150 pt display recorded at 2 px per point, with the cursor at (50, 50) pt: (100, 200)

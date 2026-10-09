@@ -11,8 +11,10 @@ import SwiftUI
 
 /// Shows the Quick Access card for the last screenshot in a floating panel, and owns the pins made from it.
 ///
-/// The card stays until it's closed, saved or pinned, or the next screenshot replaces it.
+/// The card stays until it's closed, saved or pinned, or the next screenshot replaces it. The last one to go
+/// stays in memory for Restore Last Screenshot.
 @MainActor
+@Observable
 final class QuickAccessController {
 
     /// The largest card. A card takes its screenshot's shape inside it (`cardSize(for:)`)
@@ -38,25 +40,67 @@ final class QuickAccessController {
 
     nonisolated static let margin: CGFloat = 16
 
-    private let save: @MainActor (Screenshot) async -> Bool
-    private let pins = PinController()
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "QuickAccess")
+    /// The editor's tool strip, and the row of Copy and Save under the shot
+    nonisolated static let annotationBarHeight: CGFloat = 32
 
-    private var panel: NSPanel?
-    private var model: QuickAccessViewModel?
-    private var loadTask: Task<Void, Never>?
+    /// The narrowest editor: room for the tool strip
+    nonisolated static let minAnnotationWidth: CGFloat = 620
+
+    /// The card grown into the editor (spec 0015) for a shot of `pointSize`: the shot at its size on screen, shrunk to
+    /// fit `visibleFrame` less the margins, the edge, the strip and the actions, and at least `minAnnotationWidth`.
+    nonisolated static func annotationCardSize(for pointSize: CGSize, in visibleFrame: CGRect) -> CGSize {
+        let bars = 2 * annotationBarHeight + 2 * inset
+        let roomWidth = visibleFrame.width - 2 * margin - 2 * inset
+        let roomHeight = visibleFrame.height - 2 * margin - 2 * inset - bars
+        guard pointSize.width > 0, pointSize.height > 0, roomWidth > 0, roomHeight > 0 else { return maxCardSize }
+        let scale = min(1, roomWidth / pointSize.width, roomHeight / pointSize.height)
+        let width = (pointSize.width * scale).rounded() + 2 * inset
+        let height = (pointSize.height * scale).rounded() + 2 * inset + bars
+        return CGSize(width: max(width, min(minAnnotationWidth, visibleFrame.width - 2 * margin)), height: height)
+    }
+
+    /// `frame` moved the least that puts it inside `visibleFrame`
+    nonisolated static func onScreen(_ frame: CGRect, in visibleFrame: CGRect) -> CGRect {
+        CGRect(
+            x: min(max(frame.minX, visibleFrame.minX), max(visibleFrame.maxX - frame.width, visibleFrame.minX)),
+            y: min(max(frame.minY, visibleFrame.minY), max(visibleFrame.maxY - frame.height, visibleFrame.minY)),
+            width: frame.width, height: frame.height
+        )
+    }
+
+    /// The screenshot of the last card that went away (closed, copied, saved, pinned or replaced), for `restoreClosed()`
+    private(set) var closedScreenshot: Screenshot?
+
+    @ObservationIgnored private let save: @MainActor (Screenshot) async -> Bool
+    @ObservationIgnored private let background: @MainActor () -> ScreenshotBackground
+    @ObservationIgnored let pins = PinController()
+    @ObservationIgnored private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "QuickAccess")
+
+    @ObservationIgnored private var panel: NSPanel?
+    @ObservationIgnored private var model: QuickAccessViewModel?
+    /// The card's corner that stays put when it grows, shrinks or refits to a reshaped shot
+    @ObservationIgnored private var anchor = UnitPoint.bottomLeading
+    /// The screenshot shown, or about to be once its preview is drawn
+    @ObservationIgnored private var current: Screenshot?
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
 
     /// Panels playing their exit; `hide()` takes them off at once too, so none lands in a capture
-    private var leaving: [NSPanel] = []
+    @ObservationIgnored private var leaving: [NSPanel] = []
 
-    /// - Parameter save: Saves a screenshot into the output folder, returning whether it did
-    init(save: @escaping @MainActor (Screenshot) async -> Bool) {
+    /// - Parameters:
+    ///   - save: Saves a screenshot into the output folder, returning whether it did
+    ///   - background: The background a card's Add Background puts the shot on (Settings → Screenshots)
+    init(save: @escaping @MainActor (Screenshot) async -> Bool, background: @escaping @MainActor () -> ScreenshotBackground) {
         self.save = save
+        self.background = background
     }
 
     /// Replaces any card showing.
-    func show(_ screenshot: Screenshot) {
+    /// - Parameter besidePointer: Whether an area capture's card opens where the drag ended; otherwise it opens in the
+    ///   screen's corner.
+    func show(_ screenshot: Screenshot, besidePointer: Bool = true) {
         dismiss()
+        current = screenshot
 
         // After an area capture the pointer is still where the drag ended
         let pointer = NSEvent.mouseLocation
@@ -73,17 +117,54 @@ final class QuickAccessController {
                 logger.error("Couldn't draw a preview of the screenshot")
                 return
             }
-            present(QuickAccessViewModel(screenshot: screenshot, preview: preview, save: save), on: screen, pointer: pointer)
+            let model = QuickAccessViewModel(screenshot: screenshot, preview: preview, previewPixelSize: maxPixelSize, save: save, background: background)
+            present(model, on: screen, pointer: besidePointer ? pointer : nil)
         }
+    }
+
+    /// Does what a `reco://` link asked for in place of the card, leaving any card showing as it is. The shot is then
+    /// the one to restore; when copying or saving fails, its card opens instead.
+    func follow(_ followUp: ScreenshotFollowUp, with screenshot: Screenshot) async {
+        closedScreenshot = screenshot
+        switch followUp {
+        case .copy:
+            do {
+                ImagePasteboard.copy(png: try await ScreenshotService.pngData(of: screenshot.image))
+            } catch {
+                logger.error("Couldn't encode the screenshot to copy: \(error.localizedDescription)")
+                show(screenshot)
+            }
+        case .save:
+            if await !save(screenshot) {
+                show(screenshot)
+            }
+        case .pin:
+            let pointer = NSEvent.mouseLocation
+            guard let screen = NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) }) ?? NSScreen.main else { return }
+            // An area stays where it was taken; anything else pins where its card would open
+            pins.pin(screenshot, at: screenshot.region?.origin ?? Self.panelFrame(in: screen.visibleFrame, size: .zero).origin, on: screen)
+        }
+    }
+
+    /// Brings back the last card that went away, in the screen's corner; a card showing takes its place in memory.
+    func restoreClosed() {
+        guard let closedScreenshot else { return }
+        show(closedScreenshot, besidePointer: false)
     }
 
     func dismiss() {
         loadTask?.cancel()
         loadTask = nil
+        if let current {
+            // The card's shot, since hiding sensitive info replaces it
+            closedScreenshot = model?.screenshot ?? current
+            self.current = nil
+        }
 
         // A save finishing after its card went away must not close the next card
         model?.onClose = nil
         model?.onPin = nil
+        model?.onReshape = nil
         model?.removeDragFile()
         model?.isPresented = false
         model = nil
@@ -139,15 +220,22 @@ final class QuickAccessController {
         return CGRect(origin: origin, size: size)
     }
 
-    private func present(_ model: QuickAccessViewModel, on screen: NSScreen, pointer: CGPoint) {
+    /// - Parameter pointer: Where an area capture's drag ended, to open beside; nil opens in the screen's corner
+    private func present(_ model: QuickAccessViewModel, on screen: NSScreen, pointer: CGPoint?) {
         model.onClose = { [weak self] in self?.dismiss() }
         model.onPin = { [weak self] in self?.pin() }
+        model.onReshape = { [weak self] in self?.refit() }
 
-        let visibleFrame = screen.visibleFrame
-        let region = model.screenshot.region
         let size = Self.cardSize(for: model.screenshot.pointSize)
-        let frame = region.map { Self.panelFrame(in: visibleFrame, size: size, pointer: pointer, awayFrom: $0) }
-            ?? Self.panelFrame(in: visibleFrame, size: size)
+        model.cardSize = size
+        let frame: CGRect
+        var grownFrom: CGPoint?
+        if let pointer, let region = model.screenshot.region {
+            frame = Self.panelFrame(in: screen.visibleFrame, size: size, pointer: pointer, awayFrom: region)
+            grownFrom = pointer
+        } else {
+            frame = Self.panelFrame(in: screen.visibleFrame, size: size)
+        }
         let panel = QuickAccessPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -168,12 +256,33 @@ final class QuickAccessController {
         let dragger = PanelDragger()
         dragger.panel = panel
         dragger.onFlick = { [weak model] in model?.close() }
-        let anchor = Self.anchor(for: frame, pointer: region == nil ? nil : pointer)
-        panel.contentView = NSHostingView(rootView: QuickAccessView(model: model, dragger: dragger, anchor: anchor, size: size).themed())
+        anchor = Self.anchor(for: frame, pointer: grownFrom)
+        panel.contentView = NSHostingView(rootView: QuickAccessView(model: model, dragger: dragger, anchor: anchor).themed())
         // Key, so ⌘C and ⌘S copy and save the new screenshot until another window is clicked
         panel.makeKeyAndOrderFront(nil)
         self.panel = panel
         self.model = model
+    }
+
+    /// The card at `size`, moved so the corner at `anchor` (top at y 0) stays where it is.
+    nonisolated static func refitted(_ frame: CGRect, to size: CGSize, anchor: UnitPoint) -> CGRect {
+        CGRect(
+            x: frame.minX + (frame.width - size.width) * anchor.x,
+            y: frame.minY + (frame.height - size.height) * (1 - anchor.y),
+            width: size.width, height: size.height
+        )
+    }
+
+    /// Fits the card to its shot's new shape (a background added or taken off) or to the editor, keeping the corner it
+    /// grew from in place, moved on screen where it wouldn't fit.
+    private func refit() {
+        guard let model, let panel, let screen = panel.screen ?? NSScreen.main else { return }
+        let size = model.isAnnotating
+            ? Self.annotationCardSize(for: model.annotation?.pointSize ?? model.screenshot.pointSize, in: screen.visibleFrame)
+            : Self.cardSize(for: model.screenshot.pointSize)
+        model.cardSize = size
+        let frame = Self.onScreen(Self.refitted(panel.frame, to: size, anchor: anchor), in: screen.visibleFrame)
+        panel.setFrame(frame, display: true)
     }
 
     /// Pins the screenshot with its bottom-left where the card is

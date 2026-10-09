@@ -10,7 +10,7 @@ import Foundation
 /// A key press shown as a chip, placed when the render plan is built.
 nonisolated struct KeystrokeChip: Equatable, Sendable {
 
-    /// Source time of the press.
+    /// Output time of the press, so the chip holds for its duration on screen at any speed.
     var time: Double
 
     /// The chip's image in ``RenderPlan/chipImages``.

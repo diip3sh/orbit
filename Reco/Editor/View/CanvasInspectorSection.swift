@@ -15,7 +15,7 @@ struct CanvasInspectorSection: View {
     @State private var choosesBackgroundImage = false
 
     var body: some View {
-        let videoSize = viewModel.source?.naturalSize ?? CGSize(width: 16, height: 9)
+        let videoSize = viewModel.videoSize ?? CGSize(width: 16, height: 9)
 
         InspectorSection(nil) {
             InspectorField("Aspect Ratio") {
@@ -27,55 +27,64 @@ struct CanvasInspectorSection: View {
                         .aspectRatio(aspect.ratio ?? videoSize.width / max(videoSize.height, 1), contentMode: .fit)
                 }
             }
-
-            InspectorField("Background") {
-                TilePicker(selection: $viewModel.canvas.background, values: CanvasStyle.Background.allCases) { background in
-                    switch background {
-                    case .gradient: "Gradient"
-                    case .color: "Color"
-                    case .image: "Image"
-                    case .transparent: "Clear"
-                    }
-                } picture: { background in
-                    BackgroundSwatch(background: background, canvas: viewModel.canvas)
+            // In the recording's own shape the video fills the frame either way
+            if viewModel.canvas.aspect != .source {
+                InspectorField("Video") {
+                    SegmentedChoice(selection: $viewModel.canvas.fillsFrame, options: [(false, "Fit"), (true, "Fill")])
                 }
+                .transition(.opacity)
             }
 
-            BackgroundFillControls(viewModel: viewModel, choosesImage: $choosesBackgroundImage)
+            CropField(viewModel: viewModel)
 
-            InspectorSlider("Padding", value: $viewModel.canvas.padding, in: 0...0.25, defaultValue: CanvasStyle().padding) {
-                Text($0, format: .percent.precision(.fractionLength(0)))
-            }
-            InspectorSlider("Corners", value: $viewModel.canvas.cornerRadius, in: 0...0.05, defaultValue: CanvasStyle().cornerRadius) {
-                Text($0, format: .percent.precision(.fractionLength(1)))
-            }
-            InspectorSlider("Shadow", value: $viewModel.canvas.shadow, in: 0...1, defaultValue: CanvasStyle().shadow) {
-                Text($0, format: .percent.precision(.fractionLength(0)))
-            }
-            // The border grows into the padding, so without any there's no room for it
-            let hasNoRoomForBorder = viewModel.canvas.padding == 0
-            Group {
-                InspectorSlider("Border", value: $viewModel.canvas.borderWidth, in: 0...0.02, defaultValue: 0) {
-                    $0 == 0 ? Text("Off") : Text($0, format: .percent.precision(.fractionLength(1)))
-                }
-                if viewModel.canvas.borderWidth > 0 {
-                    ColorPicker("Border Color", selection: $viewModel.canvas.borderColor.cgColor, supportsOpacity: false)
-                }
-            }
-            .disabled(hasNoRoomForBorder)
-            // Text in ink doesn't dim by itself when disabled
-            .opacity(hasNoRoomForBorder ? 0.4 : 1)
+            CanvasStyleControls(
+                canvas: $viewModel.canvas, wallpapers: viewModel.wallpapers, imageURL: viewModel.backgroundImageURL,
+                setImage: viewModel.setBackgroundImage, choosesImage: $choosesBackgroundImage
+            )
         } footer: {
             if viewModel.canvas.background == .transparent {
                 Text("Only ProRes 4444 exports keep the background transparent; other formats make it black.")
             }
         }
         .editorMotion(value: viewModel.canvas.background)
+        .editorMotion(value: viewModel.canvas.aspect == .source)
         .task { await viewModel.loadWallpapers() }
         .fileImporter(isPresented: $choosesBackgroundImage, allowedContentTypes: [.image]) { result in
             if case .success(let url) = result {
                 viewModel.setBackgroundImage(url)
             }
         }
+    }
+}
+
+/// The canvas's crop: the pad on the frame at the playhead, and Reset once something is cropped.
+struct CropField: View {
+    @Bindable var viewModel: EditorViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
+            HStack {
+                Text("Crop")
+                Spacer()
+                if viewModel.crop != VideoCrop.full {
+                    Button("Reset", action: viewModel.resetCrop)
+                        .buttonStyle(.borderless)
+                        .font(.theme(.caption))
+                        .transition(.opacity)
+                }
+            }
+            if let videoSize = viewModel.source?.naturalSize {
+                RegionPad(
+                    image: viewModel.thumbnail(at: viewModel.playheadSourceTime),
+                    videoSize: videoSize,
+                    regions: Binding { [viewModel.crop] } set: { viewModel.crop = $0[0] },
+                    selection: .constant(0),
+                    minimumSize: VideoCrop.minimumSize,
+                    label: "Crop",
+                    onEnd: viewModel.cropDidSettle
+                )
+            }
+        }
+        .editorMotion(value: viewModel.crop == VideoCrop.full)
     }
 }

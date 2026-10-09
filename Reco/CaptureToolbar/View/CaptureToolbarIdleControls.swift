@@ -39,12 +39,15 @@ struct CaptureToolbarIdleControls: View {
 
         modeGroup(CaptureToolbarMode.allCases.filter { $0.records == viewModel.mode.records })
 
-        // Countdown, audio and camera apply only to a take
+        // Countdown, audio and camera apply only to a take; a screenshot has its own timer
         if viewModel.mode.records {
             HStack(spacing: 2) {
                 CaptureToolbarOptions(viewModel: viewModel)
             }
             .captureToolbarPill()
+        } else {
+            CaptureToolbarCountdownMenu(title: "Self-Timer", duration: Bindable(viewModel.settings).screenshotTimer)
+                .captureToolbarPill()
         }
 
         Button {

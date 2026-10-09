@@ -9,14 +9,6 @@ import Foundation
 
 extension EditorViewModel {
 
-    /// Makes `preset` the gradient: both colors in one undo step.
-    func applyGradient(_ preset: GradientPreset) {
-        edit("Gradient") {
-            $0.canvas.gradientStart = preset.start
-            $0.canvas.gradientEnd = preset.end
-        }
-    }
-
     /// Reads the picture `bookmark` opens into ``resources`` unless it's the one there already. Returns `false`
     /// when there should be a picture and it couldn't be read.
     func updateBackgroundImage(for bookmark: Data?) async -> Bool {
@@ -35,10 +27,5 @@ extension EditorViewModel {
     func loadWallpapers() async {
         guard wallpapers.isEmpty else { return }
         wallpapers = await SystemWallpaper.installed()
-    }
-
-    /// Whether `wallpaper` is the canvas's picture.
-    func isBackground(_ wallpaper: SystemWallpaper) -> Bool {
-        project.canvas.background == .image && backgroundImageURL == wallpaper.url
     }
 }

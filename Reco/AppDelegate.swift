@@ -29,7 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var captureToolbar = CaptureToolbarController(viewModel: CaptureToolbarViewModel(recorder: viewModel, screenshots: screenshots))
 
     private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
-    private lazy var quickAccess = QuickAccessController { [screenshots] screenshot in await screenshots.save(screenshot) }
+    lazy var quickAccess = QuickAccessController(
+        save: { [screenshots] screenshot in await screenshots.save(screenshot) },
+        background: { [settings = viewModel.settings] in settings.screenshotBackground }
+    )
     private lazy var notchShelf = NotchShelfController(settings: viewModel.settings)
 
     /// Serves the tools coding agents record web pages with; a movie it renders opens in the editor, behind the
@@ -83,9 +86,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             captureToolbar.hide(animated: false)
             notchShelf.hide()
         }
-        screenshots.onDidCapture = { [quickAccess, notchShelf] screenshot in
+        screenshots.onDidCapture = { [quickAccess, notchShelf] screenshot, followUp in
             notchShelf.restore()
-            if let screenshot {
+            if let screenshot, let followUp {
+                quickAccess.restore()
+                Task { await quickAccess.follow(followUp, with: screenshot) }
+            } else if let screenshot {
                 quickAccess.show(screenshot)
             } else {
                 quickAccess.restore()
@@ -156,41 +162,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls where url.scheme == "reco" {
-            handle(url)
+        for url in urls {
+            if url.scheme == "reco" {
+                handle(url)
+            } else if url.pathExtension == StylePreset.fileExtension {
+                editorWindows.importStyle(from: url)
+            }
         }
     }
 
     // MARK: - Keyboard Shortcuts
 
     private func registerKeyboardShortcuts() {
-        KeyboardShortcuts.onKeyUp(for: .toggleRecording) { [viewModel] in
-            Task { @MainActor in
-                await viewModel.toggleRecording()
-            }
-        }
-
-        KeyboardShortcuts.onKeyUp(for: .pauseRecording) { [viewModel] in
-            Task { @MainActor in
-                viewModel.togglePause()
+        let recording: [(KeyboardShortcuts.Name, @MainActor (RecorderViewModel) async -> Void)] = [
+            (.toggleRecording, { await $0.toggleRecording() }),
+            (.pauseRecording, { $0.togglePause() }),
+            (.restartRecording, { await $0.restartRecording() }),
+            (.cancelRecording, { await $0.cancelRecording() }),
+            (.selectContent, { $0.presentPicker() }),
+            (.selectArea, { await $0.presentAreaSelection() })
+        ]
+        for (name, action) in recording {
+            KeyboardShortcuts.onKeyUp(for: name) { [viewModel] in
+                Task { @MainActor in
+                    await action(viewModel)
+                }
             }
         }
 
         KeyboardShortcuts.onKeyUp(for: .recordWithAgent) { [weak self] in
             Task { @MainActor in
                 self?.showAgentRecording()
-            }
-        }
-
-        KeyboardShortcuts.onKeyUp(for: .selectContent) { [viewModel] in
-            Task { @MainActor in
-                viewModel.presentPicker()
-            }
-        }
-
-        KeyboardShortcuts.onKeyUp(for: .selectArea) { [viewModel] in
-            Task { @MainActor in
-                await viewModel.presentAreaSelection()
             }
         }
 
@@ -206,6 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let captures: [(KeyboardShortcuts.Name, @MainActor (ScreenshotController) async -> Void)] = [
             (.captureArea, { await $0.captureArea() }),
+            (.capturePreviousArea, { await $0.capturePreviousArea() }),
             (.captureWindow, { await $0.captureWindow() }),
             (.captureScreen, { await $0.captureScreen() })
         ]
@@ -242,6 +245,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         case "pause":
             viewModel.togglePause()
+        case "cancel":
+            Task { await viewModel.cancelRecording() }
+        case "restart":
+            Task { await viewModel.restartRecording(countdown: false) }
+        case "capture-area", "capture-previous-area", "capture-window", "capture-screen":
+            captureScreenshot(from: url)
         case "edit-last":
             editLastRecording()
         case "open-recordings":
@@ -255,6 +264,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: settings.outputDirectory.path)
         default:
             logger.warning("Unhandled URL host: \(url.host ?? "nil")")
+        }
+    }
+
+    /// `reco://capture-area`, `capture-previous-area`, `capture-window` or `capture-screen`, with `?then=copy|save|pin` in place of the card.
+    /// Ignored, like the shortcuts, while recording, counting down or capturing.
+    private func captureScreenshot(from url: URL) {
+        let followUp = ScreenshotFollowUp(url: url)
+        if followUp == nil, url.query()?.contains("then=") == true {
+            logger.warning("Unknown then in \(url.absoluteString); opening the card")
+        }
+        Task {
+            guard screenshots.canCapture(alongside: viewModel) else {
+                logger.info("Ignored \(url.absoluteString): recording, counting down or capturing")
+                return
+            }
+            switch url.host {
+            case "capture-area": await screenshots.captureArea(then: followUp)
+            case "capture-previous-area": await screenshots.capturePreviousArea(then: followUp)
+            case "capture-window": await screenshots.captureWindow(then: followUp)
+            default: await screenshots.captureScreen(then: followUp)
+            }
         }
     }
 }

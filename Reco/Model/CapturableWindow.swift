@@ -23,4 +23,7 @@ struct CapturableWindow: Equatable, Sendable {
 
     /// The window's title, or an empty string.
     let title: String
+
+    /// The window's level (`SCWindow.windowLayer`); 0 for an app's normal windows.
+    var layer = 0
 }

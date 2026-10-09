@@ -56,7 +56,7 @@ nonisolated struct LibraryItem: Identifiable, Hashable, Sendable {
     /// Whether a file in the screenshot folder is one of Reco's: that folder is the Desktop by default,
     /// which holds everything else too.
     static func isScreenshot(_ url: URL, contentType: UTType?) -> Bool {
-        contentType?.conforms(to: .png) == true && url.lastPathComponent.hasPrefix(screenshotPrefix)
+        Screenshot.contentTypes.contains { contentType?.conforms(to: $0) == true } && url.lastPathComponent.hasPrefix(screenshotPrefix)
     }
 
     /// The prefixes `SettingsStore.filename(prefix:fileExtension:date:)` is given for these.

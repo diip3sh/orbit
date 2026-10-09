@@ -6,6 +6,7 @@
 //
 
 import CoreGraphics
+import CoreImage.CIFilterBuiltins
 import CoreText
 import Foundation
 import Testing
@@ -49,6 +50,30 @@ struct TextRecognizerTests {
         let text = try await TextRecognizer.text(in: .filled(width: 400, height: 200))
 
         #expect(text.isEmpty)
+    }
+
+    // MARK: - codes(in:)
+
+    @Test func readsAQRCodesPayload() async throws {
+        let codes = try await TextRecognizer.codes(in: Self.qrCode("https://example.com/reco"))
+
+        #expect(codes == "https://example.com/reco")
+    }
+
+    @Test func anImageWithOnlyTextHasNoCodes() async throws {
+        let codes = try await TextRecognizer.codes(in: Self.image(lines: ["Hello World"]))
+
+        #expect(codes.isEmpty)
+    }
+
+    /// `message` as a QR code, 10 px a module, on a white quiet zone
+    private static func qrCode(_ message: String) throws -> CGImage {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(message.utf8)
+        let code = try #require(filter.outputImage).transformed(by: CGAffineTransform(scaleX: 10, y: 10))
+        let framed = code.transformed(by: CGAffineTransform(translationX: 40, y: 40))
+            .composited(over: CIImage(color: .white).cropped(to: code.extent.insetBy(dx: -40, dy: -40).offsetBy(dx: 40, dy: 40)))
+        return try #require(CIContext().createCGImage(framed, from: framed.extent))
     }
 
     /// Black 64 pt Helvetica lines on white, the first at the top

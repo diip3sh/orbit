@@ -12,11 +12,12 @@ import Foundation
 /// and a lerp.
 ///
 /// Integrated once per plan: a critically damped spring pulls the view towards each moment's
-/// target, a zoom segment's scale and focus or else the whole frame. Scale is integrated in log
-/// space, so zooming in and out by the same factor look equally fast.
+/// target, a zoom segment's scale and focus or else the base view, the whole frame or (filling a canvas of
+/// another shape) the largest part of it in the canvas's shape, following the cursor. Scale is integrated in
+/// log space, so zooming in and out by the same factor look equally fast.
 nonisolated struct CameraPath: Sendable {
 
-    /// What the camera shows: the frame magnified `scale` times around `center`.
+    /// What the camera shows: the base view magnified `scale` times around `center`.
     nonisolated struct Viewport: Equatable, Sendable {
 
         /// Fractions of the video's width and height from its top-left corner.
@@ -32,22 +33,37 @@ nonisolated struct CameraPath: Sendable {
     /// The share of the view, around its centre, in which the cursor moves without the view following.
     static let deadZone = 0.5
 
-    /// Empty when there are no zooms.
+    /// The base view when the canvas shows the whole video.
+    static let wholeVideo = CGSize(width: 1, height: 1)
+
+    /// The part of the video shown at 1×, as fractions of it (``CanvasLayout/baseView``).
+    let baseView: CGSize
+
+    /// Empty when there are no zooms and the base view is the whole video.
     private let samples: [Viewport]
 
+    /// Times are the output's (``RenderPlan`` maps them), so a zoom eases at the same pace at any speed.
     /// - Parameters:
     ///   - zooms: Sorted and apart.
-    ///   - cursor: The cursor's positions in the video, sorted by source time, each held until the
+    ///   - cursor: The cursor's positions in the video, sorted by time, each held until the
     ///     next. Without them, a zoom that follows the cursor centres on the frame.
-    ///   - duration: The recording's length in seconds.
+    ///   - duration: The output's length in seconds.
     ///   - stiffness: The spring's natural frequency, in radians per second (``ZoomMotion/frequency``).
-    init(zooms: [ZoomSegment], cursor: [(time: Double, point: CGPoint)], duration: Double, stiffness: Double = ZoomMotion.smooth.frequency) {
-        guard !zooms.isEmpty else {
+    ///   - baseView: The part of the video shown at 1×; smaller than the whole, it follows the cursor between zooms.
+    init(
+        zooms: [ZoomSegment], cursor: [(time: Double, point: CGPoint)], duration: Double,
+        stiffness: Double = ZoomMotion.smooth.frequency, baseView: CGSize = wholeVideo
+    ) {
+        self.baseView = baseView
+        let follows = baseView != Self.wholeVideo
+        guard !zooms.isEmpty || follows else {
             samples = []
             return
         }
-        var centerX = Spring(position: 0.5, frequency: stiffness, rate: Self.sampleRate)
-        var centerY = Spring(position: 0.5, frequency: stiffness, rate: Self.sampleRate)
+        // A base view that follows starts on the cursor, not easing there from the centre
+        let start = follows && !cursor.isEmpty ? Self.following(cursor[0].point, from: nil, scale: 1, in: baseView) : Viewport.whole.center
+        var centerX = Spring(position: start.x, frequency: stiffness, rate: Self.sampleRate)
+        var centerY = Spring(position: start.y, frequency: stiffness, rate: Self.sampleRate)
         var logScale = Spring(position: 0, frequency: stiffness, rate: Self.sampleRate)
         var zoomIndex = 0
         var cursorIndex = 0
@@ -66,13 +82,19 @@ nonisolated struct CameraPath: Sendable {
                 cursorIndex += 1
             }
 
+            let point = cursor.isEmpty ? nil : cursor[cursorIndex].point
             var target = Viewport.whole
             if zoomIndex < zooms.count, zooms[zoomIndex].range.contains(time) {
-                target = Self.target(of: zooms[zoomIndex], cursor: cursor.isEmpty ? nil : cursor[cursorIndex].point, followed: &followed)
+                target = Self.target(of: zooms[zoomIndex], cursor: point, followed: &followed, in: baseView)
+            } else if follows, let point {
+                target.center = Self.following(point, from: followed, scale: 1, in: baseView)
+                followed = target.center
             }
 
             let scale = max(exp(logScale.position), 1)
-            samples.append(Viewport(center: ZoomSegment.clamped(CGPoint(x: centerX.position, y: centerY.position), scale: scale), scale: scale))
+            samples.append(Viewport(
+                center: ZoomSegment.clamped(CGPoint(x: centerX.position, y: centerY.position), scale: scale, in: baseView), scale: scale
+            ))
 
             centerX.advance(to: target.center.x)
             centerY.advance(to: target.center.y)
@@ -81,7 +103,7 @@ nonisolated struct CameraPath: Sendable {
         self.samples = samples
     }
 
-    /// The view at source time `time`, clamped to the recording.
+    /// The view at output time `time`, clamped to the output.
     func viewport(at time: Double) -> Viewport {
         guard let last = samples.indices.last else { return .whole }
         let position = min(max(time * Self.sampleRate, 0), Double(last))
@@ -100,26 +122,26 @@ nonisolated struct CameraPath: Sendable {
 
     /// Where `zoom` looks: at its fixed focus, or following `cursor` from `followed`, which it
     /// updates. Without a cursor, at the frame's centre.
-    private static func target(of zoom: ZoomSegment, cursor: CGPoint?, followed: inout CGPoint?) -> Viewport {
+    private static func target(of zoom: ZoomSegment, cursor: CGPoint?, followed: inout CGPoint?, in view: CGSize) -> Viewport {
         switch zoom.focus {
         case .fixed(let center):
-            return Viewport(center: ZoomSegment.clamped(center, scale: zoom.scale), scale: zoom.scale)
+            return Viewport(center: ZoomSegment.clamped(center, scale: zoom.scale, in: view), scale: zoom.scale)
         case .followCursor:
             guard let cursor else { return Viewport(center: Viewport.whole.center, scale: zoom.scale) }
-            let center = following(cursor, from: followed, scale: zoom.scale)
+            let center = following(cursor, from: followed, scale: zoom.scale, in: view)
             followed = center
             return Viewport(center: center, scale: zoom.scale)
         }
     }
 
     /// The view's centre, moved from `center` just enough to bring `cursor` within the dead zone,
-    /// and kept inside the frame. Without a centre yet, the cursor.
-    static func following(_ cursor: CGPoint, from center: CGPoint?, scale: Double) -> CGPoint {
-        let reach = deadZone / (2 * scale)
+    /// and kept inside the frame. Without a centre yet, the cursor. `view` is the base view.
+    static func following(_ cursor: CGPoint, from center: CGPoint?, scale: Double, in view: CGSize = wholeVideo) -> CGPoint {
+        let (reachX, reachY) = (deadZone * view.width / (2 * scale), deadZone * view.height / (2 * scale))
         let center = center ?? cursor
         return ZoomSegment.clamped(
-            CGPoint(x: min(max(center.x, cursor.x - reach), cursor.x + reach), y: min(max(center.y, cursor.y - reach), cursor.y + reach)),
-            scale: scale
+            CGPoint(x: min(max(center.x, cursor.x - reachX), cursor.x + reachX), y: min(max(center.y, cursor.y - reachY), cursor.y + reachY)),
+            scale: scale, in: view
         )
     }
 }

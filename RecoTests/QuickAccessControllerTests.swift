@@ -10,6 +10,70 @@ import SwiftUI
 import Testing
 @testable import Reco
 
+/// Restore Last Screenshot. Each card is dismissed before its preview is drawn, so no panel opens.
+@MainActor
+struct QuickAccessRestoreTests {
+
+    private let controller = QuickAccessController(save: { _ in false }, background: { ScreenshotBackground() })
+
+    private func screenshot(at seconds: TimeInterval) throws -> Screenshot {
+        try Screenshot(image: .filled(width: 4, height: 4), scale: 2, date: Date(timeIntervalSince1970: seconds))
+    }
+
+    @Test func nothingToRestoreUntilACardGoes() throws {
+        controller.show(try screenshot(at: 1))
+        #expect(controller.closedScreenshot == nil)
+
+        controller.dismiss()
+        #expect(controller.closedScreenshot?.date == Date(timeIntervalSince1970: 1))
+    }
+
+    @Test func aReplacedCardIsTheOneToRestore() throws {
+        controller.show(try screenshot(at: 1))
+        controller.show(try screenshot(at: 2))
+        #expect(controller.closedScreenshot?.date == Date(timeIntervalSince1970: 1))
+    }
+
+    @Test func restoringSwapsWithTheCardShowing() throws {
+        controller.show(try screenshot(at: 1))
+        controller.dismiss()
+        controller.show(try screenshot(at: 2))
+
+        controller.restoreClosed()
+        #expect(controller.closedScreenshot?.date == Date(timeIntervalSince1970: 2))
+
+        controller.dismiss()
+        #expect(controller.closedScreenshot?.date == Date(timeIntervalSince1970: 1))
+    }
+}
+
+@MainActor
+struct PinClickThroughTests {
+
+    private let pins = PinController()
+
+    private func pinOne() throws -> NSPanel {
+        let screenshot = try Screenshot(image: .filled(width: 4, height: 4), scale: 2, date: .now)
+        let screen = try #require(NSScreen.main)
+        pins.pin(screenshot, at: screen.visibleFrame.origin, on: screen)
+        return try #require(pins.panels.last)
+    }
+
+    @Test func aClickThroughPinTakesClicksAgainOnceUnlocked() throws {
+        let panel = try pinOne()
+        #expect(!pins.hasClickThroughPins)
+
+        pins.letClicksThrough(panel)
+        #expect(panel.ignoresMouseEvents)
+        #expect(pins.hasClickThroughPins)
+
+        pins.unlockPins()
+        #expect(!panel.ignoresMouseEvents)
+        #expect(!pins.hasClickThroughPins)
+        panel.orderOut(nil)
+    }
+}
+
 struct QuickAccessControllerTests {
 
     private let card = CGSize(width: 230, height: 210)

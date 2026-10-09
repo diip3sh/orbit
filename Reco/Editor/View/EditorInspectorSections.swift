@@ -9,7 +9,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// The editor's right column: the tab bar, a notice when the telemetry is missing, then the chosen tab's
-/// sections. Selecting a zoom on the timeline turns to Motion, where its settings are.
+/// sections. Selecting a zoom on the timeline turns to Motion, a mask to Background, where their settings are.
 struct EditorInspector: View {
     @Bindable var viewModel: EditorViewModel
     @Binding var tab: InspectorTab
@@ -40,6 +40,7 @@ struct EditorInspector: View {
                     switch tab {
                     case .background:
                         CanvasInspectorSection(viewModel: viewModel)
+                        MaskInspectorSection(viewModel: viewModel)
                     case .audio:
                         if !trackNames.isEmpty {
                             AudioInspectorSection(viewModel: viewModel, trackNames: trackNames)
@@ -53,6 +54,7 @@ struct EditorInspector: View {
                     case .motion:
                         MotionInspectorSection(viewModel: viewModel)
                         ZoomInspectorSection(viewModel: viewModel)
+                        SpeedInspectorSection(viewModel: viewModel)
                     case .camera, .caption:
                         EmptyView()
                     }
@@ -67,8 +69,10 @@ struct EditorInspector: View {
         }
         .editorMotion(EditorTheme.quickMotion, value: tab)
         .onChange(of: viewModel.selection) { _, selection in
-            if case .zoom = selection {
-                tab = .motion
+            switch selection {
+            case .zoom: tab = .motion
+            case .mask: tab = .background
+            case .segment, nil: break
             }
         }
     }
@@ -91,11 +95,12 @@ struct ZoomInspectorSection: View {
                     SegmentedChoice(selection: zoom.followsCursor, options: [(true, "Follow Cursor"), (false, "Fixed")])
                     .disabled(telemetry == nil)
                 }
-                if let center = Binding(unwrapping: zoom.fixedCenter), let videoSize = viewModel.source?.naturalSize {
+                if let center = Binding(unwrapping: zoom.fixedCenter), let videoSize = viewModel.videoSize {
                     ZoomFocusPad(
-                        image: viewModel.thumbnail(at: zoom.wrappedValue.range.lowerBound),
+                        image: viewModel.croppedThumbnail(at: zoom.wrappedValue.range.lowerBound),
                         videoSize: videoSize,
                         scale: zoom.wrappedValue.scale,
+                        baseView: viewModel.baseView,
                         center: center
                     )
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -202,10 +207,17 @@ struct CursorInspectorSection: View {
                 .opacity(isRecordedStyle ? 1 : 0.4)
             Toggle("Shrink on Click", isOn: $viewModel.cursor.animatesClicks)
             Toggle("Hide When Idle", isOn: $viewModel.cursor.hidesWhenIdle)
+            Toggle("Tilt While Moving", isOn: $viewModel.cursor.tilts)
             Toggle("Loop Position", isOn: $viewModel.cursor.loops)
+            InspectorSlider("Stop Before End", value: $viewModel.cursor.stopDuration, in: 0...3, defaultValue: 0) {
+                $0 == 0 ? Text("Off") : Text("\($0, format: .number.precision(.fractionLength(1))) s")
+            }
         } footer: {
             if viewModel.cursor.loops {
                 Text("In the last second the cursor glides back to where it started, so the video loops.")
+            }
+            if viewModel.cursor.stopDuration > 0 {
+                Text("The cursor holds still at the end, so reaching for Stop doesn't show.")
             }
             if telemetry?.capture.cursorInVideo == true {
                 Text("""
@@ -283,7 +295,7 @@ struct KeystrokesInspectorSection: View {
     }
 }
 
-/// Each audio track's volume and mute.
+/// Each audio track's volume and mute, and Enhance Voice on the microphone's.
 struct AudioInspectorSection: View {
     @Bindable var viewModel: EditorViewModel
     let trackNames: [String]
@@ -291,7 +303,13 @@ struct AudioInspectorSection: View {
     var body: some View {
         InspectorSection("Audio") {
             ForEach(trackNames.indices, id: \.self) { index in
-                AudioTrackRow(name: trackNames[index], settings: $viewModel.audio[track: index])
+                AudioTrackRow(
+                    name: trackNames[index], mayHoldVoice: index == viewModel.source?.voiceTrackIndex, settings: $viewModel.audio[track: index]
+                )
+            }
+        } footer: {
+            if viewModel.source?.voiceTrackIndex != nil {
+                Text("Enhance Voice takes out the noise around the voice.")
             }
         }
     }

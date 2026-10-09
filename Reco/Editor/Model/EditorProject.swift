@@ -24,8 +24,15 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     /// Where the timeline is divided, so the part between two splits can be selected and cut.
     var splits: [Double] = []
 
+    /// Source ranges played at another speed, sorted and apart. A cut leaves a range's speed here, so restoring
+    /// the cut brings it back.
+    var speeds: [SpeedRange] = []
+
     /// Sorted and apart.
     var zooms: [ZoomSegment] = []
+
+    /// Sorted and apart.
+    var masks: [MaskSegment] = []
 
     var clickHighlights = ClickHighlightStyle()
     var keystrokes = KeystrokeOverlayStyle()
@@ -35,6 +42,9 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     /// How long the shutter stays open over a frame, from 0 (never: every frame is sharp) to 1 (the whole
     /// frame). The camera's moves blur by what they travel in that time.
     var motionBlur = 0.0
+
+    /// The part of the video kept, as fractions of it from its top-left corner (``VideoCrop``).
+    var crop = VideoCrop.full
     var canvas = CanvasStyle()
     var audio = AudioMixSettings()
 
@@ -58,12 +68,15 @@ extension EditorProject {
         }
         cuts = try container.decode([Range<Double>].self, forKey: .cuts)
         splits = try container.decodeIfPresent([Double].self, forKey: .splits) ?? []
+        speeds = try container.decodeIfPresent([SpeedRange].self, forKey: .speeds) ?? []
         zooms = try container.decodeIfPresent([ZoomSegment].self, forKey: .zooms) ?? []
+        masks = try container.decodeIfPresent([MaskSegment].self, forKey: .masks) ?? []
         clickHighlights = try container.decodeIfPresent(ClickHighlightStyle.self, forKey: .clickHighlights) ?? ClickHighlightStyle()
         keystrokes = try container.decodeIfPresent(KeystrokeOverlayStyle.self, forKey: .keystrokes) ?? KeystrokeOverlayStyle()
         cursor = try container.decodeIfPresent(CursorStyle.self, forKey: .cursor) ?? CursorStyle()
         zoomMotion = try container.decodeIfPresent(ZoomMotion.self, forKey: .zoomMotion) ?? .smooth
         motionBlur = try container.decodeIfPresent(Double.self, forKey: .motionBlur) ?? 0
+        crop = try container.decodeIfPresent(CGRect.self, forKey: .crop) ?? VideoCrop.full
         canvas = try container.decodeIfPresent(CanvasStyle.self, forKey: .canvas) ?? CanvasStyle()
         audio = try container.decodeIfPresent(AudioMixSettings.self, forKey: .audio) ?? AudioMixSettings()
     }

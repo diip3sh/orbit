@@ -16,9 +16,12 @@ nonisolated enum EditorError: LocalizedError {
     case unreadableProject(any Error)
     case projectNotSaved(any Error)
     case exportFailed(any Error)
+    case frameNotCopied(any Error)
     case unreadableBackground
     case unreadableBackgroundAudio
     case renameFailed(any Error)
+    case styleNotSaved(any Error)
+    case unreadableStyle(any Error)
 
     var errorDescription: String? {
         switch self {
@@ -42,12 +45,18 @@ nonisolated enum EditorError: LocalizedError {
             "Edits couldn't be saved. \(error.localizedDescription)"
         case .exportFailed(let error):
             "The video couldn't be exported. \(error.localizedDescription)"
+        case .frameNotCopied(let error):
+            "The frame couldn't be copied. \(error.localizedDescription)"
         case .unreadableBackground:
             "The background image couldn't be opened, so its color is shown instead."
         case .unreadableBackgroundAudio:
             "The background audio couldn't be opened, so it's left out."
         case .renameFailed(let error):
             "The recording couldn't be renamed. \(error.localizedDescription)"
+        case .styleNotSaved(let error):
+            "The style couldn't be saved. \(error.localizedDescription)"
+        case .unreadableStyle(let error):
+            "The style couldn't be read. \(error.localizedDescription)"
         }
     }
 }

@@ -7,11 +7,14 @@
 
 import SwiftUI
 
-/// Cutting and zooming, play/pause and frame stepping, and the playhead's time, in the timeline's
+/// Cutting, speed and zooming, play/pause and frame stepping, and the playhead's time, in the timeline's
 /// header. Space plays and pauses, ← and → step a frame, S splits at the playhead, Z adds a
-/// zoom there and ⌫ removes the selection.
+/// zoom there, M a mask, ⌫ removes the selection and ⇧⌘C copies the frame.
 struct TransportBar: View {
-    let viewModel: EditorViewModel
+    @Bindable var viewModel: EditorViewModel
+
+    /// Shows a check for a moment after Copy Frame, since nothing else on screen changes.
+    @State private var copiedFrame = false
 
     var body: some View {
         let playback = viewModel.playback
@@ -27,6 +30,22 @@ struct TransportBar: View {
                 .keyboardShortcut("s", modifiers: [])
                 .help("Split at the playhead (S)")
 
+                Menu {
+                    Picker("Speed", selection: $viewModel.selectedSpeed) {
+                        ForEach(SpeedRange.rates, id: \.self) { rate in
+                            Text(SpeedRange.label(for: rate)).tag(rate)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Label("Speed", systemImage: "gauge.with.dots.needle.67percent")
+                }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help(viewModel.canChangeSpeed ? "Speed of the selected part" : "Select a part to change its speed")
+                .disabled(!viewModel.canChangeSpeed)
+
                 Button("Add Zoom", systemImage: "plus.magnifyingglass") {
                     viewModel.addZoom()
                 }
@@ -34,13 +53,32 @@ struct TransportBar: View {
                 .help("Add a zoom at the playhead (Z)")
                 .disabled(!viewModel.canAddZoom)
 
-                let deletesZoom = viewModel.selectedZoom != nil
-                Button(deletesZoom ? "Delete Zoom" : "Cut Selection", systemImage: "trash") {
+                Button("Add Mask", systemImage: "eye.slash") {
+                    viewModel.addMask()
+                }
+                .keyboardShortcut("m", modifiers: [])
+                .help("Hide part of the frame from the playhead (M)")
+                .disabled(!viewModel.canAddMask)
+
+                let deleted = deletedName
+                Button(deleted.map { "Delete \($0)" } ?? "Cut Selection", systemImage: "trash") {
                     viewModel.deleteSelection()
                 }
                 .keyboardShortcut(.delete, modifiers: [])
-                .help(deletesZoom ? "Delete the selected zoom (⌫)" : "Cut the selected part (⌫)")
+                .help(deleted.map { "Delete the selected \($0.lowercased()) (⌫)" } ?? "Cut the selected part (⌫)")
                 .disabled(!viewModel.canDeleteSelection)
+
+                Button(copiedFrame ? "Copied" : "Copy Frame", systemImage: copiedFrame ? "checkmark" : "photo.on.rectangle") {
+                    Task {
+                        guard await viewModel.copyFrame() else { return }
+                        copiedFrame = true
+                        try? await Task.sleep(for: .seconds(1.5))
+                        copiedFrame = false
+                    }
+                }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+                .contentTransition(.symbolEffect(.replace))
+                .help("Copy the frame at the playhead as an image (⇧⌘C)")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -77,6 +115,15 @@ struct TransportBar: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .buttonStyle(.editorIcon)
+    }
+
+    /// What ⌫ deletes when it isn't a part of the recording.
+    private var deletedName: String? {
+        switch viewModel.selection {
+        case .zoom: "Zoom"
+        case .mask: "Mask"
+        case .segment, nil: nil
+        }
     }
 
     private static func format(_ seconds: Double) -> String {

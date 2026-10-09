@@ -12,6 +12,11 @@ import Foundation
 nonisolated struct CanvasStyle: Codable, Equatable, Sendable {
     var aspect = Aspect.source
 
+    /// In a shape other than the recording's, whether the video covers the space inside the padding instead of
+    /// fitting in it: the camera shows the largest part of the video in that shape and follows the cursor with
+    /// it (see ``CanvasLayout/baseView``). Nothing in the recording's own shape.
+    var fillsFrame = false
+
     /// The space around the video, as a share of the frame's shorter side.
     var padding = 0.08
 
@@ -43,6 +48,23 @@ nonisolated struct CanvasStyle: Codable, Equatable, Sendable {
     /// The preset the gradient's colors are, or `nil` when they were picked by hand.
     var gradientPreset: GradientPreset? {
         GradientPreset.all.first { $0.start == gradientStart && $0.end == gradientEnd }
+    }
+
+    /// Whether the video covers the padded space: ``fillsFrame`` in a shape that isn't the recording's.
+    var fills: Bool {
+        fillsFrame && aspect != .source
+    }
+
+    /// Makes `preset` the gradient: both colors at once, so a bound control's one write is one edit.
+    mutating func apply(_ preset: GradientPreset) {
+        gradientStart = preset.start
+        gradientEnd = preset.end
+    }
+
+    /// Makes the picture `bookmark` opens the background.
+    mutating func setImage(_ bookmark: Data) {
+        background = .image
+        imageBookmark = bookmark
     }
 
     /// The recording as it is: its own shape, filling the frame.
@@ -86,6 +108,7 @@ extension CanvasStyle {
         self.init()
         let container = try decoder.container(keyedBy: CodingKeys.self)
         aspect = try container.decodeIfPresent(Aspect.self, forKey: .aspect) ?? aspect
+        fillsFrame = try container.decodeIfPresent(Bool.self, forKey: .fillsFrame) ?? fillsFrame
         padding = try container.decodeIfPresent(Double.self, forKey: .padding) ?? padding
         cornerRadius = try container.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? cornerRadius
         shadow = try container.decodeIfPresent(Double.self, forKey: .shadow) ?? shadow

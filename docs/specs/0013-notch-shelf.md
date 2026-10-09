@@ -19,7 +19,7 @@ grows out of it shows the newest screenshots at once, like Alcove, NotchNook or 
 - Open: "Screenshots" and their count, and a scrolling strip of the newest 20 (saved ones in the
   screenshot folder and unsaved ones in the history), newest first. **Click** copies the PNG and the tile
   says Copied for 1.2 s; **drag** drops the file into another app. No screenshots: "No screenshots yet".
-- **Settings → General → Screenshot History → Show Screenshots in the Notch** (on by default).
+- **Settings → Screenshots → History → Show Screenshots in the Notch** (on by default; in General until 2026-10-08).
 - Taken away as a screenshot starts and brought back as it ends, so it isn't in the shot.
 
 ## Rules

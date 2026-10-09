@@ -91,6 +91,45 @@ struct RenderPlanTests {
         #expect(points.map(\.point) == [CGPoint(x: 0.5, y: 0.5), CGPoint(x: 0.375, y: 0.5)])
     }
 
+    @Test func aCropIsTheVideoForEverythingInThePlan() async {
+        var project = EditorProject()
+        project.crop = CGRect(x: 0.25, y: 0, width: 0.5, height: 0.5)
+
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: .none)
+
+        // 400…1200 px across and the top 600 px, which is 600…1200 in Core Image's space
+        #expect(plan.videoSize == CGSize(width: 800, height: 600))
+        #expect(plan.crop == CGRect(x: 400, y: 600, width: 800, height: 600))
+        // The first click is 400 px from the left and 240 from the top of the video: the crop's left edge
+        #expect(plan.clicks.first?.position == CGPoint(x: 0, y: 360))
+    }
+
+    @Test func aCroppedFrameShowsOnlyTheCrop() async throws {
+        var project = EditorProject()
+        project.canvas = .plain
+        project.crop = CGRect(x: 0.5, y: 0, width: 0.5, height: 1)
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: nil), resources: .none)
+        // Red on the left half, blue on the right
+        let frame = CIImage(color: .blue).cropped(to: CGRect(x: 0, y: 0, width: 1600, height: 1200))
+        let left = CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: 800, height: 1200))
+
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(
+            nil, Int(plan.canvas.size.width), Int(plan.canvas.size.height), kCVPixelFormatType_32BGRA,
+            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer
+        )
+        let output = try #require(buffer)
+        try FrameRenderer.draw(
+            left.composited(over: frame), at: 1, plan: plan, into: output,
+            context: CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull()])
+        )
+
+        #expect(plan.canvas.size == CGSize(width: 800, height: 1200))
+        let image = CIImage(cvPixelBuffer: output)
+        #expect(image.pixel(at: CGPoint(x: 0, y: 0)) == [0, 0, 255, 255])
+        #expect(image.pixel(at: CGPoint(x: 799, y: 1199)) == [0, 0, 255, 255])
+    }
+
     @Test func buildsTheCameraFromTheZooms() async {
         let project = EditorProject(zooms: [ZoomSegment(range: 1..<9, focus: .fixed(center: CGPoint(x: 0.25, y: 0.25)))])
 
@@ -149,6 +188,24 @@ struct RenderPlanTests {
         #expect(plan.timeMap.outputDuration == 9)
     }
 
+    @Test func timesOverlaysAndTheCameraOnTheOutput() async {
+        // Kept: 0..<1.5, 2.5..<4, then 4..<8 at 2× and 8..<10: 7 s of output
+        var project = EditorProject(cuts: [1.5..<2.5])
+        project.speeds = [SpeedRange(range: 4..<8, rate: 2)]
+        project.zooms = [ZoomSegment(range: 4..<8, focus: .fixed(center: CGPoint(x: 0.5, y: 0.5)))]
+        let resources = RenderResources(keyLabels: KeyLabelFormatter.layout(id: "com.apple.keylayout.US"))
+
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: resources)
+
+        #expect(plan.timeMap.outputDuration == 7)
+        // The click at 2 s is cut; the one at 6 s is 2 s into the 2× part
+        #expect(plan.clicks.map(\.time) == [1, 4])
+        #expect(plan.keystrokes.map(\.time) == [1, 2, 3])
+        // The zoom spans output 3..<5
+        #expect(plan.camera.viewport(at: 2.9) == .whole)
+        #expect(plan.camera.viewport(at: 4.9).scale > 1.9)
+    }
+
     @Test func buildsNoOverlaysWithoutTelemetry() async {
         let plan = await RenderPlan.build(project: EditorProject(), source: source(telemetry: nil), resources: RenderResources(keyLabels: KeyLabelFormatter.current()))
 
@@ -167,6 +224,27 @@ struct RenderPlanTests {
         #expect(preview.canvas.size == CGSize(width: 1600, height: 1200))
         #expect(export.canvas.size == CGSize(width: 800, height: 600))
         #expect(export.canvas.videoFrame.height == 504)
+    }
+
+    @Test func fillingFollowsTheCursorThroughTheRecording() async {
+        var project = EditorProject()
+        project.canvas = CanvasStyle(aspect: .portrait, fillsFrame: true, padding: 0)
+        var telemetry = telemetry
+        // 50 pt into the 800 pt window, then 650 pt in after it has moved
+        telemetry.cursor = [.init(time: 0, location: CGPoint(x: 150, y: 380)), .init(time: 6, location: CGPoint(x: 850, y: 380))]
+
+        let plan = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: .none)
+
+        // 1200×2134 of a 1600×1200 video: its full height and 0.4217 of its width
+        #expect(plan.canvas.size == CGSize(width: 1200, height: 2134))
+        #expect(plan.canvas.videoFrame == CGRect(origin: .zero, size: plan.canvas.size))
+        #expect(plan.camera.baseView == plan.canvas.baseView)
+        #expect(abs(plan.camera.baseView.width - 0.4217) < 1e-3 && plan.camera.baseView.height == 1)
+        // The view starts as far left as it goes for the cursor at 0.0625, then follows it to 0.8125 at a dead zone's reach
+        let before = plan.camera.viewport(at: 2.9)
+        let after = plan.camera.viewport(at: 9.9)
+        #expect(abs(before.center.x - 0.2108) < 1e-3 && before.scale == 1)
+        #expect(abs(after.center.x - 0.7071) < 1e-3 && after.scale == 1)
     }
 
     @Test func buildsOneChipImagePerLabel() async {
@@ -209,17 +287,32 @@ struct RenderPlanTests {
         // The last kept frame is the one before 9 s
         let loop = RenderPlan.cursorLoop(for: TimeMap(cuts: [9..<10], sourceDuration: 10, frameRate: 60))
 
+        let lastFrame: Double = 539.0 / 60
         #expect(loop.start == 0)
-        #expect(abs(loop.glide.upperBound - 539.0 / 60) < 1e-9)
-        #expect(abs(loop.glide.lowerBound - (539.0 / 60 - CursorPath.loopDuration)) < 1e-9)
+        #expect(abs(loop.glide.upperBound - lastFrame) < 1e-9)
+        #expect(abs(loop.glide.lowerBound - (lastFrame - CursorPath.loopDuration)) < 1e-9)
     }
 
     @Test func theCursorLoopStaysInsideTheLastKeptRange() {
         // Kept: 0..<1 and a last range of 0.4 s, shorter than the glide
         let loop = RenderPlan.cursorLoop(for: TimeMap(cuts: [1..<9.6], sourceDuration: 10, frameRate: 60))
 
+        let lastFrame: Double = 10 - 1.0 / 60
         #expect(abs(loop.glide.lowerBound - 9.6) < 1e-9)
-        #expect(abs(loop.glide.upperBound - (10 - 1.0 / 60)) < 1e-9)
+        #expect(abs(loop.glide.upperBound - lastFrame) < 1e-9)
+    }
+
+    @Test func theCursorStopsItsDurationOfOutputBeforeTheLastFrame() throws {
+        // Source 2..<4 is cut, so the last frame at 599/60 of source is 479/60 of output
+        let timeMap = TimeMap(cuts: [2..<4], sourceDuration: 10, frameRate: 60)
+
+        #expect(RenderPlan.cursorStop(before: 0, for: timeMap) == nil)
+        let stop = try #require(RenderPlan.cursorStop(before: 3, for: timeMap))
+        // 479/60 - 3 of output is past the cut, so 2 s later in source
+        let expected: Double = 479.0 / 60 - 3 + 2
+        #expect(abs(stop - expected) < 1e-9)
+        // Longer than the video, it holds from the first frame
+        #expect(RenderPlan.cursorStop(before: 20, for: timeMap) == 0)
     }
 
     @Test func buildsALoopingCursorOnlyWhenAsked() async {
@@ -234,7 +327,8 @@ struct RenderPlanTests {
         let looping = await RenderPlan.build(project: project, source: source(telemetry: telemetry), resources: .none)
 
         #expect(plain.cursor?.position(at: 9.9) != plain.cursor?.position(at: 0))
-        #expect(looping.cursor?.position(at: 10 - 1.0 / 60) == looping.cursor?.position(at: 0))
+        let lastFrame: Double = 10 - 1.0 / 60
+        #expect(looping.cursor?.position(at: lastFrame) == looping.cursor?.position(at: 0))
     }
 
     @Test func buildsTheChosenCursorImages() async {

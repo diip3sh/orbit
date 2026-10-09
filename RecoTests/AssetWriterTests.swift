@@ -85,6 +85,23 @@ struct AssetWriterTests {
         #expect(FileManager.default.fileExists(atPath: result.url.path()))
     }
 
+    @Test func cancellingATakeInProgressLeavesNoFile() async throws {
+        let settings = makeStore()
+        let url = makeOutputURL()
+
+        let assetWriter = AssetWriter()
+        try assetWriter.setup(url: url, settings: settings, videoSize: videoSize)
+        try assetWriter.startWriting()
+        for index in 0..<5 {
+            assetWriter.appendVideoSample(try makeVideoSampleBuffer(at: CMTime(value: CMTimeValue(index), timescale: 60)))
+        }
+        assetWriter.pause()
+
+        assetWriter.cancel()
+
+        #expect(!FileManager.default.fileExists(atPath: url.path()))
+    }
+
     @Test func recordingWithoutAnySampleThrows() async throws {
         let settings = makeStore()
 

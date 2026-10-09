@@ -5,6 +5,7 @@
 //  Created by Diip3sh on 26.09.26.
 //
 
+import CoreGraphics
 import Foundation
 import Testing
 @testable import Reco
@@ -31,12 +32,14 @@ struct EditorProjectTests {
         project.motionBlur = 0.6
         project.cursor.smoothing = .off
         project.canvas.aspect = .portrait
+        project.canvas.fillsFrame = true
         project.canvas.background = .image
         project.canvas.imageBookmark = Data([1, 2, 3])
         project.canvas.backgroundBlur = 0.4
         project.canvas.borderWidth = 0.01
         project.canvas.borderColor = RGBAColor(red: 1, green: 0, blue: 0, alpha: 1)
         project.audio[track: 1].isMuted = true
+        project.masks = [MaskSegment(range: 1..<2, rects: [CGRect(x: 0.1, y: 0.2, width: 0.3, height: 0.4)], kind: .pixelate)]
 
         let data = try JSONEncoder().encode(project)
         let json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -105,6 +108,7 @@ struct EditorProjectTests {
 
         let audio = try JSONDecoder().decode(AudioMixSettings.self, from: Data(#"{ "tracks": [{ "volume": 0.5, "isMuted": true }] }"#.utf8))
         #expect(audio.tracks == [AudioMixSettings.Track(volume: 0.5, isMuted: true)])
+        #expect(!audio.tracks[0].enhancesVoice && audio.enhancedTracks.isEmpty)
         #expect(audio.clickVolume == 0 && audio.background == nil && !audio.addsAudio)
         #expect(AudioMixSettings(background: BackgroundAudio(bookmark: Data(), name: "Song")).addsAudio)
     }

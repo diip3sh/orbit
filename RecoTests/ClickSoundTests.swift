@@ -61,7 +61,8 @@ struct ClickSoundTests {
         let url = URL.temporaryDirectory.appending(path: "\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: url) }
         // Over a chunk's edge (a chunk is a second) and at the very start
-        let onsets = [0, 47_990, 3 * 48_000 + 123]
+        let lastOnset = 3 * 48_000 + 123
+        let onsets = [0, 47_990, lastOnset]
 
         try await ClickSoundWriter.write(onsets: onsets, frameCount: 4 * 48_000, to: url)
 
@@ -78,8 +79,9 @@ struct ClickSoundTests {
         }
         // Silent between the first click's end and the second's start, and after the last
         #expect(all[961..<47_990].allSatisfy { $0 == 0 })
-        #expect(all[(3 * 48_000 + 123 + 960)...].allSatisfy { $0 == 0 })
+        #expect(all[(lastOnset + 960)...].allSatisfy { $0 == 0 })
         // Lossless to 16 bits
-        #expect(abs(all[48_000 * 3 + 123 + 5] - ClickSound.samples[5]) < 1.0 / 32_768)
+        let difference: Float = abs(all[lastOnset + 5] - ClickSound.samples[5])
+        #expect(difference < 1.0 / 32_768)
     }
 }

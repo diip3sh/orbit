@@ -61,6 +61,59 @@ struct CompositionBuilderTests {
         #expect(abs(try await level(ofFrame: 6, in: exported) - (try await level(ofFrame: 15, in: source.asset))) <= 3)
     }
 
+    @Test func grabsTheFrameAtAnOutputTimeAsTheCompositionDrawsIt() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30) {
+            UInt8($0 * 8)
+        }
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        // Frames 6 to 14 are cut, so output frame 6 is source frame 15
+        let project = EditorProject(cuts: [0.2..<0.5])
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
+        let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
+
+        let image = try await FrameGrabber.image(of: composition, at: 6.0 / 30, timescale: source.timescale)
+
+        // On the canvas, at its size, with the video in the middle
+        #expect(CGFloat(image.width) == plan.canvas.size.width && CGFloat(image.height) == plan.canvas.size.height)
+        let level = Int(CIImage(cgImage: image).pixel(at: CGPoint(x: image.width / 2, y: image.height / 2))[1])
+        #expect(abs(level - (try await self.level(ofFrame: 15, in: source.asset))) <= 3)
+    }
+
+    @Test func exportPlaysAFasterPartFaster() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30, withTone: true) {
+            UInt8($0 * 8)
+        }
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        // Frames 6 to 17 at 4×: output 0.2..<0.3, so 0.7 s in all
+        var project = EditorProject()
+        project.speeds = [SpeedRange(range: 0.2..<0.6, rate: 4)]
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
+        var extra = ExtraAudio()
+        for part in SpeedAudio.parts(of: plan.timeMap, trackIDs: source.audioTrackIDs) {
+            let url = folder.appending(path: "fast-\(part.trackID).caf")
+            try await SpeedAudio.render(part, from: video, trackID: part.trackID, to: url)
+            extra.fastParts[part] = url
+        }
+        #expect(extra.fastParts.count == 1)
+        let composition = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio, extra: extra)
+        let output = ExportFormat.mp4.outputURL(for: video)
+
+        // The tone plays throughout, the fast part too
+        let mixed = try await mixedAudio(of: composition)
+        #expect(abs(Double(mixed.count) / TestRecording.sampleRate - 0.7) < 0.003)
+        #expect(peak(of: mixed, from: 0.22, to: 0.28) > 0.3)
+        try await ExportService.export(composition, to: output, as: ExportSettings(quality: .studio)) { _ in }
+
+        let exported = AVURLAsset(url: output)
+        #expect(abs(try await exported.load(.duration).seconds - 0.7) < 1.0 / 30)
+        // Output frame 7 shows source frame 10, frame 9 shows 18
+        for (frame, shown) in [(5, 5), (7, 10), (9, 18), (12, 21)] {
+            #expect(abs(try await level(ofFrame: frame, in: exported) - (try await level(ofFrame: shown, in: source.asset))) <= 3)
+        }
+    }
+
     @Test func mixFadesAtTheCutAndPlaysEachTrackAtItsVolume() async throws {
         defer { try? FileManager.default.removeItem(at: folder) }
         try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30, withTone: true)
@@ -102,8 +155,9 @@ struct CompositionBuilderTests {
 
         #expect(try await composition.asset.loadTracks(withMediaType: .audio).count == 2)
         #expect(composition.extraAudio.clicks == clicks)
-        #expect(abs(peak(of: mixed, from: 0.1, to: 0.12) - loudest * 0.5) < 0.02)
-        #expect(abs(peak(of: mixed, from: 0.3, to: 0.32) - loudest * 0.5) < 0.02)
+        let half: Float = loudest * 0.5
+        #expect(abs(peak(of: mixed, from: 0.1, to: 0.12) - half) < 0.02)
+        #expect(abs(peak(of: mixed, from: 0.3, to: 0.32) - half) < 0.02)
         // Nothing of the click in the cut, nor between the others
         #expect(peak(of: mixed, from: 0.13, to: 0.29) < 0.001)
 
@@ -114,6 +168,51 @@ struct CompositionBuilderTests {
         // The recording's own track is still muted, and without the file there is only it
         let plain = try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio)
         #expect(try await plain.asset.loadTracks(withMediaType: .audio).count == 1)
+    }
+
+    @Test func anEnhancedFilePlaysInItsTracksPlaceThroughTheCuts() async throws {
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try await TestRecording.write(to: video, size: CGSize(width: 64, height: 48), frameCount: 30, frameRate: 30, withTone: true)
+        let source = try await EditorSourceLoader.load(videoURL: video)
+        let trackID = try #require(source.audioTrackIDs.first)
+        // Cut 0.2 to 0.5; the enhanced file is a second of the tone at half the recording's level, on the source timeline
+        let project = EditorProject(cuts: [0.2..<0.5])
+        let plan = await RenderPlan.build(project: project, source: source, resources: .none)
+        let enhanced = folder.appending(path: "enhanced.caf")
+        try writeTone(amplitude: 0.25, duration: 1, to: enhanced)
+
+        let composition = try await CompositionBuilder.composition(
+            for: source, plan: plan, audio: project.audio, extra: ExtraAudio(enhanced: [trackID: enhanced])
+        )
+        let mixed = try await mixedAudio(of: composition)
+
+        // Still one track, 0.7 s long, at the file's level either side of the cut
+        #expect(try await composition.asset.loadTracks(withMediaType: .audio).count == 1)
+        #expect(abs(Double(mixed.count) / TestRecording.sampleRate - 0.7) < 0.003)
+        #expect(abs(peak(of: mixed, from: 0.1, to: 0.15) - 0.25) < 0.02)
+        #expect(abs(peak(of: mixed, from: 0.25, to: 0.3) - 0.25) < 0.02)
+
+        // A file that couldn't be rendered, or one for another track, leaves the recording's audio as it is
+        for extra in [ExtraAudio(enhanced: [trackID: nil]), ExtraAudio(enhanced: [trackID + 7: enhanced])] {
+            let own = try await mixedAudio(of: try await CompositionBuilder.composition(for: source, plan: plan, audio: project.audio, extra: extra))
+            #expect(peak(of: own, from: 0.1, to: 0.15) > 0.45)
+        }
+    }
+
+    /// Writes `duration` seconds of a 440 Hz tone at `amplitude`, mono at the test recording's rate, to `url`.
+    private func writeTone(amplitude: Float, duration: Double, to url: URL) throws {
+        let file = try AVAudioFile(
+            forWriting: url, settings: [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: TestRecording.sampleRate, AVNumberOfChannelsKey: 1],
+            commonFormat: .pcmFormatFloat32, interleaved: false
+        )
+        let count = Int(duration * TestRecording.sampleRate)
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(count)))
+        buffer.frameLength = AVAudioFrameCount(count)
+        let samples = try #require(buffer.floatChannelData)[0]
+        for index in 0..<count {
+            samples[index] = amplitude * Float(sin(2 * .pi * 440 * Double(index) / TestRecording.sampleRate))
+        }
+        try file.write(from: buffer)
     }
 
     @Test func loopsFillTheOutputExactlyAndTheLastOneIsCut() {

@@ -20,12 +20,14 @@ struct ContentFilterRulesTests {
     private func visibility(
         wallpaper: Bool = true,
         dock: Bool = true,
-        reco: Bool = true
+        reco: Bool = true,
+        desktopIcons: Bool = true
     ) -> ContentVisibility {
         ContentVisibility(
             showWallpaper: wallpaper,
             showDock: dock,
             showReco: reco,
+            showDesktopIcons: desktopIcons,
             ownBundleID: Self.ownBundleID
         )
     }
@@ -35,9 +37,11 @@ struct ContentFilterRulesTests {
     private let backstop = CapturableWindow(id: 3, bundleID: "com.apple.WindowManager", title: "Backstop Window")
     private let ownWindow = CapturableWindow(id: 4, bundleID: ContentFilterRulesTests.ownBundleID, title: "Reco")
     private let otherApp = CapturableWindow(id: 5, bundleID: "com.apple.Safari", title: "Safari")
+    private let desktopIcons = CapturableWindow(id: 6, bundleID: "com.apple.finder", title: "", layer: ContentFilterRules.desktopIconLevel)
+    private let finderWindow = CapturableWindow(id: 7, bundleID: "com.apple.finder", title: "Downloads")
 
     private var allWindows: [CapturableWindow] {
-        [wallpaper, dock, backstop, ownWindow, otherApp]
+        [wallpaper, dock, backstop, ownWindow, otherApp, desktopIcons, finderWindow]
     }
 
     private func excluded(_ visibility: ContentVisibility) -> Set<CGWindowID> {
@@ -98,6 +102,21 @@ struct ContentFilterRulesTests {
     @Test func displayExcludesEverythingHidden() {
         let ids = excluded(visibility(wallpaper: false, dock: false, reco: false))
         #expect(ids == [wallpaper.id, dock.id, backstop.id, ownWindow.id])
+    }
+
+    @Test func displayExcludesOnlyFindersIconWindowWhenDesktopIconsAreHidden() {
+        let hidden = visibility(desktopIcons: false)
+        #expect(ContentFilterRules.requiresRebuild(visibility: hidden))
+        #expect(excluded(hidden) == [desktopIcons.id])
+    }
+
+    @Test func otherWindowsAtTheIconLevelAreKept() {
+        let overlay = CapturableWindow(id: 30, bundleID: "com.apple.WindowManager", title: "", layer: ContentFilterRules.desktopIconLevel)
+        #expect(ContentFilterRules.excludedWindowIDs(from: [overlay], visibility: visibility(desktopIcons: false)).isEmpty)
+    }
+
+    @Test func applicationIgnoresDesktopIconVisibility() {
+        #expect(excepted(visibility(desktopIcons: false)).isEmpty)
     }
 
     @Test func displayNeverExcludesOtherApplications() {

@@ -10,10 +10,13 @@ upstream, and only run when a release is published by hand.
 Every push to `main` that touches the app is released automatically by
 `.github/workflows/fork-release.yml`. It:
 
-1. Runs the tests. A failing test stops the release.
-2. Builds a universal (Intel and Apple silicon) app, signed with the Apple Development certificate.
-3. Packs it into a DMG whose volume icon is the app's, and signs the DMG with the Sparkle key.
-4. Publishes a GitHub Release with the DMG and `appcast.xml`, Sparkle's update feed.
+1. Builds a universal (Intel and Apple silicon) app, signed with the Apple Development certificate.
+2. Packs it into a DMG whose volume icon is the app's, and signs the DMG with the Sparkle key.
+3. Publishes a GitHub Release with the DMG and `appcast.xml`, Sparkle's update feed.
+
+CI doesn't run the tests (removed 2026-10-09: the runner's Xcode 26 never finished type-checking
+`RecoTests`, 15 minutes against seconds locally, on two PRs and a release run). The pull request
+workflow lints and builds. **The local test run is the only test gate**, so it isn't optional.
 
 Installed copies read that feed (`SUFeedURL` in `Info.plist`) and offer the new version.
 
@@ -26,7 +29,7 @@ Installed copies read that feed (`SUFeedURL` in `Info.plist`) and offer the new 
 
 A push to `main` reaches users as an update, so check first:
 
-1. All tests pass locally (the `test` command in `CLAUDE.md`).
+1. All tests pass locally (the `test` command in `CLAUDE.md`). Nothing else runs them.
 2. SwiftLint is clean on the files you touched.
 3. The code compiles with **Xcode 26.6**. GitHub's `macos-26` runner has no Xcode 27, and its older
    Swift compiler can fail to infer types that Xcode 27 accepts, such as a closure returning a labeled

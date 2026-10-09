@@ -20,6 +20,13 @@ nonisolated struct CursorStyle: Codable, Equatable, Sendable {
     /// Glides the cursor back to where it started over the last second, so the video loops.
     var loops = false
 
+    /// How long, in seconds of output, the cursor holds still before the end, so the reach for Stop doesn't show.
+    /// 0 is off.
+    var stopDuration = 0.0
+
+    /// Whether the cursor leans the way it moves.
+    var tilts = false
+
     /// A multiple of the cursor's size on screen.
     var size = 1.0
 
@@ -75,6 +82,8 @@ extension CursorStyle {
         appearance = try container.decodeIfPresent(Appearance.self, forKey: .appearance) ?? appearance
         alwaysUsesArrow = try container.decodeIfPresent(Bool.self, forKey: .alwaysUsesArrow) ?? alwaysUsesArrow
         loops = try container.decodeIfPresent(Bool.self, forKey: .loops) ?? loops
+        stopDuration = try container.decodeIfPresent(Double.self, forKey: .stopDuration) ?? stopDuration
+        tilts = try container.decodeIfPresent(Bool.self, forKey: .tilts) ?? tilts
         size = try container.decodeIfPresent(Double.self, forKey: .size) ?? size
         smoothing = try container.decodeIfPresent(Smoothing.self, forKey: .smoothing) ?? smoothing
         animatesClicks = try container.decodeIfPresent(Bool.self, forKey: .animatesClicks) ?? animatesClicks
