@@ -41,7 +41,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
   && { pkill -x Reco; open /tmp/bc-build/dd/Build/Products/Debug/Reco.app; }
 ```
 
-- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 982 tests).
+- Tests: same command with `test` instead of `build -quiet` (Swift Testing, 965 tests).
 - Lint: `swiftlint lint --quiet <files>` — new code must be clean. Pre-existing warnings:
   `AssetWriter.swift` (file_length, type_body_length, 2× function_body_length),
   `RecorderViewModel.swift` (file_length, type_body_length) and `AreaSelectionOverlay.swift`
@@ -135,7 +135,9 @@ or indirection that doesn't pay for itself in an AVFoundation app.
 - Match the surrounding code. Name things by meaning. Comments say *why*, and record measured facts
   with their numbers (like `shadowTopFraction`) so nobody re-derives them.
 - Done means: zero compiler warnings, all tests pass, SwiftLint clean on touched files, new logic
-  has tests, and docs (this file, specs) match the code.
+  checked by tests, and docs (this file, specs) match the code.
+- Tests written to check a change are deleted once they pass, unless the user asks to keep them
+  (2026-10-09): they are for checking the work, not to pile up in `RecoTests`.
 
 ### Performance
 
@@ -853,24 +855,23 @@ slate gradient.
 Linear tokens came in. Its `color` group is the dark palette as given (herding.app's since 2026-10-09, Linear's before), `lightColor` the light one (Default's); its `role` group gives each role above a dark `$value`
 (a hex or an alias such as `{color.void}`) and, in `$extensions.com.reco.theme`, its `light`, `darkHighContrast` and
 `lightHighContrast` values. Edit the file (or replace it with another theme's, keeping the `role` names), run
-`scripts/apply-theme.py`, which rewrites every colour set in `Assets.xcassets/Theme` and `AccentColor`, then run the
-tests: `ThemeContrastTests` checks the new colours' contrast and `ThemeTokenFileTests` that the colour sets, the radii
-(`radius`) and the typefaces (`font`) match the file. Radii and typefaces are read by Swift, not generated: change
+`scripts/apply-theme.py`, which rewrites every colour set in `Assets.xcassets/Theme` and `AccentColor`, then check the
+colours' contrast against the rules below and that the radii (`radius`) and typefaces (`font`) still match the file:
+no test checks them. Radii and typefaces are read by Swift, not generated: change
 `EditorTheme`'s radii or `Typeface`'s families to match, and put a new font's file in `Reco/Fonts`.
 
 | File | Role |
 |---|---|
 | `theme/theme.tokens.json`, `scripts/apply-theme.py` | The theme's tokens; the generator of the colour sets (aliases resolved, loops and bad values refused) |
-| `RecoTests/ThemeTokens.swift`, `ThemeContrastTests.swift`, `ThemeTokenFileTests.swift` | Reads the token file and the colour sets from the source tree; the contrast rules; the sync checks |
 
 Key facts:
-- Contrast is tested, not eyeballed (`ThemeContrastTests`): in dark, light and both Increase Contrast variants, ink is at
+- Contrast is measured with the WCAG formula, not eyeballed: in dark, light and both Increase Contrast variants, ink is at
   least 7:1 on every surface, dim 4.5:1, faint (structure marks only, never text) and the accent 3:1, and `onAccent` on the
   accent fill 4.5:1 (7:1 with Increase Contrast; white on iris is 6:1).
-- The tests read the colours from the token file, not from AppKit: the Increase Contrast variants are compiled into
+- Measure the colours from the token file, not through AppKit: the Increase Contrast variants are compiled into
   `Assets.car` (`assetutil` lists them), but `NSColor(named:)` resolved under `NSAppearance(named:
-  .accessibilityHighContrastDarkAqua)` returns the normal value (2026-10-08, macOS 27), so a test through AppKit
-  silently checked only dark and light.
+  .accessibilityHighContrastDarkAqua)` returns the normal value (2026-10-08, macOS 27), so a check through AppKit
+  silently covers only dark and light.
 - **An accent fill carries `onAccent`, never a fixed colour:** it is page void on spray wash in dark (white on it is 1.7:1) and white on iris in light. That includes system prominent buttons,
   which draw white titles: use `.editorPrimary` instead.
 - **If glass comes back, it animates itself unless told not to.** `glassEffect` grows its shape as it appears (Apple's
@@ -1336,7 +1337,7 @@ only the headers it has built, so an unmeasured date is one below the fold and i
 |---|---|
 | `Library/Model/LibraryItem.swift` | Pure: kinds by name and type (`Reco_Web_` web, `-edited` export, `Reco_Screenshot_` PNG), companions, `LibrarySection` |
 | `Library/Model/LibraryDateGroup.swift` | Pure: `groups(of:now:calendar:)`, the date headers, and `active(in:headerTops:topLine:)`, which date the rail marks |
-| `Library/Model/LibraryOrientation.swift`, `LibrarySort.swift`, `MasonryPlacement.swift`, `Library/View/MasonryLayout.swift` | Pure: the Filter's shapes and orders, the grid's columns and slots (`LibraryGridTests`); the SwiftUI `Layout` on them |
+| `Library/Model/LibraryOrientation.swift`, `LibrarySort.swift`, `MasonryPlacement.swift`, `Library/View/MasonryLayout.swift` | Pure: the Filter's shapes and orders, the grid's columns and slots; the SwiftUI `Layout` on them |
 | `Library/Service/LibraryStore.swift` | Lists the recordings, screenshot and history folders (a folder read once when two are the same; a history name also saved is listed from the screenshot folder), thumbnails (movie frame or `CGImageSource`), trash |
 | `Library/Service/FolderWatcher.swift` | `DispatchSource` vnode writes on all three folders, 0.3 s settle, so new saves show at once (a folder that doesn't exist yet isn't watched until the window is reopened; the history folder is made at launch) |
 | `Library/ViewModel/LibraryViewModel.swift`, `Library/View/` | Sections, search, intents; `Actions` wired in `AppDelegate`; window in `EditorWindowManager.showLibrary()` |

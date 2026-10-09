@@ -11,8 +11,7 @@ import SwiftUI
 /// accent for the one action and what is chosen. Every colour is a colour set in `Assets.xcassets/Theme`, written from
 /// `theme/theme.tokens.json`: dark from herding.app's tokens with spray wash, light from Default's (snow, bone, chalk) with
 /// iris, and an Increase Contrast variant of each, so the app follows the user's appearance. Ink, dim and the accent
-/// meet WCAG AA (4.5:1 for text, 3:1 for faint marks and the accent) on every surface in all four variants
-/// (`ThemeContrastTests`).
+/// meet WCAG AA (4.5:1 for text, 3:1 for faint marks and the accent) on every surface in all four variants.
 enum EditorTheme {
 
     /// The window's ground (page void `#1c1c1a`).
