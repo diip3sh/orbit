@@ -808,11 +808,13 @@ Key facts:
 
 ### S1 — Editor design (`feat/editor-shell`, theme `feat/linear-theme`)
 
-Since 2026-10-08 every window and floating panel wears Linear's design tokens (extracted from linear.app by Refero): near-black solid
-surfaces one step apart (void `#08090a` for window grounds, carbon `#0f1011` for cards and floating panels,
-obsidian `#161718` for what floats over them, slate `#23252a` for control fills), text in three tones (ink, dim, faint),
-graphite hairlines instead of boxes, Inter for every label and JetBrains Mono for shortcuts, file names and code, and acid
-lime `#e4f222` as the one accent. Light mode (2026-10-08) takes the light end of Default's tokens (default.com, also by
+Since 2026-10-08 every window and floating panel wears design tokens extracted by Refero; dark mode's are herding.app's
+(2026-10-09, in place of Linear's): warm olive-charcoal solid surfaces one step apart (page void `#1c1c1a` for window grounds,
+graphite card `#232320` for panels and cards, ash step `#35352f` for what floats over them and for control fills, slate matte
+`#2e2e2b` for lanes), text in three tones (off-white ink `#fffffe`, sand label `#a3a29c`, fog text `#7f7e77`), bistre `#161615`
+hairlines darker than the surfaces instead of boxes, Inter for every label (herding's Styrene is a paid typeface) and JetBrains
+Mono for shortcuts, file names and code, and spray wash `#3fe0a6` as the one accent, with page void on it. Pewter `#45453e`
+and stone `#3e3e38` aren't used: sand label on them is 3.8:1 and 4.2:1. Light mode (2026-10-08) takes the light end of Default's tokens (default.com, also by
 Refero): bone `#f2f2f2` for window grounds and control fills, snow `#ffffff` for panels and cards, chalk `#cececf`
 hairlines, void `#0b0c0e` text, steel darkened to `#6b6b73` for dim text (steel `#71717a` is 4.3:1 on bone), fog
 `#858687` for faint marks, and iris `#314ef0` as the accent and its fill, with white on it (Signal Blue `#3b82f6` was
@@ -848,7 +850,7 @@ slate gradient.
 | `Editor/View/ExportOptions.swift`, `ExportProgressBar.swift` | Export's inspector: format, size and frame rate as `SegmentedChoice` tabs (an option can be disabled), the quality as rows with their estimated sizes, Export and Copy to Clipboard (side by side, or stacked when the column is narrow) pinned under a line; progress |
 
 **Changing the theme:** `theme/theme.tokens.json` is the source of every colour, in the W3C design-token format the
-Linear tokens came in. Its `color` group is the dark palette as given (Linear's), `lightColor` the light one (Default's); its `role` group gives each role above a dark `$value`
+Linear tokens came in. Its `color` group is the dark palette as given (herding.app's since 2026-10-09, Linear's before), `lightColor` the light one (Default's); its `role` group gives each role above a dark `$value`
 (a hex or an alias such as `{color.void}`) and, in `$extensions.com.reco.theme`, its `light`, `darkHighContrast` and
 `lightHighContrast` values. Edit the file (or replace it with another theme's, keeping the `role` names), run
 `scripts/apply-theme.py`, which rewrites every colour set in `Assets.xcassets/Theme` and `AccentColor`, then run the
@@ -864,12 +866,12 @@ tests: `ThemeContrastTests` checks the new colours' contrast and `ThemeTokenFile
 Key facts:
 - Contrast is tested, not eyeballed (`ThemeContrastTests`): in dark, light and both Increase Contrast variants, ink is at
   least 7:1 on every surface, dim 4.5:1, faint (structure marks only, never text) and the accent 3:1, and `onAccent` on the
-  accent fill 4.5:1 (7:1 with Increase Contrast; white on iris is 6:1). Linear's own ash `#62666d` was 2.66:1 on slate, so faint is a step lighter (`#72767d`).
+  accent fill 4.5:1 (7:1 with Increase Contrast; white on iris is 6:1).
 - The tests read the colours from the token file, not from AppKit: the Increase Contrast variants are compiled into
   `Assets.car` (`assetutil` lists them), but `NSColor(named:)` resolved under `NSAppearance(named:
   .accessibilityHighContrastDarkAqua)` returns the normal value (2026-10-08, macOS 27), so a test through AppKit
   silently checked only dark and light.
-- **An accent fill carries `onAccent`, never a fixed colour:** it is void on lime in dark (white on lime is 1.2:1) and white on iris in light. That includes system prominent buttons,
+- **An accent fill carries `onAccent`, never a fixed colour:** it is page void on spray wash in dark (white on it is 1.7:1) and white on iris in light. That includes system prominent buttons,
   which draw white titles: use `.editorPrimary` instead.
 - **If glass comes back, it animates itself unless told not to.** `glassEffect` grows its shape as it appears (Apple's
   own transition, `GlassEffectTransition` in SwiftUICore with `.matchedGeometry`, `.materialize` and `.identity`), so a

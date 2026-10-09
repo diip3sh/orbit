@@ -9,47 +9,47 @@ import SwiftUI
 
 /// Reco's look: surfaces one step apart, text in three tones (ink, dim, faint), hairlines instead of boxes, and one
 /// accent for the one action and what is chosen. Every colour is a colour set in `Assets.xcassets/Theme`, written from
-/// `theme/theme.tokens.json`: dark from Linear's tokens with acid lime, light from Default's (snow, bone, chalk) with
+/// `theme/theme.tokens.json`: dark from herding.app's tokens with spray wash, light from Default's (snow, bone, chalk) with
 /// iris, and an Increase Contrast variant of each, so the app follows the user's appearance. Ink, dim and the accent
 /// meet WCAG AA (4.5:1 for text, 3:1 for faint marks and the accent) on every surface in all four variants
 /// (`ThemeContrastTests`).
 enum EditorTheme {
 
-    /// The window's ground (void `#08090a`).
+    /// The window's ground (page void `#1c1c1a`).
     static let stage = Color(.stage)
 
-    /// Under the timeline (carbon `#0f1011`).
+    /// Under the timeline (graphite card `#232320`).
     static let panel = Color(.panel)
 
-    /// Cards and floating panels: the capture toolbar, the Quick Access card (carbon `#0f1011`).
+    /// Cards and floating panels: the capture toolbar, the Quick Access card (graphite card `#232320`).
     static let surface = Color(.surface)
 
-    /// What floats over a surface: tooltips, menus, the source picker (obsidian `#161718`).
+    /// What floats over a surface: tooltips, menus, the source picker (ash step `#35352f`).
     static let raised = Color(.raised)
 
-    /// Controls' own fill: secondary buttons, tracks, chosen tiles (slate `#23252a`).
+    /// Controls' own fill: secondary buttons, tracks, chosen tiles (ash step `#35352f`; pewter `#45453e` holds dim text at only 3.8:1).
     static let control = Color(.control)
 
-    /// Text (bone `#e5e5e6`).
+    /// Text (off-white ink `#fffffe`).
     static let ink = Color(.ink)
 
-    /// Values, notes and the other text under the main one (fog `#8a8f98`).
+    /// Values, notes and the other text under the main one (sand label `#a3a29c`).
     static let dim = Color(.dim)
 
-    /// Marks that only structure, like ruler ticks and section titles' chevrons (ash, a step lighter: `#72767d`).
+    /// Marks that only structure, like ruler ticks and section titles' chevrons (fog text `#7f7e77`).
     static let faint = Color(.faint)
 
-    /// Lines between areas and around pictures (graphite `#23252a`).
+    /// Lines between areas and around pictures (bistre border `#161615`, darker than the surfaces).
     static let hairline = Color(.hairline)
 
-    /// Lanes and quieter edges (obsidian `#161718`).
+    /// Lanes and quieter edges (slate matte `#2e2e2b`).
     static let softHairline = Color(.softHairline)
 
-    /// Lines, text and marks in the accent: the playhead, the selection, a chosen tab. Acid lime `#e4f222` in
+    /// Lines, text and marks in the accent: the playhead, the selection, a chosen tab. Spray wash `#3fe0a6` in
     /// dark, iris `#314ef0` in light.
     static let accent = Color.accentColor
 
-    /// The accent as a fill, with `onAccent` on it: void on lime in dark, white on iris in light.
+    /// The accent as a fill, with `onAccent` on it: page void on spray wash in dark, white on iris in light.
     static let accentFill = Color(.accentFill)
     static let onAccent = Color(.onAccent)
 
