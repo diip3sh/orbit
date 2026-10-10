@@ -56,7 +56,7 @@ nonisolated enum MotionFrameRenderer {
         let pointers = zip(pointerTips(of: scene, at: opens, plan: plan), pointerTips(of: scene, at: closes, plan: plan)).map { tips in
             tips.0.flatMap { from in tips.1.map { hypot($0.x - from.x, $0.y - from.y) } } ?? 0
         }
-        return ((travel + pointers).max() ?? 0) * plan.outputScale
+        return max(((travel + pointers).max() ?? 0) * plan.outputScale, seamTravel(of: scene, at: sceneTime, across: shutter, size: plan.outputSize))
     }
 
     /// The frame at `time` as a shutter open for an instant sees it, with layers drawn sharp where they are at `sharp`, the
@@ -79,6 +79,13 @@ nonisolated enum MotionFrameRenderer {
                 let width = bounds.width
                 frame = frame.transformed(by: CGAffineTransform(translationX: width * (1 - progress), y: 0))
                     .composited(over: previous.transformed(by: CGAffineTransform(translationX: -width * progress, y: 0)))
+            case .stack:
+                frame = stacked(previous.composited(over: background), under: frame.composited(over: background), progress: progress, size: bounds.size)
+            case .expand:
+                frame = expanded(
+                    previous.composited(over: background), into: frame.composited(over: background), from: expandSource(into: index, plan: plan),
+                    progress: progress, size: bounds.size
+                )
             case .glow, .dither, .ring:
                 frame = FieldRenderer.seam(
                     transition, between: (previous.composited(over: background), frame.composited(over: background)), progress: progress, at: time,

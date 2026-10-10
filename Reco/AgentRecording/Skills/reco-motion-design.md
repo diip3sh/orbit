@@ -70,14 +70,16 @@ What makes it good, and what yours must have:
    - Does the pointer land on what it clicks?
 
    Fix everything in one edit_motion call. Stop after three previews.
-6. **Export** with export_recording: format h264, resolution 2160.
+6. **Export** with export_recording: format hevc, resolution 2160, and no frame_rate: the film's own 60 fps (H.264 stops
+   at 30 fps at 4K).
 
 `reference/example.md` is a whole document of this kind. Read it if you're unsure how the parts fit.
 
 ## The look
 
 - canvas:
-  - `{"size": [1920, 1080], "frameRate": 30, "background": "#000000", "pacing": "beats"}`.
+  - `{"size": [1920, 1080], "frameRate": 60, "background": "#000000", "pacing": "beats"}`: 60 fps, so the morphs and
+    floods are smooth.
   - For a brand with a hue: field `ember` at `fieldStrength` 0.45, light in two corners and the middle dark.
   - Without a hue: `satin`.
 - style:
@@ -99,8 +101,9 @@ What makes it good, and what yours must have:
 
 ## Sound
 
-Give the document `"sound": {"style": "house"}`: a 125 BPM four-on-the-floor score like the reference's, fitted to your
-cuts. Put your cuts on its 0.48 s beat. Effects come from the film's own timing:
+Leave `sound` out: quiet chords that change with the scenes, and the effects from the film's own timing. Never `house` or
+`groove` unless the user asks for a beat: a drum loop under every change was "too punchy, the same sound everywhere".
+Keep your changes on the 0.48 s grid all the same. The effects:
 
 - a blip on each pop, a key on each press and click, a riser and hit on a flood, glass on a burst;
 - keys under kinetic type, a whoosh on a fast scroll.

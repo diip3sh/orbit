@@ -87,7 +87,7 @@ Camera moves sit on the scene: `"camera": {"moves": [...]}`.
 ## Canvas
 
 - `fieldStrength`, 0–1: how strongly the field shows. 0.45 tones a light look down to a glow.
-- `frameRate` 30, as the reference.
+- `frameRate` 60 (the reference is 30; morphs and floods are smoother at 60).
 
 ## Scenes and seams
 

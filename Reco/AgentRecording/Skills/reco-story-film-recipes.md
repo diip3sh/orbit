@@ -162,9 +162,9 @@ What the person says, typed big. Give it its own scene, 6–8 beats.
 
 ## Send, then the thread
 
-The box with the request and its attachments. The hand presses send on a beat and the box washes. Cut on the next beat
-to the thread: the request (54 px) at the top, its attachments under it, then the product's mark and "Thinking…", then
-its reply, two lines at 66 px.
+The box with the request and its attachments. The hand presses send on a beat and the box washes. On the next beat the
+thread comes up over it on a card (`"seam": "stack"` on the thread's scene): the request (54 px) at the top, its
+attachments under it, then the product's mark and "Thinking…", then its reply, two lines at 66 px.
 
 ```json
 "box group moves": [{"move": "wash", "start": 1.35}],
@@ -255,6 +255,15 @@ A diff, a log, a reply, a result: rebuilt as a card of glass 1540×640, its sour
 `#ff9b9b`, sign `−`), an added one on a green band (`#0ac86424`, text `#8be9b0`, sign `+`), each band 1460×62. A comment
 pill (620×92, `#1b1c1f`, 38 px, `type` from 0.45, a send disc 64) pops on it at [330, 245] and is sent with a
 click and a wash on a beat. The card's group takes `{"move": "rise", "start": 0}`.
+
+### Opening one of them
+
+To read one of the answers close, click it: in the bento's or the collage's last beat, a `click` on that tile's group
+pressed 0.35 s before the scene ends, and `"seam": "expand"` on the next scene. The next scene opens out of the tile.
+
+```json
+"the tile's group moves": [{"move": "pop", "start": 0.776}, {"move": "click", "start": 2.47}]
+```
 
 ### A bento that swaps
 

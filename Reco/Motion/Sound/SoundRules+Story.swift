@@ -28,6 +28,14 @@ nonisolated extension SoundRules {
     static let washShimmer = (length: 0.55, low: 2000.0, high: 10000.0, power: 1.6, level: -22.0, crossed: 0.62)
     static let washGlass = (note: 98.0, length: 1.0, brightness: 1.4, level: -27.0)
 
+    /// A stack: air as the card comes up, a soft low landing as it covers the frame (this share of the seam).
+    static let stackSwish = (length: 0.45, level: -20.0, send: 0.25)
+    static let stackLanding = (at: 0.6, high: 70.0, low: 44.0, length: 0.5, decay: 0.12, level: -24.0)
+
+    /// An expand: air opening out into its brightest moment (this share of the seam), a glass as the next scene fills the frame.
+    static let expandRiser = (length: 0.4, low: 800.0, high: 7000.0, power: 1.8, level: -22.0, peak: 0.35)
+    static let expandGlass = (note: 93.0, length: 1.2, brightness: 1.2, level: -25.0)
+
     /// A story film's cut: its swish this much quieter, no hit.
     static let softCut = -3.0
 

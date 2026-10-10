@@ -105,12 +105,11 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
     /// Which of Reco's skills to load, by what the user asked for (spec 0014).
     static let skillChoice = """
         Before anything else, choose Reco's skill for this film and load it with the Skill tool, then follow it: \
-        \(AgentSkill.launchFilmName) for the product's real UI up close, typed into and toured (the default); \
-        \(AgentSkill.motionDesignName) when the user asks for motion design, a UI animation or a concept film, or names \
-        movements such as morphs, a flood, a burst or kinetic type, and for a consumer app whose story is one flow through \
-        its UI; \(AgentSkill.storyFilmName) when the user asks for a story, one person's request, Lovable's style or type \
-        in a gradient, and for a product driven by a prompt, chat or agents whose answers are things it makes. For a film \
-        of 45 s or more, or when the user asks for two, load both.
+        \(AgentSkill.storyFilmName) for one person's job told through the product, its UI rebuilt as things that move (the \
+        default, for any product); \(AgentSkill.motionDesignName) when the user asks for motion design, a UI animation or a \
+        concept film, or names movements such as morphs, a flood, a burst or kinetic type; \(AgentSkill.launchFilmName) \
+        when the user asks for the real UI up close, typed into and toured, Raycast's style or a walk through its docs. \
+        When the user asks for two kinds, load both.
         """
 
     /// How a motion video is changed from its window's chat.

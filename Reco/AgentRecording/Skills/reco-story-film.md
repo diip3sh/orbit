@@ -1,6 +1,6 @@
 ---
 name: reco-story-film
-description: Reco's story film. One person's request is told through the product's own prompt or chat, with the motion of Lovable's chat launch. What they say is typed big, the product's controls are clicked in macro, and its answers arrive as things (tiles, cards, a collage, a result read close), cut on a 170 BPM grid with a sound for every transition. The look is the product's own theme over one of Reco's shader looks (dither, light, satin, or the aurora for a brand whose colour is a gradient), with seams in that look's language. Use it for a product driven by a prompt, chat, command bar or agents (AI builders, coding agents, assistants), and when the user asks for a story, a customer's journey, Lovable's style or type in a gradient. Its reference files are read one at a time, when a step says so.
+description: Reco's launch film, the default. One person's real job is told through the product's own UI, rebuilt as things that move, with the motion of Lovable's chat launch. What they say is typed big, the product's controls are clicked in macro, its answers arrive as things (tiles, cards, a collage, a result read close), and every scene comes out of the last through a transition with a reason (a click opening into the next, a view stacking over the last, the look's seam), on a 170 BPM grid with a sound for each. The look is the product's own theme over one of Reco's shader looks (dither, light, satin, or the aurora for a brand whose colour is a gradient). Use it for any product unless the user asks for another kind: prompts, chats and agents, and calendars, notes, editors, dashboards alike. Its reference files are read one at a time, when a step says so.
 ---
 
 # A story film, Reco's way
@@ -14,12 +14,12 @@ Two things make it, and they come from different places:
 
 ## The motion
 
-1. The prompt box arrives over the ground. Cut on a beat to macro: its agent or mode pill, a hand on it. Its menu opens
-   and the highlight follows the hand.
+1. The product's main control arrives over the ground: its prompt box, search, calendar, editor or new-task dialog. Cut on
+   a beat to macro: one of its pills or buttons, a hand on it. Its menu opens and the highlight follows the hand.
 2. The person talks: "I've got five bugs and one evening" is typed huge, the newest words in the gradient, the line
    sliding left behind a thin caret.
-3. Back in the box: the request, its attachments. The hand presses send and the gradient washes across the box. Cut to
-   the thread: "Thinking…" shimmers, the reply arrives word by word.
+3. Back in the box: the request, its attachments. The hand presses send and the gradient washes across the box. The
+   thread comes up over it: "Thinking…" shimmers, the reply arrives word by word.
 4. The answers are things, not screenshots: a bento of the product's actors popping from the middle out, then all
    swapping status on one beat; its outputs thrown out of a stack into a collage; one result read close, a comment sent.
 5. Big type with the logo.
@@ -47,9 +47,35 @@ What makes it good, and what yours must have:
   everywhere.
 - **Something on every cut.** On a cut, the layer that carries on is there on the scene's first frame, or the first new
   thing pops at 0. The ground is never alone after a cut. After one of the look's seams, the seam is the entrance.
+- **Never still.** Something changes on every beat: a hand, a pop, typing, a swap, a scroll, the camera. The next move
+  starts before the last has settled. A line being read is no pause: while it's read, a chip pops beside it, the hand
+  goes to the next control, the camera pushes in. Lovable's film is still in 8 % of its frames; a film of cards that
+  appear and wait is still in half of them, and reads as a slideshow.
+- **Out of each other.** The next thing comes out of what's there: a clicked card opens into the next scene, the thread
+  comes up over the box, a pill morphs into its next state, a button floods the frame. Read *Transitions*.
 
 `reference/film.md` has Lovable's film shot by shot with every timing measured. Read it before your first storyboard.
 Take its motion and timing, never its colours.
+
+## Transitions
+
+Every change of scene is a transition with a reason, and you can name it:
+
+| What happens | Seam on the next scene |
+|---|---|
+| The scene clicks something (a card, a button, send) and the next scene is what it opens | `expand`: the next scene opens out of the clicked thing, as an app opens from its icon. Make it the scene's last click, pressed in its last 0.5 s |
+| A new view of the product comes over the last: the thread over the box, a detail over a list, a form over a calendar | `stack`: the next scene rises on a card while the last sinks back |
+| The camera goes to another part of the same thing | `whip` |
+| The three turns: the opening, the first answer, the end words | the look's seam: `dither` or `glow` (below) |
+| The end words into the logo | `ring`, with `"field": "halo"` |
+| The next scene moves on its first frame: a voice line typing, a pop at 0, a scatter, a scroll | `cut`: the motion on the cut carries it |
+
+- Never the same seam on two scene changes running, and never more than two cuts running. A film of 15 scenes uses at
+  least four kinds.
+- Never a cut onto something still.
+- Inside a scene, a change of state is a move, not a cut: a pill `morph`s into its next size and colour, a button
+  `flood`s the frame, a done thing `burst`s. Their fields are in `../reco-motion-design/reference/moves.md`; read it when
+  you use one.
 
 ## The look
 
@@ -88,7 +114,7 @@ Choose one from the brand and keep the whole film in it (one look a film):
 
 ### The look's seams
 
-Cuts on the beat are the film's transition. The look's own seam (`dither` or `glow`) marks the three turns, never more:
+The look's own seam (`dither` or `glow`) marks the three turns, never more:
 
 - **The opening.** Name it on the first scene (`"seam": "dither"`): the ground swells in from black over 0.6 s and the
   box arrives in the seam by 1.4 s. Make that scene 6 beats and start nothing in it before 1.4 s.
@@ -98,7 +124,8 @@ Cuts on the beat are the film's transition. The look's own seam (`dither` or `gl
 - **Into the logo:** `"seam": "ring"` with `"field": "halo"` on the logo's scene (dither and light looks): a ring of
   smoke opens from the middle and leaves the logo in a halo in the brand's colour.
 
-The aurora and satin cut everywhere; the aurora's light goes out over the last 2 s.
+The aurora and satin have no seam of their own: their turns take `stack` or `expand`. The aurora's light goes out over the
+last 2 s.
 
 ### The gradient
 
@@ -112,17 +139,17 @@ something is sent. Nowhere else: the UI keeps its own colours.
 
 | The film | Skill |
 |---|---|
-| The product's real UI at work, close: typing, results, a tour (Raycast's look) | reco-launch-film |
-| A flow through the UI as motion design: states that morph, clicks, floods, bursts (Spotify Jam) | reco-motion-design |
-| One person's request told through the product's prompt, chat or agents | this one |
+| One person's job told through the product (the default) | this one |
+| The user asks for the real UI up close, typed into and toured, or Raycast's look | reco-launch-film |
+| The user asks for motion design: one object morphing state to state (Spotify Jam) | reco-motion-design |
 
 ## Method
 
 1. **Research.**
    - Call inspect_page on the product's site and the pages its navigation links to.
    - Find:
-     - the product's main input (a prompt, a chat, a command bar, a "new task" dialog) and its controls (mode or agent
-       pickers, send, mic);
+     - the product's main input (a prompt, a chat, a command bar, a "new task" dialog, a booking calendar, a notes editor)
+       and its controls (pickers, pills, send, confirm);
      - what the product gives back (agents, tasks, files, pull requests, previews, designs);
      - its theme: background, surfaces, border, text, fonts, button style, status colours, logo.
    - Web search what it's for, if you can.
@@ -153,7 +180,8 @@ something is sent. Nowhere else: the UI keeps its own colours.
    logo, the finish, the end words and the logo.
 7. **Check.** Call preview_motion and look at every frame:
    - Is every scene a whole number of beats?
-   - Does each shot answer the last?
+   - Does each shot answer the last, and does every scene change have its transition (*Transitions*)?
+   - Is anything still for more than a beat and a half?
    - Is it the product's theme everywhere, and the gradient only on new words, shimmers and washes?
    - Is the type at least 34 px, and is every answer whole in the frame (preview_motion names text that runs off it)?
    - Do labels sit clear of each other (attachments, chips, a swapped label)?
@@ -186,7 +214,8 @@ is a gradient. Read it for how the parts fit, and take your look from your brand
 - A screenshot of a page, a terminal, a transcript or a docs image as an answer: rebuild it as things.
 - Colours the product doesn't have: Lovable's gradient or aurora on another brand, a violet glow on a black and white one.
 - A flat, opaque card or box over the look's ground: every surface is glass.
-- Two looks in one film, a seam from another look, or more than the four seams above.
+- Two looks in one film, a seam from another look, or the look's seam at more than its three turns.
+- A cut onto something still; the same seam on two scene changes running.
 - An answer cut by the frame's edge, or small in a wide empty frame.
 - Text on attachments in a stack, or two labels in one place at once.
 - A fade between scenes, a slide in from the side, a title card.

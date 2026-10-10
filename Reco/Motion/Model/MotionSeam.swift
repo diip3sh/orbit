@@ -29,6 +29,14 @@ nonisolated enum MotionSeam: String, Codable, CaseIterable, Sendable {
     /// A cross-fade: rare in the references.
     case fade
 
+    /// The next scene rises from below on a card with rounded corners while this one sinks back, dims and blurs: a
+    /// sheet coming up over a page.
+    case stack
+
+    /// A rounded rectangle grows out of what the scene before clicked last (else its middle) to the whole frame, the
+    /// next scene inside it, while this one dives towards it: an app opening from its icon.
+    case expand
+
     /// A front of grainy light in the brand's colour crosses the frame out of the light's shape, the next
     /// scene behind it: the light looks' seam (``MotionField/Family/light``).
     case glow

@@ -66,7 +66,9 @@ nonisolated extension AgentToolCatalog {
         them), ui (the logo, shown alone last): New Raycast's ending in small mono caps, a word cut in every 0.42 s. Give it \
         0.42 s a word plus 4.5 s, 1.6 s more with ui; it's drawn on black.
         Seams, how a scene begins: cut (most), whip (the camera streaks out sideways and into the next scene, blurred), \
-        cutOnMotion (carries the camera's speed on), zoomThrough, blurCut, push, fade (rare); in a look's language, over \
+        cutOnMotion (carries the camera's speed on), zoomThrough, blurCut, push, fade (rare), stack (the next scene rises \
+        from below on a card over this one, which sinks back and dims, 0.7 s), expand (the next scene opens out of what this \
+        one clicked last, or its middle, as an app opens from its icon, 0.65 s); in a look's language, over \
         the whole frame: glow (light: a front of grainy light out of the next scene's field's shape, 0.9 s), dither \
         (dither: the frame turned to the accent's dots from its edges in, then into the next scene, 0.8 s), ring (a ring \
         of smoke opening from the middle, the next scene inside it, 1 s: into a closing). Glow or dither on the first scene, \
@@ -124,7 +126,7 @@ nonisolated extension AgentToolCatalog {
         "target":{"type":"string","description":"set_moves, remove: a layer id from the reply, or camera"},
         "index":{"type":"integer","description":"add_scene, move_scene: position from 0"},
         "canvas":{"type":"object"},"style":{"type":"object"},"sound":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
-        "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade","glow","dither","ring"]},
+        "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade","stack","expand","glow","dither","ring"]},
         "shot":{"type":"object","description":"{shot: macro|hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard|closing, text, detail, ui, items, region, view}"},
         "field":{"type":"string","enum":["satin","plain","ember","sunlit","bloom","orb","ripple","matrix","warp","swirl","tide","halo","aurora"]},
         "moves":{"type":"array","items":{"type":"object"}}},

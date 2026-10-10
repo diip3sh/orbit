@@ -57,7 +57,7 @@ nonisolated extension MotionFrameRenderer {
 
     /// The clicked layers' clicks and the quads they're clicked on at `time`: a group where its layers are, all of them (a
     /// button of a pill and its label).
-    private static func clickTargets(of scene: MotionPlan.Scene, at time: Double, plan: MotionPlan) -> [(clicks: [MotionPlan.Click], corners: [CGPoint])] {
+    static func clickTargets(of scene: MotionPlan.Scene, at time: Double, plan: MotionPlan) -> [(clicks: [MotionPlan.Click], corners: [CGPoint])] {
         guard scene.layers.contains(where: { !$0.clicks.isEmpty }) else { return [] }
         let placements = plan.placements(of: scene, at: time)
         return scene.layers.enumerated().compactMap { index, layer in

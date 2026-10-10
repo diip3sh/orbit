@@ -298,3 +298,58 @@ everywhere; we need transition sounds".
   that one glides from where it was, staying the hand (`pointerTurns`); only a pointer coming in from below is the arrow.
 - **Seventh run from the app** (`~/Movies/Reco/Orca 7-edited.mp4`, re-exported with the pointer fix; copied to
   `~/Desktop/Orca ADE v6.mp4`): 11 min, 32.5 s, HEVC 4K60, `ambient` with the transition sounds. "Merged" clears its check.
+
+### 2026-10-10: a readiness test on other companies, from the app
+
+Four runs, each from the app without help, timed from the URL to the exported file:
+
+| Company | How asked | Skill and look | Made in | Film |
+|---|---|---|---|---|
+| buildonto.dev | the address alone | launch film, matrix dither in its orange | 5.0 min | 25 s, H.264 4K30 |
+| cal.com | the address alone | launch film, satin | 11.7 min | 25 s, H.264 4K30 |
+| granola.ai | the address alone | launch film, bloom light | 14.9 min | 22 s, H.264 4K30 |
+| buildonto.dev | "in Lovable's story style" and a one-line story | story film, warp dither in its orange, glass | 12.0 min | 34 s, HEVC 4K60 |
+
+- The story film carried to a brand it had never seen: Onto's orange over warp, a founder hearing ChatGPT misquote their
+  price, the agents as a bento switching from HTML to Markdown, pages served as a collage (412 KB → 8.2 KB), the corrected
+  answer, "Clean Markdown. Same URL." and the logo in its halo.
+- The launch films from an address alone show the real UI crisply in macro (the cal.com booking typed through to its
+  confirmation), but each ends on the word-swap closing for 9–9.5 s, 38–42 % of the film, small mono caps on black; they
+  export H.264 at 30 fps; light UIs (cal.com's form, Granola's cream notes) are cropped hard at the frame's edges; and
+  Granola's run dropped its typing scenes because the site's own animations overwrote the typing, leaving static panels.
+
+### 2026-10-10: "repetitive, no transitions": motion measured, two transitions, the story film as the default
+
+The user, on the films above: very repetitive, one image and then the next, no real animation, transitions in some but not
+in most.
+
+- **Measured** (frames 0.1 s apart at 160×90 grey; a step under 1 level of change is still; closings left out):
+
+  | Film | Still | Median change |
+  |---|---|---|
+  | Lovable (reference) | 8 % | 4.3 |
+  | Spotify Jam (reference) | 18 % | 3.7 |
+  | Raycast (reference) | 49 % | 1.0 |
+  | Orca ADE v6, story film | 48 % | 1.1 |
+  | cal.com, Onto, Granola: launch films from the address | 43–69 % | 0.5–1.4 |
+  | cal.com, motion-design skill from the app | 34 % | 1.5 |
+
+  The launch films are four or five lifted stills, each held while the camera creeps 3 %, joined by hard cuts or whips,
+  then 9 s of closing. Nothing enters, morphs or carries over a cut. The camera in Orca v6 barely moves (median
+  0.1 % of the width a second); Lovable's holds too, so its motion is in what's on screen: typing, pops, swaps, scrolls.
+- **Two transitions between scenes** (`MotionFrameRenderer+Seams`), motion-blurred along their moving edge:
+  - `stack`: the next scene rises from below on a card with a sheet's corners (4 % of the height, square once it covers
+    the frame) over 0.7 s, out-quart; the scene before sinks to 0.92, darkens by 55 % and blurs 8 px at 1080p.
+  - `expand`: the next scene opens out of the box of the last layer the scene before clicked (where it is at that scene's
+    end; the middle 30 % without a click) to the whole frame over 0.65 s on the morph easing, filled as an app's first
+    screen grows out of its icon; the scene before dives 25 % closer towards it.
+  - Their sounds: a stack's swish and a soft low landing; an expand's air opening into a glass. No cut's hit.
+  - A blurred shadow must not be clamped to its extent first: clamping spread a card's edge row over the whole frame and
+    darkened the scene before by 45 % before the card had moved.
+- **The story film is the default** for Launch Video, for any product (calendars and notes as well as prompts): its UI
+  rebuilt as things in the product's theme. Its skill adds *Transitions*: each scene change has its reason (a click
+  opening the next: `expand`; a view coming over the last: `stack`; another part of the same thing: `whip`; the look's
+  seam at three turns; `ring` into the logo; a cut only onto motion), never the same seam twice running, at least four
+  kinds in a film; never still for more than a beat and a half; states change by `morph`, `flood` and `burst` inside a
+  scene. The launch film (Raycast's) is for the real UI up close when asked; motion design when asked, now at 60 fps in
+  HEVC with quiet chords instead of the house beat.

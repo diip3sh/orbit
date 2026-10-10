@@ -18,9 +18,8 @@ row on that page. Another product's rows need their own selector from inspect_pa
 ```json
 {
  "version": 1,
- "canvas": {"size": [1920, 1080], "frameRate": 30, "field": "ember", "fieldStrength": 0.45, "background": "#000000", "pacing": "beats"},
+ "canvas": {"size": [1920, 1080], "frameRate": 60, "field": "ember", "fieldStrength": 0.45, "background": "#000000", "pacing": "beats"},
  "style": {"text": "#ffffff", "dim": "#a7a7a7", "accent": "#1ed760", "face": "sans"},
- "sound": {"style": "house"},
  "assets": [
   {"id": "row1", "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", "viewport": [390, 844], "selector": "div:nth-of-type(1) > [data-encore-id=listRow]", "bare": true},
   {"id": "row2", "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", "viewport": [390, 844], "selector": "div:nth-of-type(2) > [data-encore-id=listRow]", "bare": true},
