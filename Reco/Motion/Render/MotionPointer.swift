@@ -77,7 +77,8 @@ nonisolated struct MotionPointer: Sendable {
         guard corners.count == 4, time >= appears, time <= click.leaves + fade else { return nil }
         let middle = CGPoint(x: corners.map(\.x).reduce(0, +) / 4, y: corners.map(\.y).reduce(0, +) / 4)
         let onScreen = hypot(corners[3].x - corners[0].x, corners[3].y - corners[0].y)
-        let target = CGPoint(x: middle.x, y: middle.y + tipBelow * onScreen)
+        // A drag's tip is on the selection's end, wherever it has got to (the start before its press)
+        let target = click.sweep.map { point(at: $0.tip(at: time), on: corners) } ?? CGPoint(x: middle.x, y: middle.y + tipBelow * onScreen)
         if time < lands {
             // From just below the frame, so it needs no fade
             let progress = MotionEasing.enter.progress((time - appears) / travel, duration: travel)
@@ -89,6 +90,12 @@ nonisolated struct MotionPointer: Sendable {
         return gone < 1 ? (CGPoint(x: target.x, y: target.y + 0.03 * canvas.height * gone), 1 - gone) : nil
     }
 
+    /// The point `fraction` of the way across and down a quad's corners (top-left, top-right, bottom-right, bottom-left).
+    private static func point(at fraction: CGPoint, on corners: [CGPoint]) -> CGPoint {
+        let mix = { (start: CGPoint, end: CGPoint, share: Double) in CGPoint(x: start.x + (end.x - start.x) * share, y: start.y + (end.y - start.y) * share) }
+        return mix(mix(corners[0], corners[1], fraction.x), mix(corners[3], corners[2], fraction.x), fraction.y)
+    }
+
     /// The pointer of `click` on a layer whose quad is `corners` (canvas points, top-left origin) at `time` in the
     /// scene, in output pixels from the bottom-left; `nil` while it isn't on screen.
     func image(
@@ -97,7 +104,8 @@ nonisolated struct MotionPointer: Sendable {
     ) -> CIImage? {
         guard let (position, opacity) = Self.tip(of: click, on: corners, at: time, canvas: canvas, from: from) else { return nil }
         // The arrow rising in from below; handed on from a press, it stays the hand, as Lovable's moving down its menu
-        let sprite = from == nil && time < click.press - Self.landing - 0.05 && click.press >= Self.carriedOver ? arrow : hand
+        // A drag across text is the arrow throughout, as IrukaDark's was
+        let sprite = click.sweep != nil || (from == nil && time < click.press - Self.landing - 0.05 && click.press >= Self.carriedOver) ? arrow : hand
         let pressing = time - (click.press - 0.04)
         let press = pressing > 0 && pressing < 0.2 ? 1 - Self.pressDepth * sin(.pi * pressing / 0.2) : 1
         // Both sprites at the hand's points to pixels, so the arrow is the hand's size as on screen

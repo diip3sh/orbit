@@ -1357,6 +1357,35 @@ Key facts:
   and hit, a wash's shimmer, a chime when things turn to done, a quieter swish alone on cuts, no keys under a voice.
   A scene's clicks share one pointer, gliding from press to press as the hand. Seventh run: `~/Desktop/Orca ADE v6.mp4`.
 
+### S11 — Flow films (`remotion`, spec 0016)
+
+A fourth kind of launch film, after two light AI launch reels (Vantae, IrukaDark; copies in
+`~/Movies/Reco/references/new/`): one unbroken flow on a white ground lit by the brand, every scene growing out of the last.
+It ships as the `reco-flow-film` skill, the prompt's default for a product whose own UI is light (the story film stays the
+default for a dark one).
+
+| File | Role |
+|---|---|
+| `Motion/Render/AuroraSetup+Haze.swift`, `FieldPalette`, `FieldRenderer`, `auroraField` | `haze`: the aurora's lights read through a ramp from paper white into `style.gradient` (pale to deep), five setups, wandering 6× as far and 5× as fast, swinging round |
+| `Motion/Render/MotionFrameRenderer+Seams.swift`, `FieldKernels.metal.txt` (`meltSeam`) | `dive` (the camera through the last click into the next scene, tilting) and `melt` (by light and place, grain, the brand's colours at the front); `transitioned` draws every seam |
+| `Motion/Grammar/MoveExpansion+Flow.swift` | `fly`: a mark on an arc onto its place, banking |
+| `Motion/Render/TextSelection.swift`, `MotionFrameRenderer+Flow.swift`, `MotionPointer.swift` | `select`: a text selected line by line as the arrow drags along its end (`Click.sweep`) |
+| `AgentRecording/Skills/reco-flow-film*.md` | The skill, the two reels measured, recipes, Vantae's reel rebuilt as the example |
+
+Key facts:
+- **The references.** Vantae is still in 1 % of its 0.1 s steps (median change 5.7), IrukaDark in 22 % (2.9); a film of
+  cards that appear and wait, in half. Vantae's ground is a deep blue blob (`#0436e7` → `#0b92f6`) turning round `#f5fbfd`,
+  IrukaDark's a pastel orb on `#fcfcfc`. Their music is a beat (126 BPM house, 176 BPM breaks); flow films keep the quiet
+  chords and a sound a transition.
+- **Stillness.** Vantae's rebuild was still in 53 % at first: pushes at intensity 0.4–0.9 over white move few pixels. With
+  the haze's wander and pushes at 2.5–3 it's 15 % (median 2.8). The skill asks for a camera move in every scene.
+- **Melt.** Ordered by light alone, a white frame dissolved at once into a frame of blue grain; 40 % of the order is place,
+  from the top left, so a plain frame has a front.
+- **Dive.** Its window follows the clicked thing as the scene before goes on under the seam (`expandSource(into:at:plan:)`):
+  fixed where it was at the cut, it slid off a drifting macro's send button.
+- **Light grounds** (`MotionPlan.isLight`): what goes behind a stack or expand dims to 0.15 black, not 0.55.
+- The lint lets a story film's first move land on its cut, and any scene after a seam other than a cut.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -1433,6 +1462,7 @@ should hold but need re-measuring.
 | S8 motion sound (spec 0013) | S1–S4 done: cue sheet from the plan, voices, room, finish, loudness, cache, preview and export, `set_sound`, the Sound section; the Supabase film's sheet matches the hand-made score. Next: the user's listening round (S5) |
 | S9 motion design (spec 0014) | D1–D5 done: morphs, floods, pops, clicks, bursts, ripples, letters, kinetic type, scrolls; their sounds; the `reco-motion-design` skill with references read on demand; look-dev matching the Spotify Jam reference. D6: a Spotify film made from the app (9 min, 30 s 4K, every named movement). D7: smoother after the user's review (letters, flood, bands, sharp particles, pointer, spin, chained pans, stillness lint, skill and example rebuilt). Next: the user's verdict |
 | S10 story films and score styles (spec 0015) | Reference measured (picture and music; the Spotify Jam's music too); `aurora`, the brand gradient, voice, reply, shimmer, wash, scatter, show/hide, UI glyphs, the hand in macro; `groove` and `house` scores fitted to the cuts; the `reco-story-film` skill; the reference rebuilt in the engine and checked frame by frame; `beats` lint. Orca ADE made from the app twice; the user found it "really bad". Rebuilt by hand to Lovable's bar (stills checked), and the engine (elongated aurora lights, SVG marks with `tint`, text-off-frame check) and skill (answers as coloured things, Lovable's type sizes) changed to match. A third run from the app follows the new recipes. The user found it short still: the look now comes from the product's theme over Reco's shader looks (Orca: `warp` dither, its seams, the halo), Lovable giving only the motion; the shutter swap fix, the opening's arrival, and the overlapping-text check. Then glass cards, a corner wash, 60 fps and a wider groove after the user's notes; then a sound for each transition instead of a beat. Next: the user's verdict, a listening round |
+| S11 flow films (spec 0016) | Both reels measured; `haze`, `dive`, `melt`, `fly`, `select` and their sounds; the `reco-flow-film` skill with Vantae's reel rebuilt as its example and IrukaDark's pieces checked; the default for light products. Next: films from the app, the user's verdict |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

@@ -682,7 +682,8 @@ inline float2 onPanel(float2 pixel, float3 rowX, float3 rowY, float3 rowW) {
 /// gradient, 0 to `shape.w` of reach across its `shape.x` pixels). `frame`: the output's width and height, seconds into
 /// the shot. `view`: the camera's zoom and shift (output pixels, y up) as the ground follows it. `l0`–`l4`: each light's
 /// middle (fractions of the frame, y down), radius across (frame heights) and strength, drifting a little so a held shot's
-/// light isn't a still. `e0`–`e2`: each light's elongation and angle (degrees, clockwise), two a vector.
+/// light isn't a still (`shape.y` times as far, `shape.z` times as fast, swinging round with it: the haze's wander).
+/// `e0`–`e2`: each light's elongation and angle (degrees, clockwise), two a vector.
 [[stitchable]] float4 auroraField(
     coreimage::sampler ramp, float4 frame, float4 view, float4 l0, float4 l1, float4 l2, float4 l3, float4 l4,
     float4 e0, float4 e1, float4 e2, float4 shape, coreimage::destination dest
@@ -697,13 +698,14 @@ inline float2 onPanel(float2 pixel, float3 rowX, float3 rowY, float3 rowW) {
     float reach = 0.0;
     for (int i = 0; i < 5; i++) {
         float phase = float(i) * 1.7;
-        float2 drift = 0.03 * float2(sin(0.21 * t + phase), cos(0.17 * t + 1.3 * phase));
+        float2 drift = 0.03 * shape.y * float2(sin(0.21 * shape.z * t + phase), cos(0.17 * shape.z * t + 1.3 * phase));
         float2 center = (lights[i].xy - 0.5) * float2(aspect, 1.0) + drift;
         float2 off = q - center;
-        float turn = shapes[i].y * 0.0174532925;
+        // The haze's long lights also swing round as they wander (none for the aurora, whose reach is 1)
+        float turn = shapes[i].y * 0.0174532925 + 0.08 * (shape.y - 1.0) * sin(0.13 * shape.z * t + 2.1 * phase);
         float along = (off.x * cos(turn) + off.y * sin(turn)) / (lights[i].z * shapes[i].x);
         float across = (off.y * cos(turn) - off.x * sin(turn)) / lights[i].z;
-        float strength = lights[i].w * (1.0 + 0.05 * sin(0.29 * t + phase));
+        float strength = lights[i].w * (1.0 + 0.05 * sin(0.29 * shape.z * t + phase));
         reach += strength * exp(-along * along - across * across);
     }
     float u = clamp(reach / shape.w, 0.0, 1.0) * (shape.x - 1.0) + 0.5;
@@ -726,5 +728,32 @@ inline float2 onPanel(float2 pixel, float3 rowX, float3 rowY, float3 rowW) {
     float u = (1.0 - clamp(max(behind, 0.0) / shape.w, 0.0, 1.0)) * (front.w - 1.0) + 0.5;
     float3 color = ramp.sample(ramp.transform(float2(u, 0.5))).rgb;
     return float4(color * light, light);
+}
+#endif
+
+#ifdef meltSeam_ONLY
+/// A melt (``MotionSeam/melt``): `before` dissolves into `next` along a front ordered by the light of `order` (the scene before,
+/// blurred: its darks first) and by place (from the top left), its edge broken by grain; at the front the scene before runs
+/// down a little and turns to the brand's colours, `deep` at its heart and `pale` round it (Vantae's room going blue and white
+/// into its ground). `frame`: progress, the front's width, the drip (pixels), the grain's cell (pixels). `shape`: the frame's
+/// size, the share of the order by place, how much grain breaks the front.
+[[stitchable]] float4 meltSeam(
+    coreimage::sampler before, coreimage::sampler next, coreimage::sampler order, float4 frame, float4 shape, float4 deep, float4 pale,
+    coreimage::destination dest
+) {
+    float2 p = dest.coord();
+    float width = frame.y;
+    float front = frame.x * (1.0 + 2.0 * width) - width;
+    float grain = fract(sin(dot(floor(p / frame.w), float2(12.9898, 78.233))) * 43758.5453) - 0.5;
+    float light = dot(order.sample(order.transform(p)).rgb, float3(0.2126, 0.7152, 0.0722));
+    float place = 0.5 * (p.x / shape.x + 1.0 - p.y / shape.y);
+    float key = mix(light, place, shape.z) + shape.w * grain;
+    float melted = smoothstep(key - width, key + width, front);
+    // Coming loose a little before it goes, running down
+    float loose = smoothstep(key - 3.0 * width, key + width, front);
+    float3 old = before.sample(before.transform(p + float2(0.0, frame.z * loose))).rgb;
+    float band = saturate(1.0 - abs(front - key) / (2.5 * width));
+    float3 tinted = mix(old, mix(pale.rgb, deep.rgb, band), 0.9 * band);
+    return float4(mix(tinted, next.sample(next.transform(p)).rgb, melted), 1.0);
 }
 #endif

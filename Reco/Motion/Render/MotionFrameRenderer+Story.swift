@@ -172,7 +172,7 @@ nonisolated extension MotionFrameRenderer {
         )
     }
 
-    private static func ciColor(_ color: RGBAColor) -> CIColor {
+    static func ciColor(_ color: RGBAColor) -> CIColor {
         CIColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha)
     }
 }

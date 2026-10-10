@@ -118,7 +118,8 @@ nonisolated extension SoundCueList {
 
 nonisolated extension SoundCueList {
 
-    /// Motion design's events (spec 0014): pops, presses and clicks, floods, bursts, kinetic keys and fast scrolls.
+    /// Motion design's events (spec 0014): pops, presses and clicks, floods, bursts, kinetic keys and fast scrolls; flights and
+    /// selections (spec 0016).
     mutating func design(in plan: MotionPlan, document: MotionDocument, before end: Double) {
         for (index, scene) in plan.scenes.enumerated() where scene.start < end && document.scenes.indices.contains(index) {
             let layers = Self.flattened(document.scenes[index].layers)
@@ -144,7 +145,7 @@ nonisolated extension SoundCueList {
             let notes = SoundRules.popNotes
             add(.blip(note: notes[pops % notes.count], length: 0.3), .effects, at: time, level: SoundRules.popLevel, pan: 0.1, send: 0.3)
             pops += 1
-        case .press, .click:
+        case .press, .click, .select:
             add(.key(.letter), .effects, at: time, level: SoundRules.pressLevel, send: SoundRules.keySend)
         case .flood:
             flood(at: time, filling: time + duration * ShapeMorph.floodDip / (ShapeMorph.floodDip + ShapeMorph.floodFill))
@@ -154,8 +155,8 @@ nonisolated extension SoundCueList {
                 add(.glass(note: glass.notes[note], length: glass.length, brightness: 1.2), .effects, at: time, level: glass.levels[note],
                     pan: glass.pans[note], send: glass.send)
             }
-        case .wash, .show:
-            story(move.kind, at: time)
+        case .wash, .show, .fly:
+            story(move.kind, at: time, lasting: duration)
         case .scatter where move.target == nil:
             // A collage thrown out of its stack: a whoosh at its fastest, early in the throw
             add(.whoosh, .effects, at: time + duration * 0.3, level: SoundRules.whooshLevel - 6, send: 0.2)

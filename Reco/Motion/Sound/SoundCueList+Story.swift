@@ -6,10 +6,11 @@
 import Foundation
 
 /// A story film's transitions (spec 0015), each with its own sound: the look's seams, the ring into the logo, a card stacking
-/// over a scene, a click opening into the next, a wash as something is sent, a swap to done.
+/// over a scene, a click opening into the next or the camera diving through it, a melt, a wash as something is sent, a swap
+/// to done.
 nonisolated extension SoundCueList {
 
-    /// The opening's arrival, every seam drawn in a look's language, and every stack and expand.
+    /// The opening's arrival, every seam drawn in a look's language, and every stack, expand, dive and melt.
     mutating func seams(of plan: MotionPlan, before end: Double) {
         for (index, scene) in plan.scenes.enumerated() where scene.start < end {
             if index == 0, let arrival = scene.arrival {
@@ -53,17 +54,37 @@ nonisolated extension SoundCueList {
             let open = time + riser.peak * duration
             add(.riser(length: riser.length, low: riser.low, high: riser.high, power: riser.power), .effects, at: open, level: riser.level, send: 0.3)
             add(.glass(note: glass.note, length: glass.length, brightness: glass.brightness), .effects, at: open, level: glass.level, pan: 0.1, send: 0.45)
+        case .dive:
+            let (riser, landing) = (SoundRules.diveRiser, SoundRules.diveLanding)
+            let fastest = time + riser.peak * duration
+            add(.riser(length: riser.length, low: riser.low, high: riser.high, power: riser.power), .effects, at: fastest, level: riser.level, send: 0.3)
+            add(.whoosh, .effects, at: fastest, level: SoundRules.whooshLevel - 8, send: 0.2)
+            let lands = time + landing.at * duration
+            add(.thump(high: landing.high, low: landing.low, length: landing.length, decay: landing.decay), .effects, at: lands, level: landing.level, send: 0.1)
+            add(.glass(note: landing.note, length: 1.2, brightness: 1.1), .effects, at: lands, level: landing.glass, pan: -0.1, send: 0.45)
+        case .melt:
+            let (shimmer, glass) = (SoundRules.meltShimmer, SoundRules.meltGlass)
+            let through = time + shimmer.peak * duration
+            add(.riser(length: shimmer.length, low: shimmer.low, high: shimmer.high, power: shimmer.power), .effects, at: through, level: shimmer.level,
+                send: 0.4)
+            add(.glass(note: glass.note, length: glass.length, brightness: glass.brightness), .effects, at: through, level: glass.level, pan: 0.15, send: 0.5)
         default:
             break
         }
     }
 
-    /// A story move's sound: a wash's shimmer, a swap's chime.
-    mutating func story(_ kind: MotionMove.Kind, at time: Double) {
+    /// A story or flow move's sound: a wash's shimmer, a swap's chime, a flight's whoosh and landing.
+    mutating func story(_ kind: MotionMove.Kind, at time: Double, lasting duration: Double) {
         if kind == .wash {
             wash(at: time)
         } else if kind == .show {
             done(at: time)
+        } else if kind == .fly {
+            // Air at its fastest, early in the swoop, and a glass as it lands
+            add(.whoosh, .effects, at: time + duration * SoundRules.flyWhoosh, level: SoundRules.whooshLevel - 7, send: 0.2)
+            let glass = SoundRules.flyGlass
+            add(.glass(note: glass.note, length: glass.length, brightness: glass.brightness), .effects, at: time + duration * glass.at, level: glass.level,
+                pan: 0.1, send: 0.45)
         }
     }
 

@@ -37,6 +37,8 @@ nonisolated extension MoveExpansion {
         case .scatter:
             guard let from = move.target else { return [:] }
             return scatterTracks(of: move, from: from, start: start, duration: duration, in: context)
+        case .fly:
+            return flyTracks(of: move, start: start, duration: duration, in: context)
         default:
             return [:]
         }

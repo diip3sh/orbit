@@ -61,7 +61,8 @@ nonisolated enum MotionLint {
             findings += textFindings(layers, scene: scene, canvas: document.canvas, context: context)
             // The last scene may hold: a logo on its own as the light goes out
             let isEndCard = source.shot?.kind.isEnding == true || (document.scenes.count > 1 && source.id == document.scenes.last?.id)
-            findings += timingFindings(layers, scene: scene, isEndCard: isEndCard, onBeat: SoundRules.beat(document.sound.style) != nil, live: live)
+            let onBeat = SoundRules.beat(document.sound.style) != nil || SoundCueSheet.isStory(document)
+            findings += timingFindings(layers, scene: scene, isEndCard: isEndCard, onBeat: onBeat, live: live)
             if source.shot?.kind == .hook, let text = source.shot?.text, ReadingTime.words(in: text) > 6 {
                 findings.append(Finding(rule: .hookLength, scene: scene.id, message: "A hook is six words at most; this one has \(ReadingTime.words(in: text))."))
             }
@@ -111,13 +112,13 @@ nonisolated enum MotionLint {
         }
     }
 
-    /// One look a film: its scenes' fields from one family (satin, light, dither or aurora; plain and the halo go
+    /// One look a film: its scenes' fields from one family (satin, light, dither, aurora or haze; plain and the halo go
     /// with any), and a seam in a field's language only into a scene of that language. A new technique a
     /// shot is a generated video's tell (`docs/references/style-guide.md`). A cut keeps the ground: bolt.new's
     /// cut in closer on its prompt jumped from a blob of light to two corners of it.
     private static func lookFindings(_ document: MotionDocument) -> [Finding] {
         var findings: [Finding] = []
-        let looks: Set<MotionField.Family> = [.satin, .light, .dither, .aurora]
+        let looks: Set<MotionField.Family> = [.satin, .light, .dither, .aurora, .haze]
         var first: (family: MotionField.Family, scene: String)?
         var before: MotionField?
         for scene in document.scenes where scene.shot?.kind != .closing {
@@ -219,8 +220,9 @@ nonisolated enum MotionLint {
         }
     }
 
-    /// `onBeat`: the film is cut to a beat, where a scene's first move lands on its cut (Lovable's tiles and words, the
-    /// Spotify Jam's pill): waiting 0.1 s left the ground alone on screen at every cut of an Orca film.
+    /// `onBeat`: the film is cut to a beat or tells a story, where a scene's first move lands on its cut (Lovable's tiles and
+    /// words, the Spotify Jam's pill): waiting 0.1 s left the ground alone on screen at every cut of an Orca film. After a seam
+    /// other than a cut, the seam is the entrance, and a move may start under it.
     private static func timingFindings(_ layers: [TimedLayer], scene: MotionScene, isEndCard: Bool, onBeat: Bool, live: [String: Double]) -> [Finding] {
         var findings: [Finding] = []
         let cameraMoves = scene.camera.moves.map { MoveExpansion.timing(of: $0, in: MoveContext(sceneDuration: scene.duration, canvas: .zero)) }
@@ -235,7 +237,7 @@ nonisolated enum MotionLint {
         }.sorted { $0.start < $1.start }
 
         if let first = starts.first?.start {
-            if first < 0.1, !onBeat {
+            if first < 0.1, !onBeat, scene.seam == .cut {
                 findings.append(Finding(rule: .firstMove, scene: scene.id, message: "Motion starts at the cut (\(first.formatted()) s): start 0.1–0.3 s after it."))
             } else if first > 0.3, !cameraMovesAtCut {
                 findings.append(Finding(rule: .firstMove, scene: scene.id, message: "Nothing moves for \(first.formatted()) s after the cut: start 0.1–0.3 s after it."))

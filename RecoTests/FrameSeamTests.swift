@@ -17,7 +17,7 @@ struct FrameSeamTests {
 
     /// The card comes up from below over the scene before, which darkens as it goes back; it ends as the next scene.
     @Test func aStackRisesOverTheSceneBefore() throws {
-        let draw = { (progress: Double) in MotionFrameRenderer.stacked(Self.before, under: Self.next, progress: progress, size: Self.size) }
+        let draw = { (progress: Double) in MotionFrameRenderer.stacked(Self.before, under: Self.next, progress: progress) }
 
         let (start, plain) = (try Self.color(of: draw(0), at: CGPoint(x: 120, y: 60)), try Self.color(of: Self.before, at: .zero))
         #expect(start == plain, "\(start) \(plain)")
@@ -33,7 +33,7 @@ struct FrameSeamTests {
     @Test func anExpandOpensOutOfItsSource() throws {
         let source = CGRect(x: 180, y: 60, width: 40, height: 20)
         let draw = { (progress: Double) in
-            MotionFrameRenderer.expanded(Self.before, into: Self.next, from: source, progress: progress, size: Self.size)
+            MotionFrameRenderer.expanded(Self.before, into: Self.next, from: source, progress: progress)
         }
 
         let start = try draw(0.1)
@@ -62,11 +62,11 @@ struct FrameSeamTests {
     @Test func theCardIsBlurredWhileItTravels() async throws {
         let json = #"{"version": 1, "scenes": [{"id": "one", "duration": 2}, {"id": "two", "duration": 2, "seam": "stack"}]}"#
         let plan = await MotionPlan.build(try JSONDecoder().decode(MotionDocument.self, from: Data(json.utf8)), bundle: URL.temporaryDirectory)
-        let travel = { (time: Double) in MotionFrameRenderer.seamTravel(of: plan.scenes[1], at: time, across: 1.0 / 60, size: plan.outputSize) }
+        let travel = { (time: Double) in MotionFrameRenderer.seamTravel(into: 1, at: time, across: 1.0 / 60, plan: plan) }
 
         #expect(travel(0.1) > 10)
         #expect(travel(1) == 0)
-        #expect(MotionFrameRenderer.seamTravel(of: plan.scenes[0], at: 0.1, across: 1.0 / 60, size: plan.outputSize) == 0)
+        #expect(MotionFrameRenderer.seamTravel(into: 0, at: 0.1, across: 1.0 / 60, plan: plan) == 0)
     }
 
     /// A stack sounds as air and a soft landing, an expand as air opening and a glass; neither as a cut's swish and hit.

@@ -27,7 +27,9 @@ nonisolated extension AgentToolCatalog {
         middle), orb (a lit sphere), ripple (rings from the middle); the dither look's ordered dots in the accent: matrix \
         (a lit sphere), warp (liquid streaks), swirl (arms turning), tide (a wave from below); halo (a ring of smoke); \
         aurora (black with soft lights in the brand's gradient from a corner or two, in a new place every scene, the last \
-        ringing a dark middle and going out before the end: Lovable's; under type and rebuilt UI alike). Light, dither and \
+        ringing a dark middle and going out before the end: Lovable's; under type and rebuilt UI alike); haze (white with \
+        style.gradient as soft light, pale to its last colour at a strong light's heart, drifting: a pastel orb behind type, \
+        a deep blob sweeping in from a corner, faint corners under UI, a new setup every scene: light UI). Light, dither and \
         halo go under a macro's glass, or under type toned down (fieldStrength 0.45).
 
         Asset: {id, url, selector, viewport [w,h] (default [1440,900]), hide [selectors], glass}: an element of a real page, \
@@ -68,7 +70,10 @@ nonisolated extension AgentToolCatalog {
         Seams, how a scene begins: cut (most), whip (the camera streaks out sideways and into the next scene, blurred), \
         cutOnMotion (carries the camera's speed on), zoomThrough, blurCut, push, fade (rare), stack (the next scene rises \
         from below on a card over this one, which sinks back and dims, 0.7 s), expand (the next scene opens out of what this \
-        one clicked last, or its middle, as an app opens from its icon, 0.65 s); in a look's language, over \
+        one clicked last, or its middle, as an app opens from its icon, 0.65 s), dive (the camera tilts and flies through \
+        what this one clicked last, or its middle, into the next scene seen through it, 0.8 s), melt (this scene dissolves \
+        into the next by its own light, darks first, in grain, its front in the brand's colours, 0.75 s: an image into the \
+        ground, the ground into a picture); in a look's language, over \
         the whole frame: glow (light: a front of grainy light out of the next scene's field's shape, 0.9 s), dither \
         (dither: the frame turned to the accent's dots from its edges in, then into the next scene, 0.8 s), ring (a ring \
         of smoke opening from the middle, the next scene inside it, 1 s: into a closing). Glow or dither on the first scene, \
@@ -97,6 +102,9 @@ nonisolated extension AgentToolCatalog {
         places); show and hide (there from, gone from, start: contents swapping on a beat). A camera {position [x, y, z]} \
         starts a scene close: z = 1728 × (1 − 1/zoom) at 1080p (3.5× is 1234). A click within 0.6 s of its scene's start \
         has the pointer there from the cut; in a close scene the pointer is as large as the camera shows it.
+        Flow films (the reco-flow-film skill has recipes): fly (a mark or icon flies in on an arc onto its place, banking, \
+        0.9 s; direction the way it travels, left by default: in from the right); select {color} (text: selected part by part \
+        as the arrow drags across it, 60 characters a second, held after).
 
         Sound: every video gets a score and quiet effects made from its own timing. sound.style picks the score: ambient \
         (the default: a chord a shot, a hit as the first UI cuts in, Raycast's closing), groove (170 BPM drum and bass, \
@@ -126,9 +134,10 @@ nonisolated extension AgentToolCatalog {
         "target":{"type":"string","description":"set_moves, remove: a layer id from the reply, or camera"},
         "index":{"type":"integer","description":"add_scene, move_scene: position from 0"},
         "canvas":{"type":"object"},"style":{"type":"object"},"sound":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
-        "duration":{"type":"number"},"seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade","stack","expand","glow","dither","ring"]},
+        "duration":{"type":"number"},
+        "seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade","stack","expand","dive","melt","glow","dither","ring"]},
         "shot":{"type":"object","description":"{shot: macro|hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard|closing, text, detail, ui, items, region, view}"},
-        "field":{"type":"string","enum":["satin","plain","ember","sunlit","bloom","orb","ripple","matrix","warp","swirl","tide","halo","aurora"]},
+        "field":{"type":"string","enum":["satin","plain","ember","sunlit","bloom","orb","ripple","matrix","warp","swirl","tide","halo","aurora","haze"]},
         "moves":{"type":"array","items":{"type":"object"}}},
         "required":["op"],"additionalProperties":false}}},
         "required":["operations"],"additionalProperties":false}

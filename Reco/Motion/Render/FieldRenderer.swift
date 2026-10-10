@@ -86,7 +86,9 @@ nonisolated enum FieldRenderer {
     ]
 
     /// Reco's own, drawn in stages instead of as one look: satin, its grain, glass, the seams.
-    private static let ownKernels = ["auroraField", "satinGround", "satinFinish", "filmGrainNoise", "filmGrain", "glassPanel", "glowSeam", "ditherSeam", "ringSeam", "washLight"]
+    private static let ownKernels = [
+        "auroraField", "satinGround", "satinFinish", "filmGrainNoise", "filmGrain", "glassPanel", "glowSeam", "ditherSeam", "ringSeam", "washLight", "meltSeam"
+    ]
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "FieldRenderer")
 
@@ -141,6 +143,9 @@ nonisolated enum FieldRenderer {
         }
         if field == .aurora {
             return aurora(AuroraSetup.forShot(shot.index, isLast: shot.isLast), palette: palette, at: time, size: size, shot: shot) ?? plain
+        }
+        if field == .haze {
+            return aurora(AuroraSetup.haze(shot.index), palette: palette, isHaze: true, at: time, size: size, shot: shot) ?? plain
         }
         guard let look = looks[field], let kernel = kernels[look.kernel] else { return plain }
         // Reference pixels per output pixel, and drawn pixels per output pixel. Dither stays whole:
@@ -332,9 +337,11 @@ nonisolated extension FieldRenderer {
     static let auroraRampPixels = 1024
 
     /// `setup` at `time` seconds into the video: its soft lights summed and read through the ramp of `palette`'s stops
-    /// (``AuroraSetup/core`` into the brand's gradient), following the camera as ground far behind the planes.
-    private static func aurora(_ setup: AuroraSetup, palette: FieldPalette, at time: Double, size: CGSize, shot: Shot) -> CIImage? {
-        guard let kernel = kernels["auroraField"], let ramp = auroraRamp(palette) else { return nil }
+    /// (``AuroraSetup/core``, or the haze's ``AuroraSetup/hazeCore``, into the brand's gradient), following the camera as
+    /// ground far behind the planes. The haze's lights wander further and faster (``AuroraSetup/hazeDrift``).
+    private static func aurora(_ setup: AuroraSetup, palette: FieldPalette, isHaze: Bool = false, at time: Double, size: CGSize, shot: Shot) -> CIImage? {
+        guard let kernel = kernels["auroraField"], let ramp = auroraRamp(palette, isHaze: isHaze) else { return nil }
+        let drift = isHaze ? AuroraSetup.hazeDrift : (reach: 1, rate: 1)
         let since = time - shot.start
         // The video's first shot: its light comes in from nothing
         let swell = shot.start == 0 && shot.index == 0 ? MotionEasing.enter.progress(min(since / AuroraSetup.swell.length, 1), duration: 1) : 1
@@ -354,19 +361,20 @@ nonisolated extension FieldRenderer {
             ramp,
             CIVector(x: size.width, y: size.height, z: since, w: 0),
             CIVector(x: pow(shot.zoom, groundParallax), y: groundParallax * shot.shift.dx, z: -groundParallax * shot.shift.dy, w: 0)
-        ] + lights + shapes + [CIVector(x: Double(auroraRampPixels), y: 0, z: 0, w: AuroraSetup.rampEnd)]
+        ] + lights + shapes + [CIVector(x: Double(auroraRampPixels), y: drift.reach, z: drift.rate, w: AuroraSetup.rampEnd)]
         let rampExtent = ramp.extent
         return kernel.apply(extent: CGRect(origin: .zero, size: size), roiCallback: { _, _ in rampExtent }, arguments: arguments)
     }
 
     /// The aurora's stops spread along a row of ``auroraRampPixels``, mixed in linear light and stored encoded, as the
-    /// kernels draw: the core's at ``AuroraSetup/core``'s positions, the gradient's across ``AuroraSetup/brandSpan``.
-    private static func auroraRamp(_ palette: FieldPalette) -> CIImage? {
-        let coreCount = AuroraSetup.core.count
-        guard palette.colors.count > coreCount else { return nil }
-        let brand = palette.colors.count - coreCount
-        let span = AuroraSetup.brandSpan
-        let positions = AuroraSetup.core.map(\.position)
+    /// kernels draw: the core's at ``AuroraSetup/core``'s positions, the gradient's across ``AuroraSetup/brandSpan`` (the
+    /// haze's at its own).
+    private static func auroraRamp(_ palette: FieldPalette, isHaze: Bool) -> CIImage? {
+        let core = isHaze ? AuroraSetup.hazeCore.map(\.position) : AuroraSetup.core.map(\.position)
+        guard palette.colors.count > core.count else { return nil }
+        let brand = palette.colors.count - core.count
+        let span = isHaze ? AuroraSetup.hazeSpan : AuroraSetup.brandSpan
+        let positions = core
             + (0..<brand).map { span.lowerBound + (span.upperBound - span.lowerBound) * Double($0) / Double(max(brand - 1, 1)) }
         let linear = { (value: Double) in value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4) }
         let encoded = { (value: Double) in value <= 0.0031308 ? value * 12.92 : 1.055 * pow(max(value, 0), 1 / 2.4) - 0.055 }

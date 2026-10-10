@@ -75,7 +75,7 @@ nonisolated struct MotionPlan: Sendable {
         /// The gradient over its pixels: shimmers and washes, its own and its groups'.
         var tints: [LayerTint] = []
 
-        /// When a pointer clicks it.
+        /// When a pointer clicks it, and drags a selection across its text (spec 0016).
         var clicks: [Click] = []
 
         /// Drawn where it is at the frame's own time under motion blur, as a burst's particles are (``BurstExpansion/isParticles(_:)``).

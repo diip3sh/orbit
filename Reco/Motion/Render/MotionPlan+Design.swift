@@ -3,7 +3,7 @@
 //  Reco
 //
 
-import CoreGraphics
+import CoreImage
 
 /// What a plan knows of motion design's clicks and letters (spec 0014).
 nonisolated extension MotionPlan {
@@ -12,6 +12,14 @@ nonisolated extension MotionPlan {
     struct Click: Equatable, Sendable {
         let press: Double
         let leaves: Double
+
+        /// A selection the press drags across, the pointer following its end (spec 0016).
+        var sweep: TextSelection?
+    }
+
+    /// Whether the video is on a light ground: what goes behind a card over it dims less (spec 0016).
+    var isLight: Bool {
+        0.2126 * background.red + 0.7152 * background.green + 0.0722 * background.blue > 0.5
     }
 
     /// Whether any layer is clicked, so the plan needs the system's pointer.

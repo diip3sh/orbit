@@ -40,6 +40,7 @@ nonisolated enum SeamExpansion {
             case .push: return MotionEasing.move.progress(linear, duration: duration)
             case .stack: return MotionEasing.cascade.progress(linear, duration: duration)
             case .expand: return MotionEasing.morph.progress(linear, duration: duration)
+            case .dive, .melt: return MotionEasing.move.progress(linear, duration: duration)
             case .dither: return min((linear * duration * Self.ditherSteps).rounded(.down) / (duration * Self.ditherSteps), 1)
             default: return linear
             }
@@ -57,6 +58,11 @@ nonisolated enum SeamExpansion {
     /// A card rising over the frame and an element opening into it: as long as a sheet or an app takes to open.
     static let stackDuration = 0.7
     static let expandDuration = 0.65
+
+    /// Vantae's dive from the click on its send to the next scene clear (6.0–6.8 s), and its melts: its room into the blue
+    /// ground (15.4–16.1 s) and the ground into a meadow (2.3–2.9 s).
+    static let diveDuration = 0.8
+    static let meltDuration = 0.75
 
     /// How a light or dither film's opening control comes in: in its look's seam out of the ground alone, where
     /// satin cuts it in as Raycast's bar did. Cut in, bolt.new's prompt box and its blob of light had nothing
@@ -133,7 +139,7 @@ nonisolated enum SeamExpansion {
             let width = canvas.width
             outgoing(.positionX, 0, whipOut.travel * width / zooms.outgoing, last: whipOut.duration, easing: .exit)
             incoming(.positionX, -whipIn.travel * width / zooms.incoming, 0, over: whipIn.duration, easing: .enterFast)
-        case .push, .fade, .stack, .expand, .glow, .dither, .ring:
+        case .push, .fade, .stack, .expand, .dive, .melt, .glow, .dither, .ring:
             effect.transition = Transition(seam: seam, duration: duration(of: seam))
         }
         return effect
@@ -144,6 +150,8 @@ nonisolated enum SeamExpansion {
         switch seam {
         case .stack: stackDuration
         case .expand: expandDuration
+        case .dive: diveDuration
+        case .melt: meltDuration
         case .glow: glowDuration
         case .dither: ditherDuration
         case .ring: ringDuration

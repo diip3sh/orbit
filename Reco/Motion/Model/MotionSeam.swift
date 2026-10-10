@@ -37,6 +37,14 @@ nonisolated enum MotionSeam: String, Codable, CaseIterable, Sendable {
     /// next scene inside it, while this one dives towards it: an app opening from its icon.
     case expand
 
+    /// The camera tilts and dives into what the scene before clicked last (else its middle) until it fills the frame, the
+    /// next scene seen through it coming up from further back: flying through a glass prompt into what it made (Vantae).
+    case dive
+
+    /// The frame dissolves into the next by its own light, its darks first, in grain, a front of the brand's colour where
+    /// it goes: an image melting into the ground (Vantae's room into its blue, its ground into a meadow).
+    case melt
+
     /// A front of grainy light in the brand's colour crosses the frame out of the light's shape, the next
     /// scene behind it: the light looks' seam (``MotionField/Family/light``).
     case glow

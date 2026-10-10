@@ -31,6 +31,9 @@ nonisolated struct MotionMove: Equatable, Sendable {
         // Story films (spec 0015), any layer: the brand's gradient running through it, sweeping across it (a group's
         // layers too); there from its start, gone from its start
         case shimmer, wash, show, hide
+        // Flow films (spec 0016), any layer: flying in on an arc onto its place, banking; text only: selected as a pointer
+        // drags across it
+        case fly, select
         // Groups: their layers flying out from its middle to their places
         case scatter
         // Groups: their layers one after another
@@ -42,11 +45,11 @@ nonisolated struct MotionMove: Equatable, Sendable {
             [.hold, .push, .pan, .pullBack, .drift, .whip].contains(self)
         }
 
-        /// Story films' moves on any layer (``MoveExpansion/storyTracks(of:start:duration:in:)``).
-        static let storyKinds: Set<Kind> = [.shimmer, .wash, .show, .hide, .scatter]
+        /// Story and flow films' moves on any layer (``MoveExpansion/storyTracks(of:start:duration:in:)``).
+        static let storyKinds: Set<Kind> = [.shimmer, .wash, .show, .hide, .scatter, .fly]
 
         var needsText: Bool {
-            [.blurWipe, .lineMask, .wordByWord, .type, .roll, .letters, .kinetic, .voice, .reply].contains(self)
+            [.blurWipe, .lineMask, .wordByWord, .type, .roll, .letters, .kinetic, .voice, .reply, .select].contains(self)
         }
     }
 
@@ -66,7 +69,7 @@ nonisolated struct MotionMove: Equatable, Sendable {
     /// whip, how much closer than where it starts.
     var intensity: Double?
 
-    /// Where a drift, a slide in or an exit goes.
+    /// Where a drift, a slide in, a fly or an exit goes.
     var direction: Direction?
 
     /// A roll's words, in turn after the text's last word.
@@ -80,7 +83,7 @@ nonisolated struct MotionMove: Equatable, Sendable {
     var target: CGPoint?
 
     /// What a morph changes a shape to: its size and corner radius in canvas pixels, its colour (also a burst's
-    /// particles' and a ripple's rings', and a kinetic caret's), and its outline's width (0 fills it).
+    /// particles' and a ripple's rings', a kinetic caret's and a selection's), and its outline's width (0 fills it).
     var size: CGSize?
     var radius: Double?
     var color: RGBAColor?

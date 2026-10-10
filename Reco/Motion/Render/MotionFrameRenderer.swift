@@ -56,7 +56,7 @@ nonisolated enum MotionFrameRenderer {
         let pointers = zip(pointerTips(of: scene, at: opens, plan: plan), pointerTips(of: scene, at: closes, plan: plan)).map { tips in
             tips.0.flatMap { from in tips.1.map { hypot($0.x - from.x, $0.y - from.y) } } ?? 0
         }
-        return max(((travel + pointers).max() ?? 0) * plan.outputScale, seamTravel(of: scene, at: sceneTime, across: shutter, size: plan.outputSize))
+        return max(((travel + pointers).max() ?? 0) * plan.outputScale, seamTravel(into: plan.sceneIndex(at: time), at: sceneTime, across: shutter, plan: plan))
     }
 
     /// The frame at `time` as a shutter open for an instant sees it, with layers drawn sharp where they are at `sharp`, the
@@ -73,27 +73,7 @@ nonisolated enum MotionFrameRenderer {
             let previous = sceneImage(
                 index - 1, at: plan.scenes[index - 1].duration + sceneTime, sharpAt: plan.scenes[index - 1].duration + sharpTime, plan: plan, frames: frames
             )
-            let progress = transition.progress(at: sceneTime)
-            switch transition.seam {
-            case .push:
-                let width = bounds.width
-                frame = frame.transformed(by: CGAffineTransform(translationX: width * (1 - progress), y: 0))
-                    .composited(over: previous.transformed(by: CGAffineTransform(translationX: -width * progress, y: 0)))
-            case .stack:
-                frame = stacked(previous.composited(over: background), under: frame.composited(over: background), progress: progress, size: bounds.size)
-            case .expand:
-                frame = expanded(
-                    previous.composited(over: background), into: frame.composited(over: background), from: expandSource(into: index, plan: plan),
-                    progress: progress, size: bounds.size
-                )
-            case .glow, .dither, .ring:
-                frame = FieldRenderer.seam(
-                    transition, between: (previous.composited(over: background), frame.composited(over: background)), progress: progress, at: time,
-                    size: bounds.size
-                )
-            default:
-                frame = previous.fading(to: 1 - progress).composited(over: frame)
-            }
+            frame = transitioned(previous, frame, into: index, at: sceneTime, plan: plan)
         }
         // An opening's control coming in over its ground alone, which is all there is before it
         if let arrival = plan.scenes[index].arrival, case let since = sceneTime - plan.scenes[index].arrivesAt, since < arrival.duration {
@@ -125,9 +105,7 @@ nonisolated enum MotionFrameRenderer {
         for placement in placements {
             var layer = scene.layers[placement.layer]
             guard var content = content(of: &layer, at: time, take: frames[MotionPlan.LayerKey(scene: index, layer: placement.layer)]) else { continue }
-            if let reveal = layer.reveal {
-                content = revealed(content, of: layer, by: reveal, at: time)
-            }
+            content = lettered(content, of: layer, at: time)
             if !layer.tints.isEmpty {
                 content = shimmered(content, layer: layer, at: time, sceneDuration: scene.duration)
             }

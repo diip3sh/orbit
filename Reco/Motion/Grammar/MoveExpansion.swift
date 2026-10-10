@@ -152,10 +152,10 @@ nonisolated enum MoveExpansion {
             add(.blur, 10 * unit * amount, 0, easing: .enter)
         case .exit:
             effect.tracks = exitTracks(of: move, start: start, duration: duration, in: context)
-        case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan, .whip, .burst, .ripple, .morph, .flood, .scroll, .shimmer, .wash, .show, .hide, .scatter:
+        case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan, .whip, .burst, .ripple, .morph, .flood, .scroll, .shimmer, .wash, .show, .hide, .scatter, .select, .fly:
             // A roll, a cascade, a burst and a ripple become other layers' moves (``DocumentExpansion``); a morph, a
             // flood and a scroll a shape's states and the layer's place, with the others before and after (``ShapeMorph``);
-            // a story's moves are expanded above
+            // a story's moves are expanded above; a selection is drawn behind the text (``TextSelection``)
             break
         case .blurWipe, .lineMask, .wordByWord, .type, .letters, .kinetic, .voice, .reply:
             effect.reveal = reveal(move, start: start, duration: duration, in: context)
@@ -307,7 +307,7 @@ nonisolated enum MoveExpansion {
     }
 
     /// From `begin` at `start` to `end` `duration` later.
-    private static func ramp(_ property: MotionProperty, _ values: (begin: Double, end: Double), start: Double, duration: Double, easing: MotionEasing) -> PropertyTrack {
+    static func ramp(_ property: MotionProperty, _ values: (begin: Double, end: Double), start: Double, duration: Double, easing: MotionEasing) -> PropertyTrack {
         PropertyTrack(property, from: Keyframe(time: start, value: values.begin, easing: easing), to: Keyframe(time: start + duration, value: values.end))
     }
 
@@ -348,6 +348,8 @@ nonisolated enum MoveExpansion {
         case .shimmer: return rest
         case .show, .hide: return 1e-3
         case .scatter: return scatterDuration
+        case .fly: return flyDuration
+        case .select: return max(Double(context.characters) / selectRate, selectShortest)
         case .morph: return morphDuration
         // The film's dip (0.17 s) and its fill past the frame (0.4 s)
         case .flood: return ShapeMorph.floodDip + ShapeMorph.floodFill

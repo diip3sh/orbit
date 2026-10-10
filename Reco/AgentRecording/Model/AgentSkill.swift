@@ -6,8 +6,8 @@
 import Foundation
 
 /// Reco's methods for motion films, shipped in the app as skills: the launch film (spec 0012, Q4), motion design
-/// (spec 0014) and the story film (spec 0015). Claude Code finds them in its run's folder and loads the one a film needs;
-/// the last two's references are files beside their `SKILL.md`, read one at a time when their method says so. Agents without skills get the launch
+/// (spec 0014), the story film (spec 0015) and the flow film (spec 0016). Claude Code finds them in its run's folder and loads the one a film needs;
+/// the last three's references are files beside their `SKILL.md`, read one at a time when their method says so. Agents without skills get the launch
 /// film's method in their prompt.
 nonisolated enum AgentSkill {
 
@@ -39,12 +39,20 @@ nonisolated enum AgentSkill {
 
     static let storyFilm = resource(storyFilmName)
 
+    static let flowFilmName = "reco-flow-film"
+
+    /// Its references, bundled as `reco-flow-film-<name>.md`: the two reels measured, recipes and a whole example (spec 0016).
+    static let flowFilmReferences = ["film", "recipes", "example"]
+
+    static let flowFilm = resource(flowFilmName)
+
     /// Every skill file a motion run gets, by its path relative to the run's folder.
     static let files: [String: String] = {
         var files = [
-            launchFilmPath: launchFilm, ".claude/skills/\(motionDesignName)/SKILL.md": motionDesign, ".claude/skills/\(storyFilmName)/SKILL.md": storyFilm
+            launchFilmPath: launchFilm, ".claude/skills/\(motionDesignName)/SKILL.md": motionDesign, ".claude/skills/\(storyFilmName)/SKILL.md": storyFilm,
+            ".claude/skills/\(flowFilmName)/SKILL.md": flowFilm
         ]
-        for (skill, references) in [(motionDesignName, motionDesignReferences), (storyFilmName, storyFilmReferences)] {
+        for (skill, references) in [(motionDesignName, motionDesignReferences), (storyFilmName, storyFilmReferences), (flowFilmName, flowFilmReferences)] {
             for name in references {
                 files[".claude/skills/\(skill)/reference/\(name).md"] = resource("\(skill)-\(name)")
             }

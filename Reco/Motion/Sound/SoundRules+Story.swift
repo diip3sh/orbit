@@ -36,6 +36,19 @@ nonisolated extension SoundRules {
     static let expandRiser = (length: 0.4, low: 800.0, high: 7000.0, power: 1.8, level: -22.0, peak: 0.35)
     static let expandGlass = (note: 93.0, length: 1.2, brightness: 1.2, level: -25.0)
 
+    /// A dive: air rising into its fastest moment, half way, a whoosh there, and a soft landing with a glass as the next scene
+    /// is clear.
+    static let diveRiser = (length: 0.45, low: 400.0, high: 4000.0, power: 2.0, level: -22.0, peak: 0.5)
+    static let diveLanding = (at: 0.95, high: 72.0, low: 42.0, length: 0.6, decay: 0.14, level: -23.0, note: 86.0, glass: -26.0)
+
+    /// A fly: its whoosh this share into the flight, its glass on landing.
+    static let flyWhoosh = 0.3
+    static let flyGlass = (at: 0.85, note: 91.0, length: 1.0, brightness: 1.2, level: -26.0)
+
+    /// A melt: a high shimmer as it goes, under a low glass as the next scene comes through.
+    static let meltShimmer = (length: 0.7, low: 1500.0, high: 9000.0, power: 1.4, level: -25.0, peak: 0.7)
+    static let meltGlass = (note: 81.0, length: 1.6, brightness: 0.8, level: -24.0)
+
     /// A story film's cut: its swish this much quieter, no hit.
     static let softCut = -3.0
 

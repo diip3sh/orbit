@@ -32,6 +32,9 @@ nonisolated enum MotionField: String, Codable, CaseIterable, Sendable {
     /// Black with the brand's gradient light round a dark middle, smooth, from a corner or two, in a new place
     /// every shot: Lovable's ground (spec 0015), under type and rebuilt UI alike.
     case aurora
+    /// White with the brand's gradient as soft light drifting through it, pale at its edges and deep at its heart: the light
+    /// AI launch reels' ground (a blue blob sweeping a white frame, a pastel orb behind type), under light UI.
+    case haze
     /// Black satin out of focus under one broad light, a lit plane's edge across a corner: dark,
     /// premium UI in macro (New Raycast's ground).
     case satin
@@ -51,6 +54,8 @@ nonisolated enum MotionField: String, Codable, CaseIterable, Sendable {
         case smoke
         /// Lovable's smooth gradient light: cut, never a seam of its own.
         case aurora
+        /// The light reels' white ground and its soft light: cut, or a seam of the frame's own (melt, dive, expand).
+        case haze
         case plain
     }
 
@@ -61,6 +66,7 @@ nonisolated enum MotionField: String, Codable, CaseIterable, Sendable {
         case .halo: .smoke
         case .satin: .satin
         case .aurora: .aurora
+        case .haze: .haze
         case .plain: .plain
         }
     }

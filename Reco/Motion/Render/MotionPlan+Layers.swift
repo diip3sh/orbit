@@ -49,16 +49,31 @@ extension MotionPlan {
                 planned.morph = ShapeMorph(shape, moves: layer.moves, context: context)
             }
             planned.accent = layer.moves.first { $0.kind == .kinetic }?.color
-            planned.clicks = layer.moves.filter { $0.kind == .click }.map { move in
-                let timing = MoveExpansion.timing(of: move, in: context)
-                return Click(press: timing.start, leaves: timing.start + timing.duration)
-            }
+            press(&planned, as: layer, context: context)
             list.append(planned)
             if case .group(let children) = layer.content {
                 list = flattened(children, parent: list.count - 1, sizes: sizes, context: context, into: list)
             }
         }
         return list
+    }
+
+    /// How long the pointer stays at a selection's end once it's done.
+    nonisolated static let selectionHold = 0.5
+
+    /// When a pointer presses `planned`: its clicks, and a selection dragged across its text (spec 0016), pressed where it
+    /// starts and let go ``selectionHold`` after it ends.
+    nonisolated private static func press(_ planned: inout Layer, as layer: MotionLayer, context: MoveContext) {
+        planned.clicks = layer.moves.filter { $0.kind == .click }.map { move in
+            let timing = MoveExpansion.timing(of: move, in: context)
+            return Click(press: timing.start, leaves: timing.start + timing.duration)
+        }
+        guard let move = layer.moves.first(where: { $0.kind == .select }), !planned.parts.isEmpty else { return }
+        let timing = MoveExpansion.timing(of: move, in: context)
+        let selection = TextSelection(
+            parts: planned.parts, size: planned.size, start: timing.start, duration: timing.duration, color: move.color ?? TextSelection.defaultColor
+        )
+        planned.clicks.append(Click(press: timing.start, leaves: timing.start + timing.duration + selectionHold, sweep: selection))
     }
 
     /// A story film's parts of a layer (spec 0015): a voice line's follow, on its group if it's in one, so a logo beside it

@@ -161,6 +161,7 @@ extension AgentInvocationTests {
         #expect(run.arguments.prefix { $0 != "--permission-mode" }.suffix(5) == ["mcp__reco__*", "WebSearch", "WebFetch", "Skill", "Read(./.claude/skills/**)"])
         #expect(launch.prompt.contains("choose Reco's skill for this film") && launch.prompt.contains("reco-motion-design"))
         #expect(launch.prompt.contains("reco-story-film") && run.files[".claude/skills/reco-story-film/SKILL.md"] == AgentSkill.storyFilm)
+        #expect(launch.prompt.contains("reco-flow-film") && run.files[".claude/skills/reco-flow-film/SKILL.md"] == AgentSkill.flowFilm)
         #expect(!launch.prompt.contains(AgentSkill.launchFilmMethod))
 
         let walkthrough = try invocation(.claudeCode)
@@ -179,7 +180,8 @@ extension AgentInvocationTests {
         #expect(AgentSkill.launchFilmMethod.hasPrefix("# A launch film, Reco's way"))
         #expect(AgentSkill.motionDesign.hasPrefix("---\nname: reco-motion-design\ndescription: "))
         #expect(AgentSkill.storyFilm.hasPrefix("---\nname: reco-story-film\ndescription: "))
-        #expect(AgentSkill.files.count == 3 + AgentSkill.motionDesignReferences.count + AgentSkill.storyFilmReferences.count)
+        #expect(AgentSkill.flowFilm.hasPrefix("---\nname: reco-flow-film\ndescription: "))
+        #expect(AgentSkill.files.count == 4 + AgentSkill.motionDesignReferences.count + AgentSkill.storyFilmReferences.count + AgentSkill.flowFilmReferences.count)
         #expect(AgentSkill.files.values.allSatisfy { !$0.isEmpty })
         // Each reference the method names is there
         for name in AgentSkill.motionDesignReferences {
@@ -187,6 +189,9 @@ extension AgentInvocationTests {
         }
         for name in AgentSkill.storyFilmReferences {
             #expect(AgentSkill.storyFilm.contains("reference/\(name).md"))
+        }
+        for name in AgentSkill.flowFilmReferences {
+            #expect(AgentSkill.flowFilm.contains("reference/\(name).md"))
         }
     }
 
@@ -201,6 +206,19 @@ extension AgentInvocationTests {
         #expect(document.canvas.field == .aurora && document.sound.style == .groove && document.style.gradient?.count == 5)
         let beat = 60.0 / 170
         #expect(document.scenes.allSatisfy { abs($0.duration / beat - ($0.duration / beat).rounded()) < 0.01 })
+        #expect(MotionLint.findings(in: document).isEmpty)
+    }
+
+    /// The flow film's example, Vantae's reel rebuilt, is a document the grammar takes as it is, on the haze, with nothing for
+    /// the lint to find and every scene change but its macros a seam.
+    @Test func theFlowFilmExampleIsAValidDocument() throws {
+        let example = try #require(AgentSkill.files[".claude/skills/reco-flow-film/reference/example.md"])
+        let start = try #require(example.range(of: "```json\n"))
+        let end = try #require(example.range(of: "\n```", range: start.upperBound..<example.endIndex))
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(example[start.upperBound..<end.lowerBound].utf8))
+        try document.validate()
+        #expect(document.canvas.field == .haze && document.canvas.frameRate == 60)
+        #expect(Set(document.scenes.map(\.seam)).isSuperset(of: [.dive, .expand, .melt]))
         #expect(MotionLint.findings(in: document).isEmpty)
     }
 

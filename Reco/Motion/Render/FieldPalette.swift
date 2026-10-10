@@ -17,14 +17,26 @@ nonisolated struct FieldPalette: Equatable, Sendable {
     var colors: [RGBAColor]
 
     /// `field`'s colours in `style`: the aurora's are its dark middle's stops into the brand's gradient
-    /// (``AuroraSetup/core``), the others' from the accent.
+    /// (``AuroraSetup/core``), the haze's white's (``AuroraSetup/hazeCore``), the others' from the accent.
     init(_ field: MotionField, style: StyleTokens, background: RGBAColor) {
-        guard field == .aurora else {
+        guard field == .aurora || field == .haze else {
             self.init(field, accent: style.accent, background: background)
             return
         }
         let gradient = style.brandGradient
         let first = OKLCH(gradient[0])
+        if field == .haze {
+            // White into the gradient's first colour, its chroma coming on slower than its depth
+            let paper = AuroraSetup.hazePaper
+            let core = AuroraSetup.hazeCore.map { stop in
+                OKLCH(
+                    lightness: paper.lightness + (first.lightness - paper.lightness) * stop.share,
+                    chroma: paper.chroma + (first.chroma - paper.chroma) * pow(stop.share, 1.4), hue: first.hue
+                ).rgba
+            }
+            self.init(back: core[0], colors: core + gradient)
+            return
+        }
         // The navy climbs to the gradient's first colour and never past it: a darker first colour made the ramp dip, and
         // two lights meeting drew a thin bright line
         let climb = min(first.lightness / (AuroraSetup.core.last?.lightness ?? 1), 1)
@@ -38,7 +50,7 @@ nonisolated struct FieldPalette: Equatable, Sendable {
     }
 
     init(_ field: MotionField, accent: RGBAColor?, background: RGBAColor) {
-        if field == .aurora {
+        if field == .aurora || field == .haze {
             self.init(field, style: StyleTokens(accent: accent), background: background)
         } else if let look = Self.look(for: field) {
             let brand = accent.map(OKLCH.init)

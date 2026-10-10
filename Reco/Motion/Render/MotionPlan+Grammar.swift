@@ -45,10 +45,14 @@ extension MotionPlan {
     }
 
     /// A seam drawn in a field's language takes the next scene's field when it's of the seam's family,
-    /// else the family's first pick, coloured from the brand as that field is.
+    /// else the family's first pick, coloured from the brand as that field is; a melt, the haze's colours.
     nonisolated private static func language(_ transition: SeamExpansion.Transition, into field: MotionField, document: MotionDocument) -> SeamExpansion.Transition {
-        guard let family = transition.seam.family else { return transition }
         var transition = transition
+        // A melt's front is in the brand's colours, as the haze's light is
+        if transition.seam == .melt {
+            transition.palette = FieldPalette(.haze, style: document.style, background: document.canvas.background)
+        }
+        guard let family = transition.seam.family else { return transition }
         transition.look = field.family == family ? field : MotionField.allCases.first { $0.family == family } ?? .plain
         transition.palette = FieldPalette(transition.look, style: document.style, background: document.canvas.background)
         return transition
