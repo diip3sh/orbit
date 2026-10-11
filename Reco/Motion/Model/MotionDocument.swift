@@ -21,6 +21,9 @@ nonisolated struct MotionDocument: Equatable, Sendable {
     /// The score and effects made for it.
     var sound = MotionSound()
 
+    /// The brand's own faces, downloaded into `assets/fonts` (spec 0019).
+    var fonts: [MotionFont] = []
+
     /// The video's length in seconds: every scene, end to end.
     var duration: Double {
         scenes.reduce(0) { $0 + $1.duration }
@@ -134,6 +137,41 @@ nonisolated struct MotionDocument: Equatable, Sendable {
     }
 }
 
+nonisolated extension MotionDocument {
+
+    /// Whether it is an editorial film: a scene over paper, ink or a picture (spec 0017).
+    var isEditorial: Bool {
+        scenes.contains { ($0.field ?? canvas.field).family == .editorial }
+    }
+
+    /// Every text without a font of its own, but code, set in the brand's (`style.font`, spec 0019): what's laid out, linted and
+    /// drawn.
+    var brandSet: MotionDocument {
+        guard let font = style.font else { return self }
+        var document = self
+        for index in document.scenes.indices {
+            document.scenes[index].layers = Self.setting(document.scenes[index].layers, in: font)
+        }
+        return document
+    }
+
+    private static func setting(_ layers: [MotionLayer], in font: String) -> [MotionLayer] {
+        layers.map { layer in
+            var layer = layer
+            switch layer.content {
+            case .text(var text) where text.font == nil && text.face != .mono:
+                text.font = font
+                layer.content = .text(text)
+            case .group(let children):
+                layer.content = .group(setting(children, in: font))
+            default:
+                break
+            }
+            return layer
+        }
+    }
+}
+
 // MARK: - Codable
 
 nonisolated extension MotionDocument: Codable {
@@ -150,5 +188,6 @@ nonisolated extension MotionDocument: Codable {
         scenes = try container.decode([MotionScene].self, forKey: .scenes)
         assets = try container.decodeIfPresent([MotionAsset].self, forKey: .assets) ?? []
         sound = try container.decodeIfPresent(MotionSound.self, forKey: .sound) ?? MotionSound()
+        fonts = try container.decodeIfPresent([MotionFont].self, forKey: .fonts) ?? []
     }
 }

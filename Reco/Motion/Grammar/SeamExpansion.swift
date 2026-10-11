@@ -30,6 +30,17 @@ nonisolated enum SeamExpansion {
         var look = MotionField.plain
         var palette: FieldPalette?
 
+        /// How a seam without its own easing goes: linear, or an editorial film's darkening.
+        var easing = MotionEasing.linear
+
+        /// A graphic seam's colours, the brand's (``MotionSeam/graphic``), and which way it goes: the scene's index, so two of
+        /// one kind in a film go different ways.
+        var colors: [RGBAColor] = []
+        var variant = 0
+
+        /// Whether the film is on a light ground: what a graphic seam darkens, it darkens less.
+        var isLight = false
+
         /// How far it has gone at `time` into the next scene, eased. Light and smoke burst out of the middle and
         /// settle (eased in and out, they showed nothing for a third of the seam, then crossed the frame in 0.2 s);
         /// dither steps on at 15 frames a second, as pixel animation does (Nothing's Glyph Matrix).
@@ -43,7 +54,7 @@ nonisolated enum SeamExpansion {
             case .wipe: return SeamExpansion.wipeEasing.progress(linear, duration: duration)
             case .dive, .melt: return MotionEasing.move.progress(linear, duration: duration)
             case .dither: return min((linear * duration * Self.ditherSteps).rounded(.down) / (duration * Self.ditherSteps), 1)
-            default: return linear
+            default: return easing.progress(linear, duration: duration)
             }
         }
 
@@ -55,6 +66,17 @@ nonisolated enum SeamExpansion {
     static let glowDuration = 0.9
     static let ditherDuration = 0.8
     static let ringDuration = 1.0
+
+    /// How long each graphic seam takes (spec 0019): as long as its device reads in After Effects launch films, its fastest
+    /// edges near the middle; a flash or a glitch is a hit, a liquid or tiles a short flourish.
+    static let graphicDurations: [MotionSeam: Double] = [
+        .iris: 0.7, .bars: 0.7, .slats: 0.6, .tiles: 0.8, .split: 0.6, .spin: 0.45, .glitch: 0.4, .pixelate: 0.5, .liquid: 0.9,
+        .flip: 0.75, .cube: 0.75, .flash: 0.35, .stretch: 0.45
+    ]
+
+    /// A fade in an editorial film: ElevenLabs' ground darkened 253 → 24 in 11 frames into its dark beat, eased out (−32, −43,
+    /// −38, −32, −24 … −4 levels a frame), what was on it staying; it never cross-dissolved.
+    static let darkenDuration = 0.18
 
     /// A card rising over the frame and an element opening into it: as long as a sheet or an app takes to open.
     static let stackDuration = 0.7
@@ -145,7 +167,8 @@ nonisolated enum SeamExpansion {
             let width = canvas.width
             outgoing(.positionX, 0, whipOut.travel * width / zooms.outgoing, last: whipOut.duration, easing: .exit)
             incoming(.positionX, -whipIn.travel * width / zooms.incoming, 0, over: whipIn.duration, easing: .enterFast)
-        case .push, .fade, .stack, .expand, .wipe, .dive, .melt, .glow, .dither, .ring:
+        case .push, .fade, .stack, .expand, .wipe, .dive, .melt, .glow, .dither, .ring, .iris, .bars, .slats, .tiles, .split, .spin, .glitch,
+             .pixelate, .liquid, .flip, .cube, .flash, .stretch:
             effect.transition = Transition(seam: seam, duration: duration(of: seam))
         }
         return effect
@@ -162,7 +185,7 @@ nonisolated enum SeamExpansion {
         case .glow: glowDuration
         case .dither: ditherDuration
         case .ring: ringDuration
-        default: 0.5
+        default: graphicDurations[seam] ?? 0.5
         }
     }
 }

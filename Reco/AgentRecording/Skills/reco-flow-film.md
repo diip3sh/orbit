@@ -44,6 +44,7 @@ Every change of scene is one of these, and you can name its reason:
 
 - Never the same seam on two scene changes running. Use at least `dive`, `expand` and `melt`, and `stack` when an answer
   comes over a question.
+- The graphic seams (`iris`, `bars`, `slats`, `tiles`, `split`, `spin`, `glitch`, `pixelate`, `liquid`, `flip`, `cube`, `flash`, `stretch`) go in any look, in the brand's colours: reco-director's section 4 picks them by the brand's personality, two to four at the film's turns, never two running.
 - Inside a scene, a change is a move, never a cut: the box `morph`s into a card, a thumbnail `morph`s (with `to`) into the
   result, a line is `select`ed, a mark `fly`s in, contents `show` and `hide` on a beat.
 - `melt` opens the film's second scene or closes it; a dive after a click on send; an expand after a pick.
@@ -75,7 +76,8 @@ Every change of scene is one of these, and you can name its reason:
 1. **Research.** Call inspect_page on the product's site and the pages its navigation links to. Find its main input (a
    prompt, a search, a command bar, an editor, a booking form) and its send or confirm; what it gives back (pictures,
    answers, files, events, results); its brand colour, text colour, fonts and logo. Web search what it's for, if you can.
-2. **Story.** One person's need, in 5–7 beats, each growing out of the last:
+2. **Story.** When reco-director chose the story's shape, tell that shape with this skill's moves; the beats below are
+   one way, never the reference film's story or words. One person's need, in 5–7 beats, each growing out of the last:
    1. the need, as a short line typed huge (`voice`) or popping a word at a time (`wordByWord`), e.g. "Have an idea?";
    2. the input arrives (or the line becomes it), the request is typed, a macro on send and the hand presses it;
    3. `dive` into what it made: results popping, scattering or turning in;

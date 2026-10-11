@@ -5,6 +5,7 @@
     {
       "id": "title",
       "duration": 2,
+      "camera": { "moves": [{ "move": "hold" }] },
       "layers": [
         {
           "id": "headline",

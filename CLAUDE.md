@@ -1422,6 +1422,62 @@ Key facts:
   4K60 film (`~/Movies/Reco/InstaLanding 3-edited.mp4`) with every editorial move, in its own words; it kept the example's
   arc and timings scene for scene.
 
+### S13 — The film director (`remotion`, spec 0018)
+
+Launch films copied the films their skills learned from (InstaLanding kept ElevenLabs' 14 scenes and timings). Every Claude
+Code launch run now loads `reco-director` first: a brief from the brand and the user's few words, one look, one of six story
+shapes (the app sends a random `Variation`, 1–6, so a product gets a different film each run), moves from any skill, and a
+bridge at every cut; it names the technique skill to write with. The engine learned what made ElevenLabs' film smooth.
+
+| File | Role |
+|---|---|
+| `AgentRecording/Skills/reco-director.md`, `Model/AgentSkill.swift` | The director skill, installed with the others; the technique skills' story steps defer to it |
+| `AgentRecording/Model/AgentRecordingRequest.swift` | `skillChoice` loads the director; `variation`, set at random by `AgentRecordingViewModel.submit()` |
+| `Motion/Grammar/MoveExpansion+Editorial.swift`, `Render/MotionFrameRenderer+Editorial.swift` (`eaten`), `MotionPlan.Eat` | `eat`: text eaten by two bars from its ends into a block, by default into its scene's cut |
+| `MoveExpansion.breath(over:)`, `MotionPlan+Grammar.swift` (`breathe`) | An editorial scene without a camera of its own but the last settles in, creeps and leaves faster |
+| `Motion/Grammar/SeamExpansion.swift` (`darkenDuration`, `Transition.easing`) | A fade in an editorial film is the ground darkening in 0.18 s |
+
+Key facts:
+- **The rebuild against the film:** frozen (no pixel changing by over 6 levels) in 26.4 % of its frames before the end card
+  against the film's 5.9 %, the longest freeze 1.73 s against 0.57, and 6 of its 10 cuts from a frozen frame against none.
+  With eats and breathing: 14.7 %, 0.82 s.
+- **Measured on the film:** after a cut a move is half done in 0.12–0.23 s; held shots creep about 2 % a second; before a cut
+  things accelerate (5 % in 0.4 s); lines are eaten into the mark in 0.18–0.28 s, ease-in; the ground darkens in 11 frames; no
+  dissolves.
+- The editorial skill lists the scenes its look does well instead of ElevenLabs' arc, and its example says its story and
+  words are ElevenLabs'.
+
+### S14 — The brand's taste and graphic transitions (`remotion`, spec 0019)
+
+Films looked like the films Reco learned from and changed scenes in two or three ways. A film now takes its design from the
+product's website: `inspect_page` reads its font files, palette, gradients, corner radii and how its heading is set, and the
+document sets text in the brand's own face (`fonts`, `style.font`). The director picks a motion personality from the brand and
+the transitions it speaks in, and the engine has thirteen graphic transitions any look may use, in the brand's colours.
+
+| File | Role |
+|---|---|
+| `Motion/Model/MotionSeam.swift` (`graphic`), `Grammar/SeamExpansion.swift` (`graphicDurations`, `Transition.colors`, `variant`) | `iris`, `bars`, `slats`, `tiles`, `split`, `spin`, `glitch`, `pixelate`, `liquid`, `flip`, `cube`, `flash`, `stretch` |
+| `Motion/Render/TransitionRenderer.swift`, `+Space.swift`, `TransitionKernels.metal.txt` | Masks and blobs by kernel; split, flip, cube, flash, stretch with Core Image |
+| `Motion/Model/StyleTokens.swift` (`seamColors`, `font`) | The accent and a second brand colour; the brand's family for every text |
+| `Motion/Model/MotionFont.swift`, `Render/BrandFonts.swift`, `Service/FontCapture.swift` | Font files fetched into `assets/fonts`, read by Core Text, found by family and weight |
+| `WebRecording/Service/WebInspectScript.swift`, `Model/PageInspection.swift` | `brand.fonts`, `heading`, `palette`, `gradients`, `radius` |
+| `Motion/Sound/SoundCueList+Graphic.swift`, `SoundRules+Graphic.swift` | A sound each |
+| `AgentRecording/Skills/reco-director.md` | The design system from the site, five motion personalities, the variation picking story, ground and signature seam |
+
+Key facts:
+- Seam colours: the accent, then the gradient's other end, or the accent 0.25 lighter or darker (OKLCH). Two seams of a
+  kind go different ways (`variant`, the scene's index). Most ease on in-out quart, their parts one after another.
+- Seams that cut inside themselves (pixels, glitch, dither, spin, stretch, flash) are drawn at the frame's own time:
+  averaged across the shutter, a stretch's cut drew both scenes grey. Masks add their edges' travel to motion blur.
+- Core Text reads WOFF2 and WOFF from data (`CTFontManagerCreateFontDescriptorsFromData`), so web fonts need no conversion;
+  a variable face is set on its `wght` axis. Fonts load when a plan is captured and after each `edit_motion`.
+- A font's `@font-face` is read from the page's stylesheets, fetched again when cross-origin; the Latin file of the closest
+  weight; next/font's `__Inter_d65c78` is named Inter.
+- Seam colours stand out from the grounds they join (≥ 0.15 apart in OKLab, else the text's or the background): a liquid in
+  the accent over a scene on the accent didn't show. A split dims what's behind 0.15 on a light ground, not 0.5.
+- Every film's scenes without a camera or shot of their own breathe now, not only editorial ones; a camera `hold` keeps one
+  still (the golden fixtures' scenes hold). The first LemonLime film of this spec was frozen in 24.6 % of its frames.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -1500,6 +1556,8 @@ should hold but need re-measuring.
 | S10 story films and score styles (spec 0015) | Reference measured (picture and music; the Spotify Jam's music too); `aurora`, the brand gradient, voice, reply, shimmer, wash, scatter, show/hide, UI glyphs, the hand in macro; `groove` and `house` scores fitted to the cuts; the `reco-story-film` skill; the reference rebuilt in the engine and checked frame by frame; `beats` lint. Orca ADE made from the app twice; the user found it "really bad". Rebuilt by hand to Lovable's bar (stills checked), and the engine (elongated aurora lights, SVG marks with `tint`, text-off-frame check) and skill (answers as coloured things, Lovable's type sizes) changed to match. A third run from the app follows the new recipes. The user found it short still: the look now comes from the product's theme over Reco's shader looks (Orca: `warp` dither, its seams, the halo), Lovable giving only the motion; the shutter swap fix, the opening's arrival, and the overlapping-text check. Then glass cards, a corner wash, 60 fps and a wider groove after the user's notes; then a sound for each transition instead of a beat. Next: the user's verdict, a listening round |
 | S11 flow films (spec 0016) | Both reels measured; `haze`, `dive`, `melt`, `fly`, `select` and their sounds; the `reco-flow-film` skill with Vantae's reel rebuilt as its example and IrukaDark's pieces checked; the default for light products. Next: films from the app, the user's verdict |
 | S12 editorial films (spec 0017) | ElevenLabs' film measured (picture and score); `paper`, `ink`, `lens` and pictures in shapes; `wipe`; `sweep`, `brighten`, `blink`, `grow`, `marks`, `orbit`, `dots`, `unfold`; the `editorial` score; the film rebuilt and checked against its frames; the `reco-editorial-film` skill; a film made from the app (InstaLanding, 5.5 min, 41 s 4K). Next: the user's verdict, a listening round |
+| S13 film director (spec 0018) | The director skill, the variation, `eat`, breathing, the darkening; the rebuild's frozen frames 26 → 15 %. A LemonLime (YC S26) film from the app; the user found it ElevenLabs' again (spec 0019) |
+| S14 brand taste and graphic transitions (spec 0019) | Thirteen graphic seams in the brand's colours, the brand's fonts, palette, gradients and radii scraped and its type drawn in its own face, the director's personalities and variation. Next: films from the app, the user's verdict |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

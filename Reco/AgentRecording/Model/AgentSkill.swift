@@ -5,11 +5,16 @@
 
 import Foundation
 
-/// Reco's methods for motion films, shipped in the app as skills: the launch film (spec 0012, Q4), motion design
-/// (spec 0014), the story film (spec 0015), the flow film (spec 0016) and the editorial film (spec 0017). Claude Code finds them in its run's folder
-/// and loads the one a film needs; the last four's references are files beside their `SKILL.md`, read one at a time when their method says so.
-/// Agents without skills get the launch film's method in their prompt.
+/// Reco's methods for motion films, shipped in the app as skills: the director (spec 0018), the launch film (spec 0012, Q4),
+/// motion design (spec 0014), the story film (spec 0015), the flow film (spec 0016) and the editorial film (spec 0017). Claude Code
+/// finds them in its run's folder, loads the director first and the technique skills it names; their references are files beside
+/// their `SKILL.md`, read one at a time when their method says so. Agents without skills get the launch film's method in their prompt.
 nonisolated enum AgentSkill {
+
+    /// Plans every launch film from the brand and the user's words, and names the technique skills it takes (spec 0018).
+    static let directorName = "reco-director"
+
+    static let director = resource(directorName)
 
     static let launchFilmName = "reco-launch-film"
 
@@ -56,7 +61,8 @@ nonisolated enum AgentSkill {
     /// Every skill file a motion run gets, by its path relative to the run's folder.
     static let files: [String: String] = {
         var files = [
-            launchFilmPath: launchFilm, ".claude/skills/\(motionDesignName)/SKILL.md": motionDesign, ".claude/skills/\(storyFilmName)/SKILL.md": storyFilm,
+            ".claude/skills/\(directorName)/SKILL.md": director, launchFilmPath: launchFilm,
+            ".claude/skills/\(motionDesignName)/SKILL.md": motionDesign, ".claude/skills/\(storyFilmName)/SKILL.md": storyFilm,
             ".claude/skills/\(flowFilmName)/SKILL.md": flowFilm, ".claude/skills/\(editorialFilmName)/SKILL.md": editorialFilm
         ]
         let referenced = [

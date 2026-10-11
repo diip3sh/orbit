@@ -18,7 +18,9 @@ nonisolated extension AgentToolCatalog {
 
         Video: canvas {size [1920,1080], frameRate 60, background "#rrggbb", field, fieldStrength, pacing}, style {text, dim, accent: \
         "#rrggbb"; gradient ["#rrggbb", 2–5 colours: the brand's gradient, cool end first]; face sans|serif|mono; alignment \
-        leading|center} from inspect_page's brand, assets, scenes. Pacing \
+        leading|center; font (the brand's family every text is set in but code); fonts [{family, url}] (its font files from \
+        inspect_page's brand.fonts, one a weight, downloaded into the bundle)} from inspect_page's brand, assets, scenes. A text \
+        layer's font names a family of fonts for itself. Pacing \
         driftAndCut: 3–5 s shots, the camera drifting at constant speed, hard cuts (Linear). beats: 1–2 s beats, eased \
         camera moves (Raycast). Field, what scenes are drawn over, one look a film: plain (the background colour, the default: \
         the product's UI crisp on its own ground, as Linear's films); satin (black satin out of focus, lit afresh for each \
@@ -81,7 +83,16 @@ nonisolated extension AgentToolCatalog {
         the whole frame: glow (light: a front of grainy light out of the next scene's field's shape, 0.9 s), dither \
         (dither: the frame turned to the accent's dots from its edges in, then into the next scene, 0.8 s), ring (a ring \
         of smoke opening from the middle, the next scene inside it, 1 s: into a closing). Glow or dither on the first scene, \
-        in its look: the ground swells in from black and the scene arrives in the seam by 1.4 s.
+        in its look: the ground swells in from black and the scene arrives in the seam by 1.4 s. Graphic seams, any look, in \
+        style.accent and a second brand colour (the gradient's other end, else the accent lighter or darker), two of a kind \
+        going different ways: iris (a disc of colour opens out of what was clicked, else the middle, the next scene's disc \
+        following, 0.7 s), bars (two slanted bars of colour then the next scene sweep across, 0.7 s), slats (the next scene's \
+        strips slide in from alternate sides, 0.6 s), tiles (a grid of dots of colour opening into squares of the next scene \
+        in a wave, 0.8 s), split (the frame parts down or across its middle, 0.6 s), spin (spun away blurred, the next spun \
+        in, 0.45 s), glitch (torn bands, colours apart, 0.4 s), pixelate (blocks growing then resolving, 0.5 s), liquid \
+        (wobbling blobs of colour from a corner or the click, the next inside, 0.9 s), flip (the frame turns over as a card, \
+        0.75 s), cube (turns away on a cube, 0.75 s), flash (a hit of colour on the cut, 0.35 s), stretch (stretched away and \
+        snapping back, 0.45 s).
         Moves {move, start, duration, intensity, direction, words, region, to}: text fadeUp, blurIn, blurWipe (letters sharpen \
         left to right), lineMask (lines rise out of a mask), wordByWord (words fade up one after another), type, roll (words: \
         the last word replaced in turn), exit; any layer rise, tilt, focus (region), detach, stateChange; a group cascade; \
@@ -117,7 +128,10 @@ nonisolated extension AgentToolCatalog {
         squares where they cross); orbit {color, size} (12 stars turning round a layer, 1.4 s; white by default); dots \
         {color} (squares born round a layer in a wave, gone from the inside out, 0.84 s; black by default); unfold (a group: \
         a mark, its name, a tagline, laid out as they end, the group at the line's middle: the mark alone in the middle, the \
-        name typed out of it, the tagline swept in as the line slides to its place, 2.1 s).
+        name typed out of it, the tagline swept in as the line slides to its place, 2.1 s); eat {color} (text: two bars close \
+        from its ends to its middle, eating it into a block, 0.25 s ease-in, by default into its scene's cut; the text's colour \
+        by default). A fade between editorial scenes is the ground darkening in 0.18 s. Every scene without a camera or a \
+        shot of its own breathes (settles in from 1.04×, creeps, leaves faster) but the last; a camera hold keeps one still.
 
         Sound: every video gets a score and quiet effects made from its own timing. sound.style picks the score: ambient \
         (the default: a chord a shot, a hit as the first UI cuts in, Raycast's closing), groove (170 BPM drum and bass, \
@@ -149,7 +163,8 @@ nonisolated extension AgentToolCatalog {
         "index":{"type":"integer","description":"add_scene, move_scene: position from 0"},
         "canvas":{"type":"object"},"style":{"type":"object"},"sound":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
         "duration":{"type":"number"},
-        "seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade","stack","expand","wipe","dive","melt","glow","dither","ring"]},
+        "seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade","stack","expand","wipe","dive","melt","glow","dither","ring",
+        "iris","bars","slats","tiles","split","spin","glitch","pixelate","liquid","flip","cube","flash","stretch"]},
         "shot":{"type":"object","description":"{shot: macro|hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard|closing, text, detail, ui, items, region, view}"},
         "field":{"type":"string","enum":["satin","plain","ember","sunlit","bloom","orb","ripple","matrix","warp","swirl","tide","halo","aurora","haze","paper","ink","lens"]},
         "moves":{"type":"array","items":{"type":"object"}}},

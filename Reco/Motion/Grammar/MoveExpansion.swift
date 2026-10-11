@@ -158,7 +158,7 @@ nonisolated enum MoveExpansion {
         case .exit:
             effect.tracks = exitTracks(of: move, start: start, duration: duration, in: context)
         case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan, .whip, .burst, .ripple, .morph, .flood, .scroll, .shimmer, .wash, .show, .hide,
-             .scatter, .select, .fly, .sweep, .brighten, .blink, .grow, .marks, .orbit, .dots, .unfold:
+             .scatter, .select, .fly, .sweep, .brighten, .blink, .grow, .marks, .orbit, .dots, .unfold, .eat:
             // A roll, a cascade, a burst and a ripple become other layers' moves (``DocumentExpansion``); a morph, a
             // flood and a scroll a shape's states and the layer's place, with the others before and after (``ShapeMorph``);
             // a story's and an editorial film's moves are expanded above; a selection is drawn behind the text (``TextSelection``)
@@ -320,6 +320,8 @@ nonisolated enum MoveExpansion {
     private static func defaultStart(of kind: MotionMove.Kind, in context: MoveContext) -> Double {
         switch kind {
         case .exit: max(context.sceneDuration - defaultDuration(of: MotionMove(.exit), start: 0, in: context), 0)
+        // Eaten into the cut
+        case .eat: max(context.sceneDuration - eatDuration, 0)
         case .pullBack, .drift, .hold, .marks: 0
         default: entranceStart
         }
@@ -350,7 +352,7 @@ nonisolated enum MoveExpansion {
         case .letters: return letterStagger * Double(max(context.characters - 1, 0)) + letterDuration
         case .kinetic, .voice: return Double(context.characters) / kineticRate
         case .reply: return replyStagger * Double(max(context.words - 1, 0)) + replyFade
-        case .sweep, .brighten, .blink, .grow, .marks, .orbit, .dots, .unfold: return editorialDuration(of: move.kind, rest: rest, in: context)
+        case .sweep, .brighten, .blink, .grow, .marks, .orbit, .dots, .unfold, .eat: return editorialDuration(of: move.kind, rest: rest, in: context)
         case .wash: return washDuration
         case .shimmer: return rest
         case .show, .hide: return 1e-3

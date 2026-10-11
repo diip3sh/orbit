@@ -24,9 +24,21 @@ nonisolated extension MotionPlan {
         let color: RGBAColor?
     }
 
+    /// A text eaten from both ends into a block by two bars in `color` (spec 0018), seconds into its scene.
+    struct Eat: Equatable, Sendable {
+        let start: Double
+        let duration: Double
+        let color: RGBAColor
+    }
+
     /// Whether the video is on a light ground: what goes behind a card over it dims less (spec 0016).
     var isLight: Bool {
-        0.2126 * background.red + 0.7152 * background.green + 0.0722 * background.blue > 0.5
+        Self.isLight(RGBAColor(red: background.red, green: background.green, blue: background.blue, alpha: 1))
+    }
+
+    /// Whether `color` is a light ground: its luminance past half.
+    static func isLight(_ color: RGBAColor) -> Bool {
+        0.2126 * color.red + 0.7152 * color.green + 0.0722 * color.blue > 0.5
     }
 
     /// Whether the video is an editorial film, over paper, ink or pictures (spec 0017).
@@ -60,8 +72,10 @@ nonisolated extension MotionPlan.Layer {
     /// The room its letters spring through around it, in canvas pixels each side and whole image pixels: its revealed
     /// image is that much larger, drawn onto the quad around it.
     var revealRoom: CGSize {
-        guard reveal?.style == .letter, let line = parts.map(\.height).max(), rasterScale > 0 else { return .zero }
+        guard reveal?.style == .letter || eat != nil, let line = parts.map(\.height).max(), rasterScale > 0 else { return .zero }
         let room = { (lines: Double) in (line * lines * rasterScale).rounded(.up) / rasterScale }
-        return CGSize(width: room(MotionFrameRenderer.letterRoom.width), height: room(MotionFrameRenderer.letterRoom.height))
+        // Eating bars start just outside the text's ends
+        let lines = reveal?.style == .letter ? MotionFrameRenderer.letterRoom : CGSize(width: MoveExpansion.eatGap + MoveExpansion.eatBar.width, height: 0)
+        return CGSize(width: room(lines.width), height: room(lines.height))
     }
 }

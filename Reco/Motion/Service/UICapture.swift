@@ -22,6 +22,9 @@ enum UICapture {
     /// Builds the plan for `document`, lifting and baking what it needs first. Only a capture tells
     /// the plan an element's size, so a plan that captured asks again once: at most two rounds.
     static func plan(for document: MotionDocument, bundle: URL, shorterSide: CGFloat? = nil, frameRate: Int? = nil) async throws -> MotionPlan {
+        // The brand's faces first: text is measured as the plan lays it out
+        await FontCapture.fetch(document.fonts, into: bundle)
+        BrandFonts.load(document.fonts, bundle: bundle)
         var plan = await MotionPlan.build(document, bundle: bundle, shorterSide: shorterSide, frameRate: frameRate)
         for _ in 0..<2 where !plan.liftsNeeded.isEmpty || !plan.bakesNeeded.isEmpty {
             while isCapturing {

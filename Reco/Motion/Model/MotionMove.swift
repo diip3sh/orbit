@@ -36,8 +36,8 @@ nonisolated struct MotionMove: Equatable, Sendable {
         case fly, select
         // Editorial films (spec 0017), text only: wiped in behind a soft front; shown dim, its words lit one by one as the
         // line settles. Any layer: blinking in, registration marks round it, a ring of stars round it, dots born round it in a
-        // wave; a rectangle: growing to fill the frame
-        case sweep, brighten, blink, marks, orbit, dots, grow
+        // wave; a rectangle: growing to fill the frame. Text (spec 0018): eaten from both ends into a block by two bars
+        case sweep, brighten, blink, marks, orbit, dots, grow, eat
         // Groups, editorial films: a mark opening into its name and tagline
         case unfold
         // Groups: their layers flying out from its middle to their places
@@ -55,10 +55,10 @@ nonisolated struct MotionMove: Equatable, Sendable {
         static let storyKinds: Set<Kind> = [.shimmer, .wash, .show, .hide, .scatter, .fly]
 
         /// Editorial films' moves (``MoveExpansion/editorialEffect(of:start:duration:in:)``).
-        static let editorialKinds: Set<Kind> = [.sweep, .brighten, .blink, .grow, .marks, .orbit, .dots, .unfold]
+        static let editorialKinds: Set<Kind> = [.sweep, .brighten, .blink, .grow, .marks, .orbit, .dots, .unfold, .eat]
 
         var needsText: Bool {
-            [.blurWipe, .lineMask, .wordByWord, .type, .roll, .letters, .kinetic, .voice, .reply, .select, .sweep, .brighten].contains(self)
+            [.blurWipe, .lineMask, .wordByWord, .type, .roll, .letters, .kinetic, .voice, .reply, .select, .sweep, .brighten, .eat].contains(self)
         }
     }
 

@@ -49,10 +49,7 @@ extension MotionPlan {
                 planned.morph = ShapeMorph(shape, moves: layer.moves, context: context)
             }
             planned.accent = layer.moves.first { $0.kind == .kinetic }?.color
-            if let move = layer.moves.first(where: { $0.kind == .marks }) {
-                let timing = MoveExpansion.timing(of: move, in: context)
-                planned.marks = Marks(shown: timing.start...(timing.start + timing.duration), color: move.color)
-            }
+            mark(&planned, as: layer, context: context)
             press(&planned, as: layer, context: context)
             list.append(planned)
             if case .group(let children) = layer.content {
@@ -185,6 +182,18 @@ extension MotionPlan {
                 return [layer.content] + contents(of: children)
             }
             return [layer.content]
+        }
+    }
+
+    /// An editorial film's marks round a layer and the bars eating its text (spec 0017, 0018).
+    nonisolated private static func mark(_ planned: inout Layer, as layer: MotionLayer, context: MoveContext) {
+        if let move = layer.moves.first(where: { $0.kind == .marks }) {
+            let timing = MoveExpansion.timing(of: move, in: context)
+            planned.marks = Marks(shown: timing.start...(timing.start + timing.duration), color: move.color)
+        }
+        if let move = layer.moves.first(where: { $0.kind == .eat }), case .text(let text) = layer.content {
+            let timing = MoveExpansion.timing(of: move, in: context)
+            planned.eat = Eat(start: timing.start, duration: timing.duration, color: move.color ?? text.color)
         }
     }
 }

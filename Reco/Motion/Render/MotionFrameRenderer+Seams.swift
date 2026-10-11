@@ -34,6 +34,9 @@ nonisolated extension MotionFrameRenderer {
             return melted(previous, into: frame, progress: progress, palette: transition.palette, size: bounds.size)
         case .glow, .dither, .ring:
             return FieldRenderer.seam(transition, between: (previous, frame), progress: progress, at: plan.scenes[index].start + time, size: bounds.size)
+        case let seam where MotionSeam.graphic.contains(seam):
+            let origin = clickedBox(into: index, at: time, plan: plan).map { CGPoint(x: $0.midX, y: $0.midY) }
+            return TransitionRenderer.draw(transition, between: (previous, frame), at: (progress, time), origin: origin, size: bounds.size)
         default:
             return before.fading(to: 1 - progress).composited(over: next)
         }
@@ -145,10 +148,15 @@ nonisolated extension MotionFrameRenderer {
     static func expandSource(into index: Int, at time: Double = 0, plan: MotionPlan) -> CGRect {
         let (width, height) = (Double(plan.outputSize.width), Double(plan.outputSize.height))
         let middle = CGRect(x: width * (1 - expandMiddle) / 2, y: height * (1 - expandMiddle) / 2, width: width * expandMiddle, height: height * expandMiddle)
+        return clickedBox(into: index, at: time, plan: plan) ?? middle
+    }
+
+    /// The box of the last layer the scene before scene `index` clicked, where it is `time` into the seam, in output pixels.
+    static func clickedBox(into index: Int, at time: Double, plan: MotionPlan) -> CGRect? {
         guard index > 0, case let scene = plan.scenes[index - 1],
               let last = clickTargets(of: scene, at: scene.duration + time, plan: plan).max(by: { pressed($0.clicks) < pressed($1.clicks) }),
               let minX = last.corners.map(\.x).min(), let maxX = last.corners.map(\.x).max(),
-              let minY = last.corners.map(\.y).min(), let maxY = last.corners.map(\.y).max() else { return middle }
+              let minY = last.corners.map(\.y).min(), let maxY = last.corners.map(\.y).max() else { return nil }
         let scale = plan.outputScale
         return CGRect(x: minX * scale, y: (plan.canvas.height - maxY) * scale, width: (maxX - minX) * scale, height: (maxY - minY) * scale)
     }
@@ -158,11 +166,21 @@ nonisolated extension MotionFrameRenderer {
     /// height from its middle, magnified log-evenly.
     static func seamTravel(into index: Int, at time: Double, across shutter: Double, plan: MotionPlan) -> Double {
         let size = plan.outputSize
-        guard let transition = plan.scenes[index].transition, [.stack, .expand, .dive].contains(transition.seam), time < transition.duration else { return 0 }
+        guard let transition = plan.scenes[index].transition, time < transition.duration else { return 0 }
         let (opens, closes) = (transition.progress(at: time - shutter / 2), transition.progress(at: time + shutter / 2))
+        if let reach = graphicTravel[transition.seam] {
+            // Their edges cross about this share of the frame's width over the seam, on curves up to 4 times as fast as even
+            return abs(closes - opens) * reach * Double(size.width) * graphicPeak
+        }
+        guard [.stack, .expand, .dive].contains(transition.seam) else { return 0 }
         guard transition.seam == .dive else { return abs(closes - opens) * size.height }
         return abs(closes - opens) * log(diveReach(of: expandSource(into: index, at: time, plan: plan), size: size)) * size.height / 2
     }
+
+    /// How far a graphic seam's fastest edge goes over the seam, in frame widths, for motion blur: the ones that blur themselves
+    /// (a spin, a stretch) or step (a glitch, pixels, a flash) and tiles that only open aren't blurred again.
+    static let graphicTravel: [MotionSeam: Double] = [.iris: 1, .bars: 1.2, .slats: 1, .split: 0.5, .liquid: 1, .flip: 0.5, .cube: 1]
+    static let graphicPeak = 4.0
 
     private static func pressed(_ clicks: [MotionPlan.Click]) -> Double {
         clicks.map(\.press).max() ?? 0

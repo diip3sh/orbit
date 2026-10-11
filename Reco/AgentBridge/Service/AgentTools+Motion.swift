@@ -41,6 +41,9 @@ extension AgentTools {
         motionEdits += 1
         lastMotionBundle = bundle
         onMotionEdited(bundle)
+        // The brand's faces, so the lint measures its text as it's drawn
+        await FontCapture.fetch(edited.fonts, into: bundle)
+        BrandFonts.load(edited.fonts, bundle: bundle)
         return MotionSummary(edited, bundle: bundle, sizes: UILiftCache.sizes(of: edited, in: bundle))
     }
 

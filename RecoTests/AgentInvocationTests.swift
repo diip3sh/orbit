@@ -159,7 +159,10 @@ extension AgentInvocationTests {
         // Read, but only inside the skills: their references are loaded as they're needed
         #expect(run.arguments.contains("WebSearch,WebFetch,Skill,Read"))
         #expect(run.arguments.prefix { $0 != "--permission-mode" }.suffix(5) == ["mcp__reco__*", "WebSearch", "WebFetch", "Skill", "Read(./.claude/skills/**)"])
-        #expect(launch.prompt.contains("choose Reco's skill for this film") && launch.prompt.contains("reco-motion-design"))
+        #expect(launch.prompt.contains("load Reco's director skill, reco-director") && run.files[".claude/skills/reco-director/SKILL.md"] == AgentSkill.director)
+        #expect(launch.prompt.contains("reco-motion-design") && !launch.prompt.contains("Variation"))
+        launch.variation = 4
+        #expect(launch.prompt.contains("Variation: 4"))
         #expect(launch.prompt.contains("reco-story-film") && run.files[".claude/skills/reco-story-film/SKILL.md"] == AgentSkill.storyFilm)
         #expect(launch.prompt.contains("reco-flow-film") && run.files[".claude/skills/reco-flow-film/SKILL.md"] == AgentSkill.flowFilm)
         #expect(launch.prompt.contains("reco-editorial-film") && run.files[".claude/skills/reco-editorial-film/SKILL.md"] == AgentSkill.editorialFilm)
@@ -177,6 +180,7 @@ extension AgentInvocationTests {
 
     /// The skills ship in the app: Claude Code's front matter, then the method; motion design's references beside it.
     @Test func theSkillsAreBundledWithTheirFrontMatter() {
+        #expect(AgentSkill.director.hasPrefix("---\nname: reco-director\ndescription: "))
         #expect(AgentSkill.launchFilm.hasPrefix("---\nname: reco-launch-film\ndescription: "))
         #expect(AgentSkill.launchFilmMethod.hasPrefix("# A launch film, Reco's way"))
         #expect(AgentSkill.motionDesign.hasPrefix("---\nname: reco-motion-design\ndescription: "))
@@ -185,7 +189,7 @@ extension AgentInvocationTests {
         #expect(AgentSkill.editorialFilm.hasPrefix("---\nname: reco-editorial-film\ndescription: "))
         let references = AgentSkill.motionDesignReferences.count + AgentSkill.storyFilmReferences.count + AgentSkill.flowFilmReferences.count
             + AgentSkill.editorialFilmReferences.count
-        #expect(AgentSkill.files.count == 5 + references)
+        #expect(AgentSkill.files.count == 6 + references)
         #expect(AgentSkill.files.values.allSatisfy { !$0.isEmpty })
         // Each reference the method names is there
         for name in AgentSkill.motionDesignReferences {
@@ -240,7 +244,7 @@ extension AgentInvocationTests {
         #expect(document.canvas.frameRate == 60 && document.sound.style == .editorial)
         #expect(Set(document.scenes.map(\.seam)) == [.cut, .wipe, .fade])
         let moves = Set(document.scenes.flatMap { Self.moves(in: $0.layers) })
-        #expect(moves.isSuperset(of: [.unfold, .sweep, .brighten, .blink, .grow, .marks, .orbit, .dots]))
+        #expect(moves.isSuperset(of: [.unfold, .sweep, .brighten, .blink, .grow, .marks, .orbit, .dots, .eat]))
         #expect(MotionLint.findings(in: document).isEmpty)
     }
 

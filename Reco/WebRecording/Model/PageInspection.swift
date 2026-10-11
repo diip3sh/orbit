@@ -70,6 +70,41 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
 
         /// The image or drawing in the link to the home page.
         var logo: Logo?
+
+        /// How the main heading is set (spec 0019): its weight, letter spacing in ems, whether in capitals, and its size as a
+        /// share of the viewport's width.
+        var heading: Heading?
+
+        /// The colours painted on the first three screens, most area first, and the gradients painted there as their stops.
+        var palette: [String]?
+        var gradients: [[String]]?
+
+        /// The main call to action's corner radius and the one most panels share, in CSS pixels.
+        var radius: Radius?
+
+        /// The files of the faces the heading and the body are set in, to set the video in them.
+        var fonts: [Font]?
+    }
+
+    nonisolated struct Heading: Codable, Equatable, Sendable {
+        var weight: Int
+        var tracking: Double
+        var uppercase: Bool
+        var size: Double
+    }
+
+    nonisolated struct Radius: Codable, Equatable, Sendable {
+        var button: Double?
+        var card: Double?
+    }
+
+    nonisolated struct Font: Codable, Equatable, Sendable {
+
+        /// `heading` or `body`.
+        var role: String
+        var family: String
+        var weight: Int
+        var url: String
     }
 
     nonisolated struct Logo: Codable, Equatable, Sendable {

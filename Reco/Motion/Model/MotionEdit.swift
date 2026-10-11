@@ -78,6 +78,10 @@ nonisolated struct MotionEdit: Codable, Equatable, Sendable {
         var gradient: [RGBAColor]?
         var face: TextContent.Face?
         var alignment: TextContent.Alignment?
+
+        /// The brand's family for every text, and its font files (spec 0019).
+        var font: String?
+        var fonts: [MotionFont]?
     }
 
     nonisolated struct SoundChange: Codable, Equatable, Sendable {
@@ -157,6 +161,8 @@ nonisolated extension MotionEdit {
             document.style.gradient = change.gradient ?? document.style.gradient
             document.style.face = change.face ?? document.style.face
             document.style.alignment = change.alignment ?? document.style.alignment
+            document.style.font = change.font ?? document.style.font
+            document.fonts = change.fonts ?? document.fonts
         default:
             let change = try required(sound, "sound")
             document.sound.score = change.score ?? document.sound.score

@@ -10,7 +10,7 @@
     { "id": "cascade", "duration": 2.5, "seam": "push", "shot": { "shot": "uiCascade", "items": [{ "ui": "card" }, { "ui": "card" }] } },
     { "id": "features", "duration": 5, "shot": { "shot": "featureSequence", "items": [{ "text": "Plan", "ui": "card" }, { "text": "Build" }] } },
     {
-      "id": "roll", "duration": 3,
+      "id": "roll", "duration": 3, "camera": { "moves": [{ "move": "hold" }] },
       "layers": [{
         "id": "agents", "content": { "text": { "text": "Agents for Coding", "size": 100 } }, "transform": { "position": [960, 540, 0] },
         "moves": [{ "move": "blurWipe" }, { "move": "roll", "words": ["DevOps", "Triage"] }]

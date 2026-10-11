@@ -141,9 +141,12 @@ struct MotionGrammarTests {
     }
 
     @Test func seamsMoveTheCamerasEitherSide() async {
-        let still = MotionScene(id: "one", duration: 2)
+        // A held camera doesn't breathe, so only the seams move it
+        var still = MotionScene(id: "one", duration: 2)
+        still.camera.moves = [MotionMove(.hold)]
         var through = MotionScene(id: "two", duration: 2)
         through.seam = .zoomThrough
+        through.camera.moves = [MotionMove(.hold)]
         var pushed = MotionScene(id: "three", duration: 2)
         pushed.seam = .push
         let plan = await MotionPlan.build(MotionDocument(scenes: [still, through, pushed]), bundle: URL.temporaryDirectory)

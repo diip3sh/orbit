@@ -33,6 +33,10 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
     /// The conversation before these instructions, oldest first.
     var conversation: [AgentChatMessage] = []
 
+    /// Which of the story shapes that suit a new launch film the director takes, so the same product gets a different
+    /// film each time (spec 0018); 0 leaves it to the agent.
+    var variation = 0
+
     /// A motion video to change, and what the user has selected in its window: what "this" means.
     nonisolated struct MotionVideo: Equatable, Sendable {
         var bundle: URL
@@ -99,21 +103,18 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
     /// How a launch film is made (``AgentSkill``): Claude Code loads the skill the film needs, other agents read the
     /// launch film's here.
     private var launchMethod: String {
-        agent == .claudeCode ? Self.skillChoice : AgentSkill.launchFilmMethod
+        guard agent == .claudeCode else { return AgentSkill.launchFilmMethod }
+        return variation > 0 ? Self.skillChoice + "\n\nVariation: \(variation)" : Self.skillChoice
     }
 
-    /// Which of Reco's skills to load, by what the user asked for (spec 0014).
+    /// Which of Reco's skills to load: the director, which plans the film and names the technique skills it takes (spec 0018).
     static let skillChoice = """
-        Before anything else, choose Reco's skill for this film and load it with the Skill tool, then follow it: \
-        \(AgentSkill.flowFilmName) for a light film where every scene flows out of the last (the default for a product whose \
-        own UI is light, and whenever the user asks for flowing transitions or a light, clean film); \(AgentSkill.editorialFilmName) \
-        for an editorial film of type, paper and pictures under a film score (when the user names ElevenLabs or asks for an \
-        editorial, typographic, print-like or minimal film); \(AgentSkill.storyFilmName) \
-        for one person's job told through the product on a dark ground (the default for a product whose own UI is dark); \
-        \(AgentSkill.motionDesignName) when the user asks for motion design, a UI animation or a \
-        concept film, or names movements such as morphs, a flood, a burst or kinetic type; \(AgentSkill.launchFilmName) \
-        when the user asks for the real UI up close, typed into and toured, Raycast's style or a walk through its docs. \
-        When the user asks for two kinds, load both.
+        Before anything else, load Reco's director skill, \(AgentSkill.directorName), with the Skill tool and follow it: it plans an \
+        original film in the product's own taste (its website's fonts, colours, shapes and motion personality) from what the user \
+        said, and names which of Reco's technique skills to load for its moves (\(AgentSkill.editorialFilmName), \
+        \(AgentSkill.flowFilmName), \(AgentSkill.storyFilmName), \(AgentSkill.motionDesignName), \(AgentSkill.launchFilmName)). Only \
+        when the user names a style (ElevenLabs, Raycast, Lovable, motion design, a light flowing film) lead with that skill's look \
+        and motion, never its reference film's story or words.
         """
 
     /// How a motion video is changed from its window's chat.
@@ -186,7 +187,8 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         parts.append(Self.motionChangePlaybook)
         parts.append(agent == .claudeCode
             ? "For anything beyond a small tweak (a new scene, a new look, making it better), first load the skill the video is made with: "
-                + "\(AgentSkill.storyFilmName) if a person's words are typed big in it (voice moves), \(AgentSkill.motionDesignName) if its scenes are shapes and type "
+                + "\(AgentSkill.storyFilmName) if a person's words are typed big in it (voice moves), \(AgentSkill.editorialFilmName) if it is over "
+                + "paper, ink or lens grounds, \(AgentSkill.flowFilmName) if over haze, \(AgentSkill.motionDesignName) if its scenes are shapes and type "
                 + "that morph, else \(AgentSkill.launchFilmName)."
             : "For anything beyond a small tweak, this is how Reco makes a launch film:\n\n" + AgentSkill.launchFilmMethod)
         parts.append("""

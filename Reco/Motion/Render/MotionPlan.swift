@@ -66,6 +66,9 @@ nonisolated struct MotionPlan: Sendable {
         /// When registration marks frame it (spec 0017), seconds into its scene, and their colour if the move names one.
         var marks: Marks?
 
+        /// Two bars eating it from both ends into a block (spec 0018).
+        var eat: Eat?
+
         /// The field typed into that it shows instead of an image.
         var typing: TypedField?
 

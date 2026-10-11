@@ -82,8 +82,9 @@ print-like or minimal film.
 
 ## Open
 
-- The film's bars parting into the name's first letters, the words eaten from both ends into the mark, the grey lines
-  deleted from the left, and the dotted globe of letters have no moves.
+- The film's bars parting into the name's first letters, the grey lines deleted from the left, and the dotted globe of
+  letters have no moves (words eaten from both ends are `eat`, spec 0018).
 - The wordmark is laid out by the agent from estimated letter widths; a layout the engine measures would be surer.
-- The agent copies the example's arc scene for scene; the skill could offer more than one arc.
+- The agent copied the example's arc scene for scene: spec 0018's director now plans the story, and the skill lists scenes
+  instead of the arc.
 - Nobody has listened to the score.

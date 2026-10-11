@@ -60,6 +60,47 @@ nonisolated enum MotionSeam: String, Codable, CaseIterable, Sendable {
     /// A ring of smoke opens from the middle past the frame's corners, the next scene inside it (Opera's
     /// ring portal): into a closing or a logo, in any look but satin's.
     case ring
+
+    // Graphic transitions in the brand's colours, any look (spec 0019): the devices of After Effects launch films.
+
+    /// A disc of the brand's colour opens out of what was clicked (else the middle), the next scene's disc following inside it.
+    case iris
+
+    /// Two bars in the brand's colours, then the next scene, sweep across one after another, their edges slanted.
+    case bars
+
+    /// The next scene slides in as horizontal strips from alternate sides, the middle ones first.
+    case slats
+
+    /// The next scene opens as a grid of tiles, each from a dot of the brand's colour to a square, in a wave.
+    case tiles
+
+    /// The frame splits down the middle and its halves slide apart, the next scene coming up behind them.
+    case split
+
+    /// The frame spins away blurred along its turn and the next spins in.
+    case spin
+
+    /// The frame tears into shifted bands with its colours apart, blocks of the next showing through, for a moment.
+    case glitch
+
+    /// The frame breaks into blocks that grow, then the next resolves out of them.
+    case pixelate
+
+    /// Blobs of the brand's colours swell out of a corner (or what was clicked) with wobbling edges, the next scene inside.
+    case liquid
+
+    /// The frame turns over as a card, the next scene on its back.
+    case flip
+
+    /// The frame turns away on a cube, the next scene on its next face.
+    case cube
+
+    /// A flash of the brand's colour on the cut, the next scene settling out of it.
+    case flash
+
+    /// The frame stretches away along one axis, blurred, and the next snaps back from stretched.
+    case stretch
 }
 
 nonisolated extension MotionSeam {
@@ -73,4 +114,7 @@ nonisolated extension MotionSeam {
         default: nil
         }
     }
+
+    /// The graphic transitions any look may use, drawn in the brand's colours (spec 0019).
+    static let graphic: Set<MotionSeam> = [.iris, .bars, .slats, .tiles, .split, .spin, .glitch, .pixelate, .liquid, .flip, .cube, .flash, .stretch]
 }

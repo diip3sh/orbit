@@ -96,8 +96,11 @@ nonisolated struct TextImage: @unchecked Sendable {
         return boxes
     }
 
-    /// SF Pro, New York or SF Mono at the content's size and weight.
+    /// The brand's face, else SF Pro, New York or SF Mono, at the content's size and weight.
     private static func font(for content: TextContent) -> NSFont {
+        if let family = content.font, let font = BrandFonts.font(family: family, weight: content.weight, size: content.size) {
+            return font
+        }
         let weight: NSFont.Weight = switch content.weight {
         case .regular: .regular
         case .medium: .medium

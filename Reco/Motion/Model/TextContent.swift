@@ -6,7 +6,7 @@
 import Foundation
 
 /// A text layer: drawn once per plan with Core Text in a system face (spec 0010 decided SF Pro,
-/// New York and SF Mono).
+/// New York and SF Mono), or in the brand's own (`font`, spec 0019).
 nonisolated struct TextContent: Equatable, Sendable {
 
     nonisolated enum Face: String, Codable, Sendable {
@@ -33,6 +33,9 @@ nonisolated struct TextContent: Equatable, Sendable {
 
     /// Where lines wrap, in canvas pixels; `nil` for one line per paragraph.
     var width: Double?
+
+    /// The brand's family it's set in (``MotionDocument/fonts``), else `face`'s system font.
+    var font: String?
 }
 
 // MARK: - Codable
@@ -49,5 +52,6 @@ nonisolated extension TextContent: Codable {
         color = try container.decodeIfPresent(RGBAColor.self, forKey: .color) ?? RGBAColor(red: 0.96, green: 0.96, blue: 0.97, alpha: 1)
         alignment = try container.decodeIfPresent(Alignment.self, forKey: .alignment) ?? .leading
         width = try container.decodeIfPresent(Double.self, forKey: .width)
+        font = try container.decodeIfPresent(String.self, forKey: .font)
     }
 }

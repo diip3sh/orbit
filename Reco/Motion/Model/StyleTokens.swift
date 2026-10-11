@@ -24,6 +24,9 @@ nonisolated struct StyleTokens: Equatable, Sendable {
 
     /// Where titles sit: on the left of the safe area, or centred.
     var alignment = TextContent.Alignment.leading
+
+    /// The brand's family every text is set in unless it names its own or is code (``MotionDocument/fonts``, spec 0019).
+    var font: String?
 }
 
 // MARK: - Codable
@@ -39,6 +42,7 @@ nonisolated extension StyleTokens: Codable {
         gradient = try container.decodeIfPresent([RGBAColor].self, forKey: .gradient)
         face = try container.decodeIfPresent(TextContent.Face.self, forKey: .face) ?? defaults.face
         alignment = try container.decodeIfPresent(TextContent.Alignment.self, forKey: .alignment) ?? defaults.alignment
+        font = try container.decodeIfPresent(String.self, forKey: .font)
     }
 }
 
@@ -66,4 +70,47 @@ nonisolated extension StyleTokens {
 
     /// The silver gradient's lightness steps.
     static let silver = [0.55, 0.72, 0.9]
+}
+
+// MARK: - A graphic seam's colours
+
+nonisolated extension StyleTokens {
+
+    /// The two colours a graphic seam's bars, discs and blobs are drawn in (spec 0019): the accent (else the gradient's first),
+    /// then the gradient's other end, or for a brand of one colour, that colour a quarter lighter (darker if it's light), so a
+    /// seam is always the brand's.
+    var seamColors: [RGBAColor] {
+        let first = accent ?? brandGradient[0]
+        if let gradient, gradient.count >= 2, let last = gradient.last {
+            return [first, last == first ? gradient[0] : last]
+        }
+        var tint = OKLCH(first)
+        tint.lightness += tint.lightness > 0.6 ? -Self.seamTint : Self.seamTint
+        return [first, tint.rgba]
+    }
+
+    /// How much lighter or darker a one-colour brand's second seam colour is, in OKLCH lightness.
+    static let seamTint = 0.25
+
+    /// ``seamColors`` for a seam between scenes on `grounds`: the brand's two kept while they stand out from both, else the
+    /// farthest of them, the text's colour and `background`. An accent bar over a scene already on the accent was lost.
+    func seamColors(between grounds: [RGBAColor], background: RGBAColor) -> [RGBAColor] {
+        let brand = seamColors
+        guard !grounds.isEmpty else { return brand }
+        let apart = { (color: RGBAColor) in grounds.map { Self.difference(color, $0) }.min() ?? 1 }
+        let kept = brand.filter { apart($0) >= Self.seamContrast }
+        let others = (brand + [text, background]).filter { !kept.contains($0) }.sorted { apart($0) > apart($1) }
+        return Array((kept + others).prefix(2))
+    }
+
+    /// How far apart in OKLab a seam's colour and a ground must be to tell them apart at a glance.
+    static let seamContrast = 0.15
+
+    private static func difference(_ one: RGBAColor, _ other: RGBAColor) -> Double {
+        let (first, second) = (OKLCH(one), OKLCH(other))
+        let opponent = { (color: OKLCH) in (color.chroma * cos(color.hue * .pi / 180), color.chroma * sin(color.hue * .pi / 180)) }
+        let (start, end) = (opponent(first), opponent(second))
+        return ((first.lightness - second.lightness) * (first.lightness - second.lightness)
+            + (start.0 - end.0) * (start.0 - end.0) + (start.1 - end.1) * (start.1 - end.1)).squareRoot()
+    }
 }

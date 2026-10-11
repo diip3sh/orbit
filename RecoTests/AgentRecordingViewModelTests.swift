@@ -382,7 +382,7 @@ extension AgentRecordingViewModelTests {
 
         let prompt = try #require(calls.arguments.first?[1])
         #expect(prompt.hasPrefix("Make a launch video of this product with Reco: https://linear.app"))
-        #expect(prompt.contains("choose Reco's skill for this film and load it with the Skill tool"))
+        #expect(prompt.contains("load Reco's director skill, reco-director, with the Skill tool") && prompt.contains("Variation: "))
         // Claude Code finds Reco's skills in its run's folder, and may use the Skill tool and read them
         #expect(calls.arguments.first?.contains("WebSearch,WebFetch,Skill,Read") == true)
         #expect(model.phase == .idle)

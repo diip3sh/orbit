@@ -51,4 +51,25 @@ nonisolated extension MotionFrameRenderer {
     static let marksDash = 3.0
     static let marksLineOpacity = 0.3
     static let marksClearance = 42.0
+
+    /// A text eaten by two bars from its ends to its middle (spec 0018), in its image's pixels: what's between the bars, and the
+    /// bars, at whole pixels; before it starts, the text as it is. Drawn in the room its bars start in, as letters are.
+    static func eaten(_ content: CIImage, of layer: MotionPlan.Layer, by eat: MotionPlan.Eat, at time: Double) -> CIImage {
+        let (scale, size, room) = (layer.rasterScale, layer.size, layer.revealRoom)
+        let extent = CGRect(x: -room.width, y: -room.height, width: size.width + room.width * 2, height: size.height + room.height * 2)
+            .applying(CGAffineTransform(scaleX: scale, y: scale))
+        let clear = CIImage(color: .clear).cropped(to: extent)
+        guard time >= eat.start, let line = layer.parts.map(\.height).max() else { return content.composited(over: clear) }
+        let progress = MoveExpansion.eatEasing.progress((time - eat.start) / eat.duration, duration: eat.duration)
+        // The left bar's inner edge, from a gap outside the text's start to its middle; the right bar's mirrors it
+        let gap = line * MoveExpansion.eatGap
+        let edge = ((-gap + progress * (size.width / 2 + gap)) * scale).rounded()
+        let bar = CGSize(width: (line * MoveExpansion.eatBar.width * scale).rounded(), height: (line * MoveExpansion.eatBar.height * scale).rounded())
+        let (right, bottom) = (size.width * scale - edge, ((size.height * scale - bar.height) / 2).rounded())
+        let ink = CIImage(color: CIColor(red: eat.color.red, green: eat.color.green, blue: eat.color.blue, alpha: eat.color.alpha))
+        let between = content.cropped(to: CGRect(x: edge, y: extent.minY, width: max(right - edge, 0), height: extent.height))
+        return ink.cropped(to: CGRect(x: edge - bar.width, y: bottom, width: bar.width, height: bar.height))
+            .composited(over: ink.cropped(to: CGRect(x: right, y: bottom, width: bar.width, height: bar.height)))
+            .composited(over: between).composited(over: clear).cropped(to: extent)
+    }
 }

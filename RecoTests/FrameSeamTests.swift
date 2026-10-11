@@ -46,7 +46,7 @@ struct FrameSeamTests {
     @Test func anExpandOpensFromTheLastClick() async throws {
         let button = #"{"id": "button", "content": {"shape": {"size": [200, 100], "color": "333333"}}, "transform": {"position": [1500, 300, 0]},"#
             + #" "moves": [{"move": "click", "start": 0.5}]}"#
-        let json = #"{"version": 1, "scenes": [{"id": "one", "duration": 2, "layers": ["# + button
+        let json = #"{"version": 1, "scenes": [{"id": "one", "duration": 2, "camera": {"moves": [{"move": "hold"}]}, "layers": ["# + button
             + #"]}, {"id": "two", "duration": 2, "seam": "expand"}, {"id": "three", "duration": 2, "seam": "expand"}]}"#
         let plan = await MotionPlan.build(try JSONDecoder().decode(MotionDocument.self, from: Data(json.utf8)), bundle: URL.temporaryDirectory)
 

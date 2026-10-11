@@ -27,6 +27,7 @@ nonisolated enum DocumentExpansion {
 
     /// - Parameter sizes: The UI assets' sizes in CSS pixels, for those already lifted or measured.
     static func expanded(_ document: MotionDocument, sizes: [String: CGSize]) -> MotionDocument {
+        let document = document.brandSet
         var output = document
         for index in document.scenes.indices {
             var result = laidOut(document, scene: index, sizes: sizes)

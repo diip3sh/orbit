@@ -78,6 +78,7 @@ nonisolated enum ShotLayout {
     static func text(_ string: String, size: Double, color: RGBAColor, width: Double?, style: StyleTokens, alignment: TextContent.Alignment? = nil) -> TextContent {
         var content = TextContent(text: string)
         content.face = style.face
+        content.font = style.font
         // A serif headline reads best light; a sans one firm
         content.weight = style.face == .serif ? .regular : .semibold
         content.size = size

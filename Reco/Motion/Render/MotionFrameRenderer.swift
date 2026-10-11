@@ -74,7 +74,10 @@ nonisolated enum MotionFrameRenderer {
             let previous = sceneImage(
                 index - 1, at: plan.scenes[index - 1].duration + sceneTime, sharpAt: plan.scenes[index - 1].duration + sharpTime, plan: plan, frames: frames
             )
-            frame = transitioned(previous, frame, into: index, at: sceneTime, plan: plan)
+            // A seam that cuts inside itself (pixels, a glitch, dots, a spin, a stretch, a flash) is drawn at the frame's own time:
+            // averaged across the shutter, its cut drew both scenes grey, and the ones that move blur themselves
+            let stepped: Set<MotionSeam> = [.pixelate, .glitch, .dither, .spin, .stretch, .flash]
+            frame = transitioned(previous, frame, into: index, at: stepped.contains(transition.seam) ? sharpTime : sceneTime, plan: plan)
         }
         // An opening's control coming in over its ground alone, which is all there is before it
         if let arrival = plan.scenes[index].arrival, case let since = sceneTime - plan.scenes[index].arrivesAt, since < arrival.duration {

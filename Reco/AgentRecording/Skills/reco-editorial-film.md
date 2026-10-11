@@ -16,7 +16,14 @@ does, and what yours must do:
   product's panels dark (`#151617`) with mono text. Never a screenshot, never glass, never a glow.
 - **Things change inside a scene, sharply.** A square steps larger in cuts and grows to fill the frame; a card grows into
   the frame and is the picture; a card turns into a sphere; tiles leave by an edge; a pill opens beside the sphere. Every
-  frame is sharp (no motion blur), and the camera only settles back onto a card or a mosaic.
+  frame is sharp (no motion blur).
+- **Never still, never cut from a still frame.** The film is frozen in 6 % of its frames; a rebuild that held still and
+  then cut was frozen in 26 % and read as a slideshow. Each shot opens moving (half its settle in 0.12 s), creeps about
+  2 % a second while held, and leaves faster into its cut. Reco breathes every scene that has no camera of its own; the
+  last scene holds, as the end card does.
+- **Across every cut, one thing carries on.** What ends a scene is what the next begins with, in the same place: a line
+  eaten into a black square, and the square grows into the next picture; a picture shrinking into a circle, and the circle
+  still shrinking on paper; the last line eaten into the mark, and the wordmark opens from it.
 - **Registration marks** frame what's shown: dotted hairlines across the whole frame, a solid square where they cross.
 - **A film score.** Dark wide pads, a sub boom after each section's cut, high ticks on what types, a breakdown, the tonic's
   major at the peak, a burst on the logo; no drums.
@@ -31,6 +38,7 @@ Every one of these was measured on the film and rebuilt in the engine. `referenc
 |---|---|
 | The mark opens into its name and tagline | a group: mark, name (one text or a bold and a regular), tagline last; `unfold` on the group |
 | A statement lit word by word as it settles | text with `brighten` (dim from the cut, a word at a time, from 1.19× to its size) |
+| A line eaten into a block as its scene ends | text with `eat`: two bars close from its ends to its middle into the cut (0.25 s, ease-in, by default its last 0.25 s; `color` the bars', else the text's) |
 | A tagline or a word wiped in | text with `sweep` |
 | A mono label blinking in | a group of a 5×12 bar and the label, `blink` on the bar and, a frame later, on the label |
 | Grey description lines | mono 14 px `#858483`, `type` at 115 characters a second |
@@ -47,10 +55,19 @@ Every one of these was measured on the film and rebuilt in the engine. `referenc
 ## Transitions
 
 - `cut` almost everywhere: on paper, between pictures, into ink. Moves land on the cut (the card grows from its first
-  frame, the statement is there dim).
+  frame, the statement is there dim), and the scene before runs into it (an `eat`, a shrink, a slide).
+- Plan every cut's bridge: the last shape of a scene and the first of the next at the same place and size.
+  - A line `eat`en: the next scene starts with a black square that size where the bars met, which `morph`s larger
+    (ease-in-out, 40 → 336 px in 0.27 s) and is a picture; or, last of all, the wordmark `unfold`s from the mark there.
+  - A picture card `morph`ing into a circle larger than the frame and shrinking: the next scene starts with the circle at
+    the size it ended, still shrinking, words parting round it.
+  - A pill or card sliding faster into the cut: the next scene starts with the bar or card where it landed.
+  - The same card in macro, then wide: cut on its send, the card in the same place.
 - `wipe` once: a picture sweeping in from the right over the wordmark, into the first card on a picture.
-- `fade` into the dark beat and out of it.
-- Nothing else: no whip, dive, melt, glow, dither, ring, stack or expand.
+- `fade` into the dark beat and out of it: in an editorial film it is the ground darkening in 0.18 s, never a dissolve.
+  Keep what's on screen in the same place on both sides, so only the ground changes.
+- Of the graphic seams, `slats`, `split` and `iris` keep the print feel: at most two, at the film's turns, when
+  reco-director's personality asks for them. Nothing else: no whip, dive, melt, glow, dither, ring, stack or expand.
 
 ## The look
 
@@ -83,22 +100,21 @@ Every one of these was measured on the film and rebuilt in the engine. `referenc
    what it does in four to six verbs ("ANALYZING CONVERSATIONS", "WRITING FIX"), its main input (a prompt, a request)
    and a real request a user would type, what it gives back, the tools it connects to, and its closing line. Web search
    what it's for, if you can.
-2. **Story.** Follow the reference's arc in 12–14 scenes; `reference/example.md` is all of it, rebuilt:
-   1. the mark opens into two or three words (`unfold`), 2 s;
-   2. labels blink in round a picture square that steps larger and grows to fill the frame, 2.4 s;
-   3. the wordmark opens: mark, name, tagline, 3 s;
-   4. `wipe` to a picture: the request card (outline, white fill sweeping from the right, a chip, the request typed), 3.4 s;
-   5. the steps it takes as icon tiles framed by marks, 2.4 s;
-   6. `fade` to the dark beat: what it's doing ("Scanning conversations…"), stars turning, the line lit, 3.2 s;
-   7. a mosaic of its panels and pictures; tiles leave by their edges, one card stays, 2.8 s;
-   8. that card turns into a sphere among dots; the input pill opens beside it, 2.8 s;
-   9. the input on a picture card, a request typed, 3 s;
-   10. a statement on ink, brightened, 2.9 s;
-   11. a card grows into "Connect <name> to — <tool>", the tools cutting by every 0.667 s on their own pictures, 3.6 s;
-   12. a sphere shrinking as two words part ("Improve ● your agents"), 1.75 s;
-   13. a last statement brightened on paper, 2.5 s;
-   14. the wordmark unfolds again and holds, 5.3 s.
-   Words are the product's own, short and plain: never hype.
+2. **Story.** The story's shape comes from reco-director, never from the reference film. These are the scenes this look
+   does well; take the ones your story needs, in its order, with your product's own words (`reference/recipes.md` has
+   each):
+   - the mark opening into its name (`unfold`), 2–3 s;
+   - labels blinking in round a picture square that steps larger and grows to fill the frame;
+   - the product's input on a picture card: an outline, its fill sweeping in, a chip, a real request typed;
+   - what it does as icon tiles framed by marks;
+   - one dark beat: what it's doing as one line, stars turning round it, the line lit (`fade` in and out);
+   - a mosaic of its panels and pictures, tiles leaving by their edges, one staying;
+   - a card turning into a sphere among dots, a pill opening beside it;
+   - a statement lit word by word, on ink or paper;
+   - a card growing into the frame, names or results cutting on it;
+   - two words parting round a shrinking sphere;
+   - the wordmark again, held, to end.
+   `reference/example.md` shows how a whole film is written. Its story, words and order are ElevenLabs': never yours.
 3. **Assets.** Rebuild everything as shapes and type. The mark is a text glyph when the logo is letters, else the logo
    lifted `bare` as a `ui` layer, first in the wordmark's group. Pictures are the engine's (`picture`), never lifted.
 4. **Write the scenes.** Copy the components from `reference/recipes.md`: read it now. Write the whole document in one
@@ -124,8 +140,9 @@ Every one of these was measured on the film and rebuilt in the engine. `referenc
 
 ## Never
 
-- Motion blur, a drifting camera, glass, glows, gradients on type, shadows on cards.
-- A seam other than a cut, one `wipe` and the `fade`s into and out of the dark beat.
+- Motion blur, a camera that pans, glass, glows, gradients on type, shadows on cards.
+- A scene that ends on a still frame: its last move runs into the cut.
+- A seam other than a cut, `wipe`, the `fade`s into and out of a dark beat and the graphic seams above.
 - Fades on words (they pop, blink, sweep or type), or words on `sand` and `dune`.
 - Screenshots of the product; text under 32 px that isn't a mono label or description.
 - Hype copy, exclamation marks, emoji.

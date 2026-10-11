@@ -70,6 +70,7 @@ Every change of scene is a transition with a reason, and you can name it:
 | The end words into the logo | `ring`, with `"field": "halo"` |
 | The next scene moves on its first frame: a voice line typing, a pop at 0, a scatter, a scroll | `cut`: the motion on the cut carries it |
 
+- The graphic seams (`iris`, `bars`, `slats`, `tiles`, `split`, `spin`, `glitch`, `pixelate`, `liquid`, `flip`, `cube`, `flash`, `stretch`) go in any look, in the brand's colours: reco-director's section 4 picks them by the brand's personality, two to four at the film's turns, never two running.
 - Never the same seam on two scene changes running, and never more than two cuts running. A film of 15 scenes uses at
   least four kinds.
 - Never a cut onto something still.
@@ -98,7 +99,8 @@ white product keeps its tiles its own greys and lets the marks carry the colour.
 
 ### The ground: one of Reco's looks
 
-Choose one from the brand and keep the whole film in it (one look a film):
+reco-director (section 3) chooses the ground from the brand, `plain` on the site's own colours among them; these are the
+shader looks and what each needs. Keep the whole film in one (one look a film):
 
 | The brand | Look | `canvas.field` | `fieldStrength` | Seam |
 |---|---|---|---|---|
@@ -154,6 +156,8 @@ something is sent. Nowhere else: the UI keeps its own colours.
      - its theme: background, surfaces, border, text, fonts, button style, status colours, logo.
    - Web search what it's for, if you can.
 2. **Story.**
+   - When reco-director chose the story's shape, tell that shape with this skill's moves; the beats below are one way,
+     never the reference film's story or words.
    - Pick one person and a concrete job that the product does well, e.g. "I've got five bugs and one evening".
    - Write 5–7 beats:
      1. the ask (voice);

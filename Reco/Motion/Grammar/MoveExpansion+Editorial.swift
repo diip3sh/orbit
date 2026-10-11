@@ -56,6 +56,31 @@ nonisolated extension MoveExpansion {
     static let unfoldSettle = (start: 0.72, duration: 1.4, response: 0.86)
     static let unfoldDuration = 2.1
 
+    /// An eat (spec 0018): ElevenLabs' lines left their scenes eaten from both ends by the mark's two bars, ease-in, the bars
+    /// meeting in the middle as the cut came: "Your agents" 280 → 39 px in 0.28 s, "Elevate your customer experiences" 989 → 37
+    /// px in 0.18 s. The bars start a third of a line outside the text's ends, a fifth of a line wide and three quarters tall.
+    static let eatDuration = 0.25
+    static let eatEasing = MotionEasing.exit
+    static let eatGap = 0.3
+    static let eatBar = CGSize(width: 0.2, height: 0.75)
+
+    /// A scene breathing (spec 0018): ElevenLabs' film was frozen in 6 % of its frames before the end card, ours in 26 %. Its shots
+    /// opened moving at their fastest, a pull-back half done in 0.12 s and nine tenths in 0.4 s; held, they crept about 2 % a
+    /// second; and they left accelerating (the wordmark grew 5 % in its last 0.4 s into the wipe).
+    static let breathSettle = (from: 1.04, timeConstant: 0.17)
+    static let breathCreep = 0.015
+    static let breathLeave = (by: 1.03, duration: 0.4)
+
+    /// A camera's scale tracks breathing over a scene `duration` long: settling in, creeping closer, leaving faster.
+    static func breath(over duration: Double) -> [PropertyTrack] {
+        let leave = min(breathLeave.duration, duration / 2)
+        return [
+            ramp(.scale, (breathSettle.from, 1), start: 0, duration: duration, easing: .settle(timeConstant: breathSettle.timeConstant)),
+            ramp(.scale, (1, 1 + breathCreep * duration), start: 0, duration: duration, easing: .linear),
+            ramp(.scale, (1, breathLeave.by), start: duration - leave, duration: leave, easing: .exit)
+        ]
+    }
+
     /// When each word of a brightened line lights after its start, by the characters in `lengths`.
     static func brightenOffsets(_ lengths: [Int]) -> [Double] {
         var offsets: [Double] = []
@@ -95,6 +120,7 @@ nonisolated extension MoveExpansion {
         case .orbit: orbitDuration
         case .dots: dotsDuration
         case .unfold: unfoldDuration
+        case .eat: min(eatDuration, rest)
         default: rest
         }
     }

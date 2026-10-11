@@ -229,7 +229,7 @@ final class AgentRecordingViewModel {
         guard !isRunning else { return nil }
         guard let url = WebScript.url(from: address) else { return .address }
         guard let agent else { return nil }
-        run(AgentRecordingRequest(url: url, instructions: instructions, agent: agent, mode: mode, model: model))
+        run(AgentRecordingRequest(url: url, instructions: instructions, agent: agent, mode: mode, model: model, variation: .random(in: 1...6)))
         return nil
     }
 

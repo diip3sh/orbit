@@ -50,7 +50,8 @@ What makes it good, and what yours must have:
      song → it's added.
    - Find the parts to lift: list rows, cover art, avatars, the logo. For the n-th of many alike, select it with
      `div:nth-of-type(n) > <the row's selector>`.
-2. **Storyboard** the beats. For each, say which object carries over from the beat before: the pill that
+2. **Storyboard** the beats, in the story's shape reco-director chose (never the reference film's). For each, say which
+   object carries over from the beat before: the pill that
    was the dot, the dot that becomes the caret. Put every change on the 0.48 s grid, and start each move a
    little before the one before ends.
 3. **Assets.**

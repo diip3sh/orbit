@@ -43,9 +43,10 @@ nonisolated enum MotionLint {
     /// Reveals read along as they're typed.
     private static let typedReveals: Set<MotionMove.Kind> = [.type, .kinetic, .voice]
 
-    private static let actions: Set<MotionMove.Kind> = [.exit, .click, .press, .spin, .morph, .flood, .scroll, .burst, .ripple, .shimmer, .wash, .hide]
+    private static let actions: Set<MotionMove.Kind> = [.exit, .eat, .click, .press, .spin, .morph, .flood, .scroll, .burst, .ripple, .shimmer, .wash, .hide]
 
     static func findings(in document: MotionDocument, sizes: [String: CGSize] = [:]) -> [Finding] {
+        let document = document.brandSet
         let expanded = DocumentExpansion.expanded(document, sizes: sizes)
         var findings: [Finding] = []
         // Live takes and how long they play, as record_page times them
@@ -55,7 +56,7 @@ nonisolated enum MotionLint {
             }
         }
         findings += beatFindings(document)
-        let isEditorial = document.scenes.contains { ($0.field ?? document.canvas.field).family == .editorial }
+        let isEditorial = document.isEditorial
         for (scene, source) in zip(expanded.scenes, document.scenes) {
             let context = MoveContext(sceneDuration: scene.duration, canvas: document.canvas.size)
             let layers = timed(scene.layers, in: context, group: nil)
@@ -328,7 +329,7 @@ nonisolated enum MotionLint {
                 let ratio = contrast.formatted(.number.precision(.fractionLength(1)))
                 findings.append(Finding(rule: .contrast, scene: scene.id, layer: id, message: "Contrast \(ratio):1 against the background is too low."))
             }
-            let leaves = timed.moves.first { $0.kind == .exit }?.start ?? scene.duration
+            let leaves = timed.moves.first { [.exit, .eat].contains($0.kind) }?.start ?? scene.duration
             if timed.group == nil, control == nil, timed.shown > 0, leaves - timed.shown < ReadingTime.hold(for: text.text) - 1e-6 {
                 let held = (leaves - timed.shown).formatted(.number.precision(.fractionLength(1)))
                 let needed = ReadingTime.hold(for: text.text).formatted(.number.precision(.fractionLength(1)))

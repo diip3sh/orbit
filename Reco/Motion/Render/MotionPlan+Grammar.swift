@@ -19,8 +19,9 @@ extension MotionPlan {
         }
     }
 
-    /// Each seam's camera tracks on the scenes either side of it, and its transition.
+    /// Each seam's camera tracks on the scenes either side of it, and its transition; the scenes breathe first.
     nonisolated static func addSeams(of document: MotionDocument, to scenes: inout [Scene]) {
+        breathe(&scenes, of: document)
         if let first = scenes.first, let opening = document.scenes.first, let arrival = SeamExpansion.arrival(on: first.field) {
             if opening.shot?.kind == .macro {
                 scenes[0].arrival = language(arrival, into: first.field, document: document)
@@ -39,8 +40,29 @@ extension MotionPlan {
             )
             scenes[index - 1].cameraMoves.merge(effect.outgoing) { $0 + $1 }
             scenes[index].cameraMoves.merge(effect.incoming) { $0 + $1 }
-            scenes[index].transition = effect.transition.map { language($0, into: scenes[index].field, document: document) }
-            scenes[index - 1].overlap = effect.transition?.duration ?? 0
+            var transition = effect.transition.map { language($0, into: scenes[index].field, document: document) }
+            if after.seam == .fade, document.isEditorial {
+                transition = SeamExpansion.Transition(seam: .fade, duration: SeamExpansion.darkenDuration, easing: .enter)
+            }
+            if MotionSeam.graphic.contains(after.seam) {
+                let grounds = [before, after].compactMap { ground(of: $0, in: document) }
+                transition?.colors = document.style.seamColors(between: grounds, background: document.canvas.background)
+                transition?.variant = index
+                transition?.isLight = MotionPlan.isLight(document.canvas.background)
+            }
+            scenes[index].transition = transition
+            scenes[index - 1].overlap = transition?.duration ?? 0
+        }
+    }
+
+    /// Every scene without a camera of its own, or a shot that lays one out, breathes (``MoveExpansion/breath(over:)``), all but
+    /// the last, which holds as ElevenLabs' end card did. Editorial films first (spec 0018); then all (spec 0019): a LemonLime
+    /// film whose agent gave its scenes no camera was still in a quarter of its frames before its end card.
+    nonisolated private static func breathe(_ scenes: inout [Scene], of document: MotionDocument) {
+        for index in scenes.indices.dropLast() {
+            let scene = document.scenes[index]
+            guard scene.shot == nil, scene.camera.moves.isEmpty, scene.camera.keyframes.isEmpty else { continue }
+            scenes[index].cameraMoves[.scale, default: []] += MoveExpansion.breath(over: scenes[index].duration)
         }
     }
 
@@ -56,6 +78,21 @@ extension MotionPlan {
         transition.look = field.family == family ? field : MotionField.allCases.first { $0.family == family } ?? .plain
         transition.palette = FieldPalette(transition.look, style: document.style, background: document.canvas.background)
         return transition
+    }
+
+    /// The colour a scene's frame mostly is, when it can be told: the topmost filled rectangle covering the canvas, else a plain
+    /// field's background.
+    nonisolated private static func ground(of scene: MotionScene, in document: MotionDocument) -> RGBAColor? {
+        let canvas = document.canvas.size
+        let covering = scene.layers.last { layer in
+            guard case .shape(let shape) = layer.content, shape.kind == .rectangle, (shape.stroke ?? 0) == 0, shape.glass != true,
+                  shape.picture == nil else { return false }
+            return shape.size.width >= canvas.width * 0.95 && shape.size.height >= canvas.height * 0.95
+        }
+        if case .shape(let shape) = covering?.content {
+            return shape.color
+        }
+        return (scene.field ?? document.canvas.field) == .plain ? document.canvas.background : nil
     }
 
     /// How many times larger than from rest the camera shows the canvas.

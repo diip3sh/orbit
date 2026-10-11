@@ -196,6 +196,12 @@ nonisolated extension SoundCueList {
                 }
             }
         }
+        // A graphic seam sounds as it does in any look
+        for scene in plan.scenes.dropFirst() {
+            if let transition = scene.transition, MotionSeam.graphic.contains(transition.seam) {
+                graphic(transition.seam, at: scene.start, lasting: transition.duration)
+            }
+        }
         for (scene, planned) in zip(document.scenes, plan.scenes) {
             for layer in Self.flattened(scene.layers) {
                 let context = MoveContext(sceneDuration: planned.duration, canvas: plan.canvas, layer: layer)

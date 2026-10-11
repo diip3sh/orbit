@@ -8,7 +8,7 @@ import CoreImage
 /// Flow films' parts of a frame (spec 0016): a text's selection behind it.
 nonisolated extension MotionFrameRenderer {
 
-    /// A text layer's pixels as its reveal shows them at `time`, over its selection.
+    /// A text layer's pixels as its reveal shows them at `time`, over its selection, eaten by its bars.
     static func lettered(_ content: CIImage, of layer: MotionPlan.Layer, at time: Double) -> CIImage {
         var content = content
         if let reveal = layer.reveal {
@@ -16,6 +16,9 @@ nonisolated extension MotionFrameRenderer {
         }
         if let selection = layer.clicks.lazy.compactMap(\.sweep).first {
             content = selected(content, of: layer, by: selection, at: time)
+        }
+        if let eat = layer.eat {
+            content = eaten(content, of: layer, by: eat, at: time)
         }
         return content
     }

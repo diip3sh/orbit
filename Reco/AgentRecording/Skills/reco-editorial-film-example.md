@@ -1,12 +1,13 @@
 # A whole editorial film: ElevenLabs' rebuilt
 
 ElevenLabs' launch film rebuilt in 41 s and checked against its frames: the wordmark opening, the statements lit word by
-word, the stars, the card growing and the wipe matched it frame for frame. Take its structure, its moves and its pace; your
-words, mark, labels and pictures from your product:
+word, the stars, the card growing and the wipe matched it frame for frame. It shows how a whole film is written: its moves,
+their timing, a line eaten into the cut and the wordmark opening from it. Its story, its order and its words are
+ElevenLabs': yours come from reco-director and your product.
 
 | Scene | Seconds | What it shows | How it comes in |
 |---|---|---|---|
-| open | 2.0 | The mark opens into "Your agents" | the first frame |
+| open | 2.0 | The mark opens into "Your agents"; the line is eaten into a block | the first frame |
 | labels | 2.42 | Mono labels blink in round a picture square stepping larger, which grows to fill the frame | cut |
 | wordmark | 3.0 | The wordmark opens out of its mark; the tagline is swept in | cut |
 | question | 3.4 | The request card: outline, fill sweeping in, chip, the request typed | wipe |
@@ -18,8 +19,8 @@ words, mark, labels and pictures from your product:
 | standards | 2.9 | A statement on ink, lit word by word | cut |
 | connect | 3.57 | A card grows into the frame: "Connect Architect to — Claude", the tools cutting by | cut |
 | improve | 1.75 | "Improve ● your agents", the sphere shrinking as the words part | cut |
-| elevate | 2.5 | A last statement lit on paper | cut |
-| end | 5.3 | The wordmark opens again and holds | cut |
+| elevate | 2.7 | A last statement lit on paper, eaten into the mark | cut |
+| end | 5.3 | The wordmark opens again from the mark and holds | cut |
 
 ```json
 {
@@ -27,8 +28,8 @@ words, mark, labels and pictures from your product:
   "scenes": [
     {"id": "open", "duration": 2.0, "field": "paper", "seam": "cut", "layers": [
       {"id": "line", "content": {"group": [
-        {"id": "mark", "content": {"text": {"text": "II", "size": 68, "color": "#000000", "weight": "bold", "face": "sans"}}, "transform": {"position": [-205, 0, 0], "anchor": [0, 0.5]}},
-        {"id": "words", "content": {"text": {"text": "Your agents", "size": 68, "color": "#1b1a19", "weight": "regular", "face": "sans"}}, "transform": {"position": [-158, 0, 0], "anchor": [0, 0.5]}}
+        {"id": "mark", "content": {"text": {"text": "II", "size": 68, "color": "#000000", "weight": "bold", "face": "sans"}}, "transform": {"position": [-205, 0, 0], "anchor": [0, 0.5]}, "moves": [{"move": "hide", "start": 1.72}]},
+        {"id": "words", "content": {"text": {"text": "Your agents", "size": 68, "color": "#1b1a19", "weight": "regular", "face": "sans"}}, "transform": {"position": [-158, 0, 0], "anchor": [0, 0.5]}, "moves": [{"move": "eat", "start": 1.72, "duration": 0.28, "color": "#000000"}]}
       ]}, "transform": {"position": [960, 540, 0]}, "moves": [{"move": "unfold", "start": 0.25}]}
     ]},
     {"id": "labels", "duration": 2.42, "field": "plain", "seam": "cut", "layers": [
@@ -71,7 +72,7 @@ words, mark, labels and pictures from your product:
     ]},
     {"id": "question", "duration": 3.4, "field": "lens", "seam": "wipe", "picture": "mist", "camera": {"moves": [{"move": "pullBack", "start": 0.28, "duration": 0.9, "intensity": 1.1}]}, "layers": [
       {"id": "outline", "content": {"shape": {"size": [1500, 700], "cornerRadius": 40, "color": "#ffffffcc", "stroke": 2}}, "transform": {"position": [960, 540, 0]}, "moves": [{"move": "blink", "start": 0.28}, {"move": "hide", "start": 0.6}]},
-      {"id": "card", "content": {"shape": {"size": [120, 700], "cornerRadius": 40, "color": "#ffffff"}}, "transform": {"position": [1710, 540, 0], "anchor": [1, 0.5]}, "moves": [{"move": "morph", "start": 0.36, "duration": 0.24, "size": [1500, 700]}]},
+      {"id": "card", "content": {"shape": {"size": [120, 700], "cornerRadius": 40, "color": "#ffffff"}}, "transform": {"position": [1710, 540, 0], "anchor": [1, 0.5]}, "moves": [{"move": "show", "start": 0.36}, {"move": "morph", "start": 0.36, "duration": 0.24, "size": [1500, 700]}]},
       {"id": "chipGroup", "content": {"group": [
         {"id": "chip", "content": {"shape": {"size": [520, 66], "cornerRadius": 14, "color": "#e4e4e4", "stroke": 1.5}}, "transform": {"position": [510, 262, 0]}},
         {"id": "avatar", "content": {"shape": {"size": [26, 26], "cornerRadius": 13, "color": "#6b6b6b"}}, "transform": {"position": [284, 262, 0]}},
@@ -169,8 +170,8 @@ words, mark, labels and pictures from your product:
         {"id": "yours", "content": {"text": {"text": "your agents", "size": 68, "color": "#1b1a19", "weight": "regular", "face": "sans"}}, "transform": {"position": [1162, 540, 0], "anchor": [0, 0.5]}, "moves": [{"move": "morph", "start": 0.03, "duration": 0.6, "to": [1213, 540]}, {"move": "morph", "start": 1.45, "duration": 0.25, "to": [1150, 540]}]}
       ]}, "transform": {"position": [0, 0, 0]}}
     ]},
-    {"id": "elevate", "duration": 2.5, "field": "plain", "seam": "cut", "layers": [
-      {"id": "elevate", "content": {"text": {"text": "Elevate your customer experiences", "size": 68, "color": "#1b1a19", "weight": "regular", "face": "sans"}}, "transform": {"position": [960, 540, 0], "anchor": [0.5, 0.5]}, "moves": [{"move": "brighten", "start": 0.02}]}
+    {"id": "elevate", "duration": 2.7, "field": "plain", "seam": "cut", "layers": [
+      {"id": "elevate", "content": {"text": {"text": "Elevate your customer experiences", "size": 68, "color": "#1b1a19", "weight": "regular", "face": "sans"}}, "transform": {"position": [960, 540, 0], "anchor": [0.5, 0.5]}, "moves": [{"move": "brighten", "start": 0.02}, {"move": "eat", "color": "#000000"}]}
     ]},
     {"id": "end", "duration": 5.3, "field": "paper", "seam": "cut", "layers": [
       {"id": "lockup", "content": {"group": [
