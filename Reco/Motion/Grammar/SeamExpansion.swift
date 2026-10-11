@@ -78,6 +78,14 @@ nonisolated enum SeamExpansion {
     /// −38, −32, −24 … −4 levels a frame), what was on it staying; it never cross-dissolved.
     static let darkenDuration = 0.18
 
+    /// A flow's handoff (``MotionPlan/handOff(from:to:way:canvas:)``): the last layer in is settling as it ends.
+    static let flowDuration = 0.8
+
+    /// A swing turns the scene 40° away round where the camera looks over its last 0.3 s, in-cubic, coming 6 % nearer, and the
+    /// next in from 40° the other way over 0.6 s, out-expo, from 6 % further: fastest at the cut, where motion blur hides it.
+    static let swingOut = (duration: 0.3, degrees: 40.0, push: 0.06)
+    static let swingIn = (duration: 0.6, degrees: 40.0, pull: 0.06)
+
     /// A card rising over the frame and an element opening into it: as long as a sheet or an app takes to open.
     static let stackDuration = 0.7
     static let expandDuration = 0.65
@@ -126,8 +134,10 @@ nonisolated enum SeamExpansion {
     ///   - velocity: The camera's at the end of the scene before.
     ///   - zooms: How magnified each side's camera shows the canvas where they meet: a whip's travel is a
     ///     share of the frame, whatever the zoom.
+    ///   - variant: The scene's index: two swings in a film turn different ways.
     static func effect(
-        of seam: MotionSeam, outgoingDuration: Double, canvas: CGSize, hasText: Bool, velocity: Velocity, zooms: (outgoing: Double, incoming: Double) = (1, 1)
+        of seam: MotionSeam, outgoingDuration: Double, canvas: CGSize, hasText: Bool, velocity: Velocity, zooms: (outgoing: Double, incoming: Double) = (1, 1),
+        variant: Int = 0
     ) -> Effect {
         let unit = canvas.height / 1080
         let blur = (hasText ? 10 : 18) * unit
@@ -167,7 +177,13 @@ nonisolated enum SeamExpansion {
             let width = canvas.width
             outgoing(.positionX, 0, whipOut.travel * width / zooms.outgoing, last: whipOut.duration, easing: .exit)
             incoming(.positionX, -whipIn.travel * width / zooms.incoming, 0, over: whipIn.duration, easing: .enterFast)
-        case .push, .fade, .stack, .expand, .wipe, .dive, .melt, .glow, .dither, .ring, .iris, .bars, .slats, .tiles, .split, .spin, .glitch,
+        case .swing:
+            let turn = variant.isMultiple(of: 2) ? 1.0 : -1.0
+            outgoing(.rotationY, 0, turn * swingOut.degrees, last: swingOut.duration, easing: .exit)
+            outgoing(.scale, 1, 1 + swingOut.push, last: swingOut.duration, easing: .exit)
+            incoming(.rotationY, -turn * swingIn.degrees, 0, over: swingIn.duration, easing: .enterFast)
+            incoming(.scale, 1 - swingIn.pull, 1, over: swingIn.duration, easing: .enterFast)
+        case .push, .fade, .flow, .stack, .expand, .wipe, .dive, .melt, .glow, .dither, .ring, .iris, .bars, .slats, .tiles, .split, .spin, .glitch,
              .pixelate, .liquid, .flip, .cube, .flash, .stretch:
             effect.transition = Transition(seam: seam, duration: duration(of: seam))
         }
@@ -177,6 +193,7 @@ nonisolated enum SeamExpansion {
     /// How long a seam that draws both scenes at once takes.
     private static func duration(of seam: MotionSeam) -> Double {
         switch seam {
+        case .flow: flowDuration
         case .stack: stackDuration
         case .expand: expandDuration
         case .wipe: wipeDuration

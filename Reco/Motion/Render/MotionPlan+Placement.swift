@@ -14,7 +14,7 @@ extension MotionPlan {
         /// Top-left, top-right, bottom-right and bottom-left, in canvas pixels from the top-left.
         var corners: [CGPoint]
 
-        /// The centre's distance from the camera; drawn farthest first.
+        /// The centre's distance from the camera looking straight, not turned (``CameraProjection/order(of:)``); drawn farthest first.
         let depth: Double
 
         let opacity: Double

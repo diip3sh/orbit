@@ -16,6 +16,8 @@ nonisolated struct MotionPlan: Sendable {
 
     /// A layer ready to draw. Groups have no image; their children follow them with `parent` set.
     nonisolated struct Layer: Sendable {
+        /// The document's id: a flow seam carries a layer to the next scene's layer of the same id (spec 0020).
+        var id = ""
         let parent: Int?
         let base: [MotionProperty: Double]
         let anchor: CGPoint
@@ -74,6 +76,14 @@ nonisolated struct MotionPlan: Sendable {
 
         /// A rectangle's states as its morphs and floods change it, generated afresh each frame (spec 0014).
         var morph: ShapeMorph?
+
+        /// A plain rectangle as it is without its morphs: what a flow carrying it to another changes in between (spec 0020).
+        var fill: ShapeMorph.State?
+
+        /// The rectangle at `time`: as its morphs leave it, else as it is.
+        func fill(at time: Double) -> ShapeMorph.State? {
+            morph?.state(at: time) ?? fill
+        }
 
         /// A kinetic reveal's caret, and its newest letters' colour.
         var accent: RGBAColor?
@@ -216,7 +226,8 @@ nonisolated struct MotionPlan: Sendable {
     func camera(of scene: Scene, at time: Double) -> CameraProjection {
         CameraProjection(
             lookAt: CGPoint(x: scene.cameraValue(.positionX, at: time), y: scene.cameraValue(.positionY, at: time)), dolly: scene.cameraValue(.positionZ, at: time),
-            canvas: canvas, zoom: max(scene.cameraValue(.scale, at: time), 0.01)
+            canvas: canvas, zoom: max(scene.cameraValue(.scale, at: time), 0.01),
+            angle: [scene.cameraValue(.rotationX, at: time), scene.cameraValue(.rotationY, at: time), scene.cameraValue(.rotationZ, at: time)]
         )
     }
 
@@ -249,12 +260,12 @@ nonisolated struct MotionPlan: Sendable {
             guard layer.isDrawn, opacity > 0, size.width > 0, size.height > 0 else { continue }
             let local = [CGPoint.zero, CGPoint(x: size.width, y: 0), CGPoint(x: size.width, y: size.height), CGPoint(x: 0, y: size.height)]
             let projected = local.compactMap { point in camera.project((matrix * SIMD4(point.x, point.y, 0, 1)).xyz) }
-            guard projected.count == 4,
-                  let center = camera.project((matrix * SIMD4(size.width / 2, size.height / 2, 0, 1)).xyz) else { continue }
+            let middle = (matrix * SIMD4(size.width / 2, size.height / 2, 0, 1)).xyz
+            guard projected.count == 4, camera.project(middle) != nil else { continue }
             let corners = projected.map(\.point)
             let scale = Self.scale(of: corners, size: size)
             var placement = Placement(
-                layer: index, corners: corners, depth: center.depth, opacity: opacity, blur: max(layer.value(.blur, at: time), 0) * scale, scale: scale
+                layer: index, corners: corners, depth: camera.order(of: middle), opacity: opacity, blur: max(layer.value(.blur, at: time), 0) * scale, scale: scale
             )
             if aperture > 0 {
                 placement.defocus = projected.map { aperture * ($0.depth - focus) / 100 }

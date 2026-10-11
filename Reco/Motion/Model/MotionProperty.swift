@@ -15,7 +15,8 @@ nonisolated enum MotionProperty: String, Codable, CodingKeyRepresentable, CaseIt
     /// A layer's size; for a camera, its zoom (the lens, so depth keeps its perspective).
     case scale
 
-    /// Degrees, as in CSS: x leans the top away, y turns the right edge away, z turns clockwise.
+    /// Degrees, as in CSS: x leans the top away, y turns the right edge away, z turns clockwise; for a camera, how the scene
+    /// is turned about where it looks (``MotionCamera/angle``).
     case rotationX, rotationY, rotationZ
 
     case opacity
@@ -34,7 +35,7 @@ nonisolated enum MotionProperty: String, Codable, CodingKeyRepresentable, CaseIt
     case focus, aperture
 
     static let layer: Set<MotionProperty> = [.positionX, .positionY, .positionZ, .scale, .rotationX, .rotationY, .rotationZ, .opacity, .blur, .shadow, .dim]
-    static let camera: Set<MotionProperty> = [.positionX, .positionY, .positionZ, .scale, .blur, .focus, .aperture]
+    static let camera: Set<MotionProperty> = [.positionX, .positionY, .positionZ, .scale, .rotationX, .rotationY, .rotationZ, .blur, .focus, .aperture]
 
     /// Whether moves multiply its value rather than add to it.
     var isFactor: Bool {

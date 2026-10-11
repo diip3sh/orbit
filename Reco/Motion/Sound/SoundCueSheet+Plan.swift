@@ -211,7 +211,11 @@ nonisolated extension SoundCueSheet {
         let (before, after) = (max(local - step, 0), min(local + step, scene.duration))
         guard after > before else { return 0 }
         let (earlier, later) = (plan.camera(of: scene, at: before), plan.camera(of: scene, at: after))
-        let shift = hypot(later.lookAt.x - earlier.lookAt.x, later.lookAt.y - earlier.lookAt.y) * (earlier.magnification + later.magnification) / 2
-        return shift / plan.canvas.width / (after - before)
+        let magnification = (earlier.magnification + later.magnification) / 2
+        let shift = hypot(later.lookAt.x - earlier.lookAt.x, later.lookAt.y - earlier.lookAt.y) * magnification
+        // A camera turning round what it looks at sweeps the frame as a pan does (a swing, spec 0020)
+        let turn = { (property: MotionProperty) in abs(scene.cameraValue(property, at: after) - scene.cameraValue(property, at: before)) * .pi / 180 }
+        let sweep = hypot(turn(.rotationX), turn(.rotationY)) * earlier.focalLength * magnification
+        return (shift + sweep) / plan.canvas.width / (after - before)
     }
 }

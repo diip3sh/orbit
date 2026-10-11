@@ -46,6 +46,9 @@ nonisolated enum MotionField: String, Codable, CaseIterable, Sendable {
     /// A colour photograph far out of focus, grainy, filling the frame (petals, dunes, dusk): the editorial film's
     /// pictures, under white words and UI cards. A shape shows one too (``ShapeContent/picture``).
     case lens
+    /// The canvas's background lit by one soft pool of light in the brand's hue, falling off to it at the frame's edges, the
+    /// UI lit by it too: Linear Agent's black (its edges 0 of 255, its middle 10–36) for any dark brand (spec 0020).
+    case pool
     /// The canvas's background colour.
     case plain
 
@@ -78,7 +81,7 @@ nonisolated enum MotionField: String, Codable, CaseIterable, Sendable {
         case .aurora: .aurora
         case .haze: .haze
         case .paper, .ink, .lens: .editorial
-        case .plain: .plain
+        case .pool, .plain: .plain
         }
     }
 

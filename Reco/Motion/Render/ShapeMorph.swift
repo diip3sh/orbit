@@ -29,6 +29,12 @@ nonisolated struct ShapeMorph: Sendable {
             min(size.width, size.height) / 2
         }
 
+        /// A plain rectangle's state, its corners no rounder than its sides allow; `nil` for a glyph, glass or a picture.
+        static func plain(_ shape: ShapeContent) -> State? {
+            guard shape.kind == .rectangle, shape.glass != true, shape.picture == nil else { return nil }
+            return State(size: shape.size, radius: min(shape.cornerRadius, min(shape.size.width, shape.size.height) / 2), color: shape.color, stroke: shape.stroke ?? 0)
+        }
+
         /// Whether its corners are as round as they go: a pill or a disc stays one as it changes size.
         var isRound: Bool {
             radius >= half - 0.5
@@ -173,7 +179,7 @@ nonisolated struct ShapeMorph: Sendable {
         return Self.interpolated(step.before, step.after, progress)
     }
 
-    private static func interpolated(_ before: State, _ after: State, _ progress: Double) -> State {
+    static func interpolated(_ before: State, _ after: State, _ progress: Double) -> State {
         let mix = { (first: Double, second: Double) in first + (second - first) * progress }
         let size = CGSize(width: max(mix(before.size.width, after.size.width), 0), height: max(mix(before.size.height, after.size.height), 0))
         // Colour mixed premultiplied, so a fill coming from clear doesn't pass through black

@@ -66,8 +66,8 @@ Every one of these was measured on the film and rebuilt in the engine. `referenc
 - `wipe` once: a picture sweeping in from the right over the wordmark, into the first card on a picture.
 - `fade` into the dark beat and out of it: in an editorial film it is the ground darkening in 0.18 s, never a dissolve.
   Keep what's on screen in the same place on both sides, so only the ground changes.
-- Of the graphic seams, `slats`, `split` and `iris` keep the print feel: at most two, at the film's turns, when
-  reco-director's personality asks for them. Nothing else: no whip, dive, melt, glow, dither, ring, stack or expand.
+- `flow` keeps the print feel: a word or a card carried into the next scene. Of the graphic seams, `slats` or `split`, at
+  most once. Nothing else: no whip, swing, dive, melt, glow, dither, ring, stack or expand.
 
 ## The look
 
@@ -142,7 +142,7 @@ Every one of these was measured on the film and rebuilt in the engine. `referenc
 
 - Motion blur, a camera that pans, glass, glows, gradients on type, shadows on cards.
 - A scene that ends on a still frame: its last move runs into the cut.
-- A seam other than a cut, `wipe`, the `fade`s into and out of a dark beat and the graphic seams above.
+- A seam other than a cut, `wipe`, `flow`, the `fade`s into and out of a dark beat and the graphic seam above.
 - Fades on words (they pop, blink, sweep or type), or words on `sand` and `dune`.
 - Screenshots of the product; text under 32 px that isn't a mono label or description.
 - Hype copy, exclamation marks, emoji.

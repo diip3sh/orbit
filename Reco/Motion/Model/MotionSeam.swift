@@ -26,6 +26,14 @@ nonisolated enum MotionSeam: String, Codable, CaseIterable, Sendable {
     /// The next scene slides in and pushes this one out.
     case push
 
+    /// The scene turns away round where the camera looks and the next turns in from the other side, blurred as it goes: a
+    /// whip in depth (spec 0020).
+    case swing
+
+    /// The next scene's layers arrive over this one's as its layers leave, one after another; a layer with the same id in both
+    /// travels from its place in this scene to its place in the next, changing shape and colour on the way (spec 0020).
+    case flow
+
     /// A cross-fade: rare in the references.
     case fade
 

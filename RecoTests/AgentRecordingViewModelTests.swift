@@ -388,7 +388,7 @@ extension AgentRecordingViewModelTests {
         #expect(model.phase == .idle)
         #expect(recorded?.movie.path() == "/tmp/Linear.motion")
         #expect(recorded?.conversation.map(\.text) == [AgentRecordingRequest.defaultLaunchInstructions, "A 30 s launch video of Linear."])
-        #expect(model.lastRequest?.timeLimit == .seconds(20 * 60))
+        #expect(model.lastRequest?.timeLimit == .seconds(30 * 60))
     }
 
     @Test func aMotionChatSendsTheBundleAndWhatIsSelected() throws {

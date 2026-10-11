@@ -34,6 +34,7 @@ extension MotionPlan {
                 anchor: layer.transform.anchor, tracks: tracks(layer.keyframes), isDrawn: !isGroup && size.width > 0 && size.height > 0,
                 size: size, shadow: layer.shadow
             )
+            planned.id = layer.id
             planned.parts = parts
             planned.isSharp = BurstExpansion.isParticles(layer.id) || parent.map { list[$0].isSharp } ?? false
             for move in layer.moves {
@@ -47,6 +48,7 @@ extension MotionPlan {
             dress(&planned, as: layer, parent: parent, in: &list, context: context)
             if case .shape(let shape) = layer.content {
                 planned.morph = ShapeMorph(shape, moves: layer.moves, context: context)
+                planned.fill = .plain(shape)
             }
             planned.accent = layer.moves.first { $0.kind == .kinetic }?.color
             mark(&planned, as: layer, context: context)

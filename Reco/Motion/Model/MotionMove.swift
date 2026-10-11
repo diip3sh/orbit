@@ -44,11 +44,11 @@ nonisolated struct MotionMove: Equatable, Sendable {
         case scatter
         // Groups: their layers one after another
         case cascade
-        // Cameras
-        case hold, push, pan, pullBack, drift, whip
+        // Cameras; an arc travels round where the camera looks, turning the scene at a steady pace (spec 0020)
+        case hold, push, pan, pullBack, drift, whip, arc
 
         var isCamera: Bool {
-            [.hold, .push, .pan, .pullBack, .drift, .whip].contains(self)
+            [.hold, .push, .pan, .pullBack, .drift, .whip, .arc].contains(self)
         }
 
         /// Story and flow films' moves on any layer (``MoveExpansion/storyTracks(of:start:duration:in:)``).

@@ -70,7 +70,7 @@ Every change of scene is a transition with a reason, and you can name it:
 | The end words into the logo | `ring`, with `"field": "halo"` |
 | The next scene moves on its first frame: a voice line typing, a pop at 0, a scatter, a scroll | `cut`: the motion on the cut carries it |
 
-- The graphic seams (`iris`, `bars`, `slats`, `tiles`, `split`, `spin`, `glitch`, `pixelate`, `liquid`, `flip`, `cube`, `flash`, `stretch`) go in any look, in the brand's colours: reco-director's section 4 picks them by the brand's personality, two to four at the film's turns, never two running.
+- `flow`, `swing` and the graphic seams go in any look: reco-director's sections 4 and 8 pick the transitions by the brand's personality, at the film's turns, the graphic seams at most once.
 - Never the same seam on two scene changes running, and never more than two cuts running. A film of 15 scenes uses at
   least four kinds.
 - Never a cut onto something still.

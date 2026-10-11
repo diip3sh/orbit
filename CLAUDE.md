@@ -912,7 +912,7 @@ layer, kept in the bundle's `chat.json`.
 | `Motion/Service/ContactSheet.swift`, `DesignCheck.swift` | `preview_motion`'s moments and sheet; flat frames and too much accent |
 | `AgentBridge/Service/AgentTools+Motion.swift` | The motion tools; edits go through the open window (one undo step) or the store |
 | `Motion/Model/MotionScene.swift` | `shotMoves`: moves set on a shot's layers or camera, kept apart from the shot |
-| `AgentRecording/Model/AgentRecordingRequest.swift` | `mode`, `motion` (bundle, selection), the launch and motion-change playbooks, 20 min limit |
+| `AgentRecording/Model/AgentRecordingRequest.swift` | `mode`, `motion` (bundle, selection), the launch and motion-change playbooks, 30 min limit (spec 0020) |
 | `Motion/View/MotionSidePanel.swift` | Style and Agent; `AgentChatViewModel` works on bundles too |
 | `WebRecording/Service/WebInspectScript.swift` | `liftable` |
 
@@ -1478,6 +1478,54 @@ Key facts:
 - Every film's scenes without a camera or shot of their own breathe now, not only editorial ones; a camera `hold` keeps one
   still (the golden fixtures' scenes hold). The first LemonLime film of this spec was frozen in 24.6 % of its frames.
 
+### S15 — The After Effects bar: depth, light, flow (`remotion`, spec 0020)
+
+Films took their brand's taste but still read as generated: a small flat card in a black void, grey bars for content, an
+effect over every cut. The camera now sees a scene at an angle and arcs round it with depth of field; a dark film is lit by
+a pool of light that falls on the UI too; a `flow` carries a layer into the next scene while the rest hands off in offsets;
+a `swing` turns one scene away and the next in; the director holds films to the bar measured on Linear's, Raycast's,
+Nothing's and Copilot's films.
+
+| File | Role |
+|---|---|
+| `Motion/Model/MotionCamera.swift` (`angle`, `angledAperture`), `Render/CameraProjection.swift` (`order(of:)`) | The scene turned about where the camera looks; layers ordered by their depth before the turn |
+| `Motion/Grammar/MoveExpansion+Arc.swift`, `SeamExpansion.swift` (`swingOut`, `swingIn`, `flowDuration`) | `arc` (camera move), `swing` (seam) |
+| `Motion/Render/MotionPlan+Handoff.swift`, `MotionFrameRenderer+Handoff.swift` | `flow`: leaving and arriving layers' tracks, the carried layer drawn between its places, its blur |
+| `Motion/Render/FieldRenderer+Pool.swift`, `FieldPalette` (`poolLift`) | `pool`: one soft light in the brand's hue, the frame falling off round it |
+| `Motion/Service/DesignCheck+Craft.swift` | `smallContent` in `preview_motion`'s findings (`flatFilm` was removed by spec 0021) |
+| `AgentRecording/Skills/reco-director.md` | Lit grounds, content-driven transitions, the frame and the motion (section 9) |
+
+Key facts:
+- The reference films cut and hold (8–31 cuts a film, 55–72 % of frames barely moving), change scene inside the shot, show UI
+  at 4–8× cropped by the frame, light it with one pool (Linear: edges 0 of 255, middle 10–36) and keep a band 15–25 % of the
+  frame in focus; none uses an iris, bars or a generic wipe. The graphic seams are now at most one a film.
+- Ordered after the camera's turn, the far side of a card lying back was farther than its middle and the card hid what was on
+  it; placements are ordered by depth before the turn.
+- A camera at an angle has depth of field (aperture 3) unless keyed.
+- Flow's layers leave from 0.12 s before the cut: leaving from it, the scene before stood whole under the next's first
+  layers for a fifth of a second. A layer with the same id in both scenes travels between its places; a plain rectangle
+  changes size, corners and colour on the way.
+- The whip finder counts the camera's turn as a pan, so a swing sounds as a whip.
+
+### S16 — Films are actions (`remotion`, spec 0021)
+
+Cardboard 5 (spec 0020) was static: UI on tilted cards, its parts rising in, then sitting there under a slow push. The films the
+user liked (Cal.com's story film, the Spotify Jam film, ElevenLabs') change their picture all the time because every scene does
+something. The director has the agent write the film as actions first and frames UI facing the viewer; `preview_motion` names
+every stretch in which the picture stands still.
+
+| File | Role |
+|---|---|
+| `Motion/Service/DesignCheck+Change.swift`, `ContactSheet.levels(of:)` | `stillPictures`: the plan read 10 times a second at 32 × 18; a film still over 25 % of the time, a scene still over 1 s |
+| `AgentRecording/Skills/reco-director.md` | Sections 7–10: the film as actions, transitions with a reason, UI facing the viewer, the check |
+
+Key facts:
+- Pixel change and the lint's idle stretches don't separate liked films from static ones: Cardboard 5's staggered entrances
+  kept every scene changing somewhere. The picture at 32 × 18, half a second apart (mean luma change under 2 of 255 is still)
+  does: Cal.com's story film is still 11 % of the time, Spotify Jam 19 %; Cardboard 5 40 %, Cardboard 2 64 %.
+- Through the engine at 270 px, Calcom 3 has no finding and Cardboard 5 five scenes; about 5 s more a preview (M5, Debug).
+- `flatFilm` is gone: it asked for UI at an angle, which the user found looks bad.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -1558,6 +1606,8 @@ should hold but need re-measuring.
 | S12 editorial films (spec 0017) | ElevenLabs' film measured (picture and score); `paper`, `ink`, `lens` and pictures in shapes; `wipe`; `sweep`, `brighten`, `blink`, `grow`, `marks`, `orbit`, `dots`, `unfold`; the `editorial` score; the film rebuilt and checked against its frames; the `reco-editorial-film` skill; a film made from the app (InstaLanding, 5.5 min, 41 s 4K). Next: the user's verdict, a listening round |
 | S13 film director (spec 0018) | The director skill, the variation, `eat`, breathing, the darkening; the rebuild's frozen frames 26 → 15 %. A LemonLime (YC S26) film from the app; the user found it ElevenLabs' again (spec 0019) |
 | S14 brand taste and graphic transitions (spec 0019) | Thirteen graphic seams in the brand's colours, the brand's fonts, palette, gradients and radii scraped and its type drawn in its own face, the director's personalities and variation. Next: films from the app, the user's verdict |
+| S15 the After Effects bar (spec 0020) | Camera angle, arc and depth of field, `swing`, `flow` (shared element and layered handoff), the `pool` ground, small and flat checks, the director's craft section, after the user found Cardboard 2 basic. Next: Cardboard from the app, the user's verdict |
+| S16 films are actions (spec 0021) | The picture-still check in `preview_motion`, the director rewritten around actions and UI facing the viewer, after the user found Cardboard 5 static. Next: Cardboard from the app, the user's verdict |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

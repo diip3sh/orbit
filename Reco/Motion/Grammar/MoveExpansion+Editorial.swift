@@ -81,6 +81,16 @@ nonisolated extension MoveExpansion {
         ]
     }
 
+    /// A camera's scale tracks after its moves stop at `end`, over a scene `duration` long: creeping closer, leaving faster
+    /// (spec 0020).
+    static func creep(after end: Double, over duration: Double) -> [PropertyTrack] {
+        let leave = min(breathLeave.duration, (duration - end) / 2)
+        return [
+            ramp(.scale, (1, 1 + breathCreep * (duration - end)), start: end, duration: duration - end, easing: .linear),
+            ramp(.scale, (1, breathLeave.by), start: duration - leave, duration: leave, easing: .exit)
+        ]
+    }
+
     /// When each word of a brightened line lights after its start, by the characters in `lengths`.
     static func brightenOffsets(_ lengths: [Int]) -> [Double] {
         var offsets: [Double] = []

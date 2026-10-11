@@ -97,3 +97,4 @@ Material, Carbon, Atlassian, GitLab, GitHub; what reads smooth or cheap) is summ
 - An iris in the brand's corner shape (a square-cornered brand's iris is a rounded square).
 - Seam colours chosen against the scenes they join: an accent bar over a scene on the accent is lost.
 - The brand's heading tracking and capitals are for the agent to carry; the engine's tracking is still −1.2 %.
+- The user found the graphic seams basic next to studio films (spec 0020): the director now uses at most one.

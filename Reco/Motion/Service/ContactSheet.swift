@@ -56,6 +56,23 @@ enum ContactSheet {
         return frames
     }
 
+    /// The plan's lumas ``DesignCheck/changeRate`` times a second at ``DesignCheck/changeSize`` (``DesignCheck/stillPictures(levels:scenes:)``).
+    static func levels(of plan: MotionPlan) async throws -> [[Double]] {
+        let composition = try await MotionCompositionBuilder.composition(for: plan)
+        let generator = AVAssetImageGenerator(asset: composition.asset)
+        generator.videoComposition = composition.videoComposition
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        let count = Int(plan.duration * DesignCheck.changeRate)
+        let times = (0..<count).map { CMTime(seconds: Double($0) / DesignCheck.changeRate, preferredTimescale: 600) }
+        var levels: [(time: CMTime, levels: [Double])] = []
+        for await result in generator.images(for: times) {
+            guard let pixels = DesignCheck.levels(of: try result.image) else { throw WebRenderError.snapshotFailed }
+            levels.append((result.requestedTime, pixels))
+        }
+        return levels.sorted { $0.time < $1.time }.map(\.levels)
+    }
+
     /// `frames` in rows of ``columns``, `gap` apart on a mid grey that no frame's own background is.
     nonisolated static func sheet(of frames: [CGImage]) -> CGImage? {
         guard let first = frames.first else { return nil }

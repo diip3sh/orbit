@@ -66,7 +66,7 @@ struct MotionDocumentTests {
         #expect(throws: MotionDocumentError.invalidDuration("title")) { try short.validate() }
 
         var turning = document
-        turning.scenes[1].camera.keyframes[.rotationX] = [Keyframe(time: 0, value: 10)]
+        turning.scenes[1].camera.keyframes[.opacity] = [Keyframe(time: 0, value: 0.5)]
         #expect(throws: MotionDocumentError.invalidCameraProperty("plane")) { try turning.validate() }
 
         document.scenes[0].layers[0].keyframes[.scale] = [Keyframe(time: 0, value: 0)]

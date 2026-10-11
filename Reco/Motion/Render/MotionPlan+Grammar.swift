@@ -36,7 +36,8 @@ extension MotionPlan {
             let effect = SeamExpansion.effect(
                 of: after.seam, outgoingDuration: before.duration, canvas: canvas,
                 hasText: hasText(before.layers) || hasText(after.layers), velocity: velocity(atEndOf: scenes[index - 1]),
-                zooms: (magnification(of: scenes[index - 1], at: before.duration, canvas: canvas), magnification(of: scenes[index], at: 0, canvas: canvas))
+                zooms: (magnification(of: scenes[index - 1], at: before.duration, canvas: canvas), magnification(of: scenes[index], at: 0, canvas: canvas)),
+                variant: index
             )
             scenes[index - 1].cameraMoves.merge(effect.outgoing) { $0 + $1 }
             scenes[index].cameraMoves.merge(effect.incoming) { $0 + $1 }
@@ -50,21 +51,39 @@ extension MotionPlan {
                 transition?.variant = index
                 transition?.isLight = MotionPlan.isLight(document.canvas.background)
             }
+            if after.seam == .flow {
+                var (leaving, arriving) = (scenes[index - 1], scenes[index])
+                handOff(from: &leaving, to: &arriving, way: flowWay(into: index), canvas: canvas)
+                (scenes[index - 1], scenes[index]) = (leaving, arriving)
+            }
             scenes[index].transition = transition
             scenes[index - 1].overlap = transition?.duration ?? 0
         }
     }
 
     /// Every scene without a camera of its own, or a shot that lays one out, breathes (``MoveExpansion/breath(over:)``), all but
-    /// the last, which holds as ElevenLabs' end card did. Editorial films first (spec 0018); then all (spec 0019): a LemonLime
+    /// the last, which holds as ElevenLabs' end card did; one whose camera stops early creeps on after it. Editorial films first (spec 0018); then all (spec 0019): a LemonLime
     /// film whose agent gave its scenes no camera was still in a quarter of its frames before its end card.
     nonisolated private static func breathe(_ scenes: inout [Scene], of document: MotionDocument) {
         for index in scenes.indices.dropLast() {
             let scene = document.scenes[index]
-            guard scene.shot == nil, scene.camera.moves.isEmpty, scene.camera.keyframes.isEmpty else { continue }
-            scenes[index].cameraMoves[.scale, default: []] += MoveExpansion.breath(over: scenes[index].duration)
+            guard scene.shot == nil, scene.camera.keyframes.isEmpty, !scene.camera.moves.contains(where: { $0.kind == .hold }) else { continue }
+            guard !scene.camera.moves.isEmpty else {
+                scenes[index].cameraMoves[.scale, default: []] += MoveExpansion.breath(over: scenes[index].duration)
+                continue
+            }
+            // A camera that stops early creeps on (spec 0020): Cardboard's third film pushed for 1.2 s and held its 2.4–3.6 s scenes,
+            // frozen in 24 % of its frames
+            let context = MoveContext(sceneDuration: scene.duration, canvas: document.canvas.size)
+            let end = scene.camera.moves.map { MoveExpansion.timing(of: $0, in: context) }.map { $0.start + $0.duration }.max() ?? 0
+            if end < scene.duration - creepAfter {
+                scenes[index].cameraMoves[.scale, default: []] += MoveExpansion.creep(after: end, over: scene.duration)
+            }
         }
     }
+
+    /// A scene's camera creeps on when its moves stop at least this long before its end.
+    nonisolated static let creepAfter = 0.5
 
     /// A seam drawn in a field's language takes the next scene's field when it's of the seam's family,
     /// else the family's first pick, coloured from the brand as that field is; a melt, the haze's colours.

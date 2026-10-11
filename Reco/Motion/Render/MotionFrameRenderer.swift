@@ -36,7 +36,11 @@ nonisolated enum MotionFrameRenderer {
         let scene = plan.scenes[plan.sceneIndex(at: time)]
         // Inside the scene: a shutter open across a cut would blend the two shots
         let times = offsets.map { min(max(time + $0 * shutter, scene.start), scene.start + scene.duration - 1e-6) }
-        let frame = FrameRenderer.average(times.map { still(at: $0, sharpAt: time, plan: plan, frames: frames) })
+        var frame = FrameRenderer.average(times.map { still(at: $0, sharpAt: time, plan: plan, frames: frames) })
+        // A pool's light falls on the UI too
+        if scene.field == .pool {
+            frame = FieldRenderer.pooled(frame, at: time, size: plan.outputSize, shot: shot(of: scene, at: time - scene.start, plan: plan))
+        }
         // Satin's grain goes over the whole frame, its UI too, once a frame
         guard scene.field == .satin else { return frame }
         return FieldRenderer.grained(frame, index: Int((time * Double(plan.frameRate)).rounded()), size: plan.outputSize)
@@ -77,7 +81,8 @@ nonisolated enum MotionFrameRenderer {
             // A seam that cuts inside itself (pixels, a glitch, dots, a spin, a stretch, a flash) is drawn at the frame's own time:
             // averaged across the shutter, its cut drew both scenes grey, and the ones that move blur themselves
             let stepped: Set<MotionSeam> = [.pixelate, .glitch, .dither, .spin, .stretch, .flash]
-            frame = transitioned(previous, frame, into: index, at: stepped.contains(transition.seam) ? sharpTime : sceneTime, plan: plan)
+            frame = transition.seam == .flow ? handedOff(into: index, at: sceneTime, sharpAt: sharpTime, plan: plan, frames: frames)
+                : transitioned(previous, frame, into: index, at: stepped.contains(transition.seam) ? sharpTime : sceneTime, plan: plan)
         }
         // An opening's control coming in over its ground alone, which is all there is before it
         if let arrival = plan.scenes[index].arrival, case let since = sceneTime - plan.scenes[index].arrivesAt, since < arrival.duration {
@@ -97,8 +102,11 @@ nonisolated enum MotionFrameRenderer {
     }
 
     /// A scene's layers at `time` in it, blurred as its camera is, over its field; layers drawn sharp where they are at
-    /// `sharp`.
-    private static func sceneImage(_ index: Int, at time: Double, sharpAt sharp: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage]) -> CIImage {
+    /// `sharp`. Layers whose ids are `hiding` are left out, and without `onField` the field too.
+    static func sceneImage(
+        _ index: Int, at time: Double, sharpAt sharp: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage],
+        hiding: Set<String> = [], onField: Bool = true
+    ) -> CIImage {
         let scene = plan.scenes[index]
         let field = ground(index, at: time, plan: plan)
         var image = CIImage.empty()
@@ -113,43 +121,57 @@ nonisolated enum MotionFrameRenderer {
                 marked.removeAll { $0 == index }
                 image = marks(of: index, in: scene, placements: placements, plan: plan).composited(over: image)
             }
-            var layer = scene.layers[placement.layer]
-            guard var content = content(of: &layer, at: time, take: frames[MotionPlan.LayerKey(scene: index, layer: placement.layer)]) else { continue }
-            content = lettered(content, of: layer, at: time)
-            if !layer.tints.isEmpty {
-                content = shimmered(content, layer: layer, at: time, sceneDuration: scene.duration)
-            }
-            if let region = layer.region, case let dim = layer.value(.dim, at: time), dim > 0 {
-                if let focusedImage = layer.focusedImage {
-                    // Drawn once at the most it dims; part of the way there, faded over the layer
-                    content = focusedImage.fading(to: min(dim / layer.mostDim, 1)).composited(over: content)
-                } else {
-                    content = MotionPlan.focused(content, on: region, dim: dim, height: layer.size.height)
-                }
-            }
-            // Letters springing in are drawn in the room around the layer
-            var room = placement
-            room.corners = placement.roomCorners ?? placement.corners
-            var layerImage = drawn(content, layer: layer, at: room, time: time, plan: plan)
-            // On glass: over its panel, clipped to it, and the panel's shadow under both
-            var shadow: CIImage?
-            if let panel = GlassRenderer.panel(under: layer, at: placement, lit: SatinSetup.forShot(scene.fieldShot).glass, over: field, plan: plan) {
-                let faded = { (image: CIImage) in placement.opacity < 1 ? image.fading(to: placement.opacity) : image }
-                layerImage = layerImage.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: panel.body])
-                    .composited(over: faded(panel.body))
-                shadow = faded(panel.shadow)
-            }
-            // Over the glass too: a glass pane's own pixels are only its veil
-            if layer.tints.contains(where: { $0.kind == .wash }) {
-                layerImage = washed(layerImage, layer: layer, at: time) { over in washBounds(of: over, in: scene, placements: placements, plan: plan) }
-            }
-            image = (shadow.map { layerImage.composited(over: $0) } ?? layerImage).composited(over: image)
+            guard !hiding.contains(scene.layers[placement.layer].id),
+                  let layerImage = layerImage(placement, in: index, over: field, at: time, placements: placements, plan: plan, frames: frames) else { continue }
+            image = layerImage.composited(over: image)
         }
         image = pointers(of: scene, at: time, plan: plan).composited(over: image)
         let bounds = CGRect(origin: .zero, size: plan.outputSize)
         let blur = scene.cameraValue(.blur, at: time) * plan.outputScale
-        guard blur >= 0.3 else { return image.composited(over: field) }
-        return image.clampedToExtent().applyingGaussianBlur(sigma: blur).cropped(to: bounds).composited(over: field)
+        if blur >= 0.3 {
+            image = image.clampedToExtent().applyingGaussianBlur(sigma: blur).cropped(to: bounds)
+        }
+        return onField ? image.composited(over: field) : image
+    }
+
+    /// One layer of the scene at `index` where `placement` puts it, over `field`: its content (`content`, else its own) with
+    /// its reveal, tints and focus, on its glass, washed, with its shadow; `nil` when it has no pixels now.
+    static func layerImage( // swiftlint:disable:this function_parameter_count
+        _ placement: MotionPlan.Placement, in index: Int, over field: CIImage, at time: Double, placements: [MotionPlan.Placement], plan: MotionPlan,
+        frames: [MotionPlan.LayerKey: CIImage], content override: CIImage? = nil
+    ) -> CIImage? {
+        let scene = plan.scenes[index]
+        var layer = scene.layers[placement.layer]
+        guard var content = override ?? content(of: &layer, at: time, take: frames[MotionPlan.LayerKey(scene: index, layer: placement.layer)]) else { return nil }
+        content = lettered(content, of: layer, at: time)
+        if !layer.tints.isEmpty {
+            content = shimmered(content, layer: layer, at: time, sceneDuration: scene.duration)
+        }
+        if let region = layer.region, case let dim = layer.value(.dim, at: time), dim > 0 {
+            if let focusedImage = layer.focusedImage {
+                // Drawn once at the most it dims; part of the way there, faded over the layer
+                content = focusedImage.fading(to: min(dim / layer.mostDim, 1)).composited(over: content)
+            } else {
+                content = MotionPlan.focused(content, on: region, dim: dim, height: layer.size.height)
+            }
+        }
+        // Letters springing in are drawn in the room around the layer
+        var room = placement
+        room.corners = placement.roomCorners ?? placement.corners
+        var layerImage = drawn(content, layer: layer, at: room, time: time, plan: plan)
+        // On glass: over its panel, clipped to it, and the panel's shadow under both
+        var shadow: CIImage?
+        if let panel = GlassRenderer.panel(under: layer, at: placement, lit: SatinSetup.forShot(scene.fieldShot).glass, over: field, plan: plan) {
+            let faded = { (image: CIImage) in placement.opacity < 1 ? image.fading(to: placement.opacity) : image }
+            layerImage = layerImage.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: panel.body])
+                .composited(over: faded(panel.body))
+            shadow = faded(panel.shadow)
+        }
+        // Over the glass too: a glass pane's own pixels are only its veil
+        if layer.tints.contains(where: { $0.kind == .wash }) {
+            layerImage = washed(layerImage, layer: layer, at: time) { over in washBounds(of: over, in: scene, placements: placements, plan: plan) }
+        }
+        return shadow.map { layerImage.composited(over: $0) } ?? layerImage
     }
 
     /// The output pixels the layer `over` and its group's layers cover in `placements`.
@@ -183,7 +205,7 @@ nonisolated enum MotionFrameRenderer {
 
     /// A scene's field at `time` in it, on the video's clock, so a field runs on across a cut to a scene with the
     /// same one. An opening whose control arrives in its look's seam swells in from black first.
-    private static func ground(_ index: Int, at time: Double, plan: MotionPlan) -> CIImage {
+    static func ground(_ index: Int, at time: Double, plan: MotionPlan) -> CIImage {
         let scene = plan.scenes[index]
         var field = FieldRenderer.image(
             scene.field, palette: scene.palette, at: scene.start + time, size: plan.outputSize, preview: plan.isPreview,
@@ -276,7 +298,7 @@ nonisolated enum MotionFrameRenderer {
     }
 
     /// The layer's image on its quad, with its blur, depth of field, opacity and shadow.
-    private static func drawn(_ image: CIImage, layer: MotionPlan.Layer, at placement: MotionPlan.Placement, time: Double, plan: MotionPlan) -> CIImage {
+    static func drawn(_ image: CIImage, layer: MotionPlan.Layer, at placement: MotionPlan.Placement, time: Double, plan: MotionPlan) -> CIImage {
         var drawn = projected(image, to: placement.corners, plan: plan)
         if let picture = layer.picture {
             drawn = pictured(drawn, picture, on: placement, at: time, plan: plan)

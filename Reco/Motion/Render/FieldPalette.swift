@@ -56,6 +56,15 @@ nonisolated struct FieldPalette: Equatable, Sendable {
     init(_ field: MotionField, accent: RGBAColor?, background: RGBAColor) {
         if field == .aurora || field == .haze {
             self.init(field, style: StyleTokens(accent: accent), background: background)
+        } else if field == .pool {
+            // The ground's own colour lifted towards the brand's hue at the pool's heart
+            let (ground, brand) = (OKLCH(background), OKLCH(accent ?? background))
+            let hasHue = brand.chroma >= Self.leastBrandChroma
+            let light = OKLCH(
+                lightness: ground.lightness + Self.poolLift, chroma: hasHue ? min(brand.chroma, Self.poolChroma) : Self.neutralChroma,
+                hue: hasHue ? brand.hue : Self.neutralHue
+            )
+            self.init(back: background, colors: [light.rgba])
         } else if field == .paper || field == .ink {
             // The canvas's own background when it's paper (or ink), else the film's
             let light = OKLCH(background).lightness
@@ -85,6 +94,11 @@ nonisolated struct FieldPalette: Equatable, Sendable {
         default: looks[field]
         }
     }
+
+    /// How much lighter than the ground a pool's heart is, and its most chroma: Linear's middle is 10–36 of 255 on black
+    /// (OKLCH lightness about 0.2).
+    static let poolLift = 0.14
+    static let poolChroma = 0.07
 
     /// Below this chroma an accent reads as white or grey (Linear's #e5e5e6 is 0.002).
     static let leastBrandChroma = 0.03

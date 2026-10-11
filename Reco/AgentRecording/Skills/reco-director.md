@@ -57,33 +57,35 @@ Every film is drawn in the product's own taste. Set it once with set_style and s
   if it paints one. Nothing else: never a colour the site doesn't use.
 - **Shape.** Corners from `radius`: cards at `radius.card`, pills and buttons at `radius.button` (999 is a pill), scaled
   from CSS pixels to the canvas (about 1.5× at 1080p). A square-cornered brand gets square cards; a round one, round.
-- **Ground.** What the scenes stand on, by the brand, then by `Variation` among those that fit:
+- **Ground.** What the scenes stand on, by the brand, then by `Variation` among those that fit. Never a flat void: a dark
+  frame is lit (Reco's shader looks, or a pool of light), a light one has soft colour moving through it.
 
 | The brand | Grounds that fit |
 |---|---|
-| Light site, one clear colour | `plain` on its background; `haze` with its gradient |
-| Light site, warm, typographic, print-like | `plain`; `paper` |
-| Dark site, a gradient of hues | `aurora`; `plain` |
-| Dark site, one clear hue | `ember`, `sunlit`, `bloom`, `orb`, `ripple` (toned to 0.45 under type); `plain` |
-| Technical (APIs, data, infra, developer tools) or black and white | `warp`, `tide`, `swirl`, `matrix`; `plain` |
-| Dark and quiet, its colour all in its UI | `satin`; `plain` |
+| Dark site, any hue | `swirl`, `warp` or `tide` (dither in its hue, 0.45 under type); `satin`; `aurora` if it paints a gradient |
+| Dark site, one clear hue, bold | `ember`, `sunlit`, `bloom`, `orb`, `ripple` (toned to 0.45 under type); a dither |
+| Technical (APIs, data, infra, developer tools) or black and white | `warp`, `tide`, `swirl`, `matrix`; `satin` |
+| Dark and quiet, its colour all in its UI | `satin`; `pool` (one soft light in its hue) |
+| Light site, one clear colour | `haze` with its gradient; `plain` on its background with lit, shadowed cards |
+| Light site, warm, typographic, print-like | `paper`; `plain` |
 
-  `plain` with the brand's own colours, cards and type is always right. A film keeps one ground family; scenes may change
-  the colour of a plain ground (a statement on the accent, the hero on black) with a graphic seam or a grow.
+  A film keeps one ground family (`pool` and `plain` are one). Scenes may change the colour of a plain ground (a statement
+  on the accent, the hero on black) with a grow or a flood.
 
 ## 4. The motion personality: its curves and its transitions
 
-| Personality | Moves | Its graphic seams (2–4 in a film, at its turns) | Bridges it favours |
+| Personality | Moves | Its signature transitions (at the film's turns) | Between them |
 |---|---|---|---|
-| **Precise** (developer tools, infra, data) | quick, no overshoot; `type`, `blurWipe`, `lineMask`, `cascade` | `slats`, `tiles`, `split`, `pixelate`, a `glitch` once | `cutOnMotion`, `whip`, `expand`, `dither` |
-| **Calm, premium** (design, finance, AI assistants) | slow settles, never a bounce; `brighten`, `wordByWord`, `fly` | `iris` (out of the UI), `wipe`, `split` | `expand`, `dive`, `stack`, `melt`, `grow`, match |
-| **Playful** (consumer, creative, social) | overshoot ~10 %; `letters`, `pop`, `morph`, `burst`, `ripple` | `liquid`, `bars`, `tiles`, `flip`, `iris` | `morph`, `flood`, `pop`, `scatter` |
-| **Bold, loud** (launches, growth, sales, sport) | expo in to the cut, expo out after; `kinetic`, short holds | `stretch`, `spin`, `flash`, `bars`, `cube` | `whip`, `zoomThrough`, `cutOnMotion` |
-| **Editorial, exact** (writing, research, voice) | stepped and still; `brighten`, `sweep`, `blink`, `eat` | `slats`, `split`, `wipe` | `eat`, `grow`, cut on motion |
+| **Precise** (developer tools, infra, data) | quick, no overshoot; `type`, `blurWipe`, `lineMask`, `cascade` | the look's seam, `flow`, `whip`, `expand` | `stack`, cuts onto motion |
+| **Calm, premium** (design, finance, AI assistants) | slow settles, never a bounce; `brighten`, `wordByWord`, `fly` | the look's seam, `flow`, `dive`, `expand` | `stack`, cuts onto motion |
+| **Playful** (consumer, creative, social) | overshoot ~10 %; `letters`, `pop`, `morph`, `burst`, `ripple` | the look's seam, `flood` into the next, `expand`, `flow` | `stack`, cuts onto a pop |
+| **Bold, loud** (launches, growth, sales, sport) | expo in to the cut, expo out after; `kinetic`, short holds | the look's seam, `whip`, `zoomThrough`, `flood` | hard cuts onto motion, on the beat |
+| **Editorial, exact** (writing, research, voice) | stepped and still; `brighten`, `sweep`, `blink`, `eat` | `eat`, `grow`, `wipe`, `flow` | hard cuts |
 
-Graphic seams are drawn in `style.accent` and a second brand colour over the whole frame, in any look; two of a kind in a
-film go different ways. Each is a hit: at the film's two to four turns (the problem to the product, the input to the
-result, the result to the name), never on every cut, never two running.
+The look's seam is its ground's own: `dither` over a dither, `glow` over light, `melt` over haze, `wipe` on paper, `ring`
+into the logo. The graphic seams (`iris`, `bars`, `slats`, `tiles`, `split`, `spin`, `glitch`, `pixelate`, `liquid`, `flip`,
+`cube`, `flash`, `stretch`) are a slideshow's transitions: at most one in a film, only in a playful or bold one, only where
+the story turns hardest.
 
 ## 5. The story shape: choose one
 
@@ -110,68 +112,103 @@ counting through them in the order listed (variation 3 of two options is the fir
 
 - the **story shape** (section 5);
 - the **ground** (section 3's row for the brand);
-- the **signature seam**: the graphic seam of the personality's list (section 4) the film uses at its biggest turn.
+- the **signature transition**: the one of the personality's list (section 4) the film uses at its biggest turn.
 
 Two runs for one product must differ in all three.
 
-## 7. Moves: borrow from any skill
+## 7. The film is actions
 
-Every move works over every ground. Read only the recipe you use.
+The films users loved (Cal.com's story film, the Spotify Jam film, ElevenLabs' launch) change their picture all the time:
+a hand clicks a pill and its menu opens, a request is typed huge, a button washes with light, tiles pop and flip to done,
+a stack of cards scatters, a slot is circled, a pill morphs to "Booked". Their picture stands still in 11–22 % of the
+film. Films that showed UI on cards that sat there while their rows rose in, the camera pushing or arcing slowly, stood
+still in 40–64 % and read as static slides, however good each frame was.
 
-| For | Moves | Recipes in |
+So write the film as actions before you write any scene: one line each, a verb on a thing, with its time.
+
+```
+0.0  the prompt box arrives; the hand comes up to "Auto"
+0.6  click: the menu opens, the highlight follows the hand to "Documentary"
+1.4  cut: "Make a one-minute documentary on American makers" typed huge
+3.0  send: the box washes with light, the thread rises over it
+3.6  "Working…" shimmers; steps tick to done one by one
+```
+
+- **Something happens at least every 0.5–1 s**, and it changes the picture: a click that opens or changes something,
+  typing, a state changing (a pill morphing, a status swapping, a check), things arriving as a group (a pop from the
+  middle out, a cascade, a scatter), a thing growing to fill the frame, the camera whipping or diving to the next thing.
+- **A scene is one action, not a display.** Parts arriving is an entrance, not the action: after its parts arrive, the
+  scene does its action (the click, the typing, the swap). A scene with nothing to do is cut, or shortened to a beat.
+- **Six or more different actions in a film**, never the same one twice running. A film of cards rising in is one action.
+- **The camera serves the action**: a push into what's about to be clicked, a whip to the next control, a dive through
+  the click. A slow push, drift or arc behind still UI is not motion.
+
+| The action | Moves | Recipes in |
 |---|---|---|
-| The name opening | `unfold` (mark into name and line), `letters`, `fly` | editorial, motion design, flow |
-| A line arriving | `brighten`, `sweep`, `letters`, `kinetic`, `voice`, `wordByWord`, `type`, `blurWipe`, `lineMask` | editorial, motion design, story |
-| Texture round what's read | `blink` labels, mono lines typed, `marks` | editorial |
-| The product's input | a macro on its control, typing, a hand's `click` and `press`, `select` | story, flow, launch |
-| Answers arriving | `pop`, `cascade`, `scatter`, `reply`, `shimmer`, `wash`, `fly` | story, motion design, flow |
-| One thing becoming another | `morph`, `grow`, `flood`, `dots`, `orbit` | motion design, editorial |
-| Things leaving | `eat`, `morph` to a line at an edge, `hide`, `exit` | editorial, motion design |
+| A control used, close | a macro on it, the hand's `click` and `press`, its menu opening (`pop`, `show`), `select` | story, flow, launch |
+| The ask | the person's words typed big (`voice`), typed into the box (`type`), the send `wash`ing it | story |
+| The product working | `shimmer` ("Working…"), steps or rows ticking to done (`show`/`hide` swaps, `spin`, `check` glyphs), a `cascade` | story, motion design |
+| The answer arriving | a bento `pop`ping from the middle out, a stack `scatter`ing into a collage, a `reply` word by word, `fly` | story, motion design, flow |
+| A state changing | `morph` (a pill to its next size and colour), `flood`, `burst`, `ripple`, a counter rolling (`roll`) | motion design |
+| One thing becoming the next scene | `grow` to fill the frame, `flood`, `eat` into a block, `flow` (the same id in both), `dive`, `expand` | editorial, motion design, this skill |
+| Words | `brighten`, `letters`, `kinetic`, `sweep`, `wordByWord`, a line laid big over the product's pictures | editorial, motion design |
+| The name | `unfold` (mark into name and line), `letters`, `fly`, `ring` into the logo | editorial, motion design, story |
 
-## 8. Transitions: every scene comes out of the last
+## 8. Transitions: each one has a reason
 
-Plan each scene's handoff before you write it: what of this scene the next begins with.
+Every change of scene comes out of an action, and you can name its reason:
 
-| Device | How |
+| What happens | Seam on the next scene |
 |---|---|
-| Grow into the next | a card or tile `grow`s or `flood`s to fill the frame; its colour is the next scene's ground |
-| Collapse into the next | a line is `eat`en into a block, a card `morph`s to a dot or a bar, and the next scene starts from that shape in the same place |
-| Match | the same thing in the same place across a cut, changed: the input now full, the card now a chart, the word now the logo |
-| Into what was clicked | `expand`, `dive` or `iris` on the next scene, the click its last move |
-| Over it | `stack`: the answer comes up over the request |
-| A graphic seam | section 4's, at the film's turns |
-| A look's seam | `glow`, `dither`, `melt`, `wipe`, `whip`, `ring` into the end, in their grounds |
-| Cut on motion | a cut whose next scene moves on its first frame: typing, a pop, a statement there dim |
+| The scene clicks something and the next is what it opens | `expand` (pressed in the scene's last 0.5 s) or `dive` through it |
+| A new view comes over the last: the thread over the box, a detail over a list | `stack` |
+| Something of this scene goes on into the next (a pill becomes a card, a word the logo, a thumbnail the full frame) | `flow`, the same layer id in both scenes |
+| The camera goes to another part of the same thing | `whip` |
+| A thing grows or floods to fill the frame and is the next ground | `grow` or `flood` in the scene, then a cut |
+| The film's three turns: the opening, the first answer, the end words | the look's seam (`dither`, `glow`, `melt`, `wipe`) |
+| The end words into the logo | `ring`, the logo on `halo` |
+| The next scene moves on its first frame (typing, a pop at 0, a scatter) | `cut` |
 
-- At least half the scene changes are a device other than a plain cut; at least four different devices in a film; never
-  the same one twice running; never a cut onto something still.
+- At least four kinds in a film; never the same seam on two scene changes running; never more than two cuts running.
+- Never a cut onto or from something still.
 - Inside a scene a change of state is a move (a pill `morph`s, a button `flood`s), never a cut.
 
-## 9. Motion
+## 9. The frame
 
-Measured on ElevenLabs' film against a rebuild that copied its moves but felt stiff: the rebuild was frozen in 26 % of its
-frames and cut from still frames six times in ten; the film is frozen in 6 % and never cuts from a still frame.
+**Facing the viewer, big, whole.** The product's parts are rebuilt as shapes, type and its own images and shown facing the
+camera, as Cal.com's film did. Never a whole window or a dense panel tilted on a card: it reads as a template and its text
+can't be read.
+- A control is shown in macro: its pill or button 3–4× its size, the hand as large as it, the frame cropping the rest.
+- An answer is a thing rebuilt from the product (tiles, cards, a short list, a calendar's week, one result), whole in the
+  frame, centred, 60–80 % of its width, its type at least 34 px.
+- The person's words are typed at 90–140 px; a statement alone is set as the brand's heading at 110–160 px and something
+  moves round it or under it (pictures of the product's output, a reply arriving).
+- `angle` is for a picture or a mark at most, never for UI.
 
-- **Never still.** Something visible changes every 0.4–1.5 s, and a held shot creeps (2–5 % over a hold). Give each scene
-  a camera move (`push`, `pullBack`, `drift`); Reco breathes editorial scenes for you.
-- **Cut into motion.** After a cut the move is at its fastest and decays: half done in 0.12–0.23 s, nine tenths by 0.4–0.5 s.
-- **Cut out of motion.** The last move runs into the cut, accelerating: an `eat`, a shrink, a slide, a seam. Carry the
-  direction: what leaves rightwards arrives from the left.
-- **Short changes.** Pops 0.22–0.27 s, a card growing to the frame 0.4 s, slides 0.65 s, a ground changing colour 0.1–0.2 s.
-  No cross-dissolves, nothing over 1 s.
-- **Arrive large, settle.** Things come in slightly large (1.1–1.2×) and settle over 0.5–1.3 s; overshoot only in a playful
-  film.
-- Scenes are 1.2–3 s; the opening's first motion is on frame one.
+**Real things in every slot.** The site's images and thumbnails (`ui` layers from its image addresses), avatars, logos,
+file names, numbers, dates. Never a grey bar for content. A panel has a header, one accent element (the selected row, the
+send, the progress) and the brand's corners.
+
+**Light.** Surfaces are lit: a card is its ground lifted 6–10 % in lightness with a 1 px edge of white at 8–14 %, or glass
+(`glass`); the hero casts a soft shadow or, in a dark film, a glow in the accent under it.
+
+**Timing.** Scenes are 0.7–3 s, each a whole number of beats when the score has a beat. Parts arrive 40–80 ms apart, rising
+out of a blur; exits are half as long as entrances and run into the cut. Things arrive slightly large and settle;
+overshoot only in a playful film, never on type.
 
 ## 10. Write, check, export
 
-1. Load the technique skills for your moves and read their recipes. set_style (with fonts) and set_canvas first, then the
-   whole film in one edit_motion call.
-2. preview_motion, and check every frame:
+1. Load `reco-story-film` (the hand, the macro, the voice, answers as things) and the other technique skills for your
+   moves, and read their recipes. set_style (with fonts) and set_canvas first, then the whole film in one edit_motion call.
+2. preview_motion, and check:
+   - Its findings: every one that says **the picture stands still** names a scene to fix: give it an action from section 7
+     or cut it shorter. The film is done only when none is left.
    - Does the first frame move, and do the first words read by 2 s?
+   - Can you say each scene's action in one verb, and each transition's reason? Six or more actions, four or more seams?
    - Is every line in the brand's own face, its colours and its corners? Would someone who knows the product's site
      recognise it with the logo covered?
-   - Can you name each scene's handoff? Are there at least four kinds, the graphic seams only at turns?
-   - Would someone who knows the reference films recognise one of them scene for scene, or by its ground? Then change it.
-   Fix everything in one edit_motion call. Stop after three previews.
+   - Is anything small in a void, tilted, a grey bar, or a dense panel? Rebuild it bigger and simpler.
+   - Would someone who knows the reference films recognise one of them scene for scene? Then change it.
+   Fix everything in one edit_motion call. Stop after three previews. Never add a scene to try something out: the
+   preview is the test, and a film that ran out of time with one in it showed a calibration card first.
 3. Export with export_recording: format hevc, resolution 2160, at 60 fps.

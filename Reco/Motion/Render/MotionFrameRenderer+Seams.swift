@@ -167,6 +167,9 @@ nonisolated extension MotionFrameRenderer {
     static func seamTravel(into index: Int, at time: Double, across shutter: Double, plan: MotionPlan) -> Double {
         let size = plan.outputSize
         guard let transition = plan.scenes[index].transition, time < transition.duration else { return 0 }
+        if transition.seam == .flow {
+            return flowTravel(into: index, at: time, across: shutter, plan: plan) * plan.outputScale
+        }
         let (opens, closes) = (transition.progress(at: time - shutter / 2), transition.progress(at: time + shutter / 2))
         if let reach = graphicTravel[transition.seam] {
             // Their edges cross about this share of the frame's width over the seam, on curves up to 4 times as fast as even

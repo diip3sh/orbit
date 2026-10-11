@@ -157,7 +157,7 @@ nonisolated enum MoveExpansion {
             add(.blur, 10 * unit * amount, 0, easing: .enter)
         case .exit:
             effect.tracks = exitTracks(of: move, start: start, duration: duration, in: context)
-        case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan, .whip, .burst, .ripple, .morph, .flood, .scroll, .shimmer, .wash, .show, .hide,
+        case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan, .whip, .arc, .burst, .ripple, .morph, .flood, .scroll, .shimmer, .wash, .show, .hide,
              .scatter, .select, .fly, .sweep, .brighten, .blink, .grow, .marks, .orbit, .dots, .unfold, .eat:
             // A roll, a cascade, a burst and a ripple become other layers' moves (``DocumentExpansion``); a morph, a
             // flood and a scroll a shape's states and the layer's place, with the others before and after (``ShapeMorph``);
@@ -299,6 +299,8 @@ nonisolated enum MoveExpansion {
             ]
         case .pan:
             return pan(to: move.target ?? context.lookAt, zoom: amount, start: start, duration: duration, in: context)
+        case .arc:
+            return arcTracks(turning: slideDirection(move.direction ?? .right) * amount, start: start, duration: duration)
         case .whip:
             // Straight there, not along a zoom path: the frame streaks rather than pulling back to look
             let target = move.target ?? context.lookAt
@@ -322,7 +324,7 @@ nonisolated enum MoveExpansion {
         case .exit: max(context.sceneDuration - defaultDuration(of: MotionMove(.exit), start: 0, in: context), 0)
         // Eaten into the cut
         case .eat: max(context.sceneDuration - eatDuration, 0)
-        case .pullBack, .drift, .hold, .marks: 0
+        case .pullBack, .drift, .arc, .hold, .marks: 0
         default: entranceStart
         }
     }
@@ -379,7 +381,7 @@ nonisolated enum MoveExpansion {
         case .pan: return panDuration(to: move.target ?? context.lookAt, zoom: move.intensity ?? 1, in: context)
         case .whip: return whipDuration
         case .pullBack, .hold: return rest
-        case .drift: return rest + driftOverrun
+        case .drift, .arc: return rest + driftOverrun
         }
     }
 
@@ -408,7 +410,7 @@ nonisolated enum MoveExpansion {
         }
     }
 
-    private static func slideDirection(_ direction: MotionMove.Direction) -> SIMD2<Double> {
+    static func slideDirection(_ direction: MotionMove.Direction) -> SIMD2<Double> {
         switch direction {
         case .left: [-1, 0]
         case .right: [1, 0]

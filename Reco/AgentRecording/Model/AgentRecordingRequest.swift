@@ -49,9 +49,10 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         motion?.bundle ?? take?.movie
     }
 
-    /// How long a run may take: a launch video's captures and checks come on top of the agent's turns.
+    /// How long a run may take: a launch video's captures and checks come on top of the agent's turns. With the director's
+    /// research a Cardboard film took 17 min, and the next ran out at 20 before it exported (spec 0020).
     var timeLimit: Duration {
-        mode == .launch && take == nil && motion == nil ? .seconds(20 * 60) : AgentRunOutcome.timeLimit
+        mode == .launch && take == nil && motion == nil ? .seconds(30 * 60) : AgentRunOutcome.timeLimit
     }
 
     /// A take to record again: its movie, and the `record_page` arguments that record it as it is.

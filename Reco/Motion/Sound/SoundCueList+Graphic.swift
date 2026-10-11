@@ -5,7 +5,7 @@
 
 import Foundation
 
-/// A graphic seam's sound (spec 0019).
+/// A graphic seam's sound (spec 0019); a flow's is a flip's, air as the layers cross and a landing (spec 0020).
 nonisolated extension SoundCueList {
 
     mutating func graphic(_ seam: MotionSeam, at time: Double, lasting duration: Double) {
@@ -28,7 +28,7 @@ nonisolated extension SoundCueList {
                 level: glass.level, pan: 0.1, send: 0.45)
         case .spin, .split, .stretch:
             add(.whoosh, .effects, at: time + duration / 2, level: SoundRules.graphicWhoosh, send: 0.2)
-        case .flip, .cube:
+        case .flip, .cube, .flow:
             add(.swish(length: swish.length), .effects, at: time + swish.at * duration, level: swish.level, send: swish.send)
             let landing = SoundRules.stackLanding
             add(.thump(high: landing.high, low: landing.low, length: landing.length, decay: landing.decay), .effects, at: time + 0.9 * duration,

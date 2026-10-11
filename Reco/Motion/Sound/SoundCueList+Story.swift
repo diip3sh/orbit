@@ -23,7 +23,7 @@ nonisolated extension SoundCueList {
     }
 
     private mutating func seam(_ seam: MotionSeam, at time: Double, lasting duration: Double) {
-        guard !MotionSeam.graphic.contains(seam) else { return graphic(seam, at: time, lasting: duration) }
+        guard !(MotionSeam.graphic.contains(seam) || seam == .flow) else { return graphic(seam, at: time, lasting: duration) }
         switch seam {
         case .dither:
             add(.bits(length: duration), .effects, at: time, level: SoundRules.bitsLevel, send: 0.25)

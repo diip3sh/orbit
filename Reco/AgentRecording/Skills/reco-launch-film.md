@@ -175,7 +175,7 @@ Seams:
     moment, then resolves into the next scene; 0.8 s.
 - The closing comes in on a cut (satin), or on `ring` (light and dither): a ring of smoke opening from the
   middle, the closing inside it; 1 s.
-- The graphic seams (`iris`, `bars`, `slats`, `tiles`, `split`, `spin`, `glitch`, `pixelate`, `liquid`, `flip`, `cube`, `flash`, `stretch`) go in any look, in the brand's colours: reco-director's section 4 picks them by the brand's personality, two to four at the film's turns, never two running.
+- `flow`, `swing` and the graphic seams go in any look: reco-director's sections 4 and 8 pick the transitions by the brand's personality, at the film's turns, the graphic seams at most once.
 
 ## 5. The look and style
 

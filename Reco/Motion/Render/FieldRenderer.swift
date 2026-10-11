@@ -145,11 +145,10 @@ nonisolated enum FieldRenderer {
         if field == .satin {
             return satin(SatinSetup.forShot(shot.index), palette: palette, at: time - shot.start, size: size, shot: shot) ?? plain
         }
-        if field == .aurora {
-            return aurora(AuroraSetup.forShot(shot.index, isLast: shot.isLast), palette: palette, at: time, size: size, shot: shot) ?? plain
-        }
-        if field == .haze {
-            return aurora(AuroraSetup.haze(shot.index), palette: palette, isHaze: true, at: time, size: size, shot: shot) ?? plain
+        guard field != .pool else { return pool(palette: palette, at: time, size: size, shot: shot) }
+        if field == .aurora || field == .haze {
+            let setup = field == .haze ? AuroraSetup.haze(shot.index) : AuroraSetup.forShot(shot.index, isLast: shot.isLast)
+            return aurora(setup, palette: palette, isHaze: field == .haze, at: time, size: size, shot: shot) ?? plain
         }
         if field == .lens {
             // Ground far behind the planes: the picture follows the camera as the others do

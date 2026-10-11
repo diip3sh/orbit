@@ -44,7 +44,7 @@ Every change of scene is one of these, and you can name its reason:
 
 - Never the same seam on two scene changes running. Use at least `dive`, `expand` and `melt`, and `stack` when an answer
   comes over a question.
-- The graphic seams (`iris`, `bars`, `slats`, `tiles`, `split`, `spin`, `glitch`, `pixelate`, `liquid`, `flip`, `cube`, `flash`, `stretch`) go in any look, in the brand's colours: reco-director's section 4 picks them by the brand's personality, two to four at the film's turns, never two running.
+- `flow`, `swing` and the graphic seams go in any look: reco-director's sections 4 and 8 pick the transitions by the brand's personality, at the film's turns, the graphic seams at most once.
 - Inside a scene, a change is a move, never a cut: the box `morph`s into a card, a thumbnail `morph`s (with `to`) into the
   result, a line is `select`ed, a mark `fly`s in, contents `show` and `hide` on a beat.
 - `melt` opens the film's second scene or closes it; a dive after a click on send; an expand after a pick.

@@ -23,7 +23,8 @@ nonisolated extension AgentToolCatalog {
         layer's font names a family of fonts for itself. Pacing \
         driftAndCut: 3–5 s shots, the camera drifting at constant speed, hard cuts (Linear). beats: 1–2 s beats, eased \
         camera moves (Raycast). Field, what scenes are drawn over, one look a film: plain (the background colour, the default: \
-        the product's UI crisp on its own ground, as Linear's films); satin (black satin out of focus, lit afresh for each \
+        the product's UI crisp on its own ground, as Linear's films); pool (the background lit by one soft pool of light in \
+        the accent's hue, falling off to it at the frame's edges, the UI lit by it too: a quiet dark brand); satin (black satin out of focus, lit afresh for each \
         scene, a slab of matte glass across a wide one's corner, monochrome: dark UI in macro, as Raycast's); the light \
         look's grainy light in the accent's hue: ember (two corners), sunlit (a wave from below), bloom (a blob in the \
         middle), orb (a lit sphere), ripple (rings from the middle); the dither look's ordered dots in the accent: matrix \
@@ -73,6 +74,11 @@ nonisolated extension AgentToolCatalog {
         them), ui (the logo, shown alone last): New Raycast's ending in small mono caps, a word cut in every 0.42 s. Give it \
         0.42 s a word plus 4.5 s, 1.6 s more with ui; it's drawn on black.
         Seams, how a scene begins: cut (most), whip (the camera streaks out sideways and into the next scene, blurred), \
+        swing (the scene turns away round where the camera looks and the next turns in from the other side, blurred, 0.3 s \
+        out and 0.6 s in: a whip in depth), flow (this scene's layers leave one after another the way the film goes as the \
+        next scene's arrive from the other side over them, 0.8 s; a layer with the same id in both scenes travels from its \
+        place in this one to its place in the next, a rectangle changing size, corners and colour on the way, anything else \
+        turning into the next scene's: a pill becomes a card, a card a panel, a word the logo), \
         cutOnMotion (carries the camera's speed on), zoomThrough, blurCut, push, fade (rare), stack (the next scene rises \
         from below on a card over this one, which sinks back and dims, 0.7 s), expand (the next scene opens out of what this \
         one clicked last, or its middle, as an app opens from its icon, 0.65 s), dive (the camera tilts and flies through \
@@ -98,7 +104,12 @@ nonisolated extension AgentToolCatalog {
         the last word replaced in turn), exit; any layer rise, tilt, focus (region), detach, stateChange; a group cascade; \
         the camera hold, push, pan (to [x,y] on the canvas, intensity the zoom it ends at; pans chain, so a pan back out \
         follows a pan in), whip (to [x,y], intensity how much \
-        closer, 0.35 s), pullBack, drift (direction left, right, up, down). intensity 1 is the grammar's own amount.
+        closer, 0.35 s), pullBack, drift (direction left, right, up, down), arc (the camera travels round where it looks, \
+        direction left, right, up or down, 2.5° a second, past the cut). intensity 1 is the grammar's own amount. A camera \
+        {angle [x, y, z]} sees the scene from an angle, in degrees: x leans its top away, y turns its right edge away, z \
+        rolls it clockwise ([20, -15, 0] is a card lying back, its left edge farther, seen from its right and above); depth \
+        of field keeps a band through where it looks sharp and softens what's farther or nearer: for a picture or a mark, never \
+        UI, which tilted reads as a template. Layers at different z (a chip at -200 in front of a panel at 0) part as the camera arcs.
         Motion design (the reco-motion-design skill has recipes): shape layers {size, cornerRadius, color, stroke (an \
         outline that wide), kind rectangle|triangle|plus|check|cross|arrow|search|play|pause, glass (a filled rectangle as a \
         pane of glass over the field, its color a veil such as #ffffff0d)}; a shadow {opacity, radius, \
@@ -163,10 +174,11 @@ nonisolated extension AgentToolCatalog {
         "index":{"type":"integer","description":"add_scene, move_scene: position from 0"},
         "canvas":{"type":"object"},"style":{"type":"object"},"sound":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
         "duration":{"type":"number"},
-        "seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade","stack","expand","wipe","dive","melt","glow","dither","ring",
-        "iris","bars","slats","tiles","split","spin","glitch","pixelate","liquid","flip","cube","flash","stretch"]},
+        "seam":{"type":"string","enum":["cut","whip","swing","flow","cutOnMotion","zoomThrough","blurCut","push","fade","stack","expand","wipe","dive",
+        "melt","glow","dither","ring","iris","bars","slats","tiles","split","spin","glitch","pixelate","liquid","flip","cube","flash","stretch"]},
         "shot":{"type":"object","description":"{shot: macro|hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard|closing, text, detail, ui, items, region, view}"},
-        "field":{"type":"string","enum":["satin","plain","ember","sunlit","bloom","orb","ripple","matrix","warp","swirl","tide","halo","aurora","haze","paper","ink","lens"]},
+        "field":{"type":"string","enum":["satin","pool","plain","ember","sunlit","bloom","orb","ripple","matrix","warp","swirl","tide","halo","aurora","haze",
+        "paper","ink","lens"]},
         "moves":{"type":"array","items":{"type":"object"}}},
         "required":["op"],"additionalProperties":false}}},
         "required":["operations"],"additionalProperties":false}

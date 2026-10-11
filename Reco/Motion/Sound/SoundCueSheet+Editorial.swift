@@ -198,7 +198,7 @@ nonisolated extension SoundCueList {
         }
         // A graphic seam sounds as it does in any look
         for scene in plan.scenes.dropFirst() {
-            if let transition = scene.transition, MotionSeam.graphic.contains(transition.seam) {
+            if let transition = scene.transition, MotionSeam.graphic.contains(transition.seam) || transition.seam == .flow {
                 graphic(transition.seam, at: scene.start, lasting: transition.duration)
             }
         }
