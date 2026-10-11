@@ -40,6 +40,7 @@ nonisolated enum SeamExpansion {
             case .push: return MotionEasing.move.progress(linear, duration: duration)
             case .stack: return MotionEasing.cascade.progress(linear, duration: duration)
             case .expand: return MotionEasing.morph.progress(linear, duration: duration)
+            case .wipe: return SeamExpansion.wipeEasing.progress(linear, duration: duration)
             case .dive, .melt: return MotionEasing.move.progress(linear, duration: duration)
             case .dither: return min((linear * duration * Self.ditherSteps).rounded(.down) / (duration * Self.ditherSteps), 1)
             default: return linear
@@ -58,6 +59,11 @@ nonisolated enum SeamExpansion {
     /// A card rising over the frame and an element opening into it: as long as a sheet or an app takes to open.
     static let stackDuration = 0.7
     static let expandDuration = 0.65
+
+    /// ElevenLabs' picture sweeping in over its wordmark: its soft edge's middle went from 1324 px to the frame's left edge in
+    /// 0.27 s (7.45–7.72 s), speeding up (fitted, 14 px rms), and the picture was whole the frame after.
+    static let wipeDuration = 0.27
+    static let wipeEasing = MotionEasing.cubicBezier(0.41, 0, 1, 1)
 
     /// Vantae's dive from the click on its send to the next scene clear (6.0–6.8 s), and its melts: its room into the blue
     /// ground (15.4–16.1 s) and the ground into a meadow (2.3–2.9 s).
@@ -139,7 +145,7 @@ nonisolated enum SeamExpansion {
             let width = canvas.width
             outgoing(.positionX, 0, whipOut.travel * width / zooms.outgoing, last: whipOut.duration, easing: .exit)
             incoming(.positionX, -whipIn.travel * width / zooms.incoming, 0, over: whipIn.duration, easing: .enterFast)
-        case .push, .fade, .stack, .expand, .dive, .melt, .glow, .dither, .ring:
+        case .push, .fade, .stack, .expand, .wipe, .dive, .melt, .glow, .dither, .ring:
             effect.transition = Transition(seam: seam, duration: duration(of: seam))
         }
         return effect
@@ -150,6 +156,7 @@ nonisolated enum SeamExpansion {
         switch seam {
         case .stack: stackDuration
         case .expand: expandDuration
+        case .wipe: wipeDuration
         case .dive: diveDuration
         case .melt: meltDuration
         case .glow: glowDuration

@@ -51,6 +51,7 @@ private extension MotionSound.Style {
         case .ambient: "Ambient"
         case .groove: "Groove (170 BPM)"
         case .house: "House (125 BPM)"
+        case .editorial: "Film Score"
         }
     }
 }

@@ -1386,6 +1386,42 @@ Key facts:
 - **Light grounds** (`MotionPlan.isLight`): what goes behind a stack or expand dims to 0.15 black, not 0.55.
 - The lint lets a story film's first move land on its cut, and any scene after a seam other than a cut.
 
+### S12 — Editorial films (`remotion`, spec 0017)
+
+A fifth kind of launch film, after ElevenLabs' "Introducing ElevenAgents Architect" (`~/Movies/Reco/references/elevenlabs-launch.mp4`):
+type and print on warm paper with hairline rings, pictures far out of focus, one dark beat, hard cuts, every frame sharp, under
+a film score. It ships as the `reco-editorial-film` skill, chosen when the user names ElevenLabs or asks for an editorial,
+typographic or minimal film.
+
+| File | Role |
+|---|---|
+| `Motion/Model/MotionField.swift`, `Render/LatticeSetup.swift`, `FieldKernels.metal.txt` (`latticeField`, `lensField`) | `paper` and `ink` (the lattice's rings, magnified in the middle, a setup a shot) and `lens` (a picture far out of focus), the `editorial` family |
+| `Motion/Model/LensPicture.swift`, `Render/LensPicture+Setup.swift` | Ten pictures fitted to the film's frames; a scene's `picture`, a rectangle's `picture` (`MotionFrameRenderer.pictured`) |
+| `Motion/Grammar/MoveExpansion+Editorial.swift`, `TextReveal.swift` | `sweep`, `brighten` (per-word `offsets`), `blink`, every number measured |
+| `Motion/Render/ShapeMorph.swift` | `grow`: a rectangle out past the frame, its corners to 27 px |
+| `Motion/Grammar/DocumentExpansion+Editorial.swift` | `unfold`: a mark, its name and a tagline opening as the film's wordmark |
+| `Motion/Grammar/BurstExpansion+Editorial.swift` | `orbit` (the dark beat's stars) and `dots` (born round the sphere) as keyframed layers |
+| `Motion/Render/MotionFrameRenderer+Editorial.swift`, `MotionPlan.Marks` | `marks`: registration marks under the layer they frame |
+| `Motion/Model/MotionSeam.swift`, `Render/MotionFrameRenderer+Seams.swift` | `wipe`: the next scene from the right behind a soft front |
+| `Motion/Sound/SoundCueSheet+Editorial.swift`, `SoundRules+Editorial.swift`, `SoundVoices+Editorial.swift` | The `editorial` score: sections, wide pads, booms, ticks, the end card's bursts |
+| `AgentRecording/Skills/reco-editorial-film*.md` | The skill, the film measured, recipes, the film rebuilt as the example |
+
+Key facts:
+- **The reference, measured.** 67 s at 60 fps; no motion blur (1 px edges at 52 px a frame), so editorial films draw sharp
+  (`MotionPlan.isEditorial`). Statements are dim from the cut and lit a word a frame (0.02 s + 0.045 s a character of the word
+  before) as they shrink from 1.19×; labels blink on alternate frames; a card grows to the frame in 0.38 s; the picture wipe's
+  front is 1000–1500 px soft and speeds up (fitted, 14 px rms); 12 stars turn at 132 → 37 → 104°/s. Its music is a G♯ film score
+  without drums, −15.7 LUFS, 70 % of its energy under 60 Hz.
+- **Rebuilt in the engine** (`~/Movies/Reco/quality/editorial/Architect.motion`, the skill's example, 41 s): the brighten matches
+  the film frame for frame, the wordmark from its letters on, the grow's box and the stars too; lint clean; 1080p60 export 10.7 s (18.4 with motion blur).
+- A filled rectangle changing its shape drew a ring part of the way (its half-side outlines mixed); two fills stay a fill.
+- Marks go under the layer they frame and over what's before it: drawn on the ground, a full-frame dark shape hid them.
+- In an editorial film the lint reads mono text as texture (size, contrast, hold), lets grey lines type at 115 a second and
+  first moves land on their cut, and keeps the look across cuts between its grounds and plain paper.
+- **From the app** (Claude Code, instalanding.ai, "an editorial launch film in the style of ElevenLabs'"): 5.5 min, a 41.3 s
+  4K60 film (`~/Movies/Reco/InstaLanding 3-edited.mp4`) with every editorial move, in its own words; it kept the example's
+  arc and timings scene for scene.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -1463,6 +1499,7 @@ should hold but need re-measuring.
 | S9 motion design (spec 0014) | D1–D5 done: morphs, floods, pops, clicks, bursts, ripples, letters, kinetic type, scrolls; their sounds; the `reco-motion-design` skill with references read on demand; look-dev matching the Spotify Jam reference. D6: a Spotify film made from the app (9 min, 30 s 4K, every named movement). D7: smoother after the user's review (letters, flood, bands, sharp particles, pointer, spin, chained pans, stillness lint, skill and example rebuilt). Next: the user's verdict |
 | S10 story films and score styles (spec 0015) | Reference measured (picture and music; the Spotify Jam's music too); `aurora`, the brand gradient, voice, reply, shimmer, wash, scatter, show/hide, UI glyphs, the hand in macro; `groove` and `house` scores fitted to the cuts; the `reco-story-film` skill; the reference rebuilt in the engine and checked frame by frame; `beats` lint. Orca ADE made from the app twice; the user found it "really bad". Rebuilt by hand to Lovable's bar (stills checked), and the engine (elongated aurora lights, SVG marks with `tint`, text-off-frame check) and skill (answers as coloured things, Lovable's type sizes) changed to match. A third run from the app follows the new recipes. The user found it short still: the look now comes from the product's theme over Reco's shader looks (Orca: `warp` dither, its seams, the halo), Lovable giving only the motion; the shutter swap fix, the opening's arrival, and the overlapping-text check. Then glass cards, a corner wash, 60 fps and a wider groove after the user's notes; then a sound for each transition instead of a beat. Next: the user's verdict, a listening round |
 | S11 flow films (spec 0016) | Both reels measured; `haze`, `dive`, `melt`, `fly`, `select` and their sounds; the `reco-flow-film` skill with Vantae's reel rebuilt as its example and IrukaDark's pieces checked; the default for light products. Next: films from the app, the user's verdict |
+| S12 editorial films (spec 0017) | ElevenLabs' film measured (picture and score); `paper`, `ink`, `lens` and pictures in shapes; `wipe`; `sweep`, `brighten`, `blink`, `grow`, `marks`, `orbit`, `dots`, `unfold`; the `editorial` score; the film rebuilt and checked against its frames; the `reco-editorial-film` skill; a film made from the app (InstaLanding, 5.5 min, 41 s 4K). Next: the user's verdict, a listening round |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:

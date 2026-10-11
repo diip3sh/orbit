@@ -25,7 +25,7 @@ extension MotionPlan {
                 size = measured.size
                 context.measure(measured)
                 parts = layer.moves.contains { $0.kind == .lineMask } ? measured.lines
-                    : layer.moves.contains { $0.kind == .wordByWord || $0.kind == .reply } ? measured.words : measured.characters
+                    : layer.moves.contains { [.wordByWord, .reply, .brighten].contains($0.kind) } ? measured.words : measured.characters
             } else {
                 size = Self.size(of: layer.content, sizes: sizes)
             }
@@ -49,6 +49,10 @@ extension MotionPlan {
                 planned.morph = ShapeMorph(shape, moves: layer.moves, context: context)
             }
             planned.accent = layer.moves.first { $0.kind == .kinetic }?.color
+            if let move = layer.moves.first(where: { $0.kind == .marks }) {
+                let timing = MoveExpansion.timing(of: move, in: context)
+                planned.marks = Marks(shown: timing.start...(timing.start + timing.duration), color: move.color)
+            }
             press(&planned, as: layer, context: context)
             list.append(planned)
             if case .group(let children) = layer.content {
@@ -81,6 +85,9 @@ extension MotionPlan {
     nonisolated private static func dress(_ planned: inout Layer, as layer: MotionLayer, parent: Int?, in list: inout [Layer], context: MoveContext) {
         if case .shape(let shape) = layer.content, shape.glass == true, !shape.isGlyph, (shape.stroke ?? 0) == 0 {
             planned.glass = GlassRenderer.Shape(radius: shape.cornerRadius, rim: GlassRenderer.shapeRim)
+        }
+        if case .shape(let shape) = layer.content, !shape.isGlyph, (shape.stroke ?? 0) == 0 {
+            planned.picture = shape.picture
         }
         if let reveal = planned.reveal, reveal.style == .voice {
             let scale = layer.transform.scale

@@ -60,6 +60,12 @@ nonisolated struct MotionPlan: Sendable {
         /// The glass panel its content sits on; `nil` for a layer not on glass.
         var glass: GlassRenderer.Shape?
 
+        /// The editorial picture its shape shows (spec 0017).
+        var picture: LensPicture?
+
+        /// When registration marks frame it (spec 0017), seconds into its scene, and their colour if the move names one.
+        var marks: Marks?
+
         /// The field typed into that it shows instead of an image.
         var typing: TypedField?
 
@@ -109,6 +115,9 @@ nonisolated struct MotionPlan: Sendable {
         let field: MotionField
         let palette: FieldPalette
 
+        /// The picture a ``MotionField/lens`` field shows, when the scene names one.
+        var picture: LensPicture?
+
         /// The scene's place among the video's scenes over the same field, from 0: satin lights each
         /// shot afresh with the next of its setups.
         var fieldShot = 0
@@ -145,35 +154,6 @@ nonisolated struct MotionPlan: Sendable {
         }
         guard let moves else { return base }
         return property.isFactor ? moves.reduce(base) { $0 * $1.value(at: time) } : moves.reduce(base) { $0 + $1.value(at: time) }
-    }
-
-    /// A layer where it lands on the canvas at one moment.
-    nonisolated struct Placement: Equatable, Sendable {
-        let layer: Int
-
-        /// Top-left, top-right, bottom-right and bottom-left, in canvas pixels from the top-left.
-        var corners: [CGPoint]
-
-        /// The centre's distance from the camera; drawn farthest first.
-        let depth: Double
-
-        let opacity: Double
-
-        /// In canvas pixels, scaled as the layer is.
-        let blur: Double
-
-        /// How many canvas pixels a layer pixel covers at its widest edge.
-        let scale: Double
-
-        /// The corners of the shadow's image, like ``corners``; `nil` without a shadow.
-        var shadowCorners: [CGPoint]?
-
-        /// The corners of the room its letters spring through (``Layer/revealRoom``), like ``corners``; `nil` without it.
-        var roomCorners: [CGPoint]?
-
-        /// The camera's blur at each corner in canvas pixels, signed: negative in front of what's
-        /// in focus. Empty without depth of field.
-        var defocus: [Double] = []
     }
 
     let canvas: CGSize
@@ -363,6 +343,7 @@ extension MotionPlan {
                 cameraBase: Dictionary(uniqueKeysWithValues: MotionProperty.camera.map { ($0, scene.camera.base($0, canvas: canvas)) })
             )
             planned.cameraMoves = cameraMoves(scene.camera.moves, of: planned, context: context)
+            planned.picture = scene.picture
             return planned
         }
         addSeams(of: expanded, to: &scenes)

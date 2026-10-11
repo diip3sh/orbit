@@ -6,9 +6,9 @@
 import Foundation
 
 /// Reco's methods for motion films, shipped in the app as skills: the launch film (spec 0012, Q4), motion design
-/// (spec 0014), the story film (spec 0015) and the flow film (spec 0016). Claude Code finds them in its run's folder and loads the one a film needs;
-/// the last three's references are files beside their `SKILL.md`, read one at a time when their method says so. Agents without skills get the launch
-/// film's method in their prompt.
+/// (spec 0014), the story film (spec 0015), the flow film (spec 0016) and the editorial film (spec 0017). Claude Code finds them in its run's folder
+/// and loads the one a film needs; the last four's references are files beside their `SKILL.md`, read one at a time when their method says so.
+/// Agents without skills get the launch film's method in their prompt.
 nonisolated enum AgentSkill {
 
     static let launchFilmName = "reco-launch-film"
@@ -46,13 +46,24 @@ nonisolated enum AgentSkill {
 
     static let flowFilm = resource(flowFilmName)
 
+    static let editorialFilmName = "reco-editorial-film"
+
+    /// Its references, bundled as `reco-editorial-film-<name>.md`: ElevenLabs' film measured, recipes and a whole example (spec 0017).
+    static let editorialFilmReferences = ["film", "recipes", "example"]
+
+    static let editorialFilm = resource(editorialFilmName)
+
     /// Every skill file a motion run gets, by its path relative to the run's folder.
     static let files: [String: String] = {
         var files = [
             launchFilmPath: launchFilm, ".claude/skills/\(motionDesignName)/SKILL.md": motionDesign, ".claude/skills/\(storyFilmName)/SKILL.md": storyFilm,
-            ".claude/skills/\(flowFilmName)/SKILL.md": flowFilm
+            ".claude/skills/\(flowFilmName)/SKILL.md": flowFilm, ".claude/skills/\(editorialFilmName)/SKILL.md": editorialFilm
         ]
-        for (skill, references) in [(motionDesignName, motionDesignReferences), (storyFilmName, storyFilmReferences), (flowFilmName, flowFilmReferences)] {
+        let referenced = [
+            (motionDesignName, motionDesignReferences), (storyFilmName, storyFilmReferences), (flowFilmName, flowFilmReferences),
+            (editorialFilmName, editorialFilmReferences)
+        ]
+        for (skill, references) in referenced {
             for name in references {
                 files[".claude/skills/\(skill)/reference/\(name).md"] = resource("\(skill)-\(name)")
             }

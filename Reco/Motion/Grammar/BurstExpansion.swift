@@ -47,6 +47,8 @@ nonisolated enum BurstExpansion {
         for (index, move) in source.layer.moves.enumerated() {
             switch move.kind {
             case .burst: accents.behind.append(burst(move, number: index, from: source))
+            case .orbit: accents.behind.append(orbit(move, number: index, from: source))
+            case .dots: accents.behind.append(dots(move, number: index, from: source))
             case .ripple:
                 if case .shape(let shape) = source.layer.content, ShapeMorph.isBand(move, on: shape) {
                     continue
@@ -58,10 +60,12 @@ nonisolated enum BurstExpansion {
         return accents
     }
 
-    /// Whether `id` is a burst's particles: drawn sharp at the frame's time under motion blur, as the film's are. Thrown
-    /// across the frame in 0.2 s, a 180° shutter streaked them into rays.
+    /// Whether `id` is a burst's particles, an orbit's stars or a wave of dots: drawn sharp at the frame's time under motion
+    /// blur, as the films' are. Thrown across the frame in 0.2 s, a 180° shutter streaked particles into rays.
     static func isParticles(_ id: String) -> Bool {
-        id.split(separator: ".").last.map { $0.hasPrefix("burst") && $0.dropFirst(5).allSatisfy(\.isNumber) && $0.count > 5 } ?? false
+        id.split(separator: ".").last.map { last in
+            ["burst", "orbit", "dots"].contains { last.hasPrefix($0) && last.count > $0.count && last.dropFirst($0.count).allSatisfy(\.isNumber) }
+        } ?? false
     }
 
     private static func particlesID(of layer: String, number: Int) -> String {
@@ -149,7 +153,7 @@ nonisolated enum BurstExpansion {
     // MARK: - Where they come from
 
     /// The middle of `layer` where its morphs and scrolls have taken it by `time`, in its parent's space.
-    private static func centre(of layer: MotionLayer, before time: Double, sizes: [String: CGSize], context: MoveContext) -> SIMD3<Double> {
+    static func centre(of layer: MotionLayer, before time: Double, sizes: [String: CGSize], context: MoveContext) -> SIMD3<Double> {
         let travels = layer.moves.filter { [.morph, .scroll].contains($0.kind) && $0.target != nil }
             .map { (target: $0.target, start: MoveExpansion.timing(of: $0, in: context).start) }
             .filter { $0.start <= time }
@@ -171,7 +175,7 @@ nonisolated enum BurstExpansion {
     }
 
     /// FNV-1a of `text`: the same particles for the same layer on every launch.
-    private static func seed(_ text: String) -> UInt64 {
+    static func seed(_ text: String) -> UInt64 {
         text.utf8.reduce(0xCBF2_9CE4_8422_2325) { ($0 ^ UInt64($1)) &* 0x100_0000_01B3 }
     }
 }

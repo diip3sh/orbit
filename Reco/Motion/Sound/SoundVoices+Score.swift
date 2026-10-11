@@ -24,7 +24,8 @@ nonisolated extension SoundVoices {
         for note in chord.notes {
             let frequency = SoundSignal.frequency(ofNote: Double(note))
             let table = wavetable(frequency, brightness: chord.brightness)
-            for (cents, side) in [(-7.0, -0.75), (0, 0), (7, 0.75)] {
+            let voices = chord.wide == true ? [(-7.0, -1.0), (3, -1), (7, 1), (-3, 1)] : [(-7.0, -0.75), (0, 0), (7, 0.75)]
+            for (cents, side) in voices {
                 let vibrato = (rate: random.uniform(0.12...0.3), phase: random.uniform(0...6.3))
                 let wobble = vForce.sin(vDSP.add(vibrato.phase, vDSP.multiply(2 * .pi * vibrato.rate, times)))
                 let frequencies = vDSP.multiply(frequency * pow(2, cents / 1200), vDSP.add(1, vDSP.multiply(0.0012, wobble)))

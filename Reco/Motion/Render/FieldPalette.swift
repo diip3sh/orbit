@@ -19,6 +19,10 @@ nonisolated struct FieldPalette: Equatable, Sendable {
     /// `field`'s colours in `style`: the aurora's are its dark middle's stops into the brand's gradient
     /// (``AuroraSetup/core``), the haze's white's (``AuroraSetup/hazeCore``), the others' from the accent.
     init(_ field: MotionField, style: StyleTokens, background: RGBAColor) {
+        if field == .paper || field == .ink {
+            self.init(field, accent: style.accent, background: background)
+            return
+        }
         guard field == .aurora || field == .haze else {
             self.init(field, accent: style.accent, background: background)
             return
@@ -52,6 +56,11 @@ nonisolated struct FieldPalette: Equatable, Sendable {
     init(_ field: MotionField, accent: RGBAColor?, background: RGBAColor) {
         if field == .aurora || field == .haze {
             self.init(field, style: StyleTokens(accent: accent), background: background)
+        } else if field == .paper || field == .ink {
+            // The canvas's own background when it's paper (or ink), else the film's
+            let light = OKLCH(background).lightness
+            let isPaper = field == .paper
+            self.init(back: isPaper == (light > 0.5) ? background : isPaper ? LatticeSetup.paper : LatticeSetup.ink, colors: [])
         } else if let look = Self.look(for: field) {
             let brand = accent.map(OKLCH.init)
             let hasHue = (brand?.chroma ?? 0) >= Self.leastBrandChroma

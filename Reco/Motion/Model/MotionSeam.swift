@@ -37,6 +37,10 @@ nonisolated enum MotionSeam: String, Codable, CaseIterable, Sendable {
     /// next scene inside it, while this one dives towards it: an app opening from its icon.
     case expand
 
+    /// The next scene sweeps in from the right behind a very soft edge, most of the frame wide, speeding up: the editorial
+    /// film's picture coming in over its wordmark (spec 0017).
+    case wipe
+
     /// The camera tilts and dives into what the scene before clicked last (else its middle) until it fills the frame, the
     /// next scene seen through it coming up from further back: flying through a glass prompt into what it made (Vantae).
     case dive

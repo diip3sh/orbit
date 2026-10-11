@@ -241,7 +241,7 @@ nonisolated extension SoundRules {
 
     static func beat(_ style: MotionSound.Style) -> BeatStyle? {
         switch style {
-        case .ambient: nil
+        case .ambient, .editorial: nil
         case .groove: groove
         case .house: house
         }

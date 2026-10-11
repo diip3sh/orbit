@@ -36,6 +36,10 @@ nonisolated struct ShapeContent: Equatable, Sendable {
     /// read as cut-outs.
     var glass: Bool?
 
+    /// A filled rectangle showing one of the editorial film's pictures in its shape (spec 0017), flat on its plane: its
+    /// colour is only its fill until the picture covers it.
+    var picture: LensPicture?
+
     /// Whether it's drawn by ``kind``'s path rather than generated as a rounded rectangle.
     var isGlyph: Bool {
         kind != .rectangle
@@ -47,7 +51,7 @@ nonisolated struct ShapeContent: Equatable, Sendable {
 nonisolated extension ShapeContent: Codable {
 
     private enum CodingKeys: String, CodingKey {
-        case kind, size, cornerRadius, color, stroke, glass
+        case kind, size, cornerRadius, color, stroke, glass, picture
     }
 
     init(from decoder: any Decoder) throws {
@@ -58,6 +62,7 @@ nonisolated extension ShapeContent: Codable {
         color = try container.decode(RGBAColor.self, forKey: .color)
         stroke = try container.decodeIfPresent(Double.self, forKey: .stroke)
         glass = try container.decodeIfPresent(Bool.self, forKey: .glass)
+        picture = try container.decodeIfPresent(LensPicture.self, forKey: .picture)
     }
 
     /// A rectangle leaves its kind out, as documents written before kinds did.
@@ -71,5 +76,6 @@ nonisolated extension ShapeContent: Codable {
         try container.encode(color, forKey: .color)
         try container.encodeIfPresent(stroke, forKey: .stroke)
         try container.encodeIfPresent(glass, forKey: .glass)
+        try container.encodeIfPresent(picture, forKey: .picture)
     }
 }

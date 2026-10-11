@@ -192,7 +192,7 @@ nonisolated extension SoundCueList {
     }
 
     /// Layers in the plan's order: each, then its group's.
-    private static func flattened(_ layers: [MotionLayer]) -> [MotionLayer] {
+    static func flattened(_ layers: [MotionLayer]) -> [MotionLayer] {
         layers.flatMap { layer -> [MotionLayer] in
             if case .group(let children) = layer.content {
                 return [layer] + flattened(children)

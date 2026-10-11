@@ -19,6 +19,10 @@ nonisolated struct MotionSound: Equatable, Sendable {
         case groove
         /// 125 BPM four-on-the-floor house in F♯, from the first beat to the last frame (the Spotify Jam concept).
         case house
+        /// A film score cut to the picture in G♯, no drums: dark wide pads a section, a sub boom after each section's cut,
+        /// high ticks on what types and between cuts, a breakdown, the tonic's major at the peak, a burst on the logo and a
+        /// fading tail (ElevenLabs' launch film, spec 0017).
+        case editorial
     }
 
     /// The music: chords a shot, the hits that open acts, the closing.

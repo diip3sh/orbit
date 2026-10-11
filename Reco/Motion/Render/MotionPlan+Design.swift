@@ -17,9 +17,21 @@ nonisolated extension MotionPlan {
         var sweep: TextSelection?
     }
 
+    /// Registration marks round a layer (spec 0017): when they show, seconds into its scene, and their colour, else ink on a
+    /// light ground and white on a dark one.
+    struct Marks: Equatable, Sendable {
+        let shown: ClosedRange<Double>
+        let color: RGBAColor?
+    }
+
     /// Whether the video is on a light ground: what goes behind a card over it dims less (spec 0016).
     var isLight: Bool {
         0.2126 * background.red + 0.7152 * background.green + 0.0722 * background.blue > 0.5
+    }
+
+    /// Whether the video is an editorial film, over paper, ink or pictures (spec 0017).
+    var isEditorial: Bool {
+        scenes.contains { $0.field.family == .editorial }
     }
 
     /// Whether any layer is clicked, so the plan needs the system's pointer.

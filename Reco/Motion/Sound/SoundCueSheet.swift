@@ -31,6 +31,10 @@ nonisolated struct SoundCueSheet: Codable, Equatable, Sendable {
 
         /// Ducked on every beat under a beat score, as a sidechained pad is; `nil` holds it steady.
         var pump: Pump?
+
+        /// Its voices apart on either side, no two alike, so the two sides share almost nothing, as an editorial film's
+        /// pads (left and right correlated 0.03, spec 0017); `nil` spreads them left, centre and right.
+        var wide: Bool?
     }
 
     /// A pad ducking on a beat (spec 0015): down by `depth` on each `period` from the chord's start, back up over

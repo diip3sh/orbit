@@ -15,7 +15,9 @@ nonisolated extension SoundCueSheet {
         var sheet = SoundCueSheet(length: Double(plan.frameCount) / Double(plan.frameRate))
         guard !document.sound.isSilent, !plan.scenes.isEmpty else { return sheet }
         let closing = ClosingCues(plan: plan, document: document)
-        if let style = SoundRules.beat(document.sound.style) {
+        if document.sound.style == .editorial {
+            sheet.scoreEditorial(plan: plan, document: document)
+        } else if let style = SoundRules.beat(document.sound.style) {
             sheet.scoreBeat(style, isHouse: document.sound.style == .house, plan: plan, document: document, closing: closing)
         } else {
             sheet.scoreAmbient(plan: plan, document: document, closing: closing)

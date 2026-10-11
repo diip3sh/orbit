@@ -34,6 +34,12 @@ nonisolated struct MotionMove: Equatable, Sendable {
         // Flow films (spec 0016), any layer: flying in on an arc onto its place, banking; text only: selected as a pointer
         // drags across it
         case fly, select
+        // Editorial films (spec 0017), text only: wiped in behind a soft front; shown dim, its words lit one by one as the
+        // line settles. Any layer: blinking in, registration marks round it, a ring of stars round it, dots born round it in a
+        // wave; a rectangle: growing to fill the frame
+        case sweep, brighten, blink, marks, orbit, dots, grow
+        // Groups, editorial films: a mark opening into its name and tagline
+        case unfold
         // Groups: their layers flying out from its middle to their places
         case scatter
         // Groups: their layers one after another
@@ -48,8 +54,11 @@ nonisolated struct MotionMove: Equatable, Sendable {
         /// Story and flow films' moves on any layer (``MoveExpansion/storyTracks(of:start:duration:in:)``).
         static let storyKinds: Set<Kind> = [.shimmer, .wash, .show, .hide, .scatter, .fly]
 
+        /// Editorial films' moves (``MoveExpansion/editorialEffect(of:start:duration:in:)``).
+        static let editorialKinds: Set<Kind> = [.sweep, .brighten, .blink, .grow, .marks, .orbit, .dots, .unfold]
+
         var needsText: Bool {
-            [.blurWipe, .lineMask, .wordByWord, .type, .roll, .letters, .kinetic, .voice, .reply, .select].contains(self)
+            [.blurWipe, .lineMask, .wordByWord, .type, .roll, .letters, .kinetic, .voice, .reply, .select, .sweep, .brighten].contains(self)
         }
     }
 
@@ -119,7 +128,8 @@ nonisolated extension MotionMove {
         case let kind where kind.needsText && !isText: return "\(kind.rawValue) needs a text layer."
         case .cascade where !isGroup: return "cascade needs a group: its layers enter one after another."
         case .scatter where !isGroup && target == nil: return "scatter needs a group: its layers fly out from its middle."
-        case .morph, .flood: return shapeProblem(on: content)
+        case .unfold where !isGroup: return "unfold needs a group: its mark first, then its name and a tagline."
+        case .morph, .flood, .grow: return shapeProblem(on: content)
         default: return missingField
         }
     }
@@ -136,12 +146,12 @@ nonisolated extension MotionMove {
         }
     }
 
-    /// A morph changes something, and only a rectangle's size, corners, colour and outline; a flood fills the frame
-    /// from a rectangle.
+    /// A morph changes something, and only a rectangle's size, corners, colour and outline; a flood and a grow fill the
+    /// frame from a rectangle.
     private func shapeProblem(on content: LayerContent?) -> String? {
         let rectangle = if case .shape(let shape) = content, !shape.isGlyph { true } else { false }
-        if kind == .flood {
-            return rectangle ? nil : "flood needs a rectangle shape: it grows out past the frame's corners."
+        if kind == .flood || kind == .grow {
+            return rectangle ? nil : "\(kind.rawValue) needs a rectangle shape: it grows out past the frame's edges."
         }
         guard size != nil || radius != nil || color != nil || stroke != nil || target != nil else {
             return "morph needs size, radius, color, stroke or to: what it changes."

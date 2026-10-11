@@ -162,6 +162,7 @@ extension AgentInvocationTests {
         #expect(launch.prompt.contains("choose Reco's skill for this film") && launch.prompt.contains("reco-motion-design"))
         #expect(launch.prompt.contains("reco-story-film") && run.files[".claude/skills/reco-story-film/SKILL.md"] == AgentSkill.storyFilm)
         #expect(launch.prompt.contains("reco-flow-film") && run.files[".claude/skills/reco-flow-film/SKILL.md"] == AgentSkill.flowFilm)
+        #expect(launch.prompt.contains("reco-editorial-film") && run.files[".claude/skills/reco-editorial-film/SKILL.md"] == AgentSkill.editorialFilm)
         #expect(!launch.prompt.contains(AgentSkill.launchFilmMethod))
 
         let walkthrough = try invocation(.claudeCode)
@@ -181,7 +182,10 @@ extension AgentInvocationTests {
         #expect(AgentSkill.motionDesign.hasPrefix("---\nname: reco-motion-design\ndescription: "))
         #expect(AgentSkill.storyFilm.hasPrefix("---\nname: reco-story-film\ndescription: "))
         #expect(AgentSkill.flowFilm.hasPrefix("---\nname: reco-flow-film\ndescription: "))
-        #expect(AgentSkill.files.count == 4 + AgentSkill.motionDesignReferences.count + AgentSkill.storyFilmReferences.count + AgentSkill.flowFilmReferences.count)
+        #expect(AgentSkill.editorialFilm.hasPrefix("---\nname: reco-editorial-film\ndescription: "))
+        let references = AgentSkill.motionDesignReferences.count + AgentSkill.storyFilmReferences.count + AgentSkill.flowFilmReferences.count
+            + AgentSkill.editorialFilmReferences.count
+        #expect(AgentSkill.files.count == 5 + references)
         #expect(AgentSkill.files.values.allSatisfy { !$0.isEmpty })
         // Each reference the method names is there
         for name in AgentSkill.motionDesignReferences {
@@ -192,6 +196,9 @@ extension AgentInvocationTests {
         }
         for name in AgentSkill.flowFilmReferences {
             #expect(AgentSkill.flowFilm.contains("reference/\(name).md"))
+        }
+        for name in AgentSkill.editorialFilmReferences {
+            #expect(AgentSkill.editorialFilm.contains("reference/\(name).md"))
         }
     }
 
@@ -220,6 +227,29 @@ extension AgentInvocationTests {
         #expect(document.canvas.field == .haze && document.canvas.frameRate == 60)
         #expect(Set(document.scenes.map(\.seam)).isSuperset(of: [.dive, .expand, .melt]))
         #expect(MotionLint.findings(in: document).isEmpty)
+    }
+
+    /// The editorial film's example, ElevenLabs' film rebuilt, is a document the grammar takes as it is, at 60 fps under its score, with
+    /// nothing for the lint to find, every editorial move in it and no seam but cuts, a wipe and the dark beat's fades.
+    @Test func theEditorialFilmExampleIsAValidDocument() throws {
+        let example = try #require(AgentSkill.files[".claude/skills/reco-editorial-film/reference/example.md"])
+        let start = try #require(example.range(of: "```json\n"))
+        let end = try #require(example.range(of: "\n```", range: start.upperBound..<example.endIndex))
+        let document = try JSONDecoder().decode(MotionDocument.self, from: Data(example[start.upperBound..<end.lowerBound].utf8))
+        try document.validate()
+        #expect(document.canvas.frameRate == 60 && document.sound.style == .editorial)
+        #expect(Set(document.scenes.map(\.seam)) == [.cut, .wipe, .fade])
+        let moves = Set(document.scenes.flatMap { Self.moves(in: $0.layers) })
+        #expect(moves.isSuperset(of: [.unfold, .sweep, .brighten, .blink, .grow, .marks, .orbit, .dots]))
+        #expect(MotionLint.findings(in: document).isEmpty)
+    }
+
+    private static func moves(in layers: [MotionLayer]) -> [MotionMove.Kind] {
+        layers.flatMap { layer -> [MotionMove.Kind] in
+            let own = layer.moves.map(\.kind)
+            guard case .group(let children) = layer.content else { return own }
+            return own + moves(in: children)
+        }
     }
 
     /// Motion design's whole example is a document the grammar takes as it is, with nothing for the lint to find.

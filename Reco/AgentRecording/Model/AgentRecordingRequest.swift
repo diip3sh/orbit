@@ -106,7 +106,9 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
     static let skillChoice = """
         Before anything else, choose Reco's skill for this film and load it with the Skill tool, then follow it: \
         \(AgentSkill.flowFilmName) for a light film where every scene flows out of the last (the default for a product whose \
-        own UI is light, and whenever the user asks for flowing transitions or a light, clean film); \(AgentSkill.storyFilmName) \
+        own UI is light, and whenever the user asks for flowing transitions or a light, clean film); \(AgentSkill.editorialFilmName) \
+        for an editorial film of type, paper and pictures under a film score (when the user names ElevenLabs or asks for an \
+        editorial, typographic, print-like or minimal film); \(AgentSkill.storyFilmName) \
         for one person's job told through the product on a dark ground (the default for a product whose own UI is dark); \
         \(AgentSkill.motionDesignName) when the user asks for motion design, a UI animation or a \
         concept film, or names movements such as morphs, a flood, a burst or kinetic type; \(AgentSkill.launchFilmName) \

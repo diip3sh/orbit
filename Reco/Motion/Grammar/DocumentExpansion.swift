@@ -100,6 +100,9 @@ nonisolated enum DocumentExpansion {
            !children.contains(where: { $0.moves.contains { $0.kind == .scatter } }) {
             layer.content = .group(scattered(children, by: scatter))
         }
+        if layer.moves.contains(where: { $0.kind == .unfold }) {
+            layer = unfolded(layer, sizes: expansion.sizes, context: expansion.context)
+        }
         if let cascade = layer.moves.first(where: { $0.kind == .cascade }), case .group(let rows) = layer.content {
             layer.moves.removeAll { $0.kind == .cascade }
             layer.content = .group(cascaded(rows, by: cascade, in: layer, expansion: expansion))

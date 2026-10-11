@@ -38,6 +38,14 @@ nonisolated enum MotionField: String, Codable, CaseIterable, Sendable {
     /// Black satin out of focus under one broad light, a lit plane's edge across a corner: dark,
     /// premium UI in macro (New Raycast's ground).
     case satin
+    /// Warm paper with hairline rings stepping out from the middle, magnified there as through a lens: the editorial
+    /// film's ground (spec 0017, ElevenLabs' launch), under its logo, its words and its UI cards.
+    case paper
+    /// The paper's rings on near-black: the editorial film's dark beat.
+    case ink
+    /// A colour photograph far out of focus, grainy, filling the frame (petals, dunes, dusk): the editorial film's
+    /// pictures, under white words and UI cards. A shape shows one too (``ShapeContent/picture``).
+    case lens
     /// The canvas's background colour.
     case plain
 
@@ -56,6 +64,8 @@ nonisolated enum MotionField: String, Codable, CaseIterable, Sendable {
         case aurora
         /// The light reels' white ground and its soft light: cut, or a seam of the frame's own (melt, dive, expand).
         case haze
+        /// The editorial film's paper, ink and pictures: cut between them as its frames change what they show.
+        case editorial
         case plain
     }
 
@@ -67,6 +77,7 @@ nonisolated enum MotionField: String, Codable, CaseIterable, Sendable {
         case .satin: .satin
         case .aurora: .aurora
         case .haze: .haze
+        case .paper, .ink, .lens: .editorial
         case .plain: .plain
         }
     }

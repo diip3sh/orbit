@@ -27,6 +27,11 @@ nonisolated struct TextReveal: Equatable, Sendable {
         case voice
         /// Words fade in one after another, the newest in the brand's gradient (spec 0015).
         case reply
+        /// Characters fading in on a straight ramp one after another, a soft front crossing the text (spec 0017): ElevenLabs'
+        /// "Architect" coming in beside its wordmark.
+        case sweep
+        /// Shown dim, its words lit at once one after another (spec 0017): ElevenLabs' statements.
+        case brighten
     }
 
     /// Whether its newest parts are drawn in the brand's gradient, turning to the text's colour over ``tintLength``.
@@ -37,10 +42,18 @@ nonisolated struct TextReveal: Equatable, Sendable {
     /// How long a new word stays in the gradient: Lovable's "making" turned white about 0.8 s after it was typed.
     static let tintLength = 0.8
 
+    /// A brightened line's words before they're lit: ElevenLabs' dim words were 31 % of the way to white on ink, 24–28 % to
+    /// black on paper.
+    static let brightenDim = 0.28
+
     let style: Style
     let start: Double
     let stagger: Double
     let partDuration: Double
+
+    /// When each part starts after `start`, for parts that don't come evenly: a brightened line's words, timed by the word
+    /// before's length. `nil` spaces them ``stagger`` apart.
+    var offsets: [Double]?
 
     /// How far part `index` is shown at `time`, eased: 0 to 1. A letter's way in is ``letterPose(_:)``.
     func progress(ofPart index: Int, at time: Double) -> Double {
@@ -81,18 +94,19 @@ nonisolated struct TextReveal: Equatable, Sendable {
 
     /// How much of part `index`'s time has passed at `time`, 0 to 1, not eased: 1 once it's at rest.
     func fraction(ofPart index: Int, at time: Double) -> Double {
-        let elapsed = time - start - Double(index) * stagger
+        let elapsed = time - start(ofPart: index)
         guard partDuration > 0 else { return elapsed >= 0 ? 1 : 0 }
         return min(max(elapsed / partDuration, 0), 1)
     }
 
     /// When part `index` starts.
     func start(ofPart index: Int) -> Double {
-        start + Double(index) * stagger
+        guard let offsets, let last = offsets.last else { return start + Double(index) * stagger }
+        return start + (offsets.indices.contains(index) ? offsets[index] : last)
     }
 
     /// When the last of `parts` is shown in full.
     func end(parts: Int) -> Double {
-        start + Double(max(parts - 1, 0)) * stagger + partDuration
+        start(ofPart: max(parts - 1, 0)) + partDuration
     }
 }

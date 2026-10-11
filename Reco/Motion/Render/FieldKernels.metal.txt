@@ -757,3 +757,117 @@ inline float2 onPanel(float2 pixel, float3 rowX, float3 rowY, float3 rowW) {
     return float4(mix(tinted, next.sample(next.transform(p)).rgb, melted), 1.0);
 }
 #endif
+
+#ifdef latticeField_ONLY
+namespace lattice {
+
+/// A staircase: flat at whole numbers, rising to the next through each half over `rise` of a step, more each step out by
+/// `growth`; each rise quadratic in and out, so where two meet the lines turn in arcs.
+inline float stair(float u, float rise, float growth) {
+    float n = floor(u);
+    float r = min(rise + growth * n, 0.9);
+    float t = saturate((u - n - 0.5 + 0.5 * r) / r);
+    return n + (t < 0.5 ? 2.0 * t * t : 1.0 - 2.0 * (1.0 - t) * (1.0 - t));
+}
+
+/// The lattice's level at `pixel` (pixels at 1080p from the middle, y down): each axis read through the lens (the middle
+/// magnified, in steps further out) into steps, the two staircases summed. `shape`: the lens's reach and width and the step
+/// (pixels), the rise and its growth.
+inline float level(float2 pixel, float4 shape, float growth) {
+    float2 r = abs(pixel);
+    float2 u = (r - shape.x * tanh(r / shape.y)) / shape.z;
+    return stair(u.x, shape.w, growth) + stair(u.y, shape.w, growth);
+}
+
+/// How much of a line of `width` pixels covers `pixel` in one colour channel, seen at `zoom`: lines lie where the level is
+/// half way between whole numbers, their distance in pixels its distance there over its slope.
+inline float line(float2 pixel, float zoom, float4 shape, float growth, float width) {
+    float2 p = pixel / zoom;
+    float e = 0.5 / zoom;
+    float f = level(p, shape, growth);
+    float2 slope = float2(level(p + float2(e, 0.0), shape, growth) - level(p - float2(e, 0.0), shape, growth),
+                          level(p + float2(0.0, e), shape, growth) - level(p - float2(0.0, e), shape, growth));
+    float distance = abs(fract(f) - 0.5) / max(length(slope), 1e-6);
+    return saturate(0.5 * width + 0.5 - distance);
+}
+
+}
+
+/// Paper with the editorial film's lattice (spec 0017, ElevenLabs' launch film): rounded stepped rings round the frame's
+/// middle in hairlines, the middle magnified as through a lens. `frame`: the output's width and height, its pixels per pixel
+/// at 1080p. `view`: the lattice's zoom, its middle's shift (output pixels, y up), and how far the colour channels' zooms part
+/// (lines split into colours while it zooms, as a lens's do). `shape`: the lens's reach and width, the step (pixels at
+/// 1080p), the rise. `ink`: the line's width (pixels at 1080p), the rise's growth a step. `paper` under `line`'s colour.
+[[stitchable]] float4 latticeField(float4 frame, float4 view, float4 shape, float4 ink, float4 paper, float4 line, coreimage::destination dest) {
+    float2 size = frame.xy;
+    float2 pixel = (dest.coord() - 0.5 * size - view.yz) / frame.z;
+    pixel.y = -pixel.y;
+    float3 cover = float3(
+        lattice::line(pixel, view.x * (1.0 + view.w), shape, ink.y, ink.x),
+        lattice::line(pixel, view.x, shape, ink.y, ink.x),
+        lattice::line(pixel, view.x * (1.0 - view.w), shape, ink.y, ink.x)
+    );
+    return float4(mix(paper.rgb, line.rgb, cover), 1.0);
+}
+#endif
+
+#ifdef lensField_ONLY
+namespace lens {
+
+inline float hash(float2 p) {
+    return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
+}
+
+/// Value noise on a lattice of whole numbers, smoothly between them: grain in clumps, as film's is.
+inline float noise(float2 p) {
+    float2 i = floor(p);
+    float2 f = p - i;
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + float2(1.0, 0.0)), f.x), mix(hash(i + float2(0.0, 1.0)), hash(i + float2(1.0, 1.0)), f.x), f.y);
+}
+
+}
+
+/// A colour photograph far out of focus, grainy (spec 0017, the pictures of ElevenLabs' launch film: petals, dunes, dusk):
+/// soft lights summed and read through `ramp` (a pale ground into the picture's deepest colour), streaked along a direction,
+/// with film grain strongest in the mid-tones. Drawn over `frame`'s rect: its width and height (output pixels), seconds into
+/// the shot, output pixels per pixel at 1080p. `place`: the rect's bottom-left corner (output pixels), the grain's seed
+/// (the frame's number). `l0`–`l4`: each light's middle (fractions of the rect, y down), radius across (rect heights) and
+/// strength; `e0`–`e2` each light's elongation and angle (degrees, clockwise), two a vector. `grain`: its deviation in
+/// levels of 255 in the mid-tones, its clump (pixels at 1080p), the streaks' strength and angle. `shape`: the ramp's
+/// pixels, the lights' drift (rect heights), how fast they drift, the reach the ramp ends at.
+[[stitchable]] float4 lensField(
+    coreimage::sampler ramp, float4 frame, float4 place, float4 l0, float4 l1, float4 l2, float4 l3, float4 l4,
+    float4 e0, float4 e1, float4 e2, float4 grain, float4 shape, coreimage::destination dest
+) {
+    float2 size = frame.xy;
+    float2 local = dest.coord() - place.xy;
+    float2 q = float2(local.x - 0.5 * size.x, 0.5 * size.y - local.y) / size.y;
+    float aspect = size.x / size.y;
+    float t = frame.z;
+    float4 lights[5] = { l0, l1, l2, l3, l4 };
+    float2 shapes[5] = { e0.xy, e0.zw, e1.xy, e1.zw, e2.xy };
+    float reach = 0.0;
+    for (int i = 0; i < 5; i++) {
+        float phase = float(i) * 1.7;
+        float2 drift = shape.y * float2(sin(0.21 * shape.z * t + phase), cos(0.17 * shape.z * t + 1.3 * phase));
+        float2 off = q - ((lights[i].xy - 0.5) * float2(aspect, 1.0) + drift);
+        float turn = shapes[i].y * 0.0174532925;
+        float along = (off.x * cos(turn) + off.y * sin(turn)) / (lights[i].z * shapes[i].x);
+        float across = (off.y * cos(turn) - off.x * sin(turn)) / lights[i].z;
+        reach += lights[i].w * exp(-along * along - across * across);
+    }
+    // Streaks: the reach broken into soft bands across the direction they run
+    float turn = grain.w * 0.0174532925;
+    float bands = dot(q, float2(-sin(turn), cos(turn))) * 22.0;
+    reach *= 1.0 + grain.z * (lens::noise(float2(bands, 3.7)) + 0.5 * lens::noise(float2(2.3 * bands, 9.1)) - 0.75);
+    float u = clamp(reach / shape.w, 0.0, 1.0) * (shape.x - 1.0) + 0.5;
+    float3 color = ramp.sample(ramp.transform(float2(u, 0.5))).rgb;
+    // Grain in clumps, new each frame, strongest in the mid-tones
+    float2 cell = dest.coord() / (grain.y * frame.w) + 512.0 * fract(float2(0.618034, 0.381966) * place.z);
+    float n = (lens::noise(cell) - 0.5) * 3.4;
+    float light = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float amount = grain.x / 255.0 * saturate(4.0 * light * (1.0 - light));
+    return float4(saturate(color + n * amount), 1.0);
+}
+#endif

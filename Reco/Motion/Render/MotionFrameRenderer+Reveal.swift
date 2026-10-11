@@ -5,7 +5,8 @@
 
 import CoreImage
 
-/// Text revealed part by part: typed, wiped, rising, words, letters springing in, voice and replies (spec 0011, 0014, 0015).
+/// Text revealed part by part: typed, wiped, rising, words, letters springing in, voice and replies, swept and brightened (spec
+/// 0011, 0014, 0015, 0017).
 nonisolated extension MotionFrameRenderer {
 
     /// A text layer's parts shown as far as `reveal` has got at `time`: each whole, or partly, by
@@ -17,6 +18,10 @@ nonisolated extension MotionFrameRenderer {
         let room = layer.revealRoom
         let extent = image.extent.insetBy(dx: -room.width * layer.rasterScale, dy: -room.height * layer.rasterScale)
         var shown = CIImage(color: .clear).cropped(to: extent)
+        // A brightened line is there dim from its cut, its words lit over it
+        if reveal.style == .brighten {
+            shown = image.fading(to: TextReveal.brightenDim).composited(over: shown)
+        }
         // Parts already shown in full, joined while they're on one line
         var whole: CGRect?
         for (index, part) in layer.parts.enumerated() {
@@ -69,10 +74,13 @@ nonisolated extension MotionFrameRenderer {
     ) -> CIImage? {
         let (eased, line, scale) = (progress.eased, part.height, layer.rasterScale)
         switch style {
-        case .type, .kinetic, .voice:
+        case .type, .kinetic, .voice, .brighten:
             return nil
         case .reply:
             return piece.fading(to: eased)
+        case .sweep:
+            // On a straight ramp: the film's front was linear
+            return piece.fading(to: progress.fraction)
         case .wipe:
             // Sharpens as it fades in: 8% of its line, 9.8 px for a 1080p headline (at most 10 on text)
             return piece.applyingGaussianBlur(sigma: (1 - eased) * line * 0.08 * scale).fading(to: eased)

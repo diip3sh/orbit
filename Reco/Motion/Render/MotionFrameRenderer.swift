@@ -28,7 +28,8 @@ nonisolated enum MotionFrameRenderer {
     /// as a jump (spec 0012, L1c); a still frame is drawn once.
     static func image(at time: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage] = [:]) -> CIImage {
         let shutter = 0.5 / Double(plan.frameRate)
-        let offsets = FrameRenderer.blurOffsets(
+        // An editorial film is drawn sharp, as ElevenLabs' is: its card's edge stayed a pixel wide growing 52 px a frame
+        let offsets = plan.isEditorial ? [0] : FrameRenderer.blurOffsets(
             distance: travel(at: time, across: shutter, plan: plan), most: plan.isPreview ? previewBlurSamples : exportBlurSamples,
             spacing: plan.isPreview ? FrameRenderer.blurSampleSpacing : exportBlurSpacing
         )
@@ -102,7 +103,13 @@ nonisolated enum MotionFrameRenderer {
         if sharp != time, scene.layers.contains(where: \.isSharp) {
             placements = sharpened(placements, at: plan.placements(of: scene, at: sharp), of: scene)
         }
+        // Registration marks go under the layer they frame, over what's drawn before it
+        var marked = scene.layers.indices.filter { scene.layers[$0].marks?.shown.contains(time) ?? false }
         for placement in placements {
+            while let index = marked.first(where: { scene.isLayer(placement.layer, within: $0) }) {
+                marked.removeAll { $0 == index }
+                image = marks(of: index, in: scene, placements: placements, plan: plan).composited(over: image)
+            }
             var layer = scene.layers[placement.layer]
             guard var content = content(of: &layer, at: time, take: frames[MotionPlan.LayerKey(scene: index, layer: placement.layer)]) else { continue }
             content = lettered(content, of: layer, at: time)
@@ -203,7 +210,7 @@ nonisolated enum MotionFrameRenderer {
         return FieldRenderer.Shot(
             index: scene.fieldShot, start: scene.start,
             shift: CGVector(dx: (landed.x - middle.x) * plan.outputScale, dy: (landed.y - middle.y) * plan.outputScale),
-            zoom: zoom.isFinite && zoom > 0 ? zoom : 1, isLast: scene.start == plan.scenes.last?.start
+            zoom: zoom.isFinite && zoom > 0 ? zoom : 1, isLast: scene.start == plan.scenes.last?.start, picture: scene.picture
         )
     }
 
@@ -268,6 +275,9 @@ nonisolated enum MotionFrameRenderer {
     /// The layer's image on its quad, with its blur, depth of field, opacity and shadow.
     private static func drawn(_ image: CIImage, layer: MotionPlan.Layer, at placement: MotionPlan.Placement, time: Double, plan: MotionPlan) -> CIImage {
         var drawn = projected(image, to: placement.corners, plan: plan)
+        if let picture = layer.picture {
+            drawn = pictured(drawn, picture, on: placement, at: time, plan: plan)
+        }
         var blur = placement.blur
         if let most = placement.defocus.map(abs).max(), let least = placement.defocus.map(abs).min() {
             if most - least < 0.5 {
@@ -294,6 +304,23 @@ nonisolated enum MotionFrameRenderer {
             cast = cast.fading(to: placement.opacity * min(strength, 1))
         }
         return drawn.composited(over: cast)
+    }
+
+    /// A shape's projected pixels filled with `picture` as the whole frame shows it, scaled about its middle to cover what of
+    /// the box its corners span is in the frame (flat: a picture on a tilted plane would need its projection), on the scene's
+    /// clock: so a card that grows to fill the frame (``MotionMove/Kind/grow``) is the frame's picture once it does.
+    private static func pictured(_ shape: CIImage, _ picture: LensPicture, on placement: MotionPlan.Placement, at time: Double, plan: MotionPlan) -> CIImage {
+        let frame = plan.outputSize
+        let output = placement.corners.map { CGPoint(x: $0.x * plan.outputScale, y: (plan.canvas.height - $0.y) * plan.outputScale) }
+        guard let minX = output.map(\.x).min().map({ max($0, 0) }), let maxX = output.map(\.x).max().map({ min($0, frame.width) }),
+              let minY = output.map(\.y).min().map({ max($0, 0) }), let maxY = output.map(\.y).max().map({ min($0, frame.height) }),
+              maxX > minX, maxY > minY
+        else { return shape }
+        let cover = max((maxX - minX) / frame.width, (maxY - minY) / frame.height)
+        let (width, height) = (frame.width * cover, frame.height * cover)
+        let box = CGRect(x: (minX + maxX - width) / 2, y: (minY + maxY - height) / 2, width: width, height: height)
+        guard let image = FieldRenderer.lens(picture, at: time, in: box, size: frame) else { return shape }
+        return image.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: shape])
     }
 
     /// White as far out of focus as the layer gets, black where it's sharp, over an image's `extent`,

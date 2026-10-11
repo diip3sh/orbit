@@ -26,6 +26,8 @@ nonisolated extension MotionFrameRenderer {
             return stacked(previous, under: frame, progress: progress, isLight: plan.isLight)
         case .expand:
             return expanded(previous, into: frame, from: expandSource(into: index, at: time, plan: plan), progress: progress, isLight: plan.isLight)
+        case .wipe:
+            return wiped(previous, into: frame, progress: progress, size: bounds.size)
         case .dive:
             return dived(previous, into: frame, from: expandSource(into: index, at: time, plan: plan), progress: progress, size: bounds.size)
         case .melt:
@@ -60,6 +62,19 @@ nonisolated extension MotionFrameRenderer {
         let back = receded(before, about: CGPoint(x: source.midX, y: source.midY), growth: expandDive, progress: progress, isLight: isLight)
         let radius = min(source.width, source.height) * expandRadius * (1 - progress)
         return framed(shown, in: rect, radius: radius, size: size).composited(over: back)
+    }
+
+    /// The next scene `progress` of the way in from the right over the scene before, behind an edge ``wipeEdge`` of the frame
+    /// wide whose middle goes from ``wipeFrom`` of the frame's width to its left edge.
+    static func wiped(_ before: CIImage, into next: CIImage, progress: Double, size: CGSize) -> CIImage {
+        let edge = wipeEdge * size.width
+        let middle = wipeFrom * size.width * (1 - progress)
+        let mask = CIFilter(name: "CILinearGradient", parameters: [
+            "inputPoint0": CIVector(x: middle - edge / 2, y: 0), "inputPoint1": CIVector(x: middle + edge / 2, y: 0),
+            "inputColor0": CIColor.black, "inputColor1": CIColor.white
+        ])?.outputImage ?? CIImage(color: .black)
+        return next.applyingFilter("CIBlendWithMask", parameters: [kCIInputBackgroundImageKey: before, kCIInputMaskImageKey: mask])
+            .cropped(to: CGRect(origin: .zero, size: size))
     }
 
     /// The camera `progress` of the way through `source` (output pixels) into the next scene: the scene before magnified about
@@ -213,6 +228,11 @@ nonisolated extension MotionFrameRenderer {
     static let expandDive = 0.25
     static let expandRadius = 0.3
     static let expandMiddle = 0.3
+
+    /// A wipe's soft edge and where its middle starts, as shares of the frame's width: ElevenLabs' picture came in under a front
+    /// whose 10–90 % span was 1000–1500 px, its middle first at 1324 px.
+    static let wipeEdge = 0.78
+    static let wipeFrom = 0.69
 
     /// A dive ends a tenth past covering the frame, turns up to 16° on the way, seen from 2.5 frame heights; the next scene
     /// comes up from 0.6 of its size out of a 14 px blur (1080p), behind a 2.5 px rim at 0.7.

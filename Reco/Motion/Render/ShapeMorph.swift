@@ -72,7 +72,7 @@ nonisolated struct ShapeMorph: Sendable {
 
     /// `shape` changed by `moves` in the order they start; `nil` when none changes it.
     init?(_ shape: ShapeContent, moves: [MotionMove], context: MoveContext) {
-        let changes = moves.filter { [.morph, .flood].contains($0.kind) }
+        let changes = moves.filter { [.morph, .flood, .grow].contains($0.kind) }
             .map { (move: $0, timing: MoveExpansion.timing(of: $0, in: context)) }
             .sorted { $0.timing.start < $1.timing.start }
         let bands = moves.filter { Self.isBand($0, on: shape) }.map { move in
@@ -81,7 +81,7 @@ nonisolated struct ShapeMorph: Sendable {
         }
         guard !shape.isGlyph, !bands.isEmpty || changes.contains(where: { change in
             let move = change.move
-            return move.kind == .flood || move.size != nil || move.radius != nil || move.color != nil || move.stroke != nil
+            return move.kind == .flood || move.kind == .grow || move.size != nil || move.radius != nil || move.color != nil || move.stroke != nil
         }) else { return nil }
         base = State(size: shape.size, radius: min(shape.cornerRadius, min(shape.size.width, shape.size.height) / 2), color: shape.color, stroke: shape.stroke ?? 0)
         self.bands = bands
@@ -100,6 +100,15 @@ nonisolated struct ShapeMorph: Sendable {
                 steps.append(Step(start: timing.start, duration: timing.duration * share, easing: .enter, before: state, after: dip))
                 steps.append(Step(start: timing.start + timing.duration * share, duration: timing.duration * (1 - share), easing: .enter, before: dip, after: filled))
                 state = filled
+                continue
+            }
+            if move.kind == .grow {
+                var grown = state
+                grown.size = Self.growSize(from: place, canvas: context.canvas)
+                grown.radius = min(MoveExpansion.growRadius * context.unit, grown.half)
+                grown.stroke = 0
+                steps.append(Step(start: timing.start, duration: timing.duration, easing: MoveExpansion.growEasing, before: state, after: grown))
+                state = grown
                 continue
             }
             var next = move.size.map { Self.resized(state, to: $0) } ?? state
@@ -146,6 +155,15 @@ nonisolated struct ShapeMorph: Sendable {
         return CGSize(width: canvas.width * 16, height: canvas.height * 16)
     }
 
+    /// A grow's size: the rectangle that covers the frame from `centre` (canvas pixels), ``growPast`` larger, so its round
+    /// corners are past the frame's when it stops.
+    private static func growSize(from centre: CGPoint, canvas: CGSize) -> CGSize {
+        let middle = CGPoint(x: min(max(centre.x, 0), canvas.width), y: min(max(centre.y, 0), canvas.height))
+        return CGSize(width: 2 * max(middle.x, canvas.width - middle.x) * growPast, height: 2 * max(middle.y, canvas.height - middle.y) * growPast)
+    }
+
+    static let growPast = 1.03
+
     /// The shape at `time` in its scene.
     func state(at time: Double) -> State {
         guard let index = steps.lastIndex(where: { $0.start <= time }) else { return base }
@@ -165,8 +183,9 @@ nonisolated struct ShapeMorph: Sendable {
                               blue: channel(before.color.blue, after.color.blue), alpha: min(max(alpha, 0), 1))
         var state = State(size: size, radius: 0, color: color, stroke: 0)
         state.radius = before.isRound && after.isRound ? state.half : min(max(mix(before.radius, after.radius), 0), state.half)
+        // A fill stays one: changing its shape, its half-side outlines mixed drew a ring
         let outline = mix(before.outline, after.outline)
-        state.stroke = outline >= state.half - 0.01 ? 0 : max(outline, 0)
+        state.stroke = before.stroke == 0 && after.stroke == 0 || outline >= state.half - 0.01 ? 0 : max(outline, 0)
         return state
     }
 

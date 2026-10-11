@@ -59,6 +59,11 @@ nonisolated struct SoundCue: Codable, Equatable, Sendable {
 
         /// A dither seam's dots: tiny square blips across the stereo field, swelling and thinning over its length.
         case bits(length: Double)
+
+        // An editorial film's (spec 0017)
+
+        /// A digital tick: a high tone gone within milliseconds.
+        case tick
     }
 
     nonisolated enum Key: String, Codable, Hashable, Sendable {

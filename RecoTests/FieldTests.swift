@@ -92,7 +92,8 @@ struct FieldTests {
         // Textured, not the plain colour the renderer falls back to
         #expect(Self.spread(of: first) > 2, "\(field) looks flat")
         #expect(try Self.pixels(field, at: 2) == first)
-        #expect(try Self.pixels(field, at: 6) != first)
+        // The editorial lattice settles in its shot's first 1.5 s and holds, as the film's does
+        #expect(try Self.pixels(field, at: field == .paper || field == .ink ? 0.5 : 6) != first)
     }
 
     // MARK: - Satin

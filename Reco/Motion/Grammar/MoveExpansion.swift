@@ -36,9 +36,15 @@ nonisolated struct MoveContext: Sendable {
     var words = 0
     var lines = 0
 
+    /// How many characters each word has, for a brightened line, which lights a word later the longer the one before.
+    var wordLengths: [Int] = []
+
     /// Counts `text`'s parts, for the reveals that time themselves by them.
     mutating func measure(_ text: TextImage) {
         (characters, words, lines) = (text.characters.count, text.words.count, text.lines.count)
+        wordLengths = text.words.map { word in
+            text.characters.filter { word.insetBy(dx: -0.5, dy: -0.5).contains(CGPoint(x: $0.midX, y: $0.midY)) }.count
+        }
     }
 
     /// Canvas pixels per pixel of a 1080p canvas: the grammar's distances are measured at 1080p.
@@ -133,10 +139,9 @@ nonisolated enum MoveExpansion {
 
     static func effect(of move: MotionMove, in context: MoveContext) -> MoveEffect { // swiftlint:disable:this cyclomatic_complexity
         let (start, duration) = timing(of: move, in: context)
-        if move.kind.isCamera {
-            return MoveEffect(tracks: cameraTracks(of: move, start: start, duration: duration, in: context))
-        }
+        guard !move.kind.isCamera else { return MoveEffect(tracks: cameraTracks(of: move, start: start, duration: duration, in: context)) }
         guard !MotionMove.Kind.storyKinds.contains(move.kind) else { return MoveEffect(tracks: storyTracks(of: move, start: start, duration: duration, in: context)) }
+        guard !MotionMove.Kind.editorialKinds.contains(move.kind) else { return editorialEffect(of: move, start: start, duration: duration, in: context) }
         let (amount, unit) = (move.intensity ?? 1, context.unit)
         var effect = MoveEffect()
         func add(_ property: MotionProperty, _ begin: Double, _ end: Double, easing: MotionEasing) {
@@ -152,10 +157,11 @@ nonisolated enum MoveExpansion {
             add(.blur, 10 * unit * amount, 0, easing: .enter)
         case .exit:
             effect.tracks = exitTracks(of: move, start: start, duration: duration, in: context)
-        case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan, .whip, .burst, .ripple, .morph, .flood, .scroll, .shimmer, .wash, .show, .hide, .scatter, .select, .fly:
+        case .roll, .cascade, .hold, .push, .pullBack, .drift, .pan, .whip, .burst, .ripple, .morph, .flood, .scroll, .shimmer, .wash, .show, .hide,
+             .scatter, .select, .fly, .sweep, .brighten, .blink, .grow, .marks, .orbit, .dots, .unfold:
             // A roll, a cascade, a burst and a ripple become other layers' moves (``DocumentExpansion``); a morph, a
             // flood and a scroll a shape's states and the layer's place, with the others before and after (``ShapeMorph``);
-            // a story's moves are expanded above; a selection is drawn behind the text (``TextSelection``)
+            // a story's and an editorial film's moves are expanded above; a selection is drawn behind the text (``TextSelection``)
             break
         case .blurWipe, .lineMask, .wordByWord, .type, .letters, .kinetic, .voice, .reply:
             effect.reveal = reveal(move, start: start, duration: duration, in: context)
@@ -314,7 +320,7 @@ nonisolated enum MoveExpansion {
     private static func defaultStart(of kind: MotionMove.Kind, in context: MoveContext) -> Double {
         switch kind {
         case .exit: max(context.sceneDuration - defaultDuration(of: MotionMove(.exit), start: 0, in: context), 0)
-        case .pullBack, .drift, .hold: 0
+        case .pullBack, .drift, .hold, .marks: 0
         default: entranceStart
         }
     }
@@ -344,6 +350,7 @@ nonisolated enum MoveExpansion {
         case .letters: return letterStagger * Double(max(context.characters - 1, 0)) + letterDuration
         case .kinetic, .voice: return Double(context.characters) / kineticRate
         case .reply: return replyStagger * Double(max(context.words - 1, 0)) + replyFade
+        case .sweep, .brighten, .blink, .grow, .marks, .orbit, .dots, .unfold: return editorialDuration(of: move.kind, rest: rest, in: context)
         case .wash: return washDuration
         case .shimmer: return rest
         case .show, .hide: return 1e-3

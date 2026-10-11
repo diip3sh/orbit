@@ -29,7 +29,10 @@ nonisolated extension AgentToolCatalog {
         aurora (black with soft lights in the brand's gradient from a corner or two, in a new place every scene, the last \
         ringing a dark middle and going out before the end: Lovable's; under type and rebuilt UI alike); haze (white with \
         style.gradient as soft light, pale to its last colour at a strong light's heart, drifting: a pastel orb behind type, \
-        a deep blob sweeping in from a corner, faint corners under UI, a new setup every scene: light UI). Light, dither and \
+        a deep blob sweeping in from a corner, faint corners under UI, a new setup every scene: light UI); the editorial look \
+        (ElevenLabs'), cut between: paper (warm paper, hairline rings magnified in the middle as through a lens), ink (the \
+        rings on near-black), lens (a colour photograph far out of focus filling the frame; scene picture sky|violet|dune|\
+        petal|bloom|sand|dusk|rose|indigo|mist, else the next in turn). Light, dither and \
         halo go under a macro's glass, or under type toned down (fieldStrength 0.45).
 
         Asset: {id, url, selector, viewport [w,h] (default [1440,900]), hide [selectors], glass}: an element of a real page, \
@@ -73,7 +76,8 @@ nonisolated extension AgentToolCatalog {
         one clicked last, or its middle, as an app opens from its icon, 0.65 s), dive (the camera tilts and flies through \
         what this one clicked last, or its middle, into the next scene seen through it, 0.8 s), melt (this scene dissolves \
         into the next by its own light, darks first, in grain, its front in the brand's colours, 0.75 s: an image into the \
-        ground, the ground into a picture); in a look's language, over \
+        ground, the ground into a picture), wipe (the next scene sweeps in from the right behind a soft edge most of the \
+        frame wide, 0.27 s: a picture over a wordmark); in a look's language, over \
         the whole frame: glow (light: a front of grainy light out of the next scene's field's shape, 0.9 s), dither \
         (dither: the frame turned to the accent's dots from its edges in, then into the next scene, 0.8 s), ring (a ring \
         of smoke opening from the middle, the next scene inside it, 1 s: into a closing). Glow or dither on the first scene, \
@@ -105,11 +109,21 @@ nonisolated extension AgentToolCatalog {
         Flow films (the reco-flow-film skill has recipes): fly (a mark or icon flies in on an arc onto its place, banking, \
         0.9 s; direction the way it travels, left by default: in from the right); select {color} (text: selected part by part \
         as the arrow drags across it, 60 characters a second, held after).
+        Editorial films (the reco-editorial-film skill has recipes, 60 fps): a rectangle's picture (one of lens's, flat in its \
+        shape); sweep (text: wiped in behind a soft front, 0.02 s a character); brighten (text: there dim, its words lit one \
+        by one, the first 0.22 s in, as the line settles from 1.19×); blink (on and off a frame at a time, then 12 px along; \
+        direction left the other way); grow (a rectangle out to fill the frame, 0.4 s, its picture the frame's once it \
+        does); marks {color} (registration marks round a layer or group from its scene's start: dotted hairlines across the frame, \
+        squares where they cross); orbit {color, size} (12 stars turning round a layer, 1.4 s; white by default); dots \
+        {color} (squares born round a layer in a wave, gone from the inside out, 0.84 s; black by default); unfold (a group: \
+        a mark, its name, a tagline, laid out as they end, the group at the line's middle: the mark alone in the middle, the \
+        name typed out of it, the tagline swept in as the line slides to its place, 2.1 s).
 
         Sound: every video gets a score and quiet effects made from its own timing. sound.style picks the score: ambient \
         (the default: a chord a shot, a hit as the first UI cuts in, Raycast's closing), groove (170 BPM drum and bass, \
         Lovable's: an intro without drums, a drop at the first cut two bars in, a break under a scene of big type alone, \
-        drums out under the end words) or house (125 BPM, the Spotify Jam's, from the first frame). A beat fits its tempo \
+        drums out under the end words), house (125 BPM, the Spotify Jam's, from the first frame) or editorial (ElevenLabs': \
+        a film score of dark wide pads, a sub boom after each section's cut, high ticks, a burst on the logo). A beat fits its tempo \
         to the cuts: put cuts on beats (groove 0.353 s, house 0.48 s). Write nothing else about sound unless asked: \
         set_sound {sound: {style, score, effects, scoreLevel, effectsLevel}} picks the style, turns either part off or \
         moves its level (dB, -24 to 6), e.g. "no typing sounds" effects false, "quieter music" scoreLevel -6.
@@ -135,9 +149,9 @@ nonisolated extension AgentToolCatalog {
         "index":{"type":"integer","description":"add_scene, move_scene: position from 0"},
         "canvas":{"type":"object"},"style":{"type":"object"},"sound":{"type":"object"},"asset":{"type":"object"},"scene":{"type":"object"},"layer":{"type":"object"},
         "duration":{"type":"number"},
-        "seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade","stack","expand","dive","melt","glow","dither","ring"]},
+        "seam":{"type":"string","enum":["cut","whip","cutOnMotion","zoomThrough","blurCut","push","fade","stack","expand","wipe","dive","melt","glow","dither","ring"]},
         "shot":{"type":"object","description":"{shot: macro|hook|title|uiHero|uiFocus|uiCascade|featureSequence|endCard|closing, text, detail, ui, items, region, view}"},
-        "field":{"type":"string","enum":["satin","plain","ember","sunlit","bloom","orb","ripple","matrix","warp","swirl","tide","halo","aurora","haze"]},
+        "field":{"type":"string","enum":["satin","plain","ember","sunlit","bloom","orb","ripple","matrix","warp","swirl","tide","halo","aurora","haze","paper","ink","lens"]},
         "moves":{"type":"array","items":{"type":"object"}}},
         "required":["op"],"additionalProperties":false}}},
         "required":["operations"],"additionalProperties":false}

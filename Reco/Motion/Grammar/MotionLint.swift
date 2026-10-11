@@ -55,14 +55,17 @@ nonisolated enum MotionLint {
             }
         }
         findings += beatFindings(document)
+        let isEditorial = document.scenes.contains { ($0.field ?? document.canvas.field).family == .editorial }
         for (scene, source) in zip(expanded.scenes, document.scenes) {
             let context = MoveContext(sceneDuration: scene.duration, canvas: document.canvas.size)
             let layers = timed(scene.layers, in: context, group: nil)
-            findings += textFindings(layers, scene: scene, canvas: document.canvas, context: context)
+            findings += textFindings(layers, scene: scene, canvas: document.canvas, ground: ground(of: source, in: document), context: context)
+                .filter { !isEditorial || !isTexture($0, in: layers) }
             // The last scene may hold: a logo on its own as the light goes out
             let isEndCard = source.shot?.kind.isEnding == true || (document.scenes.count > 1 && source.id == document.scenes.last?.id)
-            let onBeat = SoundRules.beat(document.sound.style) != nil || SoundCueSheet.isStory(document)
-            findings += timingFindings(layers, scene: scene, isEndCard: isEndCard, onBeat: onBeat, live: live)
+            let onBeat = SoundRules.beat(document.sound.style) != nil || SoundCueSheet.isStory(document) || isEditorial
+            // An editorial film types its grey lines at 110–120 characters a second, as texture
+            findings += timingFindings(layers, scene: scene, isEndCard: isEndCard, onBeat: onBeat, live: live).filter { !isEditorial || $0.rule != .typingRate }
             if source.shot?.kind == .hook, let text = source.shot?.text, ReadingTime.words(in: text) > 6 {
                 findings.append(Finding(rule: .hookLength, scene: scene.id, message: "A hook is six words at most; this one has \(ReadingTime.words(in: text))."))
             }
@@ -112,19 +115,20 @@ nonisolated enum MotionLint {
         }
     }
 
-    /// One look a film: its scenes' fields from one family (satin, light, dither, aurora or haze; plain and the halo go
-    /// with any), and a seam in a field's language only into a scene of that language. A new technique a
+    /// One look a film: its scenes' fields from one family (satin, light, dither, aurora, haze or editorial; plain and the
+    /// halo go with any), and a seam in a field's language only into a scene of that language. A new technique a
     /// shot is a generated video's tell (`docs/references/style-guide.md`). A cut keeps the ground: bolt.new's
-    /// cut in closer on its prompt jumped from a blob of light to two corners of it.
+    /// cut in closer on its prompt jumped from a blob of light to two corners of it. The editorial film's grounds are its
+    /// frames' pictures, cut between as ElevenLabs' are (paper, ink, a picture, the plain paper of its UI scenes).
     private static func lookFindings(_ document: MotionDocument) -> [Finding] {
         var findings: [Finding] = []
-        let looks: Set<MotionField.Family> = [.satin, .light, .dither, .aurora, .haze]
+        let looks: Set<MotionField.Family> = [.satin, .light, .dither, .aurora, .haze, .editorial]
         var first: (family: MotionField.Family, scene: String)?
         var before: MotionField?
         for scene in document.scenes where scene.shot?.kind != .closing {
             let field = scene.field ?? document.canvas.field
             defer { before = field }
-            if scene.seam == .cut, let before, before != field, looks.contains(field.family) {
+            if scene.seam == .cut, let before, before != field, looks.contains(field.family), field.family != .editorial || ![.editorial, .plain].contains(before.family) {
                 findings.append(Finding(
                     rule: .look, scene: scene.id,
                     message: "A cut keeps the ground: this scene is over \(field.rawValue), the one before over \(before.rawValue). "
@@ -220,9 +224,10 @@ nonisolated enum MotionLint {
         }
     }
 
-    /// `onBeat`: the film is cut to a beat or tells a story, where a scene's first move lands on its cut (Lovable's tiles and
-    /// words, the Spotify Jam's pill): waiting 0.1 s left the ground alone on screen at every cut of an Orca film. After a seam
-    /// other than a cut, the seam is the entrance, and a move may start under it.
+    /// `onBeat`: the film is cut to a beat, tells a story or is editorial, where a scene's first move lands on its cut (Lovable's
+    /// tiles and words, the Spotify Jam's pill, ElevenLabs' card growing from its cut): waiting 0.1 s left the ground alone on
+    /// screen at every cut of an Orca film. After a seam other than a cut, the seam is the entrance, and a move may start under
+    /// it.
     private static func timingFindings(_ layers: [TimedLayer], scene: MotionScene, isEndCard: Bool, onBeat: Bool, live: [String: Double]) -> [Finding] {
         var findings: [Finding] = []
         let cameraMoves = scene.camera.moves.map { MoveExpansion.timing(of: $0, in: MoveContext(sceneDuration: scene.duration, canvas: .zero)) }
@@ -230,8 +235,9 @@ nonisolated enum MotionLint {
         // A burst's and a ripple's own layers carry their start; a group and its layers are one thing
         let starts = layers.flatMap { layer in
             let isGroup = if case .group = layer.layer.content { true } else { false }
-            // A shimmer, a wash and a swap aren't entrances: Lovable's end words shimmer from the cut they land on
-            return layer.moves.filter { ![.burst, .ripple, .shimmer, .wash, .show, .hide].contains($0.kind) }.map { move in
+            // A shimmer, a wash and a swap aren't entrances: Lovable's end words shimmer from the cut they land on; marks are there
+            // with the scene, and an orbit and dots are their own layers
+            return layer.moves.filter { ![.burst, .ripple, .shimmer, .wash, .show, .hide, .marks, .orbit, .dots].contains($0.kind) }.map { move in
                 (start: move.start, key: layer.group ?? (isGroup ? layer.layer.id : layer.layer.id + "\(move.start)"))
             }
         }.sorted { $0.start < $1.start }
@@ -304,7 +310,7 @@ nonisolated enum MotionLint {
 
     // MARK: - Text
 
-    private static func textFindings(_ layers: [TimedLayer], scene: MotionScene, canvas: MotionCanvas, context: MoveContext) -> [Finding] {
+    private static func textFindings(_ layers: [TimedLayer], scene: MotionScene, canvas: MotionCanvas, ground: RGBAColor, context: MoveContext) -> [Finding] {
         var findings: [Finding] = []
         let safe = LayoutRules.safeArea(of: canvas.size)
         for timed in layers {
@@ -317,7 +323,7 @@ nonisolated enum MotionLint {
             let controls = self.controls(under: timed, at: timed.shown, in: layers, context: context)
             let control = controls.last
             // Read against the nearest fill under it: a chip's translucent tint shows the tile under it
-            let contrast = LayoutRules.contrast(text.color, controls.last { $0.filled }?.color ?? canvas.background)
+            let contrast = LayoutRules.contrast(text.color, controls.last { $0.filled }?.color ?? ground)
             if contrast < LayoutRules.minimumContrast(forSize: text.size, canvas: canvas.size) {
                 let ratio = contrast.formatted(.number.precision(.fractionLength(1)))
                 findings.append(Finding(rule: .contrast, scene: scene.id, layer: id, message: "Contrast \(ratio):1 against the background is too low."))
@@ -359,7 +365,8 @@ nonisolated enum MotionLint {
                 ?? ShapeMorph.State(size: shape.size, radius: shape.cornerRadius, color: shape.color, stroke: shape.stroke ?? 0)
             let place = centre(of: timed.layer, size: state.size, at: time, context: context)
             let box = CGRect(x: place.x - state.size.width / 2, y: place.y - state.size.height / 2, width: state.size.width, height: state.size.height)
-            return Control(box: box, color: state.color, filled: state.stroke == 0 && state.color.alpha >= 0.5)
+            // A picture card is read by its picture's colour
+            return Control(box: box, color: shape.picture?.mean ?? state.color, filled: state.stroke == 0 && (state.color.alpha >= 0.5 || shape.picture != nil))
         }
         return shapes.filter { $0.box.contains(middle) }
     }
@@ -402,5 +409,34 @@ nonisolated extension MotionLint {
                     + "\(shorter.formatted(.number.precision(.fractionLength(3)))) or \(longer.formatted(.number.precision(.fractionLength(3)))) s."
             )
         }
+    }
+}
+
+// MARK: - Editorial films
+
+nonisolated extension MotionLint {
+
+    /// What a scene's text is read against where nothing is under it: its ground's colour (the editorial film's ink and its
+    /// pictures, spec 0017), else the canvas's background.
+    private static func ground(of scene: MotionScene, in document: MotionDocument) -> RGBAColor {
+        let field = scene.field ?? document.canvas.field
+        switch field {
+        case .lens:
+            let shot = document.scenes.prefix { $0.id != scene.id }.filter { ($0.field ?? document.canvas.field) == .lens }.count
+            return (scene.picture ?? LensPicture.forShot(shot)).mean
+        case .paper, .ink:
+            return FieldPalette(field, style: document.style, background: document.canvas.background).back
+        default:
+            return document.canvas.background
+        }
+    }
+
+    /// Whether `finding` is about an editorial film's texture: its mono labels and descriptions round what's read (ElevenLabs'
+    /// were 14 px caps, its descriptions grey, typed and deleted in a second), whose size, contrast and hold aren't held to the
+    /// rules.
+    private static func isTexture(_ finding: Finding, in layers: [TimedLayer]) -> Bool {
+        guard [.textSize, .contrast, .readingTime].contains(finding.rule), let layer = layers.first(where: { $0.layer.id == finding.layer }),
+              case .text(let text) = layer.layer.content else { return false }
+        return text.face == .mono
     }
 }

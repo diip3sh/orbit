@@ -29,6 +29,9 @@ nonisolated enum FieldRenderer {
 
         /// Whether it's the video's last scene: the aurora rings its middle there (``AuroraSetup/ending``).
         var isLast = false
+
+        /// The picture a lens field shows, when the scene names one.
+        var picture: LensPicture?
     }
 
     /// How much of the camera's move a field follows, as ground far behind the planes would: pinned to
@@ -87,7 +90,8 @@ nonisolated enum FieldRenderer {
 
     /// Reco's own, drawn in stages instead of as one look: satin, its grain, glass, the seams.
     private static let ownKernels = [
-        "auroraField", "satinGround", "satinFinish", "filmGrainNoise", "filmGrain", "glassPanel", "glowSeam", "ditherSeam", "ringSeam", "washLight", "meltSeam"
+        "auroraField", "satinGround", "satinFinish", "filmGrainNoise", "filmGrain", "glassPanel", "glowSeam", "ditherSeam", "ringSeam", "washLight", "meltSeam",
+        "latticeField", "lensField"
     ]
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "FieldRenderer")
@@ -146,6 +150,20 @@ nonisolated enum FieldRenderer {
         }
         if field == .haze {
             return aurora(AuroraSetup.haze(shot.index), palette: palette, isHaze: true, at: time, size: size, shot: shot) ?? plain
+        }
+        if field == .lens {
+            // Ground far behind the planes: the picture follows the camera as the others do
+            let zoom: CGFloat = pow(shot.zoom, groundParallax)
+            let (width, height) = (size.width * zoom, size.height * zoom)
+            let rect = CGRect(
+                x: (size.width - width) / 2 + groundParallax * shot.shift.dx, y: (size.height - height) / 2 - groundParallax * shot.shift.dy,
+                width: width, height: height
+            )
+            return lens(shot.picture ?? LensPicture.forShot(shot.index), at: time - shot.start, in: rect, size: size)?.cropped(to: extent) ?? plain
+        }
+        if field == .paper || field == .ink {
+            let colors = (paper: palette.back, line: LatticeSetup.line(on: palette.back, of: field))
+            return lattice(LatticeSetup.forShot(shot.index, of: field, isLast: shot.isLast), colors: colors, at: time - shot.start, size: size, shot: shot) ?? plain
         }
         guard let look = looks[field], let kernel = kernels[look.kernel] else { return plain }
         // Reference pixels per output pixel, and drawn pixels per output pixel. Dither stays whole:
@@ -394,4 +412,89 @@ nonisolated extension FieldRenderer {
             bitmapData: data, bytesPerRow: auroraRampPixels * 16, size: CGSize(width: auroraRampPixels, height: 1), format: .RGBAf, colorSpace: nil
         ).clampedToExtent().cropped(to: CGRect(x: 0, y: 0, width: auroraRampPixels, height: 1))
     }
+}
+
+// MARK: - Paper
+
+nonisolated extension FieldRenderer {
+
+    /// `setup` `time` seconds into its shot: `colors`' paper with the lattice's rings in its line colour, following the camera as
+    /// ground far behind the planes, its lines split into colours while it zooms.
+    private static func lattice(_ setup: LatticeSetup, colors: (paper: RGBAColor, line: RGBAColor), at time: Double, size: CGSize, shot: Shot) -> CIImage? {
+        guard let kernel = kernels["latticeField"] else { return nil }
+        let unit = min(size.width, size.height) / 1080
+        let zoom = setup.zoom(at: time) * pow(shot.zoom, groundParallax)
+        let arguments: [Any] = [
+            CIVector(x: size.width, y: size.height, z: unit, w: 0),
+            CIVector(x: zoom, y: groundParallax * shot.shift.dx, z: -groundParallax * shot.shift.dy, w: LatticeSetup.aberration * setup.zoomRate(at: time)),
+            CIVector(x: LatticeSetup.lensReach, y: LatticeSetup.lensWidth, z: LatticeSetup.step, w: LatticeSetup.rise),
+            CIVector(x: LatticeSetup.lineWidth, y: LatticeSetup.riseGrowth, z: 0, w: 0),
+            vector(colors.paper), vector(colors.line)
+        ]
+        return kernel.apply(extent: CGRect(origin: .zero, size: size), roiCallback: { _, rect in rect }, arguments: arguments)
+    }
+}
+
+// MARK: - Pictures
+
+nonisolated extension FieldRenderer {
+
+    /// How many stops a picture's ramp is read from.
+    static let lensRampPixels = 512
+
+    /// `picture` `time` seconds into its shot over `rect` (output pixels, Core Image's space) in a frame of `size`, its
+    /// grain new each 240th of a second (each frame at any rate the films are made at); drawn only where it meets the frame.
+    static func lens(_ picture: LensPicture, at time: Double, in rect: CGRect, size: CGSize) -> CIImage? {
+        let extent = rect.intersection(CGRect(origin: .zero, size: size)).integral
+        guard let kernel = kernels["lensField"], let ramp = lensRamps[picture], !extent.isEmpty, rect.height > 0 else { return nil }
+        let setup = picture.setup
+        let lights = (0..<5).map { index in
+            guard index < setup.lights.count else { return CIVector(x: 0, y: 0, z: 1, w: 0) }
+            let light = setup.lights[index]
+            return CIVector(x: light.center.x, y: light.center.y, z: light.radius, w: light.strength)
+        }
+        let shaped = (0..<6).map { index in
+            index < setup.lights.count ? (setup.lights[index].elongation, setup.lights[index].angle) : (1.0, 0.0)
+        }
+        let shapes = stride(from: 0, to: 6, by: 2).map { CIVector(x: shaped[$0].0, y: shaped[$0].1, z: shaped[$0 + 1].0, w: shaped[$0 + 1].1) }
+        let arguments: [Any] = [
+            ramp,
+            CIVector(x: rect.width, y: rect.height, z: time, w: min(size.width, size.height) / 1080),
+            CIVector(x: rect.minX, y: rect.minY, z: (time * 240).rounded(), w: 0)
+        ] + lights + shapes + [
+            CIVector(x: setup.grain, y: LensPicture.grainClump, z: setup.streaks, w: setup.streakAngle),
+            CIVector(x: Double(lensRampPixels), y: LensPicture.drift.reach, z: LensPicture.drift.rate, w: 1)
+        ]
+        let rampExtent = ramp.extent
+        return kernel.apply(extent: extent, roiCallback: { _, _ in rampExtent }, arguments: arguments)
+    }
+
+    /// Each picture's ramp, its stops mixed in OKLab along a row of ``lensRampPixels``, stored encoded: drawn once.
+    private static let lensRamps: [LensPicture: CIImage] = Dictionary(uniqueKeysWithValues: LensPicture.allCases.map { picture in
+        let setup = picture.setup
+        let positions = [0] + setup.places + [1]
+        // OKLab: lightness, and the hue's two axes
+        let stops = setup.stops.map { color -> SIMD3<Double> in
+            let lch = OKLCH(color)
+            let angle = lch.hue * .pi / 180
+            return SIMD3(lch.lightness, lch.chroma * cos(angle), lch.chroma * sin(angle))
+        }
+        var pixels = [Float](repeating: 1, count: lensRampPixels * 4)
+        for index in 0..<lensRampPixels {
+            let reach = Double(index) / Double(lensRampPixels - 1)
+            let upper = min(positions.firstIndex { $0 >= reach } ?? positions.count - 1, stops.count - 1)
+            let lower = max(upper - 1, 0)
+            let share = upper == lower ? 1 : min(max((reach - positions[lower]) / (positions[upper] - positions[lower]), 0), 1)
+            let lab = stops[lower] + (stops[upper] - stops[lower]) * share
+            let color = OKLCH(lightness: lab.x, chroma: hypot(lab.y, lab.z), hue: atan2(lab.z, lab.y) * 180 / .pi).rgba
+            pixels[index * 4] = Float(color.red)
+            pixels[index * 4 + 1] = Float(color.green)
+            pixels[index * 4 + 2] = Float(color.blue)
+        }
+        let data = pixels.withUnsafeBufferPointer { Data(buffer: $0) }
+        let image = CIImage(
+            bitmapData: data, bytesPerRow: lensRampPixels * 16, size: CGSize(width: lensRampPixels, height: 1), format: .RGBAf, colorSpace: nil
+        ).clampedToExtent().cropped(to: CGRect(x: 0, y: 0, width: lensRampPixels, height: 1))
+        return (picture, image)
+    })
 }
