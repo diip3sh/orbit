@@ -7,9 +7,10 @@
 
 import SwiftUI
 
-/// The timeline: a time ruler over the whole recording as a filmstrip, with click, keystroke and
-/// zoom lanes, cut parts dimmed, and the playhead. Dragging scrubs, clicking selects a segment, and
-/// the handles on each kept part's edges trim it.
+/// The timeline's tracks: the video row, the clicks & keys row, the audio row, then the zoom and
+/// mask lanes, over a faint grid, with cut parts ghosted, trim handles on the kept parts' edges and
+/// the playhead's line. The window on the recording is the view model's viewport: dragging scrubs,
+/// clicking selects a part, scrolling pans and ⌘-scrolling zooms.
 struct EditorTimelineView: View {
     let viewModel: EditorViewModel
 
@@ -18,73 +19,70 @@ struct EditorTimelineView: View {
 
     @Environment(\.displayScale) private var displayScale
     @State private var width: CGFloat = 0
+    @State private var showsTelemetry = true
+    @State private var hoveredSegment: Range<Double>?
 
-    private static let rulerHeight: CGFloat = 16
-    private static let filmstripHeight: CGFloat = 52
-    private static let lanesHeight: CGFloat = 22
-    private static let spacing = EditorTheme.smallSpacing
+    /// Where the scroll indicator's drag began: its x and the window's start then.
+    @State private var indicatorGrab: (x: CGFloat, start: Double)?
 
-    /// Where the filmstrip starts, under the ruler.
-    private static let filmstripTop = rulerHeight + spacing
+    private static let spacing: CGFloat = 6
+    private static let indicatorHeight: CGFloat = 4
 
     /// How far the pointer may move for a press to still count as a click.
     private static let clickTolerance: CGFloat = 3
 
+    /// The thumbnails to load: which window, cut into how many tiles. Equatable, so a change reloads.
+    private struct ThumbnailRequest: Equatable {
+        var count: Int
+        var start: Double
+        var visible: Double
+    }
+
     var body: some View {
-        let timeMap = viewModel.timeMap
-        let duration = timeMap.sourceDuration
-        let tileWidth = Self.filmstripHeight * videoSize.width / max(videoSize.height, 1)
-        let tileCount = Int((width / tileWidth).rounded(.up))
-
-        VStack(alignment: .leading, spacing: Self.spacing) {
-            TimelineRuler(duration: duration)
-                .frame(height: Self.rulerHeight)
-
-            HStack(spacing: 0) {
-                ForEach(viewModel.thumbnails.indices, id: \.self) { index in
-                    Group {
-                        if let image = viewModel.thumbnails[index] {
-                            Image(decorative: image, scale: displayScale)
-                                .resizable()
-                                .scaledToFill()
-                                .transition(.opacity)
-                        } else {
-                            EditorTheme.softHairline
-                        }
-                    }
-                    .frame(width: width / CGFloat(viewModel.thumbnails.count), height: Self.filmstripHeight)
-                    .clipped()
-                }
+        VStack(spacing: Self.spacing) {
+            rows
+            scrollIndicator
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .task(id: thumbnailRequest) {
+            // A zoom drag moves the window every tick; let it settle before decoding
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            await viewModel.loadThumbnails(count: thumbnailRequest.count, maximumSize: VideoTrack.tileSize(videoSize: videoSize, displayScale: displayScale))
+        }
+        .task {
+            await viewModel.loadWaveform()
+        }
+        .task(id: viewModel.playback.isPlaying) {
+            while viewModel.playback.isPlaying, !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+                viewModel.keepPlayheadVisible()
             }
-            // minWidth 0: tiles sized from the last width would otherwise make it the window's minimum
-            // (`sizingOptions = .minSize`), so showing the inspector grew the window on every toggle
-            .frame(minWidth: 0, maxWidth: .infinity, minHeight: Self.filmstripHeight, maxHeight: Self.filmstripHeight, alignment: .leading)
-            .background(EditorTheme.softHairline)
-            .clipShape(.rect(cornerRadius: 6))
-            .overlay {
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(EditorTheme.hairline)
-            }
+        }
+    }
 
-            if let markers = viewModel.markers {
-                Canvas { context, size in
-                    guard duration > 0 else { return }
-                    let laneHeight = (size.height - 2) / 2
-                    let clickLane = CGRect(x: 0, y: 0, width: size.width, height: laneHeight)
-                    let keyLane = CGRect(x: 0, y: laneHeight + 2, width: size.width, height: laneHeight)
-                    for lane in [clickLane, keyLane] {
-                        context.fill(Path(roundedRect: lane, cornerRadius: 2), with: .color(EditorTheme.softHairline))
-                    }
-                    context.fill(Self.ticks(at: markers.clicks, duration: duration, in: clickLane), with: .color(EditorTheme.ink.opacity(0.8)))
-                    context.fill(Self.ticks(at: markers.keys, duration: duration, in: keyLane), with: .color(EditorTheme.dim))
-                }
-                .frame(height: Self.lanesHeight)
-                .help("Clicks (top) and keystrokes (bottom)")
+    /// The track rows stacked, with the grid, the cut ghosts, the handles and the playhead.
+    private var rows: some View {
+        VStack(spacing: Self.spacing) {
+            VideoTrack(
+                viewModel: viewModel,
+                videoSize: videoSize,
+                width: width,
+                showsTelemetry: $showsTelemetry,
+                hoveredSegment: $hoveredSegment
+            )
+
+            if showsTelemetry, viewModel.markers != nil {
+                TelemetryLane(viewModel: viewModel, width: width)
             } else if viewModel.source?.telemetryError != nil {
                 Text("No clicks or keystrokes: recorded without input telemetry")
                     .font(.theme(.caption))
                     .foregroundStyle(EditorTheme.dim)
-                    .frame(height: Self.lanesHeight)
+                    .frame(height: TelemetryLane.height)
+            }
+
+            if viewModel.source.map({ !$0.audioTrackIDs.isEmpty }) == true {
+                AudioLane(viewModel: viewModel, width: width)
             }
 
             ZoomLane(viewModel: viewModel, width: width)
@@ -95,114 +93,180 @@ struct EditorTimelineView: View {
             }
         }
         .editorMotion(value: viewModel.project.masks.isEmpty)
-        .editorMotion(.smooth, value: viewModel.thumbnails.count { $0 != nil })
-        .overlay {
-            // Cuts dimmed and hatched, and splits across the filmstrip (handles cover the kept parts' starts)
-            Canvas { context, size in
-                guard duration > 0 else { return }
-                let span = { (range: Range<Double>, top: CGFloat, height: CGFloat) in
-                    CGRect(x: range.lowerBound / duration * size.width, y: top, width: (range.upperBound - range.lowerBound) / duration * size.width, height: height)
-                }
-                for cut in timeMap.cuts {
-                    let area = span(cut, Self.filmstripTop, size.height - Self.filmstripTop)
-                    // Faded towards the timeline's ground, so cuts recede in light as well as dark
-                    context.fill(Path(area), with: .color(EditorTheme.panel.opacity(0.6)))
-                    context.fill(Self.hatching(in: area), with: .color(EditorTheme.ink.opacity(0.07)))
-                }
-                for segment in viewModel.segments {
-                    let line = span(segment, Self.filmstripTop, Self.filmstripHeight).divided(atDistance: 1, from: .minXEdge).slice
-                    context.fill(Path(line), with: .color(EditorTheme.ink.opacity(0.8)))
-                }
+        .background(grid)
+        .background(
+            ScrollWheelRegion { event, point in
+                handleScroll(event, at: point)
             }
-            .allowsHitTesting(false)
+        )
+        .overlay(alignment: .topLeading) {
+            cutGhosts
         }
         .overlay(alignment: .topLeading) {
-            if case .segment(let selection) = viewModel.selection, duration > 0 {
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(EditorTheme.accent, lineWidth: 2)
-                    .background(EditorTheme.accent.opacity(0.08), in: .rect(cornerRadius: 6))
-                    .frame(width: (selection.upperBound - selection.lowerBound) / duration * width)
-                    .frame(maxHeight: .infinity)
-                    .offset(x: selection.lowerBound / duration * width)
-                    .padding(.top, Self.filmstripTop)
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-            }
-        }
-        .editorMotion(value: viewModel.selection)
-        .overlay(alignment: .topLeading) {
-            // Each part that isn't at 1× says its speed in its top-left corner
-            if duration > 0 {
-                ForEach(viewModel.segments, id: \.lowerBound) { segment in
-                    let rate = timeMap.rate(atSource: (segment.lowerBound + segment.upperBound) / 2)
-                    if rate != 1 {
-                        Text(SpeedRange.label(for: rate))
-                            .font(.theme(.caption2, weight: .bold))
-                            .monospacedDigit()
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, EditorTheme.tightSpacing)
-                            .background(.black.opacity(0.6), in: .capsule)
-                            .padding(EditorTheme.tightSpacing)
-                            .frame(width: (segment.upperBound - segment.lowerBound) / duration * width, alignment: .leading)
-                            .clipped()
-                            .offset(x: segment.lowerBound / duration * width, y: Self.filmstripTop)
-                            .allowsHitTesting(false)
-                    }
-                }
-            }
+            trimHandles
         }
         .overlay(alignment: .topLeading) {
-            if duration > 0 {
-                ZStack(alignment: .leading) {
-                    ForEach(timeMap.keptRanges.indices, id: \.self) { index in
-                        let range = timeMap.keptRanges[index]
-                        TrimHandle(edge: .leading, position: range.lowerBound / duration * width, width: width) { position in
-                            viewModel.moveStart(ofKeptRange: index, to: position / width * duration)
-                        }
-                        TrimHandle(edge: .trailing, position: range.upperBound / duration * width, width: width) { position in
-                            viewModel.moveEnd(ofKeptRange: index, to: position / width * duration)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, minHeight: Self.filmstripHeight, maxHeight: Self.filmstripHeight, alignment: .leading)
-                .padding(.top, Self.filmstripTop)
-            }
-        }
-        .overlay(alignment: .topLeading) {
-            TimelineView(.animation(paused: !viewModel.playback.isPlaying)) { _ in
-                Playhead(knobHeight: Self.rulerHeight)
-                    .offset(x: duration > 0 ? viewModel.playheadSourceTime / duration * width - Playhead.knobWidth / 2 : 0)
-            }
-            .allowsHitTesting(false)
+            playhead
         }
         .contentShape(.rect)
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
                     guard width > 0 else { return }
-                    viewModel.seek(toSource: value.location.x / width * duration)
+                    viewModel.seek(toSource: viewModel.viewport.time(atX: value.location.x, width: width))
                 }
                 .onEnded { value in
                     guard width > 0, abs(value.translation.width) < Self.clickTolerance else { return }
-                    viewModel.select(at: value.location.x / width * duration)
+                    viewModel.select(at: viewModel.viewport.time(atX: value.location.x, width: width))
                 }
         )
         .coordinateSpace(.named(TrimHandle.coordinateSpace))
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .task(id: tileCount) {
-            let tileSize = CGSize(width: tileWidth * displayScale, height: Self.filmstripHeight * displayScale)
-            await viewModel.loadThumbnails(count: tileCount, maximumSize: tileSize)
-        }
     }
 
-    /// Rounded ticks at `times`, spanning `lane` vertically, as a single path.
-    private static func ticks(at times: [Double], duration: Double, in lane: CGRect) -> Path {
-        var path = Path()
-        for time in times {
-            let center = lane.minX + time / duration * lane.width
-            path.addRoundedRect(in: CGRect(x: center - 1, y: lane.minY + 2, width: 2, height: lane.height - 4), cornerSize: CGSize(width: 1, height: 1))
+    /// A hairline at each of the ruler's labelled times, running down the tracks.
+    private var grid: some View {
+        Canvas { context, size in
+            let viewport = viewModel.viewport
+            guard viewport.visible > 0 else { return }
+            var lines = Path()
+            for time in TimelineRuler.majors(in: viewport, width: size.width) {
+                let gridX = viewport.x(at: time, width: size.width)
+                lines.addRect(CGRect(x: gridX, y: 0, width: 1, height: size.height))
+            }
+            context.fill(lines, with: .color(EditorTheme.ink.opacity(0.04)))
         }
-        return path
+        .allowsHitTesting(false)
+    }
+
+    /// Cut parts as dashed, hatched ghosts naming what was cut.
+    private var cutGhosts: some View {
+        Canvas { context, size in
+            let viewport = viewModel.viewport
+            guard viewport.visible > 0 else { return }
+            for cut in viewModel.timeMap.cuts {
+                let start = viewport.x(at: cut.lowerBound, width: size.width)
+                let end = viewport.x(at: cut.upperBound, width: size.width)
+                let area = CGRect(x: start, y: 0, width: end - start, height: size.height)
+                    .intersection(CGRect(origin: .zero, size: size))
+                guard area.width > 2 else { continue }
+                context.fill(Path(area), with: .color(EditorTheme.panel.opacity(0.6)))
+                context.fill(Self.hatching(in: area), with: .color(EditorTheme.ink.opacity(0.07)))
+                context.stroke(
+                    Path(roundedRect: area.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 7),
+                    with: .color(EditorTheme.ink.opacity(0.25)),
+                    style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                )
+                guard area.width > 52 else { continue }
+                let seconds = (cut.upperBound - cut.lowerBound).formatted(.number.precision(.fractionLength(0...1)))
+                let label = context.resolve(
+                    Text("Cut · \(seconds) s")
+                        .font(.theme(.caption2))
+                        .foregroundStyle(EditorTheme.dim)
+                )
+                context.draw(label, at: CGPoint(x: area.midX, y: area.midY), anchor: .center)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// A handle on both edges of each kept part, over the video row, shown on hover and selection.
+    private var trimHandles: some View {
+        ZStack(alignment: .leading) {
+            ForEach(viewModel.timeMap.keptRanges.indices, id: \.self) { index in
+                let range = viewModel.timeMap.keptRanges[index]
+                let shown = showsHandles(for: range)
+                TrimHandle(
+                    edge: .leading,
+                    position: viewModel.viewport.x(at: range.lowerBound, width: width),
+                    width: width,
+                    isShown: shown
+                ) { position in
+                    viewModel.moveStart(ofKeptRange: index, to: viewModel.viewport.time(atX: position, width: width))
+                }
+                TrimHandle(
+                    edge: .trailing,
+                    position: viewModel.viewport.x(at: range.upperBound, width: width),
+                    width: width,
+                    isShown: shown
+                ) { position in
+                    viewModel.moveEnd(ofKeptRange: index, to: viewModel.viewport.time(atX: position, width: width))
+                }
+            }
+        }
+        .frame(width: width, height: VideoTrack.height, alignment: .leading)
+    }
+
+    /// The playhead's line, from the top of the video row to the bottom of the lanes.
+    private var playhead: some View {
+        TimelineView(.animation(paused: !viewModel.playback.isPlaying)) { _ in
+            let position = viewModel.viewport.x(at: viewModel.playheadSourceTime, width: width)
+            PlayheadLine()
+                .offset(x: position - Playhead.lineWidth / 2)
+                .opacity(position >= 0 && position <= width ? 1 : 0)
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// The window's place in the whole recording, draggable. Hidden while everything shows.
+    private var scrollIndicator: some View {
+        let viewport = viewModel.viewport
+        let duration = max(viewport.duration, 1)
+        return Capsule()
+            .fill(EditorTheme.ink.opacity(0.25))
+            .frame(width: max(width * viewport.visible / duration, 24), height: Self.indicatorHeight)
+            // minWidth 0: the capsule is laid out in points of the last width, which mustn't pin the window
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+            .offset(x: width * viewport.start / duration)
+            .opacity(viewport.showsAll ? 0 : 1)
+            .contentShape(.rect)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        if indicatorGrab == nil {
+                            indicatorGrab = (x: value.startLocation.x, start: viewModel.viewport.start)
+                        }
+                        guard let grab = indicatorGrab, width > 0 else { return }
+                        viewModel.setTimelineStart(grab.start + Double(value.location.x - grab.x) / width * duration)
+                    }
+                    .onEnded { _ in
+                        indicatorGrab = nil
+                    }
+            )
+    }
+
+    /// Horizontal scrolls pan the window, ⌘-scrolls zoom it under the pointer. Used, so they go no
+    /// further; a plain vertical scroll pans too, like the trackpad's horizontal one.
+    private func handleScroll(_ event: NSEvent, at point: CGPoint) -> Bool {
+        let precise = event.hasPreciseScrollingDeltas
+        let scale: Double = precise ? 1 : 12
+        if event.modifierFlags.contains(.command) {
+            let factor = pow(1.002, Double(event.scrollingDeltaY) * (precise ? 1 : 8))
+            let anchor = viewModel.viewport.time(atX: point.x, width: width)
+            viewModel.zoomTimeline(by: factor, anchor: anchor)
+            return true
+        }
+        let delta = abs(event.scrollingDeltaX) >= abs(event.scrollingDeltaY) ? event.scrollingDeltaX : -event.scrollingDeltaY
+        guard delta != 0, width > 0 else { return true }
+        viewModel.scrollTimeline(by: -Double(delta) * scale / width * viewModel.viewport.visible)
+        return true
+    }
+
+    /// Whether a kept part's handles show: under the pointer or selected.
+    private func showsHandles(for range: Range<Double>) -> Bool {
+        if let hoveredSegment, hoveredSegment.overlaps(range) {
+            return true
+        }
+        if case .segment(let selection) = viewModel.selection {
+            return selection.overlaps(range)
+        }
+        return false
+    }
+
+    /// What the thumbnails load: one tile per filmstrip tile width across the visible window.
+    private var thumbnailRequest: ThumbnailRequest {
+        let tileWidth = VideoTrack.tileSize(videoSize: videoSize, displayScale: 1).width
+        let count = width > 0 && tileWidth > 0 ? Int((width / tileWidth).rounded(.up)) : 0
+        return ThumbnailRequest(count: count, start: viewModel.viewport.start, visible: viewModel.viewport.visible)
     }
 
     /// Diagonal stripes filling `area`, the usual picture of something left out.

@@ -7,19 +7,28 @@
 
 import SwiftUI
 
-/// A zoom on the timeline's zoom lane, with its scale when there's room.
+/// A zoom on the timeline's zoom lane: a dashed "Auto · 2×" chip while it's the app's, a solid
+/// "2×" one once the user has touched it.
 struct ZoomBlock: View {
     let zoom: ZoomSegment
     let isSelected: Bool
     let isDragged: Bool
 
     var body: some View {
-        TimelineBlock(isSelected: isSelected, isDragged: isDragged) {
-            Label {
-                Text("\(zoom.scale, format: .number.precision(.fractionLength(0...2)))×")
-            } icon: {
+        TimelineBlock(tone: zoom.isAutomatic ? .automatic : .manual, isSelected: isSelected, isDragged: isDragged) {
+            // The icon alone on a zoom too short for its label, rather than a cut-off label
+            ViewThatFits(in: .horizontal) {
+                Label {
+                    Text(zoom.isAutomatic ? "Auto · \(scale)" : scale)
+                } icon: {
+                    Image(systemName: zoom.followsCursor ? "cursorarrow" : "scope")
+                }
                 Image(systemName: zoom.followsCursor ? "cursorarrow" : "scope")
             }
         }
+    }
+
+    private var scale: String {
+        SpeedRange.label(for: zoom.scale)
     }
 }

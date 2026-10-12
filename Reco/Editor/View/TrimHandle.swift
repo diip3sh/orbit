@@ -7,9 +7,10 @@
 
 import SwiftUI
 
-/// A handle on one edge of a kept part of the timeline. It follows the pointer while dragged,
-/// resisting past the timeline's ends, and reports where it was let go, in the timeline's
-/// coordinate space. What the timeline refuses springs back from where the handle was shown.
+/// A handle on one edge of a kept part of the timeline: a small white pill centred on the edge.
+/// It follows the pointer while dragged, resisting past the timeline's ends, and reports where it
+/// was let go, in the timeline's coordinate space. What the timeline refuses springs back from
+/// where the handle was shown.
 struct TrimHandle: View {
 
     /// The timeline's coordinate space, in which ``position`` and drop points are measured.
@@ -17,7 +18,7 @@ struct TrimHandle: View {
 
     let edge: HorizontalEdge
 
-    /// Where the kept part's edge is, horizontally. The handle sits inside the part.
+    /// Where the kept part's edge is, horizontally. The pill is centred on it.
     let position: CGFloat
 
     /// The timeline's width: the handle may go from 0 to here before it resists.
@@ -32,22 +33,23 @@ struct TrimHandle: View {
     @State private var dragPosition: CGFloat?
     @State private var isHovered = false
 
-    private static let width: CGFloat = 8
+    /// The grabbable width: the pill is 4 pt, the hand gets more.
+    private static let grabWidth: CGFloat = 10
 
     var body: some View {
         let isActive = isHovered || dragPosition != nil
 
-        RoundedRectangle(cornerRadius: 3)
-            .fill(isActive ? EditorTheme.accent : EditorTheme.ink)
+        Color.clear
+            .frame(width: Self.grabWidth)
             .overlay {
-                Capsule()
-                    .fill(EditorTheme.stage.opacity(0.6))
-                    .frame(width: 2, height: 14)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(EditorTheme.ink)
+                    .frame(width: 4, height: 18)
+                    .shadow(color: .black.opacity(0.4), radius: 2)
             }
-            .shadow(color: .black.opacity(0.4), radius: 2)
-            .frame(width: Self.width)
+            .contentShape(.rect)
             .opacity(isShown || isActive ? 1 : 0)
-            .offset(x: (dragPosition ?? position) - (edge == .leading ? 0 : Self.width))
+            .offset(x: (dragPosition ?? position) - Self.grabWidth / 2)
             .pointerStyle(.frameResize(position: edge == .leading ? .leading : .trailing))
             .onHover { isHovered = $0 }
             .editorMotion(EditorTheme.quickMotion, value: isActive)

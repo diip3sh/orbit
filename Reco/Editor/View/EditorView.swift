@@ -112,19 +112,16 @@ struct EditorView: View {
     }
 
     private func timeline(for source: EditorSource) -> some View {
-        VStack(spacing: EditorTheme.smallSpacing) {
-            TransportBar(viewModel: viewModel)
+        VStack(spacing: 0) {
+            TimelineToolbar(viewModel: viewModel)
+                .padding(.horizontal, EditorTheme.spacing)
+                .padding(.top, EditorTheme.mediumSpacing)
             EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
+                .padding(.horizontal, EditorTheme.spacing * 2)
+                .padding(.top, EditorTheme.mediumSpacing)
+                .padding(.bottom, EditorTheme.smallSpacing)
         }
-        .padding(.horizontal, EditorTheme.largeSpacing)
-        .padding(.top, EditorTheme.smallSpacing)
-        .padding(.bottom, EditorTheme.spacing)
-        .background(EditorTheme.panel)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(EditorTheme.hairline)
-                .frame(height: 1)
-        }
+        .background(EditorTheme.stage)
     }
 
     @ToolbarContentBuilder

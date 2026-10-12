@@ -19,7 +19,7 @@ struct ZoomLane: View {
 
         TimelineLane(
             clips: viewModel.project.zooms,
-            duration: viewModel.timeMap.sourceDuration,
+            viewport: viewModel.viewport,
             width: width,
             onSelect: { viewModel.selectZoom($0) },
             onMove: { viewModel.moveZoom($0, by: $1) },

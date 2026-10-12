@@ -2,6 +2,8 @@
 //  TimelineLane.swift
 //  Reco
 //
+//  Created by Diip3sh on 28.09.26.
+//
 
 import SwiftUI
 
@@ -11,8 +13,8 @@ import SwiftUI
 struct TimelineLane<Clip: TimelineClip, Block: View>: View {
     let clips: [Clip]
 
-    /// The timeline's length in seconds, laid out across ``width``.
-    let duration: Double
+    /// Which part of the recording is on screen, laid out across ``width``.
+    let viewport: TimelineViewport
     let width: CGFloat
 
     let onSelect: (UUID) -> Void
@@ -43,10 +45,10 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            if duration > 0 {
+            if viewport.duration > 0 {
                 ForEach(clips) { clip in
-                    let start = clip.range.lowerBound / duration * width
-                    let end = clip.range.upperBound / duration * width
+                    let start = viewport.x(at: clip.range.lowerBound, width: width)
+                    let end = viewport.x(at: clip.range.upperBound, width: width)
                     let dragged = drag.flatMap { $0.id == clip.id ? $0.offset : nil } ?? 0
 
                     // Where the block may go: its edges stay in the lane
@@ -55,7 +57,7 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                     let showsHandles = clip.id == hovered || clip.id == selection || drag?.id == clip.id
 
                     block(clip, drag?.id == clip.id)
-                        .frame(width: end - start)
+                        .frame(width: max(end - start, 1))
                         .offset(x: start + dragged)
                         .onHover { isInside in
                             if isInside {
@@ -83,23 +85,23 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                                         if abs(value.translation.width) < Self.clickTolerance {
                                             onSelect(clip.id)
                                         } else {
-                                            onMove(clip.id, value.translation.width / width * duration)
+                                            onMove(clip.id, value.translation.width / width * viewport.visible)
                                         }
                                     }
                                 }
                         )
 
                     TrimHandle(edge: .leading, position: start, width: width, isShown: showsHandles) { position in
-                        onMoveStart(clip.id, position / width * duration)
+                        onMoveStart(clip.id, viewport.time(atX: position, width: width))
                     }
                     TrimHandle(edge: .trailing, position: end, width: width, isShown: showsHandles) { position in
-                        onMoveEnd(clip.id, position / width * duration)
+                        onMoveEnd(clip.id, viewport.time(atX: position, width: width))
                     }
                 }
             }
         }
         // minWidth 0: blocks are laid out in points of the last width, which mustn't become the window's minimum
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height, alignment: .leading)
-        .background(EditorTheme.softHairline.opacity(0.6), in: .rect(cornerRadius: 6))
+        .clipped()
     }
 }

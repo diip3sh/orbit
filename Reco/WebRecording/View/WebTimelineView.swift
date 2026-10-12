@@ -41,11 +41,11 @@ struct WebTimelineView: View {
                 .frame(width: Self.labelWidth, alignment: .leading)
 
                 VStack(alignment: .leading, spacing: Self.spacing) {
-                    TimelineRuler(duration: duration)
+                    TimelineRuler(viewport: TimelineViewport(duration: duration))
                         .frame(height: Self.rulerHeight)
 
                     TimelineLane(
-                        clips: script.pointer, duration: duration, width: width,
+                        clips: script.pointer, viewport: TimelineViewport(duration: duration), width: width,
                         onSelect: select, onMove: viewModel.moveClip, onMoveStart: viewModel.moveClipStart, onMoveEnd: viewModel.moveClipEnd,
                         selection: viewModel.selection
                     ) { clip, isDragged in
@@ -69,7 +69,7 @@ struct WebTimelineView: View {
                     .help("Hovers and clicks: the cursor is on the clip's target from its start to its end")
 
                     TimelineLane(
-                        clips: script.scrolls, duration: duration, width: width,
+                        clips: script.scrolls, viewport: TimelineViewport(duration: duration), width: width,
                         onSelect: select, onMove: viewModel.moveClip, onMoveStart: viewModel.moveClipStart, onMoveEnd: viewModel.moveClipEnd,
                         selection: viewModel.selection
                     ) { clip, isDragged in
@@ -86,9 +86,12 @@ struct WebTimelineView: View {
                     .help("Scrolls: the page moves from where the previous one ended")
                 }
                 .overlay(alignment: .topLeading) {
-                    Playhead(knobHeight: Self.rulerHeight)
-                        .offset(x: duration > 0 ? viewModel.playhead / duration * width - Playhead.knobWidth / 2 : 0)
-                        .allowsHitTesting(false)
+                    VStack(spacing: 0) {
+                        PlayheadKnob()
+                        PlayheadLine()
+                    }
+                    .offset(x: duration > 0 ? viewModel.playhead / duration * width - Playhead.knobWidth / 2 : 0)
+                    .allowsHitTesting(false)
                 }
                 .contentShape(.rect)
                 .gesture(

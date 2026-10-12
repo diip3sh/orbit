@@ -32,8 +32,14 @@ final class EditorViewModel {
     /// Clicks and keystrokes on the timeline, or `nil` without telemetry.
     private(set) var markers: TimelineMarkers?
 
-    /// The filmstrip, left to right.
+    /// The filmstrip for the timeline's visible window, left to right.
     private(set) var thumbnails: [CGImage?] = []
+
+    /// Which part of the recording the timeline shows: its zoom and where it's scrolled to.
+    var viewport = TimelineViewport(duration: 0)
+
+    /// The audio mix's peaks for the timeline's waveform, read once after the source loads.
+    private(set) var waveform: [Float] = []
 
     /// Why the recording couldn't be opened, while ``source`` is `nil`, or why edits weren't saved.
     var error: EditorError?
@@ -156,14 +162,24 @@ final class EditorViewModel {
         logger.info("Opened \(self.videoURL.lastPathComponent)")
     }
 
-    /// Loads the filmstrip for `count` tiles of at most `maximumSize` pixels. Cancelled when the
-    /// timeline's layout changes.
+    /// Loads the filmstrip for `count` tiles of at most `maximumSize` pixels, spanning the timeline's
+    /// visible window. Cancelled when the timeline's layout changes.
     func loadThumbnails(count: Int, maximumSize: CGSize) async {
         guard let source, count > 0 else { return }
-        let times = (0..<count).map { (Double($0) + 0.5) * source.duration / Double(count) }
+        let visible = viewport.visible > 0 ? viewport.visible : source.duration
+        let times = (0..<count).map { viewport.start + (Double($0) + 0.5) * visible / Double(count) }
         let images = await ThumbnailProvider.thumbnails(of: source, at: times, maximumSize: maximumSize)
         guard !Task.isCancelled else { return }
         thumbnails = images
+    }
+
+    /// Reads the audio mix's peaks for the waveform lane, once. Off the main actor; a recording
+    /// without audio simply leaves the lane out.
+    func loadWaveform() async {
+        guard let source, waveform.isEmpty else { return }
+        let peaks = await WaveformLoader.peaks(of: source, bucketsPerSecond: WaveformLoader.bucketsPerSecond)
+        guard !Task.isCancelled else { return }
+        waveform = peaks
     }
 
     /// Applies an edit as one undo step named `actionName`, then saves once edits settle.
@@ -339,6 +355,7 @@ final class EditorViewModel {
     private func updateTimeline() {
         guard let source else { return }
         timeMap = TimeMap(cuts: project.cuts, speeds: project.speeds, sourceDuration: source.duration, frameRate: source.frameRate)
+        viewport.setDuration(source.duration)
     }
 
     /// Builds a plan for the project off the main actor, replacing a build still running, and shows

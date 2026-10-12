@@ -7,28 +7,39 @@
 
 import SwiftUI
 
-/// A line across the timeline with a knob in the ruler, pointing down at the frame shown.
-struct Playhead: View {
-
-    /// The knob's height, the ruler's.
-    let knobHeight: CGFloat
+/// Where the playhead sits on the timeline. The ruler lives in the toolbar card and the tracks
+/// under it, so the playhead is drawn in two pieces that share an x: a knob in the ruler
+/// (``PlayheadKnob``) and a line through the tracks (``PlayheadLine``). Both are plain ink, not
+/// accent: position is information, not a brand.
+enum Playhead {
 
     static let knobWidth: CGFloat = 11
+    static let lineWidth: CGFloat = 1.5
+}
+
+/// A line across the timeline's tracks, at the frame shown.
+struct PlayheadLine: View {
 
     var body: some View {
-        VStack(spacing: 0) {
-            Knob()
-                .fill(EditorTheme.accent)
-                .frame(width: Self.knobWidth, height: knobHeight)
-            Rectangle()
-                .fill(EditorTheme.accent)
-                .frame(width: 1.5)
-        }
-        .shadow(color: .black.opacity(0.5), radius: 2)
+        Rectangle()
+            .fill(EditorTheme.ink)
+            .frame(width: Playhead.lineWidth)
+            .allowsHitTesting(false)
+    }
+}
+
+/// The playhead's grip in the ruler, pointing down at the tracks.
+struct PlayheadKnob: View {
+
+    var body: some View {
+        Knob()
+            .fill(EditorTheme.ink)
+            .frame(width: Playhead.knobWidth, height: 16)
+            .allowsHitTesting(false)
     }
 
     /// Rounded at the top and pointed at the bottom.
-    private nonisolated struct Knob: Shape {
+    nonisolated private struct Knob: Shape {
         func path(in rect: CGRect) -> Path {
             let point = rect.height * 0.35
             var path = Path()

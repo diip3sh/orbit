@@ -17,7 +17,7 @@ struct MaskLane: View {
 
         TimelineLane(
             clips: viewModel.project.masks,
-            duration: viewModel.timeMap.sourceDuration,
+            viewport: viewModel.viewport,
             width: width,
             onSelect: viewModel.selectMask,
             onMove: viewModel.moveMask,
