@@ -170,7 +170,12 @@ Every change of scene comes out of an action, and you can name its reason:
 | The next scene moves on its first frame (typing, a pop at 0, a scatter) | `cut` |
 
 - At least four kinds in a film; never the same seam on two scene changes running; never more than two cuts running.
-- Never a cut onto or from something still.
+- Never a cut onto or from something still, and never onto an empty ground: a caret alone or one small word reads as nothing
+  happening. Cut into a frame that is full from its first frame (a big line, a grid, a card whole), or match the cut: the
+  thing the last scene ended on is in the same place, the same size or the same colour as the first thing of the next.
+- A `stack`, `expand` or `dive` carries the next scene in whole, as a sheet sliding up or a screen opening: what it shows is
+  there from the cut (no `rise` or `cascade` under it), and acts after it (a check ticks, a count runs, a click). Parts rising
+  in under it leave an empty sheet moving; the lint names them.
 - Inside a scene a change of state is a move (a pill `morph`s, a button `flood`s), never a cut.
 
 ## 9. The frame

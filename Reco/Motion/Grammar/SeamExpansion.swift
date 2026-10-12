@@ -191,7 +191,7 @@ nonisolated enum SeamExpansion {
     }
 
     /// How long a seam that draws both scenes at once takes.
-    private static func duration(of seam: MotionSeam) -> Double {
+    static func duration(of seam: MotionSeam) -> Double {
         switch seam {
         case .flow: flowDuration
         case .stack: stackDuration

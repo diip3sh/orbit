@@ -12,7 +12,7 @@ nonisolated enum MotionLint {
 
     nonisolated enum Rule: String, Sendable {
         case readingTime, textSize, safeArea, contrast, firstMove, simultaneousMoves, exitLength
-        case sceneLengths, typingRate, stillness, hookLength, endingLength, rollLength, busyField, material, look, beats
+        case sceneLengths, typingRate, stillness, hookLength, endingLength, rollLength, busyField, material, look, beats, carried
     }
 
     nonisolated struct Finding: Equatable, Sendable {
@@ -78,7 +78,7 @@ nonisolated enum MotionLint {
                     findings.append(Finding(rule: .endingLength, scene: scene.id, message: message))
                 }
             }
-            findings += rollFindings(scene.layers, scene: scene)
+            findings += rollFindings(scene.layers, scene: scene) + carriedFindings(layers, scene: scene)
             let field = source.field ?? document.canvas.field
             if let shot = source.shot, shot.kind == .macro, field != .plain {
                 findings += materialFindings(shot, over: field, scene: scene.id, assets: document.assets)
@@ -440,4 +440,48 @@ nonisolated extension MotionLint {
               case .text(let text) = layer.layer.content else { return false }
         return text.face == .mono
     }
+}
+
+// MARK: - Carried scenes
+
+nonisolated extension MotionLint {
+
+    /// A stack, an expand and a dive carry the next scene in whole, as a sheet or a screen opening: when most of it isn't there
+    /// yet, a dark sheet slides up empty (Cardboard 6's clips, popping in under and after their stack), so it's there from the cut
+    /// and acts after it. A detail popping in (Vantae's photo into its box) is fine; typing goes into a field that's there, a
+    /// scatter throws out a stack that's there, and a shown or hidden part swaps one state for another.
+    private static func carriedFindings(_ layers: [TimedLayer], scene: MotionScene) -> [Finding] {
+        guard [.stack, .expand, .dive].contains(scene.seam) else { return [] }
+        let carried = SeamExpansion.duration(of: scene.seam) * carriedShare
+        let byID = Dictionary(layers.map { ($0.layer.id, $0) }) { first, _ in first }
+        let arriving = { (timed: TimedLayer) in
+            timed.moves.contains { !$0.kind.isCamera && !actions.contains($0.kind) && !typedReveals.contains($0.kind) && !carriedMoves.contains($0.kind) && $0.end > carried }
+        }
+        // A part isn't there while it or a group it's in is still coming in
+        let missing = { (part: TimedLayer) -> Bool in
+            var timed: TimedLayer? = part
+            while let current = timed {
+                if arriving(current) { return true }
+                timed = current.parent.flatMap { byID[$0] }
+            }
+            return false
+        }
+        let parts = layers.filter { if case .group = $0.layer.content { false } else { true } }
+        let absent = parts.filter(missing)
+        guard let first = absent.first, Double(absent.count) >= Double(parts.count) * carriedMost else { return [] }
+        let names = Set(absent.map { $0.parent ?? $0.layer.id }).sorted()
+        let (verb, them) = names.count == 1 ? ("isn't", "it") : ("aren't", "them")
+        let more = names.count > 3 ? " and \(names.count - 3) more" : ""
+        let message = "\(names.prefix(3).map { "\"\($0)\"" }.joined(separator: ", "))\(more) \(verb) there while the \(scene.seam.rawValue) carries the "
+            + "scene in, so it moves an empty frame: have \(them) there from the cut and give \(them) something to do after it."
+        return [Finding(rule: .carried, scene: scene.id, layer: first.layer.id, message: message)]
+    }
+
+    /// A carried scene's parts are there by the middle of its seam; half of them missing there leaves it empty. A pointer's
+    /// click, a shimmer, a scatter and what marks or orbits act on what's there.
+    private static let carriedShare = 0.5
+    private static let carriedMost = 0.5
+    private static let carriedMoves: Set<MotionMove.Kind> = [
+        .burst, .ripple, .shimmer, .wash, .show, .hide, .marks, .orbit, .dots, .select, .grow, .stateChange, .focus, .scatter
+    ]
 }

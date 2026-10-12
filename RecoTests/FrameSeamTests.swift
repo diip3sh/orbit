@@ -29,17 +29,36 @@ struct FrameSeamTests {
         #expect(try Self.color(of: draw(1), at: CGPoint(x: 120, y: 120)) == Self.color(of: Self.next, at: .zero))
     }
 
-    /// The next scene opens out of the box it starts from and ends filling the frame.
+    /// The next scene opens out of the box it starts from and ends filling the frame: the clicked control grows with the
+    /// rectangle first, which turns to the next scene's colour as the next scene comes up in it.
     @Test func anExpandOpensOutOfItsSource() throws {
         let source = CGRect(x: 180, y: 60, width: 40, height: 20)
+        let before = CIImage(color: CIColor(red: 0.1, green: 0.8, blue: 0.1)).cropped(to: source).composited(over: Self.before)
         let draw = { (progress: Double) in
-            MotionFrameRenderer.expanded(Self.before, into: Self.next, from: source, progress: progress)
+            MotionFrameRenderer.expanded(before, into: Self.next, from: source, progress: progress)
         }
 
-        let start = try draw(0.1)
-        #expect(try Self.color(of: start, at: CGPoint(x: 200, y: 70))[2] > 150)
+        // The control, green, where it was; the scene before, red, round it
+        let start = try draw(0.05)
+        #expect(try Self.color(of: start, at: CGPoint(x: 200, y: 70))[1] > 150)
         #expect(try Self.color(of: start, at: CGPoint(x: 10, y: 10))[0] > 150)
+        // Most of the way, the rectangle is the next scene, blue, round its middle
+        let late = try Self.color(of: draw(0.8), at: CGPoint(x: 120, y: 67))
+        #expect(late[2] > 150 && late[1] < 60, "\(late)")
         #expect(try Self.color(of: draw(1), at: CGPoint(x: 10, y: 10)) == Self.color(of: Self.next, at: .zero))
+    }
+
+    /// A scene whose layers lie past the frame doesn't size the seam: the next scene still fills the frame as it ends.
+    @Test func aSeamIsSizedByTheFrame() async throws {
+        let json = #"{"version": 1, "scenes": [{"id": "one", "duration": 2}, {"id": "two", "duration": 2, "seam": "expand"}]}"#
+        let plan = await MotionPlan.build(try JSONDecoder().decode(MotionDocument.self, from: Data(json.utf8)), bundle: URL.temporaryDirectory)
+        let frame = CGRect(origin: .zero, size: plan.outputSize)
+        let wide = CIImage(color: CIColor(red: 0.8, green: 0.1, blue: 0.1)).cropped(to: frame.insetBy(dx: -frame.width, dy: -frame.height))
+        let next = CIImage(color: CIColor(red: 0.1, green: 0.1, blue: 0.8)).cropped(to: frame)
+        let drawn = MotionFrameRenderer.transitioned(wide, next, into: 1, at: SeamExpansion.expandDuration * 0.99, plan: plan)
+
+        let (corner, blue) = (try Self.color(of: drawn, at: CGPoint(x: frame.maxX - 4, y: frame.maxY - 4)), try Self.color(of: next, at: .zero))
+        #expect(zip(corner, blue).allSatisfy { abs(Int($0) - Int($1)) <= 2 }, "\(corner) \(blue)")
     }
 
     /// It opens from what the scene before clicked last, where that is at the scene's end; without a click, the middle.
@@ -56,6 +75,25 @@ struct FrameSeamTests {
         #expect(abs(source.width - 200) < 1 && abs(source.height - 100) < 1)
         let middle = MotionFrameRenderer.expandSource(into: 2, plan: plan)
         #expect(abs(middle.midX - 960) < 1 && abs(middle.midY - 540) < 1)
+    }
+
+    /// A stack carries its scene in whole: when most of it comes in under the stack or after it, that's named; a detail popping
+    /// in, or what's there from the cut and acts after, isn't.
+    @Test func whatComesInUnderAStackIsNamed() throws {
+        let layer = { (id: String, move: String, start: Double) in
+            #"{"id": "\#(id)", "content": {"shape": {"size": [400, 300], "color": "333333"}}, "moves": [{"move": "\#(move)", "start": \#(start)}]}"#
+        }
+        let findings = { (layers: [String]) throws in
+            let json = #"{"version": 1, "scenes": [{"id": "one", "duration": 2}, {"id": "two", "duration": 2, "seam": "stack", "layers": ["#
+                + layers.joined(separator: ",") + "]}]}"
+            return MotionLint.findings(in: try JSONDecoder().decode(MotionDocument.self, from: Data(json.utf8))).filter { $0.rule == .carried }
+        }
+        let empty = try findings([layer("grid", "rise", 0.1), layer("title", "fadeUp", 1.2), layer("check", "spin", 0.9), layer("button", "click", 0.2)])
+        let detail = try findings([layer("photo", "pop", 0), layer("grid", "spin", 0.9), layer("title", "shimmer", 1), layer("button", "click", 0.2)])
+
+        #expect(empty.map(\.scene) == ["two"])
+        #expect(empty.first?.message.hasPrefix("\"grid\", \"title\" aren't there while the stack carries the scene in") == true)
+        #expect(detail.isEmpty)
     }
 
     /// The moving edge is motion blurred while it travels, and not once the seam is over.

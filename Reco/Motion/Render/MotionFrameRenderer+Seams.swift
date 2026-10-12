@@ -16,7 +16,9 @@ nonisolated extension MotionFrameRenderer {
         guard let transition = plan.scenes[index].transition else { return next }
         let bounds = CGRect(origin: .zero, size: plan.outputSize)
         let background = CIImage(color: plan.background).cropped(to: bounds)
-        let (previous, frame) = (before.composited(over: background), next.composited(over: background))
+        // Cut to the frame: a scene's layers can lie past it, and a stack or expand sized from such a frame drew the next scene
+        // smaller than its rectangle
+        let (previous, frame) = (before.composited(over: background).cropped(to: bounds), next.composited(over: background).cropped(to: bounds))
         let progress = transition.progress(at: time)
         switch transition.seam {
         case .push:
@@ -42,17 +44,23 @@ nonisolated extension MotionFrameRenderer {
         }
     }
 
-    /// The next scene `progress` of the way up from below on a card, the scene before sinking back under it.
+    /// The next scene `progress` of the way up from below on a card, the scene before sinking back and up under it. The card's
+    /// edge is lit: on a dark film the card and what it covers are the same dark, and without it the seam read as a dim fade.
     static func stacked(_ before: CIImage, under next: CIImage, progress: Double, isLight: Bool = false) -> CIImage {
         let size = before.extent.size
         let card = CGRect(origin: CGPoint(x: 0, y: -size.height * (1 - progress)), size: size)
-        let back = receded(before, about: CGPoint(x: size.width / 2, y: size.height / 2), growth: -stackSink, progress: progress, isLight: isLight)
+        let lifted = before.transformed(by: CGAffineTransform(translationX: 0, y: stackLift * size.height * progress))
+        let back = receded(lifted.cropped(to: before.extent), about: CGPoint(x: size.width / 2, y: size.height / 2), growth: -stackSink,
+                           progress: progress, isLight: isLight)
         let shown = next.transformed(by: CGAffineTransform(translationX: 0, y: card.minY))
-        return framed(shown, in: card, radius: stackRadius * size.height * (1 - progress), size: size).composited(over: back)
+        let radius = stackRadius * size.height * (1 - progress)
+        let rim = edgeLight(of: card, radius: radius, opacity: seamRim.opacity * (1 - smoothstep(0.7, 1, progress)), size: size)
+        return rim.composited(over: framed(shown, in: card, radius: radius, size: size)).composited(over: back)
     }
 
-    /// The next scene `progress` of the way out of `source` (output pixels) to the whole frame, the scene before diving
-    /// towards it.
+    /// The next scene `progress` of the way out of `source` (output pixels) to the whole frame, the scene before diving towards
+    /// it: a container transform. The clicked control grows with the rectangle and fades as the rectangle turns from its colour
+    /// to the next scene's, which comes up in it; dark into dark, the rectangle alone read as a dim fade.
     static func expanded(_ before: CIImage, into next: CIImage, from source: CGRect, progress: Double, isLight: Bool = false) -> CIImage {
         let size = before.extent.size
         let mix = { (start: Double, end: Double) in start + (end - start) * progress }
@@ -62,9 +70,46 @@ nonisolated extension MotionFrameRenderer {
         let shown = next.transformed(by: CGAffineTransform(translationX: -size.width / 2, y: -size.height / 2)
             .concatenating(CGAffineTransform(scaleX: fill, y: fill))
             .concatenating(CGAffineTransform(translationX: rect.midX, y: rect.midY)))
+        // The control's own colour (its middle, clear of a round control's corners) to the next scene's, under both
+        let average = { (image: CIImage, area: CGRect) in
+            image.applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: area)]).clampedToExtent().cropped(to: rect)
+        }
+        let inner = source.insetBy(dx: source.width * expandInset, dy: source.height * expandInset)
+        let ground = average(next, next.extent).fading(to: smoothstep(expandStages.colour.0, expandStages.colour.1, progress))
+            .composited(over: average(before, inner))
+        // A control is a pill or a circle; a card keeps a card's corners. The control grows in its own shape, so a round
+        // button's corners in its box don't come with it
+        let shorter = min(source.width, source.height)
+        let corner = shorter * (shorter < expandControl * size.height ? 0.5 : expandRadius)
+        let shape = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+            "inputExtent": CIVector(cgRect: source), "inputRadius": corner, "inputColor": CIColor.white
+        ])?.outputImage ?? CIImage(color: .white).cropped(to: source)
+        let grown = min(rect.width / source.width, rect.height / source.height, expandGrowth)
+        let control = before.cropped(to: source).applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: shape])
+            .transformed(by: about(CGPoint(x: source.midX, y: source.midY), scale: grown, onto: CGPoint(x: rect.midX, y: rect.midY)))
+        let content = control.fading(to: 1 - smoothstep(expandStages.control.0, expandStages.control.1, progress))
+            .composited(over: shown.fading(to: smoothstep(expandStages.next.0, expandStages.next.1, progress)))
+            .composited(over: ground)
         let back = receded(before, about: CGPoint(x: source.midX, y: source.midY), growth: expandDive, progress: progress, isLight: isLight)
-        let radius = min(source.width, source.height) * expandRadius * (1 - progress)
-        return framed(shown, in: rect, radius: radius, size: size).composited(over: back)
+        let radius = corner * (1 - progress)
+        let rim = edgeLight(of: rect, radius: radius, opacity: seamRim.opacity * smoothstep(0, 0.15, progress) * (1 - smoothstep(0.6, 1, progress)), size: size)
+        return rim.composited(over: framed(content, in: rect, radius: radius, size: size)).composited(over: back)
+    }
+
+    /// A thin light round `rect`'s edge, as on a sheet of glass catching the light.
+    private static func edgeLight(of rect: CGRect, radius: Double, opacity: Double, size: CGSize) -> CIImage {
+        guard opacity > 0.005 else { return CIImage.empty() }
+        let corner = min(radius, min(rect.width, rect.height) / 2)
+        return (CIFilter(name: "CIRoundedRectangleStrokeGenerator", parameters: [
+            "inputExtent": CIVector(cgRect: rect), "inputRadius": corner, "inputWidth": seamRim.width * size.height / 1080,
+            "inputColor": CIColor(red: 1, green: 1, blue: 1, alpha: opacity)
+        ])?.outputImage ?? CIImage.empty()).cropped(to: CGRect(origin: .zero, size: size))
+    }
+
+    /// 0 below `low`, 1 above `high`, eased between.
+    private static func smoothstep(_ low: Double, _ high: Double, _ value: Double) -> Double {
+        let linear = min(max((value - low) / (high - low), 0), 1)
+        return linear * linear * (3 - 2 * linear)
     }
 
     /// The next scene `progress` of the way in from the right over the scene before, behind an edge ``wipeEdge`` of the frame
@@ -240,15 +285,29 @@ nonisolated extension MotionFrameRenderer {
         return card.composited(over: shadow)
     }
 
-    /// A stack's scene before sinks to 0.92 of its size; the card's corners are a sheet's, square once it covers the frame.
+    /// A stack's scene before sinks to 0.92 of its size and rises a twentieth of the frame, pushed up by the card; the card's
+    /// corners are a sheet's, square once it covers the frame.
     static let stackSink = 0.08
+    static let stackLift = 0.05
     static let stackRadius = 0.04
 
-    /// An expand's scene before dives a quarter closer; its rectangle's corners start at a third of its shorter side (a
-    /// pill's or a card's); without a click it opens from the middle 30 % of the frame.
+    /// An expand's scene before dives a quarter closer; its rectangle's corners start round as a pill's or a circle's from a
+    /// control (shorter than an eighth of the frame), at a third of its shorter side from a card; without a click it opens from
+    /// the middle 30 % of the frame.
     static let expandDive = 0.25
     static let expandRadius = 0.3
+    static let expandControl = 0.125
     static let expandMiddle = 0.3
+
+    /// An expand's colour is read from its control's middle (a 15 % inset keeps a round button's dark corners out). The control
+    /// grows with the rectangle up to 2.5 times (further, its pixels blur) and is gone by 0.35 of the way; the rectangle turns
+    /// to the next scene's colour from 0.1 to 0.55, and the next scene comes up in it from 0.25 to 0.7.
+    static let expandInset = 0.15
+    static let expandGrowth = 2.5
+    static let expandStages = (control: (0.0, 0.35), colour: (0.1, 0.55), next: (0.25, 0.7))
+
+    /// The lit edge of a stack's card and an expand's rectangle, at 1080p, fading as they cover the frame.
+    static let seamRim = (width: 1.5, opacity: 0.3)
 
     /// A wipe's soft edge and where its middle starts, as shares of the frame's width: ElevenLabs' picture came in under a front
     /// whose 10–90 % span was 1000–1500 px, its middle first at 1324 px.

@@ -1526,6 +1526,25 @@ Key facts:
 - Through the engine at 270 px, Calcom 3 has no finding and Cardboard 5 five scenes; about 5 s more a preview (M5, Debug).
 - `flatFilm` is gone: it asked for UI at an angle, which the user found looks bad.
 
+### S17 — Transitions that read (`remotion`, spec 0022)
+
+Cardboard 6's expand and stacks read as dim fades on its dark ground. Expand is now a container transform (the clicked control
+grows in its own shape in a rectangle of its colour, which turns to the next scene's as that comes up in it), a stack's sheet has
+a lit edge and pushes the scene before up, and both have a light edge on dark. Seams are sized by the frame. The lint names a
+stack, expand or dive whose scene is mostly not there yet (`carried`), and the director never cuts onto an empty ground.
+
+| File | Role |
+|---|---|
+| `Motion/Render/MotionFrameRenderer+Seams.swift` | `expanded` (container transform), `stacked` (lit edge, lift), `edgeLight`; both frames cut to the frame in `transitioned` |
+| `Motion/Grammar/MotionLint.swift` (`carriedFindings`) | Half a carried scene's parts missing by its seam's middle is named |
+| `AgentRecording/Skills/reco-director.md` | Section 8: no cut onto an empty ground, match cuts, carried scenes whole |
+
+Key facts:
+- A scene's image can be larger than the frame (layers past it); stack and expand sized from it drew the next scene at two
+  thirds of its rectangle.
+- The control grows at most 2.5× (further, its pixels blur), is gone by 0.35 of the way; the colour turns 0.1–0.55, the next
+  scene comes up 0.25–0.7. A control shorter than an eighth of the frame starts round; a card keeps 0.3 of its shorter side.
+
 ### Telemetry JSON (version 3)
 
 ```
@@ -1608,6 +1627,7 @@ should hold but need re-measuring.
 | S14 brand taste and graphic transitions (spec 0019) | Thirteen graphic seams in the brand's colours, the brand's fonts, palette, gradients and radii scraped and its type drawn in its own face, the director's personalities and variation. Next: films from the app, the user's verdict |
 | S15 the After Effects bar (spec 0020) | Camera angle, arc and depth of field, `swing`, `flow` (shared element and layered handoff), the `pool` ground, small and flat checks, the director's craft section, after the user found Cardboard 2 basic. Next: Cardboard from the app, the user's verdict |
 | S16 films are actions (spec 0021) | The picture-still check in `preview_motion`, the director rewritten around actions and UI facing the viewer, after the user found Cardboard 5 static. Next: Cardboard from the app, the user's verdict |
+| S17 transitions that read (spec 0022) | Expand as a container transform, a lit stack, seams sized by the frame, the `carried` lint and the director's cut rules, after the user asked for better transitions on Cardboard 6. Next: the user's verdict on `Cardboard 6 carried`, a new film from the app |
 
 What to build next: `docs/specs/0012-motion-quality.md` (October 2026), phases Q1–Q6; spec 0011's phases 5–7 wait for it. The earlier
 order: `docs/specs/0009-stand-out-roadmap.md`. The N items' details, ranked from a September 2026 survey of competitors and Apple's on-device APIs:
