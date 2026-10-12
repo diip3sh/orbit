@@ -18,6 +18,9 @@ nonisolated enum AgentRunOutcome: Equatable, Sendable {
 
     /// A render finished: the movie's path. The editor has opened it already.
     case succeeded(movie: String)
+
+    /// The agent changed a motion video and finished: the bundle's path (spec 0011, *Agent*).
+    case edited(bundle: String)
     case failed(reason: String)
     case cancelled
 
@@ -32,9 +35,11 @@ nonisolated enum AgentRunOutcome: Equatable, Sendable {
     /// A render is this run's when it isn't the one that was there when it started
     /// (`startingRenderID`). Rules, in order: cancelling wins; a finished render is a success even if
     /// the agent then exited badly (the editor has opened, and Retry would record again); then the
-    /// process's own failures; then a failed render, or none at all.
+    /// process's own failures; then a motion video the run changed (`editedMotion`): an edit with no
+    /// render is a success once the agent finishes well; then a failed render, or none at all.
     static func classify(
-        end: AgentProcessEnd, agent: AgentKind, job: RenderStatus?, startingRenderID: String?, outputReason: String
+        end: AgentProcessEnd, agent: AgentKind, job: RenderStatus?, startingRenderID: String?, outputReason: String,
+        editedMotion: URL? = nil, limit: Duration = timeLimit
     ) -> AgentRunOutcome {
         let render = job.flatMap { $0.renderID == startingRenderID ? nil : $0 }
         let reason = outputReason.isEmpty ? "" : ": \(outputReason)"
@@ -46,12 +51,15 @@ nonisolated enum AgentRunOutcome: Equatable, Sendable {
         }
         switch end {
         case .timedOut:
-            return .failed(reason: "The agent didn't finish within 15 minutes.")
+            return .failed(reason: "The agent didn't finish within \(limit.components.seconds / 60) minutes.")
         case .launchFailed(let message):
             return .failed(reason: message)
         case .exited(let status) where status != 0:
             return .failed(reason: "\(agent.displayName) exited with status \(status)\(reason)")
         case .exited, .cancelled:
+            if let editedMotion {
+                return .edited(bundle: editedMotion.path(percentEncoded: false))
+            }
             if let error = render?.error, render?.status == .failed {
                 return .failed(reason: error)
             }

@@ -1,0 +1,91 @@
+//
+//  AgentSkill.swift
+//  Reco
+//
+
+import Foundation
+
+/// Reco's methods for motion films, shipped in the app as skills: the director (spec 0018), the launch film (spec 0012, Q4),
+/// motion design (spec 0014), the story film (spec 0015), the flow film (spec 0016) and the editorial film (spec 0017). Claude Code
+/// finds them in its run's folder, loads the director first and the technique skills it names; their references are files beside
+/// their `SKILL.md`, read one at a time when their method says so. Agents without skills get the launch film's method in their prompt.
+nonisolated enum AgentSkill {
+
+    /// Plans every launch film from the brand and the user's words, and names the technique skills it takes (spec 0018).
+    static let directorName = "reco-director"
+
+    static let director = resource(directorName)
+
+    static let launchFilmName = "reco-launch-film"
+
+    /// Where Claude Code finds it, relative to the run's folder.
+    static let launchFilmPath = ".claude/skills/\(launchFilmName)/SKILL.md"
+
+    /// The skill's file: its front matter (name, description) and the method.
+    static let launchFilm = resource(launchFilmName)
+
+    /// The method without its front matter, for a prompt.
+    static var launchFilmMethod: String {
+        method(of: launchFilm)
+    }
+
+    static let motionDesignName = "reco-motion-design"
+
+    /// Its references, bundled as `reco-motion-design-<name>.md`: the reference film, the moves, recipes, longer
+    /// films and a whole example.
+    static let motionDesignReferences = ["film", "moves", "recipes", "longer", "example"]
+
+    static let motionDesign = resource(motionDesignName)
+
+    static let storyFilmName = "reco-story-film"
+
+    /// Its references, bundled as `reco-story-film-<name>.md`: the reference film, recipes and a whole example (spec 0015).
+    static let storyFilmReferences = ["film", "recipes", "example"]
+
+    static let storyFilm = resource(storyFilmName)
+
+    static let flowFilmName = "reco-flow-film"
+
+    /// Its references, bundled as `reco-flow-film-<name>.md`: the two reels measured, recipes and a whole example (spec 0016).
+    static let flowFilmReferences = ["film", "recipes", "example"]
+
+    static let flowFilm = resource(flowFilmName)
+
+    static let editorialFilmName = "reco-editorial-film"
+
+    /// Its references, bundled as `reco-editorial-film-<name>.md`: ElevenLabs' film measured, recipes and a whole example (spec 0017).
+    static let editorialFilmReferences = ["film", "recipes", "example"]
+
+    static let editorialFilm = resource(editorialFilmName)
+
+    /// Every skill file a motion run gets, by its path relative to the run's folder.
+    static let files: [String: String] = {
+        var files = [
+            ".claude/skills/\(directorName)/SKILL.md": director, launchFilmPath: launchFilm,
+            ".claude/skills/\(motionDesignName)/SKILL.md": motionDesign, ".claude/skills/\(storyFilmName)/SKILL.md": storyFilm,
+            ".claude/skills/\(flowFilmName)/SKILL.md": flowFilm, ".claude/skills/\(editorialFilmName)/SKILL.md": editorialFilm
+        ]
+        let referenced = [
+            (motionDesignName, motionDesignReferences), (storyFilmName, storyFilmReferences), (flowFilmName, flowFilmReferences),
+            (editorialFilmName, editorialFilmReferences)
+        ]
+        for (skill, references) in referenced {
+            for name in references {
+                files[".claude/skills/\(skill)/reference/\(name).md"] = resource("\(skill)-\(name)")
+            }
+        }
+        return files
+    }()
+
+    /// The folder the skills are in, which Claude Code may read and nothing else on the disk.
+    static let folder = ".claude/skills"
+
+    private static func resource(_ name: String) -> String {
+        Bundle.main.url(forResource: name, withExtension: "md").flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+    }
+
+    private static func method(of skill: String) -> String {
+        let parts = skill.split(separator: "---\n", maxSplits: 2, omittingEmptySubsequences: false)
+        return String(parts.count == 3 ? parts[2] : Substring(skill)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}

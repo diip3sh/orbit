@@ -40,6 +40,14 @@ nonisolated enum FrameRenderer {
         }
     }
 
+    /// How far apart, in pixels, the samples of a blurred frame are, until there are as many as the
+    /// plan allows: close enough that text smears instead of doubling.
+    ///
+    /// Measured on an M5, Debug, 4K with a ring and a chip, load average 3, mid-zoom: 8 samples
+    /// draw in 2.8 ms p50 (1.3 unblurred), and in 7.9 ms on the default canvas (2.8 unblurred); 16
+    /// take 5.5 and 12.5 ms, 4 still 2 and 5.6. Only frames in which the camera moves pay it.
+    static let blurSampleSpacing = 4.0
+
     /// The frame with everything on it - clicks, zoom, cursor and keystroke chip - placed on the
     /// canvas and clipped to the video's frame, square-cornered.
     private static func video(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CIImage {
@@ -199,13 +207,5 @@ nonisolated enum FrameRenderer {
             translationX: (video.midX - image.extent.width / 2).rounded(), y: (video.minY + image.extent.height * 0.8).rounded()
         )
         return image.transformed(by: placement).fading(to: opacity)
-    }
-}
-
-private extension CIImage {
-
-    /// The image with its alpha multiplied by `opacity`.
-    nonisolated func fading(to opacity: Double) -> CIImage {
-        applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: opacity)])
     }
 }

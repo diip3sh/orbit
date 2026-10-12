@@ -76,4 +76,12 @@ nonisolated struct PointerClip: Codable, Equatable, Sendable, TimelineClip {
         let count = Int((time - start) / (end - start) * Double(text.count)) + 1
         return String(text.prefix(min(count, text.count)))
     }
+
+    /// Characters entered during this clip, in the web renderer's frame-time space.
+    var keystrokes: [(time: Double, character: Character)] {
+        guard action != .hover, let text, !text.isEmpty else { return [] }
+        let start = range.lowerBound + min(Self.typingDelay, (range.upperBound - range.lowerBound) / 2)
+        let interval = min(Self.typingInterval, (range.upperBound - start) / Double(text.count))
+        return text.enumerated().map { (start + Double($0.offset) * interval, $0.element) }
+    }
 }

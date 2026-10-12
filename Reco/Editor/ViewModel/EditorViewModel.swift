@@ -98,8 +98,12 @@ final class EditorViewModel {
 
     let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "EditorViewModel")
 
-    init(videoURL: URL) {
+    /// The look a new project starts with, from the take this one replaces in its window.
+    @ObservationIgnored private let style: EditorProject?
+
+    init(videoURL: URL, style: EditorProject? = nil) {
         self.videoURL = videoURL
+        self.style = style
     }
 
     /// Loads the recording and its project; the window shows a placeholder meanwhile. With `time`, loads
@@ -108,6 +112,7 @@ final class EditorViewModel {
         guard source == nil || time != nil else { return }
         let source: EditorSource
         let project: EditorProject
+        let saved: EditorProject
         do {
             source = try await EditorSourceLoader.load(videoURL: videoURL)
         } catch {
@@ -115,9 +120,10 @@ final class EditorViewModel {
             return
         }
         do {
-            // A new project starts with the automatic zooms
-            project = try await ProjectStore.read(for: videoURL)
-                ?? EditorProject(zooms: source.telemetry.map { AutoZoomGenerator.segments(for: $0, duration: source.duration) } ?? [])
+            // A new project starts with the automatic zooms, and is saved only once edited or restyled.
+            // A take replacing another takes its look, whether it brought a project (a web take's zooms) or not
+            saved = try await ProjectStore.read(for: videoURL) ?? EditorProject(opening: source)
+            project = style.map(saved.styled(like:)) ?? saved
         } catch {
             fail(.unreadableProject(error))
             return

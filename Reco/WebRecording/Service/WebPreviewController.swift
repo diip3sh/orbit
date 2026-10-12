@@ -268,4 +268,3 @@ extension WebPreviewController {
         CGPoint(x: point.x * webView.pageZoom, y: point.y * webView.pageZoom)
     }
 }
-

@@ -26,7 +26,7 @@ struct ZoomLane: View {
             onMoveStart: { viewModel.moveZoomStart($0, to: $1) },
             onMoveEnd: { viewModel.moveZoomEnd($0, to: $1) },
             selection: selected,
-            block: { zoom, isDragged in
+            block: { zoom, isDragged in // swiftlint:disable:this trailing_closure
                 ZoomBlock(zoom: zoom, isSelected: zoom.id == selected, isDragged: isDragged)
             }
         )

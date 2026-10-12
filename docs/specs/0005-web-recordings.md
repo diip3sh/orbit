@@ -92,7 +92,8 @@ A feature folder, `Reco/WebRecording/{Model,Service,ViewModel,View}`.
     it. Following the element instead flew the cursor off the top of the page as it scrolled.
   - Between clips it travels from where it rested on a gentle arc, eased in and out, ending at the
     next clip's start and taking the gap up to 1 s.
-  - Before the first clip, it follows the first target.
+  - Before the first clip, it waits in the middle of the view, then travels to the first target
+    (spec 0008: the take opens wide, and the first stop is an arrival the editor zooms on).
 - **Target:** a CSS selector made when the user picks an element, the point picked within its box (as
   fractions), and the picked point in the viewport, used when the selector matches nothing.
 - **Scroll clip:** where the page is scrolled to at its end, and an easing (linear, ease in, ease out,

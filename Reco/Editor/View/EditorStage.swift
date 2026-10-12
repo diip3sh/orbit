@@ -11,7 +11,7 @@ import SwiftUI
 struct EditorStage: View {
     let viewModel: EditorViewModel
 
-    private static let cornerRadius: CGFloat = 10
+    private static let cornerRadius: CGFloat = 8
 
     var body: some View {
         // Continuous, like the player layer's corners: a circular one left the black backing showing at each corner

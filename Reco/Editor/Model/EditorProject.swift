@@ -54,6 +54,34 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - New projects
+
+extension EditorProject {
+
+    /// The project a recording without one opens with: the styled default with its automatic zooms.
+    nonisolated init(opening source: EditorSource) {
+        self.init(zooms: source.telemetry.map { AutoZoomGenerator.segments(for: $0, duration: source.duration) } ?? [])
+    }
+}
+
+// MARK: - Look
+
+extension EditorProject {
+
+    /// This project with `other`'s look: canvas, motion blur, cursor, click highlights and keystrokes, which a
+    /// new take of the same page keeps (spec 0008). Cuts, splits, zooms and audio belong to one
+    /// recording.
+    nonisolated func styled(like other: EditorProject) -> EditorProject {
+        var project = self
+        project.canvas = other.canvas
+        project.motionBlur = other.motionBlur
+        project.cursor = other.cursor
+        project.clickHighlights = other.clickHighlights
+        project.keystrokes = other.keystrokes
+        return project
+    }
+}
+
 // MARK: - Decoding
 
 extension EditorProject {

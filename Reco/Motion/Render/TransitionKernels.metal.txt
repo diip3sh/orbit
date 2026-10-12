@@ -1,0 +1,192 @@
+//
+//  TransitionKernels.metal.txt
+//  Reco
+//
+//  Graphic transitions any look may use (spec 0019), drawn in the brand's colours: an iris, bars, slats, tiles, a glitch,
+//  pixels, liquid and a spin's blur. The ones that move whole frames in space (split, flip, cube, flash, stretch) are drawn
+//  with Core Image's own filters (`TransitionRenderer+Space`).
+//
+//  Coordinates are output pixels from the bottom left. `frame` is (width, height, output pixels a pixel at 1080p, progress or
+//  time). Each kernel is compiled alone (`<name>_ONLY`), as the fields are: compiled together, Core Image drew only the first
+//  sampling kernel it drew (macOS 26.5).
+//
+
+#include <metal_stdlib>
+#include <CoreImage/CoreImage.h>
+
+using namespace metal;
+
+namespace seam {
+
+inline float4 at(coreimage::sampler image, float2 p) { return image.sample(image.transform(p)); }
+
+inline float hash(float2 p) { return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
+
+/// How much of a pixel lies inside an edge `d` pixels away (negative inside).
+inline float inside(float d) { return saturate(0.5 - d); }
+
+/// How much of a pixel `d` from a disc's middle the disc of `radius` covers: none while it's smaller than a pixel.
+inline float disc(float d, float radius) { return inside(d - radius) * saturate(radius); }
+
+/// CSS's out-expo, and in-out quart (cubic-bezier(0.76, 0, 0.24, 1) to within a hundredth).
+inline float outExpo(float t) { return t >= 1.0 ? 1.0 : 1.0 - exp2(-10.0 * saturate(t)); }
+inline float inOutQuart(float t) {
+    t = saturate(t);
+    return t < 0.5 ? 8.0 * t * t * t * t : 1.0 - 0.5 * pow(2.0 - 2.0 * t, 4.0);
+}
+
+inline float4 dimmed(float4 color, float by) { return float4(color.rgb * (1.0 - by), color.a); }
+
+}
+
+#ifdef irisSeam_ONLY
+/// An iris (``MotionSeam/iris``): a disc of `color` opens out of the origin ahead of the next scene's disc, leaving a ring of
+/// colour that thins as it goes; the scene before pushed in about the origin, the next coming back from closer. `iris`: the
+/// origin, the colour's radius, the next's (pixels). `zoom`: the scene before's magnification, the next's.
+[[stitchable]] float4 irisSeam(
+    coreimage::sampler before, coreimage::sampler next, float4 frame, float4 iris, float2 zoom, float4 color, coreimage::destination dest
+) {
+    float2 p = dest.coord();
+    float2 o = iris.xy;
+    float d = length(p - o);
+    float4 shown = mix(seam::at(before, o + (p - o) / zoom.x), float4(color.rgb, 1.0), seam::disc(d, iris.z));
+    return mix(shown, seam::at(next, o + (p - o) / zoom.y), seam::disc(d, iris.w));
+}
+#endif
+
+#ifdef barsSeam_ONLY
+/// Bars (``MotionSeam/bars``): a bar of `first`, one of `second`, then the next scene sweep across from one side one after
+/// another, their edges slanted; the next scene slides the rest of its way in behind its edge. `frame`'s w: how far the edge
+/// leans, as a share of the frame's span. `axis`: the way they travel (a unit vector) and across it. `fronts`: each one's front
+/// as a share of the span (the slant added), and how far the next scene still has to slide (pixels).
+[[stitchable]] float4 barsSeam(
+    coreimage::sampler before, coreimage::sampler next, float4 frame, float4 axis, float4 fronts, float4 first, float4 second,
+    coreimage::destination dest
+) {
+    float2 p = dest.coord();
+    float2 centred = p - 0.5 * frame.xy;
+    float span = abs(axis.x) * frame.x + abs(axis.y) * frame.y;
+    float spanAcross = abs(axis.z) * frame.x + abs(axis.w) * frame.y;
+    float key = dot(centred, axis.xy) / span + 0.5 + frame.w * (dot(centred, axis.zw) / spanAcross + 0.5);
+    float pixel = 1.0 / span;
+    float4 shown = seam::at(before, p);
+    shown = mix(shown, float4(first.rgb, 1.0), saturate((fronts.x - key) / pixel));
+    shown = mix(shown, float4(second.rgb, 1.0), saturate((fronts.y - key) / pixel));
+    return mix(shown, seam::at(next, p + axis.xy * fronts.w), saturate((fronts.z - key) / pixel));
+}
+#endif
+
+#ifdef slatsSeam_ONLY
+/// Slats (``MotionSeam/slats``): the next scene comes in as horizontal strips sliding in from alternate sides, the middle
+/// ones first, in-out; the scene before darkens under them. `frame`'s w: progress. `slats`: how many, the wave's share of the
+/// seam, how dark the scene before goes.
+[[stitchable]] float4 slatsSeam(coreimage::sampler before, coreimage::sampler next, float4 frame, float4 slats, coreimage::destination dest) {
+    float2 p = dest.coord();
+    float count = slats.x;
+    float row = min(floor(p.y / frame.y * count), count - 1.0);
+    float side = fmod(row, 2.0) < 0.5 ? 1.0 : -1.0;
+    float middle = 0.5 * (count - 1.0);
+    float order = abs(row - middle) / max(middle, 1.0);
+    float t = saturate((frame.w - order * slats.y) / (1.0 - slats.y));
+    float shift = side * (1.0 - seam::inOutQuart(t)) * frame.x;
+    float x = p.x - shift;
+    float cover = saturate(min(x, frame.x - x) + 0.5) * step(0.0, t - 1e-5);
+    return mix(seam::dimmed(seam::at(before, p), slats.z * frame.w), seam::at(next, float2(x, p.y)), cover);
+}
+#endif
+
+#ifdef tilesSeam_ONLY
+/// Tiles (``MotionSeam/tiles``): the next scene comes in as a grid of tiles, each opening from a dot of `color` into a square
+/// of the scene, in a wave out of the origin; the scene before darkens under them. `frame`'s w: progress. `grid`: a tile's side
+/// (pixels), the wave's share of the seam, the origin.
+[[stitchable]] float4 tilesSeam(coreimage::sampler before, coreimage::sampler next, float4 frame, float4 grid, float4 color, coreimage::destination dest) {
+    float2 p = dest.coord();
+    float side = grid.x;
+    float2 centre = (floor(p / side) + 0.5) * side;
+    float2 o = grid.zw;
+    float far = max(max(length(o), length(o - float2(frame.x, 0.0))), max(length(o - frame.xy), length(o - float2(0.0, frame.y))));
+    float t = saturate((frame.w - length(centre - o) / far * grid.y) / (1.0 - grid.y));
+    float grown = seam::outExpo(t) * step(1e-5, t);
+    // Half a pixel past its cell once whole, so neighbours meet without a seam
+    float reach = (0.5 * side + 0.5) * grown;
+    float radius = reach * (1.0 - smoothstep(0.2, 1.0, grown));
+    float2 q = abs(p - centre) - (reach - radius);
+    float edge = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+    float4 tile = mix(float4(color.rgb, 1.0), seam::at(next, p), smoothstep(0.35, 0.85, grown));
+    return mix(seam::dimmed(seam::at(before, p), 0.35 * frame.w), tile, seam::inside(edge) * saturate(reach));
+}
+#endif
+
+#ifdef glitchSeam_ONLY
+/// A glitch (``MotionSeam/glitch``): the frame tears into bands shifted sideways with its colour channels apart, blocks of the
+/// next scene and a few of `color` showing through, a new tear each step, until the next is whole. `glitch`: the step (whole),
+/// how strong (0–1), how much of the next shows (0–1).
+[[stitchable]] float4 glitchSeam(coreimage::sampler before, coreimage::sampler next, float4 frame, float4 glitch, float4 color, coreimage::destination dest) {
+    float2 p = dest.coord();
+    float unit = frame.z;
+    float tick = glitch.x;
+    float strength = glitch.y;
+    float tall = unit * 18.0 * (0.4 + 1.6 * seam::hash(float2(floor(p.y / (unit * 72.0)), tick + 0.37)));
+    float band = floor(p.y / tall);
+    float torn = step(0.45, seam::hash(float2(band, tick + 1.3)));
+    float shift = (seam::hash(float2(band * 1.7, tick + 7.1)) - 0.5) * 0.16 * frame.x * strength * torn;
+    float2 block = float2(floor(p.x / (unit * 150.0)), band);
+    float useNext = step(seam::hash(block + float2(tick * 3.1, 0.5)), glitch.z);
+    float split = strength * unit * 12.0;
+    float2 q = float2(p.x + shift, p.y);
+    float4 middle = mix(seam::at(before, q), seam::at(next, q), useNext);
+    float red = mix(seam::at(before, q + float2(split, 0.0)).r, seam::at(next, q + float2(split, 0.0)).r, useNext);
+    float blue = mix(seam::at(before, q - float2(split, 0.0)).b, seam::at(next, q - float2(split, 0.0)).b, useNext);
+    float tint = step(0.985 - 0.035 * strength, seam::hash(block * 2.3 + float2(tick, 4.0))) * strength;
+    return float4(mix(float3(red, middle.g, blue), color.rgb, 0.9 * tint), 1.0);
+}
+#endif
+
+#ifdef pixelSeam_ONLY
+/// Pixels (``MotionSeam/pixelate``): blocks centred on the frame's middle, `cells.x` pixels a side, of the scene before
+/// (`cells.y` 0) or the next (1).
+[[stitchable]] float4 pixelSeam(coreimage::sampler before, coreimage::sampler next, float4 frame, float2 cells, coreimage::destination dest) {
+    float2 middle = 0.5 * frame.xy;
+    float2 centre = (floor((dest.coord() - middle) / cells.x) + 0.5) * cells.x + middle;
+    return mix(seam::at(before, centre), seam::at(next, centre), cells.y);
+}
+#endif
+
+#ifdef liquidSeam_ONLY
+/// Liquid (``MotionSeam/liquid``): blobs of `first` and `second` swell out of the origin with wobbling edges, the next scene's
+/// following inside them, until it covers the frame. `frame`'s w: seconds, for the wobble. `origin`: the origin. `radii`: each
+/// blob's radius (pixels), how far their edges wobble (a share of the radius).
+[[stitchable]] float4 liquidSeam(
+    coreimage::sampler before, coreimage::sampler next, float4 frame, float2 origin, float4 radii, float4 first, float4 second,
+    coreimage::destination dest
+) {
+    float2 d = dest.coord() - origin;
+    float r = length(d);
+    float a = atan2(d.y, d.x);
+    float t = frame.w;
+    float w1 = 0.5 * sin(3.0 * a + 2.1 * t) + 0.3 * sin(5.0 * a - 3.3 * t + 1.0) + 0.2 * sin(7.0 * a + 4.0 * t + 2.0);
+    float w2 = 0.5 * sin(3.0 * a - 1.7 * t + 2.5) + 0.3 * sin(4.0 * a + 2.9 * t) + 0.2 * sin(6.0 * a - 3.7 * t + 1.3);
+    float w3 = 0.5 * sin(2.0 * a + 1.3 * t + 4.1) + 0.3 * sin(5.0 * a + 2.3 * t + 0.7) + 0.2 * sin(8.0 * a - 2.9 * t);
+    float4 shown = mix(seam::at(before, dest.coord()), float4(first.rgb, 1.0), seam::disc(r, radii.x * (1.0 + radii.w * w1)));
+    shown = mix(shown, float4(second.rgb, 1.0), seam::disc(r, radii.y * (1.0 + radii.w * w2)));
+    return mix(shown, seam::at(next, dest.coord()), seam::disc(r, radii.z * (1.0 + radii.w * w3)));
+}
+#endif
+
+#ifdef spinSeam_ONLY
+/// A spin's frame (``MotionSeam/spin``): `image` turned `spin.x` radians about the frame's middle and magnified `spin.y` times,
+/// blurred along its turn over `spin.z` radians.
+[[stitchable]] float4 spinSeam(coreimage::sampler image, float4 frame, float4 spin, coreimage::destination dest) {
+    float2 middle = 0.5 * frame.xy;
+    float2 d = (dest.coord() - middle) / spin.y;
+    float4 sum = float4(0.0);
+    const int taps = 32;
+    for (int i = 0; i < taps; i++) {
+        float a = -spin.x + spin.z * ((float(i) + 0.5) / float(taps) - 0.5);
+        float c = cos(a);
+        float s = sin(a);
+        sum += seam::at(image, middle + float2(d.x * c - d.y * s, d.x * s + d.y * c));
+    }
+    return sum / float(taps);
+}
+#endif

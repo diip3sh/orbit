@@ -27,12 +27,17 @@ nonisolated enum AgentToolCatalog {
     static let inspectPage = "inspect_page"
     static let recordPage = "record_page"
     static let renderStatus = "render_status"
+    static let exportRecording = "export_recording"
+    static let editMotion = "edit_motion"
+    static let captureUI = "capture_ui"
+    static let previewMotion = "preview_motion"
     static let openPage = "open_page"
     static let look = "look"
     static let readPage = "read_page"
     static let click = "click"
     static let hover = "hover"
     static let type = "type"
+    static let browsingNames = Set(browsingTools.map(\.name))
 
     /// Every tool, for agents whose permissions list them one by one.
     static var names: [String] {
@@ -51,7 +56,8 @@ nonisolated enum AgentToolCatalog {
                 """,
             schema: #"""
             {"type":"object","properties":{"url":{"type":"string","description":"Page address; https:// added if missing"},
-            "viewport":{"type":"string","enum":["desktop","laptop","tablet","phone"],"default":"desktop"}},
+            "viewport":{"type":"string","enum":["desktop","laptop","tablet","phone"],"default":"desktop"},
+            "selectors":{"type":"array","items":{"type":"string"},"description":"CSS selectors whose boxes to return"}},
             "required":["url"],"additionalProperties":false}
             """#
         ),
@@ -95,6 +101,54 @@ nonisolated enum AgentToolCatalog {
                 """,
             schema: #"""
             {"type":"object","properties":{"render_id":{"type":"string"}},"required":["render_id"],"additionalProperties":false}
+            """#
+        ),
+        Definition(
+            name: exportRecording,
+            description: """
+                Exports a recording as a finished video with Reco's edit: the zooms, the drawn cursor, click highlights and the \
+                background, as its editor shows it; or a motion video (a .motion bundle from edit_motion) as it plays. Saved next to \
+                the movie or bundle as <name>-edited. Use gif for READMEs, pull requests \
+                and chats (silent, loops, 540 px at 25 fps for motion videos), hevc for a small MP4. Returns when the file is \
+                written or after 45 s with status exporting; then call it again with the \
+                same arguments until done. One export at a time.
+                """,
+            schema: #"""
+            {"type":"object","properties":{"movie":{"type":"string","description":"Path of the movie, from record_page or render_status, or of a .motion bundle"},
+            "format":{"type":"string","enum":["hevc","gif","prores422","prores4444"],"default":"hevc"},
+            "resolution":{"type":"integer","description":"Shorter side in px, smaller than the recording's (a motion video's: up to \#
+            twice its canvas); motion GIF defaults to 540"},
+            "frame_rate":{"type":"integer","description":"No higher than the recording's; GIFs should be 30 fps or less"}},
+            "required":["movie"],"additionalProperties":false}
+            """#
+        ),
+        Definition(name: editMotion, description: editMotionDescription, schema: editMotionSchema),
+        Definition(
+            name: captureUI,
+            description: """
+                Captures the UI a motion video shows: each asset's element lifted off its page alone, with its own rounded \
+                corners (a still), or a take of it played with its steps (live). Returns each asset's size in CSS px and the \
+                rules' findings, which know the sizes now. Fails naming an asset whose selector matched nothing or lies outside \
+                its viewport: fix its selector with set_asset. Waits up to 45 s; with status working, call it again with the same \
+                bundle.
+                """,
+            schema: #"""
+            {"type":"object","properties":{"bundle":{"type":"string","description":"The .motion bundle's path from edit_motion"}},
+            "required":["bundle"],"additionalProperties":false}
+            """#
+        ),
+        Definition(
+            name: previewMotion,
+            description: """
+                Looks at a motion video: one image with a frame of each scene once its layers are in (at most 12, three a row, in \
+                order; frames lists which scene and when), what the design check sees in the frames (a frame showing nothing, \
+                an accent over 5% of the frame) and the rules' findings. Captures the UI first if needed. Look at the image: \
+                text that is cut off, overlaps the UI or is hard to read, an element that is the wrong one or empty. Waits up \
+                to 45 s; with status working, call it again with the same bundle.
+                """,
+            schema: #"""
+            {"type":"object","properties":{"bundle":{"type":"string","description":"The .motion bundle's path from edit_motion"}},
+            "required":["bundle"],"additionalProperties":false}
             """#
         )
     ]

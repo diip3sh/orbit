@@ -96,7 +96,7 @@ nonisolated enum LibraryStore {
         return abs(shown.width / shown.height)
     }
 
-    private static func contents(of folder: URL) throws -> [(url: URL, type: UTType?, date: Date)] {
+    private static func contents(of folder: URL) throws -> [(url: URL, type: UTType?, date: Date)] { // swiftlint:disable:this large_tuple
         let keys: [URLResourceKey] = [.contentTypeKey, .creationDateKey]
         let urls: [URL]
         do {

@@ -8,6 +8,8 @@
 import AppKit
 import Foundation
 
+// Recording settings and migration of saved defaults are kept in this existing store.
+// swiftlint:disable file_length
 /// Video codec options for recording
 enum VideoCodec: String, CaseIterable, Identifiable {
     case h264 = "H.264"
@@ -239,7 +241,7 @@ enum HDRPreset {
 /// Persists user preferences using UserDefaults
 @MainActor
 @Observable
-final class SettingsStore {
+final class SettingsStore { // swiftlint:disable:this type_body_length
 
     // MARK: - Dependencies
 

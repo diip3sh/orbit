@@ -26,6 +26,10 @@ nonisolated struct WebScript: Codable, Equatable, Sendable {
     /// The Scroll lane, sorted and apart.
     var scrolls: [ScrollClip] = []
 
+    /// Selectors of what's hidden on every page of the take, like a cookie banner or a chat button;
+    /// `nil` for nothing (scripts saved before it have none).
+    var hide: [String]?
+
     static let frameRate = 60
 
     /// The shortest a script can be, in seconds.
@@ -87,10 +91,11 @@ nonisolated extension WebScript {
     /// Where the cursor is at a moment.
     enum PointerPosition: Equatable, Sendable {
 
-        /// On the target, following it: during a clip, and before the first.
+        /// On the target, following it, during a clip.
         case following(WebTarget)
 
-        /// Still, where it was when the clip on this target ended, while the page may scroll under it.
+        /// Still, where it was when the clip on this target ended, while the page may scroll under it,
+        /// or in the middle of the view before the first clip.
         case resting(WebTarget)
 
         /// On its way from where it rested to the next target. `progress` is eased, from 0 to 1.
@@ -145,11 +150,25 @@ nonisolated extension WebScript {
 
     /// Where the cursor is at `time`, or `nil` when the Cursor lane is empty. ``PointerTrack`` turns
     /// it into a location.
+    ///
+    /// Before the first clip the cursor waits in the middle of the view, then travels to the first
+    /// target, so a take opens on the whole page and its first stop is an arrival, which the editor
+    /// zooms on. A clip that types rests from its first key.
     func pointerPosition(at time: Double) -> PointerPosition? {
         guard let first = pointer.first else { return nil }
-        guard let index = pointer.lastIndex(where: { $0.range.lowerBound <= time }) else { return .following(first.target) }
+        guard let index = pointer.lastIndex(where: { $0.range.lowerBound <= time }) else {
+            let entry = WebTarget(point: CGPoint(x: viewport.width / 2, y: viewport.height / 2))
+            let travel = min(first.range.lowerBound, Self.maximumTravel)
+            let departure = first.range.lowerBound - travel
+            guard time > departure, travel > 0 else { return .resting(entry) }
+            return .travelling(start: entry, end: first.target, progress: Easing.easeInOut((time - departure) / travel))
+        }
         let clip = pointer[index]
-        guard time >= clip.range.upperBound else { return .following(clip.target) }
+        // Typing, the hand is on the keys: the cursor stays where it clicked though the field changes
+        // shape (Supabase's search grows a clear button and moved it 12 pt)
+        if time < clip.range.upperBound {
+            return clip.keystrokes.first.map { time >= $0.time } == true ? .resting(clip.target) : .following(clip.target)
+        }
         guard index + 1 < pointer.count else { return .resting(clip.target) }
 
         let next = pointer[index + 1]
@@ -168,6 +187,14 @@ nonisolated extension WebScript {
             return [Press(time: press, isDown: true, target: clip.target), Press(time: release, isDown: false, target: clip.target)]
         }
         .filter { $0.time > start + Self.pressTolerance && $0.time <= end + Self.pressTolerance }
+    }
+
+    /// The characters typed after `start` and up to and including `end`, give or take
+    /// ``pressTolerance``, in time order, each with the target it's typed into.
+    func keystrokes(after start: Double, through end: Double) -> [(character: Character, target: WebTarget)] {
+        pointer.flatMap { clip in
+            clip.keystrokes.filter { $0.time > start + Self.pressTolerance && $0.time <= end + Self.pressTolerance }.map { ($0.character, clip.target) }
+        }
     }
 
     /// The point `progress` of the way from `start` to `end` along a gentle arc that bows to the left

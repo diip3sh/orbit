@@ -6,11 +6,12 @@
 import Foundation
 
 /// State and intents of the Record with AI Agent panel (spec 0007): the address and instructions the
-/// user types, which agent and model run them, and how the run is going.
+/// user types, which agent and model run them, and how the run is going. It also runs what the
+/// editor's agent chat asks (spec 0008): one run at a time, from either.
 ///
 /// A run starts the agent's command line with only Reco's MCP tools allowed. The agent inspects the
-/// page and records it through ``AgentTools``; the finished movie opens in the editor by itself. This
-/// type only watches that render, to show it and to tell success from failure.
+/// page and records it through ``AgentTools``. This type only watches that render, to show it and to
+/// tell success from failure, and hands the take to ``onRecorded`` when the run ends.
 @MainActor
 @Observable
 final class AgentRecordingViewModel {
@@ -29,6 +30,10 @@ final class AgentRecordingViewModel {
 
     var address = ""
     var instructions = ""
+
+    var mode: AgentRecordingRequest.Mode {
+        didSet { defaults.set(mode.rawValue, forKey: Self.modeKey) }
+    }
 
     /// Every run's request, what the agent said and the tools it used, for the Web Recording window's
     /// Agent tab (spec 0008). A run from the panel shows there too.
@@ -66,6 +71,8 @@ final class AgentRecordingViewModel {
 
     /// Called when a run ends with a movie, which the editor has opened.
     @ObservationIgnored var onSucceeded: (() -> Void)?
+    @ObservationIgnored var onRecorded: ((AgentRecordedTake) -> Void)?
+    @ObservationIgnored var onSignIn: ((URL) -> Void)?
 
     /// Called when a chat run ends with its plan on the Web Recording window's timeline, for the window
     /// to render it; the movie then opens in the editor like any render.
@@ -90,8 +97,12 @@ final class AgentRecordingViewModel {
     /// The render that was the bridge's latest when the run started, which isn't the run's.
     private var startingRenderID: String?
 
+    /// How many motion videos had been edited when the run started.
+    private var startingMotionEdits = 0
+
     static let agentKey = "agentRecordingAgent"
     static let modelKey = "agentRecordingModel"
+    static let modeKey = "agentRecordingMode"
     private static let pollInterval = Duration.milliseconds(250)
 
     /// - Parameters:
@@ -123,6 +134,7 @@ final class AgentRecordingViewModel {
         self.loadEnvironment = loadEnvironment
         self.isExecutable = isExecutable
         self.runProcess = runProcess
+        mode = defaults.string(forKey: Self.modeKey).flatMap(AgentRecordingRequest.Mode.init(rawValue:)) ?? .walkthrough
         agent = defaults.string(forKey: Self.agentKey).flatMap(AgentKind.init(rawValue:))
         model = defaults.string(forKey: Self.modelKey)
     }
@@ -149,6 +161,25 @@ final class AgentRecordingViewModel {
         return job.progress
     }
 
+    /// What the run's agent is doing in Reco, while it runs: rendering, looking at a page, or working
+    /// on a motion video.
+    var activity: String? {
+        guard isRunning else { return nil }
+        if let progress {
+            return "Recording… \(progress.formatted(.percent.precision(.fractionLength(0))))"
+        }
+        if let page = tools.inspecting {
+            return "Looking at \(page.host(percentEncoded: false) ?? page.absoluteString)…"
+        }
+        return tools.motionActivity
+    }
+
+    /// Why the panel's last run failed; a chat's failure shows in its chat.
+    var panelFailure: String? {
+        guard lastRequest?.subject == nil, case .failed(let reason) = phase else { return nil }
+        return reason
+    }
+
     /// What the menu bar shows while a run is going: the render's percent once it has started, "AI"
     /// before, and nothing otherwise.
     var menuBarText: String? {
@@ -158,7 +189,9 @@ final class AgentRecordingViewModel {
 
     // MARK: - Agents
 
-    /// Looks for connected agents again, e.g. when the panel opens; the last answer stays meanwhile.
+    /// Looks for agents again, e.g. when the panel opens; the last answer stays meanwhile. Claude Code
+    /// and Cursor need only their command line, since each run gives them Reco's server; the others
+    /// need connecting in Settings → Agents.
     func refreshAgents() async {
         isLookingForAgents = true
         defer { isLookingForAgents = false }
@@ -202,7 +235,15 @@ final class AgentRecordingViewModel {
         guard !isRunning else { return nil }
         guard let url = WebScript.url(from: address) else { return .address }
         guard let agent else { return nil }
-        run(AgentRecordingRequest(url: url, instructions: instructions, agent: agent, model: model))
+        run(AgentRecordingRequest(url: url, instructions: instructions, agent: agent, mode: mode, model: model, variation: .random(in: 1...6)))
+        return nil
+    }
+
+    /// Opens the typed page to sign in to: takes share the Web Recording window's cookies. Returns
+    /// the address field when it names no page.
+    func signIn() -> Field? {
+        guard let url = WebScript.url(from: address) else { return .address }
+        onSignIn?(url)
         return nil
     }
 
@@ -213,6 +254,7 @@ final class AgentRecordingViewModel {
         lastMovie = nil
         transcript.addRequest(request.summary)
         startingRenderID = tools.job?.renderID
+        startingMotionEdits = tools.motionEdits
         tools.hostsRun = true
         tools.stagesPlans = !request.rendersVideo
         phase = .running(request.agent)
@@ -263,10 +305,11 @@ final class AgentRecordingViewModel {
     }
 
     private func execute(_ request: AgentRecordingRequest) async {
-        let deadline = ContinuousClock.now + AgentRunOutcome.timeLimit
+        let deadline = ContinuousClock.now + request.timeLimit
         var outcome: AgentRunOutcome
+        var output = ""
         do {
-            outcome = try await perform(request, deadline: deadline)
+            (outcome, output) = try await perform(request, deadline: deadline)
         } catch {
             outcome = Task.isCancelled ? .cancelled : .failed(reason: error.localizedDescription)
         }
@@ -274,24 +317,32 @@ final class AgentRecordingViewModel {
         guard !Task.isCancelled else { return }
         endRun()
         switch outcome {
-        case .succeeded:
+        case .succeeded(let path), .edited(let path):
             phase = .idle
             // A success is this run's render, so a planned job is the plan the run staged
             if tools.job?.status == .planned {
                 onPlanStaged?()
             } else {
                 lastMovie = tools.job?.movie.map { URL(fileURLWithPath: $0) }
+                if !path.isEmpty {
+                    let reply = token.isEmpty ? output : output.replacing(token, with: "…")
+                    onRecorded?(AgentRecordedTake(movie: URL(filePath: path), request: request, output: reply))
+                }
                 onSucceeded?()
             }
         case .cancelled:
             phase = .idle
         case .failed(let reason):
             phase = .failed(reason)
-            reportFailure(reason)
+            // A chat shows its failure where the user asked
+            if request.subject == nil {
+                reportFailure(reason)
+            }
         }
     }
 
-    private func perform(_ request: AgentRecordingRequest, deadline: ContinuousClock.Instant) async throws -> AgentRunOutcome {
+    /// Runs `request`'s command line and waits for its render: how it ended and what it printed.
+    private func perform(_ request: AgentRecordingRequest, deadline: ContinuousClock.Instant) async throws -> (AgentRunOutcome, String) {
         let environment: [String: String]
         if let cached = self.environment {
             environment = cached
@@ -300,7 +351,7 @@ final class AgentRecordingViewModel {
         }
         guard let invocation = AgentInvocation.make(for: request, in: directory, server: store.command),
               let executable = executable(for: request.agent, in: environment) else {
-            return .failed(reason: "Orbit couldn't find \(request.agent.displayName)'s command in your login shell.")
+            return (.failed(reason: "Orbit couldn't find \(request.agent.displayName)'s command in your login shell."), "")
         }
         // The command runs in it, so it must exist even when the agent needs no files there
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -320,14 +371,17 @@ final class AgentRecordingViewModel {
         if case .exited = end, !(await waitForRender(until: deadline)) {
             end = Task.isCancelled ? .cancelled : .timedOut
         }
-        return AgentRunOutcome.classify(
+        let outcome = AgentRunOutcome.classify(
             end: end, agent: request.agent, job: tools.job, startingRenderID: startingRenderID,
             // A streaming agent's stdout is JSON; what it last said explains a failure instead
             outputReason: OutputTail.reason(
                 stdout: AgentStreamEvent.streams(request.agent) ? transcript.lastReply ?? "" : result.stdout,
                 stderr: result.stderr, redacting: [token]
-            )
+            ),
+            editedMotion: tools.motionEdits > startingMotionEdits ? tools.lastMotionBundle : nil,
+            limit: request.timeLimit
         )
+        return (outcome, result.stdout)
     }
 
     /// Waits while this run's render goes on; `false` when `deadline` or a cancel came first.

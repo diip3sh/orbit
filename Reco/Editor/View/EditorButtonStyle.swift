@@ -78,6 +78,7 @@ private struct EditorButton: View {
             .frame(minHeight: 30)
             .background { surface }
             .contentShape(shape)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .opacity(isEnabled ? 1 : 0.4)
             // The press shows on the frame it lands; only the release eases
             .scaleEffect(isEnabled && configuration.isPressed ? 0.97 : 1)

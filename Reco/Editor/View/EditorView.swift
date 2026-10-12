@@ -12,6 +12,10 @@ import SwiftUI
 /// preview grows into the room, and the inspector shows the export's options; Back (Esc) undoes it.
 struct EditorView: View {
     let viewModel: EditorViewModel
+    let chat: AgentChatViewModel
+
+    /// The smallest content the window allows: the side panel beside a stage that still shows its transport.
+    static let minimumSize = CGSize(width: 900, height: 560)
 
     @State private var showsInspector = true
 
@@ -28,6 +32,9 @@ struct EditorView: View {
     /// Entering and leaving export: critically damped like every state change, a little quicker than
     /// `EditorTheme.motion` since nothing travels far.
     private static let exportMotion = Animation.spring(response: 0.25, dampingFraction: 1)
+
+    /// The side panel the user picked, if they did.
+    @State private var pickedPanel: EditorSidePanel.Panel?
 
     var body: some View {
         Group {
@@ -56,7 +63,7 @@ struct EditorView: View {
                         if let export {
                             ExportOptions(viewModel: viewModel, session: export)
                         } else {
-                            EditorInspector(viewModel: viewModel, tab: $inspectorTab)
+                            EditorSidePanel(viewModel: viewModel, chat: chat, tab: $inspectorTab, picked: $pickedPanel)
                         }
                     }
                     .transition(.opacity)
@@ -96,8 +103,11 @@ struct EditorView: View {
             }
         }
         .editorMotion(.smooth, value: viewModel.source == nil)
-        .task {
+        .task(id: viewModel.videoURL) {
             await viewModel.load()
+        }
+        .task(id: chat.movie) {
+            await chat.load()
         }
     }
 

@@ -1,0 +1,873 @@
+//
+//  FieldKernels.metal.txt
+//  Reco
+//
+//  The fields of spec 0012, Q2: Paper Shaders 0.0.81's grain gradient (ember, sunlit, bloom, orb,
+//  ripple), dithering (matrix, warp, swirl, tide) and smoke ring (halo), Copyright 2026 Paper,
+//  Apache-2.0, ported from their GLSL (docs/references/paper-shaders) to Core Image stitchable kernels;
+//  seams drawn in their languages (a front of grainy light, ordered dither, a ring of smoke); and Reco's
+//  own satin and its grain, after New Raycast's film.
+//
+//  Each draws its frame as the 1280×720 gallery tile the look was picked from would, at a pixel
+//  ratio of 2: `frame` is (reference pixels per output pixel, the reference width and height, the
+//  look's time). Sizing is the library's defaults with the picked scale. GLSL's mod is
+//  x − y·floor(x / y), which Metal's fmod isn't for negative x. `view` is how the camera has moved the
+//  field: its zoom and its shift in reference pixels (y up). It's an argument, never a transform of the
+//  kernel's output: two of one kernel's images moved differently in one frame (motion blur's samples, a
+//  seam's two scenes) drew one of them as streaks (macOS 26.5).
+//
+//  FieldRenderer compiles each kernel alone, defining `<name>_ONLY`: compiled together, Core Image
+//  drew only whichever sampling kernel it drew first and the other came out transparent (macOS
+//  26.5).
+//
+
+#include <metal_stdlib>
+#include <CoreImage/CoreImage.h>
+
+using namespace metal;
+
+namespace paper {
+
+constant float twoPi = 6.28318530718;
+constant float pi = 3.14159265358979323846;
+constant int bayer4x4[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+
+inline float2 mod289(float2 x) { return x - 289.0 * floor(x / 289.0); }
+inline float3 mod289(float3 x) { return x - 289.0 * floor(x / 289.0); }
+inline float3 permute(float3 x) { return mod289((x * 34.0 + 1.0) * x); }
+
+inline float snoise(float2 v) {
+    const float4 c = float4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+    float2 i = floor(v + dot(v, c.yy));
+    float2 x0 = v - i + dot(i, c.xx);
+    float2 i1 = (x0.x > x0.y) ? float2(1.0, 0.0) : float2(0.0, 1.0);
+    float4 x12 = x0.xyxy + c.xxzz;
+    x12.xy -= i1;
+    i = mod289(i);
+    float3 p = permute(permute(i.y + float3(0.0, i1.y, 1.0)) + i.x + float3(0.0, i1.x, 1.0));
+    float3 m = max(0.5 - float3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
+    m = m * m;
+    m = m * m;
+    float3 x = 2.0 * fract(p * c.www) - 1.0;
+    float3 h = abs(x) - 0.5;
+    float3 ox = floor(x + 0.5);
+    float3 a0 = x - ox;
+    m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
+    float3 g;
+    g.x = a0.x * x0.x + h.x * x0.y;
+    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+    return 130.0 * dot(m, g);
+}
+
+inline float2 rotate(float2 uv, float angle) {
+    float c = cos(angle), s = sin(angle);
+    return float2(c * uv.x - s * uv.y, s * uv.x + c * uv.y);
+}
+
+/// The noise texture's red at `p`'s cell, as WebGL sampled it: linear, clamped, 128 px, its
+/// first row at the bottom (the image is flipped once in Swift).
+inline float randomR(coreimage::sampler noise, float2 p) {
+    float2 uv = fract(floor(p) / 100.0 + 0.5);
+    return noise.sample(noise.transform(uv * 128.0)).r;
+}
+
+inline float valueNoise(coreimage::sampler noise, float2 st) {
+    float2 i = floor(st);
+    float2 f = fract(st);
+    float a = randomR(noise, i);
+    float b = randomR(noise, i + float2(1.0, 0.0));
+    float c = randomR(noise, i + float2(0.0, 1.0));
+    float d = randomR(noise, i + float2(1.0, 1.0));
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+/// The CSS vignette the gallery laid over the field: radial-gradient(120% 90% at 50% 45%,
+/// transparent 55%, black `amount` 100%). `p` is from the frame's centre, y up.
+inline float4 vignetted(float3 color, float2 p, float2 size, float amount) {
+    float d = length((p - float2(0.0, 0.05 * size.y)) / (float2(1.2, 0.9) * size));
+    return float4(color * (1.0 - amount * clamp((d - 0.55) / 0.45, 0.0, 1.0)), 1.0);
+}
+
+// MARK: - Grain gradient
+
+/// The shape before grain at `p` (reference pixels from the frame's middle): a wave (`kind` 1), two
+/// corners (4), ripples (5), a blob (6) or a lit sphere (7). Objects are contained in the frame,
+/// patterns at a pixel ratio of 2.
+inline float grainShape(float2 p, float2 size, float kind, float t) {
+    float2 uv = kind > 3.5 ? p / min(size.x, size.y) : 0.0025 * p;
+    if (kind < 1.5) {
+        float wave = cos(0.5 * uv.x - 4.0 * t) * sin(1.5 * uv.x + 2.0 * t) * (0.75 + 0.25 * cos(6.0 * t));
+        return 1.0 - smoothstep(-1.0, 1.0, uv.y + wave);
+    }
+    if (kind < 4.5) {
+        uv *= 0.6;
+        float2 outer = float2(0.5);
+        float2 bl = smoothstep(float2(0.0), outer, uv + float2(0.1 + 0.1 * sin(3.0 * t), 0.2 - 0.1 * sin(5.25 * t)));
+        float2 tr = smoothstep(float2(0.0), outer, 1.0 - uv);
+        float shape = 1.0 - bl.x * bl.y * tr.x * tr.y;
+        uv = -uv;
+        bl = smoothstep(float2(0.0), outer, uv + float2(0.1 + 0.1 * sin(3.0 * t), 0.2 - 0.1 * cos(5.25 * t)));
+        tr = smoothstep(float2(0.0), outer, 1.0 - uv);
+        shape -= bl.x * bl.y * tr.x * tr.y;
+        return 1.0 - smoothstep(0.0, 1.0, shape);
+    }
+    if (kind < 5.5) {
+        float d = length(0.8 * uv);
+        return 0.5 + 0.5 * sin(pow(d, 1.2) * 5.0 - 3.0 * t);
+    }
+    if (kind < 6.5) {
+        float tt = 2.0 * t;
+        float shape = 0.5 * pow(1.0 - clamp(length(uv + 0.25 * float2(1.3 * sin(tt), 0.2 + 1.3 * cos(0.6 * tt + 4.0))), 0.0, 1.0), 5.0);
+        shape += 0.5 * pow(1.0 - clamp(length(uv + 0.2 * float2(1.2 * sin(-tt), 1.3 * sin(1.6 * tt))), 0.0, 1.0), 5.0);
+        shape += 0.5 * pow(1.0 - clamp(length(uv + 0.25 * float2(1.7 * cos(-0.6 * tt), cos(-1.6 * tt))), 0.0, 1.0), 5.0);
+        shape += 0.5 * pow(1.0 - clamp(length(uv + 0.3 * float2(1.4 * cos(0.8 * tt), 1.2 * sin(-0.6 * tt - 3.0))), 0.0, 1.0), 5.0);
+        shape = smoothstep(0.0, 0.9, shape);
+        return shape * smoothstep(0.25, 0.3, shape);
+    }
+    uv *= 2.0;
+    float d = 1.0 - dot(uv, uv);
+    float3 position = float3(uv, sqrt(max(d, 0.0)));
+    float3 light = normalize(float3(cos(1.5 * t), 0.8, sin(1.25 * t)));
+    return (0.5 + 0.5 * dot(light, position)) * step(0.0, d);
+}
+
+/// fbmR's three slow octave stacks, which don't change across a pixel.
+inline float3 slowFbm(coreimage::sampler noise, float2 n0, float2 n1, float2 n2) {
+    float amplitude = 0.2;
+    float3 total = float3(0.0);
+    for (int i = 0; i < 3; i++) {
+        n0 = rotate(n0, 0.3);
+        n1 = rotate(n1, 0.3);
+        n2 = rotate(n2, 0.3);
+        total += float3(valueNoise(noise, n0), valueNoise(noise, n1), valueNoise(noise, n2)) * amplitude;
+        n0 *= 1.99;
+        n1 *= 1.99;
+        n2 *= 1.99;
+        amplitude *= 0.6;
+    }
+    return total;
+}
+
+/// fbmR's fourth stack, at 0.4 of the grain: it changes across a pixel.
+inline float fastFbm(coreimage::sampler noise, float2 n3) {
+    float amplitude = 0.2;
+    float total = 0.0;
+    for (int i = 0; i < 3; i++) {
+        n3 = rotate(n3, 0.3);
+        total += valueNoise(noise, n3) * amplitude;
+        n3 *= 1.99;
+        amplitude *= 0.6;
+    }
+    return total;
+}
+
+/// The grain at `g`: how much it distorts the shape, and its speckle. fbmR adds its fourth stack
+/// to the third and leaves the fourth sum at 0; kept, as that's the look picked.
+inline float2 grain(coreimage::sampler noise, float2 g, float3 slow) {
+    float base = snoise(g * 0.5);
+    float z = slow.z + fastFbm(noise, rotate(0.4 * g, 2.0));
+    return float2(base * snoise(g * 0.2) - slow.x - slow.y, clamp(0.75 * base - z, 0.0, 1.0));
+}
+
+}
+
+#ifdef grainGradientField_ONLY
+/// `look` is (softness, intensity, noise, shape: grainShape's kinds); three colours on `back`.
+[[stitchable]] float4 grainGradientField(
+    coreimage::sampler noise, float4 frame, float4 view, float4 look, float vignette, float4 back, float4 c0, float4 c1, float4 c2,
+    coreimage::destination dest
+) {
+    float2 size = frame.yz;
+    float2 framed = dest.coord() * frame.x - 0.5 * size;
+    float2 p = (framed - view.yz) / view.x;
+    float t = 0.1 * (frame.w + 7.0);
+    float softness = look.x, kind = look.w;
+    float grainStep = kind > 3.5 ? 0.7 : 0.8;
+    float2 g = grainStep * p;
+
+    float3 slow = paper::slowFbm(noise, 0.002 * g + 10.0, 0.003 * g, 0.001 * g);
+    float distortion = look.y * 2.0 / 3.0, speckle = look.z * 10.0 / 3.0;
+    float2 here = paper::grain(noise, g, slow);
+    float shape = paper::grainShape(p, size, kind, t) + distortion * (here.x + 0.5) + speckle * here.y;
+    // fwidth(shape), which a Core Image kernel has no derivative for: its change to the other pixel
+    // of its 2×2 quad across and down, as a GPU takes it. The shape barely changes over a pixel; the
+    // grain does.
+    float2 toPartner = select(float2(grainStep), float2(-grainStep), fmod(floor(dest.coord() * frame.x), 2.0) > 0.5);
+    float2 across = paper::grain(noise, g + float2(toPartner.x, 0.0), slow);
+    float2 down = paper::grain(noise, g + float2(0.0, toPartner.y), slow);
+    float aa = abs(distortion * (across.x - here.x) + speckle * (across.y - here.y)) + abs(distortion * (down.x - here.x) + speckle * (down.y - here.y));
+
+    shape = clamp(shape - 0.5 / 3.0, 0.0, 1.0);
+    float total = smoothstep(0.0, softness + 2.0 * aa, clamp(shape * 3.0, 0.0, 1.0));
+    float mixer = shape * 2.0;
+    float4 gradient = float4(c0.rgb * c0.a, c0.a);
+    float4 stops[2] = { c1, c2 };
+    for (int i = 0; i < 2; i++) {
+        float local = clamp(mixer - float(i), 0.0, 1.0);
+        local = smoothstep(0.5 - 0.5 * softness - aa, 0.5 + 0.5 * softness + aa, local);
+        gradient = mix(gradient, float4(stops[i].rgb * stops[i].a, stops[i].a), local);
+    }
+    float opacity = gradient.a * total;
+    float3 color = gradient.rgb * total + back.rgb * back.a * (1.0 - opacity);
+    return paper::vignetted(color, framed, size, vignette);
+}
+#endif
+
+// MARK: - Dithering
+
+namespace paper {
+
+/// Dithering's shape at the cell centre `p` (reference pixels from the frame's middle) at `scale`:
+/// warp (`kind` 2), a wave (4), a swirl (6) or a lit sphere (7). Patterns at a pixel ratio of 2,
+/// objects contained in the frame.
+inline float ditherShape(float2 p, float2 size, float kind, float scale, float t) {
+    float2 uv = kind > 3.5 ? p / min(size.x, size.y) / scale : p / 2.0 / scale + 0.5;
+    if (kind < 2.5) {
+        uv *= 0.003;
+        for (float i = 1.0; i < 6.0; i++) {
+            uv.x += 0.6 / i * cos(i * 2.5 * uv.y + t);
+            uv.y += 0.6 / i * cos(i * 1.5 * uv.x + t);
+        }
+        return smoothstep(0.02, 1.0, 0.15 / max(0.001, abs(sin(t - uv.y - uv.x))));
+    }
+    if (kind < 4.5) {
+        uv *= 4.0;
+        float wave = cos(0.5 * uv.x - 2.0 * t) * sin(1.5 * uv.x + t) * (0.75 + 0.25 * cos(3.0 * t));
+        return 1.0 - smoothstep(-1.0, 1.0, uv.y + wave);
+    }
+    if (kind < 6.5) {
+        float l = length(uv);
+        float offset = 1.0 / pow(max(l, 1e-6), 1.2) + (6.0 * atan2(uv.y, uv.x) + 4.0 * t) / twoPi;
+        return fract(offset) * smoothstep(0.0, 1.0, pow(l, 1.2));
+    }
+    uv *= 2.0;
+    float d = 1.0 - dot(uv, uv);
+    float3 position = float3(uv, sqrt(max(0.0, d)));
+    float3 light = normalize(float3(cos(1.5 * t), 0.8, sin(1.25 * t)));
+    return (0.5 + 0.5 * dot(light, position)) * step(0.0, d);
+}
+
+/// The 4×4 Bayer matrix's threshold for a cell, 0..15/16.
+inline float bayer(float2 cells) {
+    int2 index = int2(fract(cells / 4.0) * 4.0);
+    return float(bayer4x4[index.y * 4 + index.x]) / 16.0;
+}
+
+}
+
+#ifdef ditheringField_ONLY
+/// A dithering shape in 4×4 ordered dither: `look` is (shape: ditherShape's kinds, the cell in reference
+/// pixels, the scale, how strong its lit dots are). Its cells stay on the frame's pixels, as a screen's.
+[[stitchable]] float4 ditheringField(float4 frame, float4 look, float vignette, float4 back, float4 front, coreimage::destination dest) {
+    float2 size = frame.yz;
+    float2 p = dest.coord() * frame.x - 0.5 * size;
+    float2 cells = p / look.y;
+    float shape = paper::ditherShape((floor(cells) + 0.5) * look.y, size, look.x, look.z, 0.5 * frame.w);
+    float lit = step(0.5, shape + paper::bayer(cells) - 0.5);
+    float3 color = mix(back.rgb, front.rgb, lit * look.w);
+    return paper::vignetted(color, p, size, vignette);
+}
+#endif
+
+// MARK: - Smoke ring
+
+namespace paper {
+
+inline float2 smokeFbm(coreimage::sampler noise, float2 n0, float2 n1) {
+    float2 total = float2(0.0);
+    float amplitude = 0.4;
+    for (int i = 0; i < 8; i++) {
+        total += float2(valueNoise(noise, n0), valueNoise(noise, n1)) * amplitude;
+        n0 *= 1.99;
+        n1 *= 1.99;
+        amplitude *= 0.65;
+    }
+    return total;
+}
+
+inline float smokeNoise(coreimage::sampler noise, float2 uv, float2 polar, float t, float scale) {
+    float2 left = polar + 0.03 * t;
+    float period = max(abs(scale * twoPi), 1e-6);
+    float2 right = float2(fract(polar.x / period) * period, polar.y) + 0.03 * t;
+    float2 n = smokeFbm(noise, left, right);
+    return mix(n.y, n.x, smoothstep(-0.25, 0.25, uv.x));
+}
+
+}
+
+#ifdef smokeRingField_ONLY
+/// `ring` is (radius, thickness, inner shape, noise scale), at scale 0.8 and 8 noise iterations;
+/// `c0` at the ring's core, `c1` at its edge.
+[[stitchable]] float4 smokeRingField(
+    coreimage::sampler noise, float4 frame, float4 view, float4 ring, float vignette, float4 back, float4 c0, float4 c1,
+    coreimage::destination dest
+) {
+    float2 size = frame.yz;
+    float2 framed = dest.coord() * frame.x - 0.5 * size;
+    float2 p = (framed - view.yz) / view.x;
+    float2 uv = p / min(size.x, size.y) / 0.8;
+    float t = frame.w;
+    float cycle = 3.0, period = 2.0 * cycle;
+    float first = fract((0.1 * t + cycle) / period) * period;
+    float second = fract((0.1 * t) / period) * period;
+    float blend = 0.5 + 0.5 * sin(0.1 * t * paper::pi / cycle - 0.5 * paper::pi);
+    float angle = atan2(uv.y, uv.x) + 0.001;
+    float l = length(uv);
+    float radial = 0.5 * l - rsqrt(max(1e-4, l));
+    float n = mix(paper::smokeNoise(noise, uv, float2(angle, first - radial) * ring.w, t, ring.w),
+                  paper::smokeNoise(noise, uv, float2(angle, second - radial) * ring.w, t, ring.w), blend);
+    uv *= 0.8 + 1.2 * n;
+    float distance = length(uv);
+    float shape = (1.0 - smoothstep(ring.x, ring.x + ring.y, distance)) * smoothstep(ring.x - pow(ring.z, 3.0) * ring.y, ring.x, distance);
+    float4 gradient = mix(float4(c1.rgb * c1.a, c1.a), float4(c0.rgb * c0.a, c0.a), clamp(shape * shape, 0.0, 1.0));
+    float opacity = gradient.a * shape;
+    float3 color = gradient.rgb * shape + back.rgb * back.a * (1.0 - opacity);
+    // The shader's own dither against banding, in output pixels
+    color += 1.0 / 256.0 * (fract(sin(dot(0.014 * dest.coord(), float2(12.9898, 78.233))) * 43758.5453123) - 0.5);
+    return paper::vignetted(color, framed, size, vignette);
+}
+#endif
+
+// MARK: - Reco's own
+
+// Satin is New Raycast's ground as the film the user approved drew it (spec 0012, L0, SatinSetup):
+// cloth folds lit in linear light on a coarse grid (satinGround), blurred out of focus and scaled to
+// the frame, then exposed, encoded and, in a wide shot, covered by a slab of matte glass
+// (satinFinish). The film's grain goes over the whole frame last (filmGrainNoise, filmGrain). Lifted UI
+// on glass sits on a panel lit as its shot is (glassPanel).
+
+#ifdef satinGround_ONLY
+namespace satin {
+
+inline float squared(float x) { return x * x; }
+
+/// One fold's height at `q`: `shape` is its crest's centre, angle (radians, y down) and bend, `size`
+/// its length, its width on the light's side and away from it, and its height.
+inline float fold(float2 q, float4 shape, float4 size) {
+    float2 d = q - shape.xy;
+    float along = d.x * cos(shape.z) + d.y * sin(shape.z);
+    float across = -d.x * sin(shape.z) + d.y * cos(shape.z) - shape.w * along * along;
+    float width = across < 0.0 ? size.y : size.z;
+    return size.w * exp(-0.5 * squared(along / size.x) - 0.5 * squared(across / width));
+}
+
+/// The cloth's height at `q`, its folds' lines wandering a little as cloth's do; `phase` moves them.
+inline float height(float2 q, float phase, thread const float4 *shapes, thread const float4 *sizes) {
+    float2 wander = float2(sin(3.1 * q.y + 1.3 * q.x + 0.7 + phase) + 0.6 * sin(5.3 * q.x - 2.2 * q.y + 2.1 - 0.7 * phase),
+                           sin(2.7 * q.x - 1.1 * q.y + 1.9 - phase) + 0.6 * sin(4.9 * q.y + 2.6 * q.x + 0.3 + 0.8 * phase));
+    float2 w = q + 0.03 * wander;
+    float h = 0.0;
+    for (int i = 0; i < 5; i++) {
+        h += fold(w, shapes[i], sizes[i]);
+    }
+    return h;
+}
+
+}
+
+/// The cloth's light, linear, at each pixel of a coarse grid. `frame`: the frame's pixels per grid
+/// pixel, its width and height in pixels, and the shot's time. `view`: how the camera moved the cloth
+/// (its zoom, and its shift in frame pixels, y down). `motion`: the folds' drift in shorter sides a
+/// second, how fast their lines wander, how much the pools breathe. `light`: towards the key (y down),
+/// and the height a crest is lit fully at; below it light falls off as the power `occlusion`. Then
+/// five folds (shape, size) and four pools (centre, radius, strength).
+[[stitchable]] float4 satinGround(
+    float4 frame, float4 view, float4 motion, float4 light, float occlusion,
+    float4 shape0, float4 size0, float4 shape1, float4 size1, float4 shape2, float4 size2, float4 shape3, float4 size3,
+    float4 shape4, float4 size4, float4 pool0, float4 pool1, float4 pool2, float4 pool3, coreimage::destination dest
+) {
+    float2 size = frame.yz;
+    float t = frame.w;
+    float2 pixel = dest.coord() * frame.x;
+    pixel.y = size.y - pixel.y;
+    // The point of the cloth the camera shows at this pixel, in shorter sides
+    float2 q = (0.5 * size + (pixel - 0.5 * size - view.yz) / view.x) / min(size.x, size.y);
+    float4 shapes[5] = { shape0, shape1, shape2, shape3, shape4 };
+    float4 sizes[5] = { size0, size1, size2, size3, size4 };
+    float2 drifted = q - motion.xy * t;
+    float phase = motion.z * t;
+    // The slope across 4 pixels at 1080p, as the stills took it
+    float e = 1.0 / 270.0;
+    float h = satin::height(drifted, phase, shapes, sizes);
+    float slopeX = satin::height(drifted + float2(e, 0.0), phase, shapes, sizes) - satin::height(drifted - float2(e, 0.0), phase, shapes, sizes);
+    float slopeY = satin::height(drifted + float2(0.0, e), phase, shapes, sizes) - satin::height(drifted - float2(0.0, e), phase, shapes, sizes);
+    float3 normal = normalize(float3(-slopeX / (2.0 * e), -slopeY / (2.0 * e), 1.0));
+    float3 key = normalize(light.xyz);
+    // Satin's sheen is a broad highlight; the diffuse light under it is faint
+    float sheen = pow(saturate(dot(normal, normalize(key + float3(0.0, 0.0, 1.0)))), 8.0);
+    float diffuse = 0.1 * satin::squared(saturate(dot(normal, key)));
+    float4 pools[4] = { pool0, pool1, pool2, pool3 };
+    float breathe = 1.0 + motion.w * sin(0.9 * t);
+    float pooled = 0.0;
+    for (int i = 0; i < 4; i++) {
+        float2 d = q - pools[i].xy;
+        pooled += pools[i].w * exp(-dot(d, d) / satin::squared(pools[i].z * breathe));
+    }
+    // Valleys stay darker than crests
+    float lit = (diffuse + sheen) * pooled * pow(saturate(h / light.w), occlusion);
+    return float4(lit, lit, lit, 1.0);
+}
+#endif
+
+#ifdef satinFinish_ONLY
+namespace satin {
+
+inline float squared(float x) { return x * x; }
+
+inline float encoded(float linear) {
+    return linear <= 0.0031308 ? 12.92 * linear : 1.055 * pow(linear, 1.0 / 2.4) - 0.055;
+}
+
+}
+
+/// The cloth's blurred light (`ground`, scaled to the frame) exposed by `tone.x` less a black of
+/// `tone.y`, encoded as sRGB, under a slab of matte glass if `face.x` (its level of 255) isn't 0.
+/// `frame`: pixels at 1080p per frame pixel, and the frame's width and height. `view`: how the camera
+/// moved the slab (zoom, shift in frame pixels, y down). `edge`: a point on the slab's edge (fractions
+/// of the frame), its angle (radians, y down) and the groove's distance in. `face`: its level, the
+/// groove's and the bevel's depth, its falloff. `shade`: its shadow's depth and reach, its tilt.
+[[stitchable]] float4 satinFinish(
+    coreimage::sampler ground, float4 frame, float4 tone, float4 view, float4 edge, float4 face, float4 shade,
+    float4 back, float4 lit, coreimage::destination dest
+) {
+    float level = 255.0 * satin::encoded(saturate(ground.sample(ground.transform(dest.coord())).r * tone.x - tone.y));
+    if (face.x > 0.0) {
+        float2 size = frame.yz;
+        float2 pixel = float2(dest.coord().x, size.y - dest.coord().y);
+        float2 g = 0.5 * size + (pixel - 0.5 * size - view.yz) / view.x;
+        // Signed distance from the edge in pixels at 1080p, negative on the slab
+        float d = (-(g.x - edge.x * size.x) * sin(edge.z) + (g.y - edge.y * size.y) * cos(edge.z)) * view.x * frame.x;
+        float slab = face.x + shade.z * clamp(d, -2000.0, 0.0) / 400.0;
+        float profile = 1.0 - face.y * exp(-satin::squared((d + edge.w) / 1.1)) + face.z * exp(-satin::squared((d + edge.w - 3.0) / 1.5))
+            - 0.32 * smoothstep(-face.w, 0.0, d);
+        float cover = 1.0 - smoothstep(-0.6, 0.6, d);
+        float shadow = 1.0 - shade.x * exp(-max(d, 0.0) / shade.y);
+        level = level * shadow * (1.0 - cover) + slab * profile * cover;
+    }
+    return float4(mix(back.rgb, lit.rgb, saturate(level / 255.0)), 1.0);
+}
+#endif
+
+#ifdef filmGrainNoise_ONLY
+namespace grain {
+
+/// Three independent 32-bit hashes of three integers (pcg3d: Jarzynski and Olano, "Hash Functions for
+/// GPU Rendering", 2020).
+inline uint3 pcg3d(uint3 v) {
+    v = v * 1664525u + 1013904223u;
+    v.x += v.y * v.z;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    v ^= v >> 16u;
+    v.x += v.y * v.z;
+    v.y += v.z * v.x;
+    v.z += v.x * v.y;
+    return v;
+}
+
+/// Gaussian noise of unit deviation at pixel `p`, new for each `seed`.
+inline float gaussian(int2 p, int seed) {
+    uint3 hashed = pcg3d(uint3(int3(p, seed)));
+    float2 u = (float2(hashed.xy >> 8u) + 0.5) / 16777216.0;
+    return sqrt(-2.0 * log(u.x)) * cos(6.28318530718 * u.y);
+}
+
+}
+
+/// The film's grain, of unit deviation, new for each `seed` (the frame's number): white noise blurred
+/// as OpenCV's 0.6 px Gaussian does (its 5 taps less the outer two, 0.3 % each), so neighbouring
+/// pixels correlate by 0.44.
+[[stitchable]] float4 filmGrainNoise(float seed, coreimage::destination dest) {
+    const float taps[3] = { 0.16638, 0.66724, 0.16638 };
+    int2 p = int2(floor(dest.coord()));
+    float n = 0.0;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            n += taps[x + 1] * taps[y + 1] * grain::gaussian(p + int2(x, y), int(seed));
+        }
+    }
+    // The blur's own deviation, divided out
+    n /= 0.5006;
+    return float4(n, n, n, 1.0);
+}
+#endif
+
+#ifdef filmGrain_ONLY
+/// `frame` with `noise` added as grain of `amount` levels of 255 in the mid-tones, fading as the square
+/// root of the level below 60, so black stays black.
+[[stitchable]] float4 filmGrain(coreimage::sampler frame, coreimage::sampler noise, float amount, coreimage::destination dest) {
+    float4 color = frame.sample(frame.transform(dest.coord()));
+    float n = noise.sample(noise.transform(dest.coord())).r;
+    float level = 255.0 * (color.r + color.g + color.b) / 3.0;
+    return float4(color.rgb + n * amount * sqrt(saturate(level / 60.0)) / 255.0, color.a);
+}
+#endif
+
+#ifdef glassPanel_ONLY
+namespace glass {
+
+inline float squared(float x) { return x * x; }
+
+/// How far `point` is from a rounded rectangle `size` large with corners `radius` round, in its own
+/// units from its top-left corner, negative inside.
+inline float distance(float2 point, float2 size, float radius) {
+    float2 q = abs(point - 0.5 * size) - (0.5 * size - radius);
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+}
+
+/// The panel's point under frame pixel `pixel` (y down), through the inverse of its projection.
+inline float2 onPanel(float2 pixel, float3 rowX, float3 rowY, float3 rowW) {
+    float3 p = float3(pixel, 1.0);
+    return float2(dot(rowX, p), dot(rowY, p)) / dot(rowW, p);
+}
+
+}
+
+/// A panel of dark glass in a rounded rectangle's shape, premultiplied by its coverage, as the film's
+/// stills drew it after Raycast's search pill (spec 0012, L0): the ground seen through it (`seen`,
+/// already blurred and encoded) over a dark base, a pool of light, the key's sheen, and a rim of light
+/// round its outline over `ground`. `frame`: the frame's width and height, and pixels at 1080p per
+/// frame pixel. `shape`: the panel's width, height, corner radius and rim width in its own units;
+/// `rowX`, `rowY`, `rowW` map a frame pixel (y down) onto it. `rim`: level, lit facing left, share of
+/// the ground, inner highlight. `glint`: level, depth, source. `pool`: centre, radius, level. `sheen`:
+/// a point on it, its angle (radians), width. `body`: base, the sheen's level and fall, the glint's
+/// fall. Levels are of 255, lengths pixels at 1080p, points fractions of the frame.
+[[stitchable]] float4 glassPanel(
+    coreimage::sampler seen, coreimage::sampler ground, float4 frame, float4 shape, float3 rowX, float3 rowY, float3 rowW,
+    float4 rim, float4 glint, float4 pool, float4 sheen, float4 body, coreimage::destination dest
+) {
+    float2 size = frame.xy;
+    float2 pixel = float2(dest.coord().x, size.y - dest.coord().y);
+    float2 p = glass::onPanel(pixel, rowX, rowY, rowW);
+    // Its change across a frame pixel each way: the distance in frame pixels, and the outward normal
+    float2 slope = 0.5 * float2(
+        glass::distance(glass::onPanel(pixel + float2(1.0, 0.0), rowX, rowY, rowW), shape.xy, shape.z)
+            - glass::distance(glass::onPanel(pixel - float2(1.0, 0.0), rowX, rowY, rowW), shape.xy, shape.z),
+        glass::distance(glass::onPanel(pixel + float2(0.0, 1.0), rowX, rowY, rowW), shape.xy, shape.z)
+            - glass::distance(glass::onPanel(pixel - float2(0.0, 1.0), rowX, rowY, rowW), shape.xy, shape.z));
+    float perPixel = max(length(slope), 1e-6);
+    float d = glass::distance(p, shape.xy, shape.z) / perPixel;
+    float2 normal = slope / perPixel;
+    float cover = 1.0 - smoothstep(-0.7, 0.7, d);
+    if (cover <= 0.0) {
+        return float4(0.0);
+    }
+    // In colour, so a coloured ground tints it; satin's is grey, so all three channels are the same
+    float3 level = max(255.0 * seen.sample(seen.transform(dest.coord())).rgb, float3(body.x));
+    float2 fromPool = (pixel - pool.xy * size) / size.y;
+    level += pool.w * exp(-dot(fromPool, fromPool) / glass::squared(pool.z));
+    float across = (-(pixel.x - sheen.x * size.x) * sin(sheen.z) + (pixel.y - sheen.y * size.y) * cos(sheen.z)) * frame.z;
+    float below = max(p.y, 0.0) / perPixel * frame.z;
+    level += body.y * exp(-glass::squared(across / sheen.w)) * exp(-below / body.z);
+    // The rim: lit facing the key, a glint along its outer edge facing up, a highlight inside facing left
+    float width = shape.w / perPixel;
+    float band = smoothstep(-width - 0.7, -width + 0.7, d) * (1.0 - smoothstep(-0.7, 0.7, d));
+    float left = saturate(-normal.x);
+    float up = saturate(-normal.y);
+    float depth = max(-d, 0.0) * frame.z;
+    float fall = exp(-length(pixel - glint.zw * size) / size.x / body.w);
+    float3 lit = rim.x + rim.y * pow(left, 1.5) + rim.z * 255.0 * ground.sample(ground.transform(dest.coord())).rgb
+        + glint.x * pow(up, 0.7) * fall * exp(-glass::squared(depth / glint.y))
+        + rim.w * left * left * exp(-glass::squared((width * frame.z - depth) / 1.2));
+    level = mix(level, lit, band) / 255.0;
+    return float4(level * cover, cover);
+}
+#endif
+
+// MARK: - Seams
+
+// A seam draws the scene before (`from`) into the next (`to`) in a field's language, over the whole
+// frame, its UI too: light and texture acting on the content, not behind it (docs/references/
+// launch-films.md). `frame` as the fields take it; colours from the brand as the field's.
+
+#ifdef glowSeam_ONLY
+/// A band of grainy light crossing the frame, the next scene behind it: out of the middle for a blob, a
+/// sphere or ripples, up from below for a wave, in from the corners for ember's, its edge drawn by the
+/// field's shape and grain. `seam`: progress, the shape (grainShape's kinds), the band's width in the
+/// order's units, how bright its light goes; `c0` the light's heart, `c1` its edges.
+///
+/// The order is mostly where in the frame (seven tenths): ordered by the shape alone, the front crossed
+/// the shape's flat stretches at once, and ripples flooded bolt.new's frame with light.
+[[stitchable]] float4 glowSeam(
+    coreimage::sampler noise, coreimage::sampler from, coreimage::sampler to, float4 frame, float4 seam,
+    float4 c0, float4 c1, coreimage::destination dest
+) {
+    float2 size = frame.yz;
+    float2 p = dest.coord() * frame.x - 0.5 * size;
+    float t = 0.1 * (frame.w + 7.0);
+    float kind = seam.y;
+    float grainStep = kind > 3.5 ? 0.7 : 0.8;
+    float2 g = grainStep * p;
+    float2 grain = paper::grain(noise, g, paper::slowFbm(noise, 0.002 * g + 10.0, 0.003 * g, 0.001 * g));
+    // 1 where the light reaches first, 0 where last
+    float2 q = p / (0.5 * size);
+    float spread = length(q) / sqrt(2.0);
+    float place = kind < 1.5 ? 0.5 - 0.5 * q.y : (kind < 4.5 ? spread : 1.0 - spread);
+    float order = mix(saturate(paper::grainShape(p, size, kind, t)), place, 0.7) + 0.06 * (grain.x + 0.5) + 0.1 * grain.y;
+    // From just past the order's top (1 and the grain's 0.19) to just below its bottom (the grain's −0.06):
+    // a front starting further out crossed nothing for the seam's first third
+    float width = seam.z;
+    float ahead = order - mix(1.2, -0.07, seam.x);
+    float next = smoothstep(-0.01, 0.01, ahead);
+    // Brightest at the band, a little left behind it on the next scene, gone at both ends
+    float light = exp(-ahead * ahead / (width * width)) + 0.15 * exp(-ahead / width) * next;
+    light *= sqrt(sin(paper::pi * saturate(seam.x)));
+    // Pale at the band's heart, the brand's hue at its edges
+    float3 glow = mix(c0.rgb, c1.rgb, smoothstep(0.0, 2.0 * width, abs(ahead)));
+    float3 color = mix(from.sample(from.coord()).rgb, to.sample(to.coord()).rgb, next);
+    return float4(1.0 - (1.0 - color) * (1.0 - saturate(seam.w * light) * glow), 1.0);
+}
+#endif
+
+#ifdef ditherSeam_ONLY
+/// The scene before turned to ordered dither from the frame's edges in, flipped cell by cell to the
+/// next scene's dither half-way, which resolves into the next scene from the edges in: its UI drawn in
+/// the brand's dots for a moment. `seam`: progress, the dithering shape that roughens the front, the
+/// cell in reference pixels, the front's spread; `look`: the shape's scale and time.
+[[stitchable]] float4 ditherSeam(
+    coreimage::sampler from, coreimage::sampler to, float4 frame, float4 seam, float4 look, float4 back, float4 front,
+    coreimage::destination dest
+) {
+    float2 size = frame.yz;
+    float2 p = dest.coord() * frame.x - 0.5 * size;
+    float2 cells = p / seam.z;
+    float2 centre = (floor(cells) + 0.5) * seam.z;
+    // Near 0 at the frame's edges, up to 1.3 in its middle, roughened by the shape and the Bayer matrix
+    // (a spread of at most 0.3)
+    float2 edge = 1.0 - abs(centre) / (0.5 * size);
+    float d = paper::bayer(cells);
+    float order = 0.15 + 0.75 * saturate(min(edge.x * size.x / size.y, edge.y)) + 0.25 * paper::ditherShape(centre, size, seam.y, look.x, 0.5 * look.y)
+        + (d - 0.5) * seam.w;
+    float dithered = step(order, 2.62 * seam.x - 0.001);
+    float arrived = step(order, 2.62 * seam.x - 1.311);
+    float flipped = step(d, saturate((seam.x - 0.42) / 0.16));
+    // The cell's light from its centre, its contrast stretched so text reads in dots and panels don't
+    float2 sampled = (centre + 0.5 * size) / frame.x;
+    float3 a = from.sample(from.transform(sampled)).rgb;
+    float3 b = to.sample(to.transform(sampled)).rgb;
+    float lightness = dot(mix(a, b, flipped), float3(0.2126, 0.7152, 0.0722));
+    float lit = step(0.5, smoothstep(0.03, 0.42, lightness) + d - 0.5);
+    float3 color = mix(from.sample(from.coord()).rgb, mix(back.rgb, front.rgb, lit), dithered);
+    return float4(mix(color, to.sample(to.coord()).rgb, arrived), 1.0);
+}
+#endif
+
+#ifdef ringSeam_ONLY
+/// A ring of smoke opening from the frame's middle past its corners, the next scene inside it, the
+/// smoke lit brightest half-way. `seam`: progress, the ring's thickness in shorter sides, the noise's
+/// scale; `c0` at its core, `c1` at its edge.
+[[stitchable]] float4 ringSeam(
+    coreimage::sampler noise, coreimage::sampler from, coreimage::sampler to, float4 frame, float4 seam,
+    float4 c0, float4 c1, coreimage::destination dest
+) {
+    float2 size = frame.yz;
+    float2 uv = (dest.coord() * frame.x - 0.5 * size) / min(size.x, size.y);
+    // Past the corners however far the smoke pushes them out (up to 1.4 times)
+    float reach = 0.75 * length(size) / min(size.x, size.y) + seam.y;
+    float radius = seam.x * (reach + 0.2) - 0.1;
+    float l = length(uv);
+    float n = paper::smokeNoise(noise, uv, float2(atan2(uv.y, uv.x) + 0.001, 0.05 * frame.w - 0.5 * l + rsqrt(max(1e-4, l))) * seam.z, frame.w, seam.z);
+    float distorted = l * (0.8 + 0.5 * n);
+    float inside = 1.0 - smoothstep(radius - 0.5 * seam.y, radius, distorted);
+    float ring = (1.0 - smoothstep(radius, radius + seam.y, distorted)) * smoothstep(radius - 0.6 * seam.y, radius, distorted);
+    float3 color = mix(from.sample(from.coord()).rgb, to.sample(to.coord()).rgb, inside);
+    float3 smoke = mix(c1.rgb, c0.rgb, ring * ring) * ring * sin(paper::pi * saturate(seam.x));
+    return float4(1.0 - (1.0 - color) * (1.0 - smoke), 1.0);
+}
+#endif
+
+#ifdef auroraField_ONLY
+/// Lovable's ground (spec 0015): soft lights summed, read through `ramp` (``AuroraSetup``: black, navy, then the brand's
+/// gradient, 0 to `shape.w` of reach across its `shape.x` pixels). `frame`: the output's width and height, seconds into
+/// the shot. `view`: the camera's zoom and shift (output pixels, y up) as the ground follows it. `l0`–`l4`: each light's
+/// middle (fractions of the frame, y down), radius across (frame heights) and strength, drifting a little so a held shot's
+/// light isn't a still (`shape.y` times as far, `shape.z` times as fast, swinging round with it: the haze's wander).
+/// `e0`–`e2`: each light's elongation and angle (degrees, clockwise), two a vector.
+[[stitchable]] float4 auroraField(
+    coreimage::sampler ramp, float4 frame, float4 view, float4 l0, float4 l1, float4 l2, float4 l3, float4 l4,
+    float4 e0, float4 e1, float4 e2, float4 shape, coreimage::destination dest
+) {
+    float2 size = frame.xy;
+    float2 framed = (dest.coord() - 0.5 * size - view.yz) / view.x;
+    float2 q = float2(framed.x, -framed.y) / size.y;
+    float aspect = size.x / size.y;
+    float t = frame.z;
+    float4 lights[5] = { l0, l1, l2, l3, l4 };
+    float2 shapes[5] = { e0.xy, e0.zw, e1.xy, e1.zw, e2.xy };
+    float reach = 0.0;
+    for (int i = 0; i < 5; i++) {
+        float phase = float(i) * 1.7;
+        float2 drift = 0.03 * shape.y * float2(sin(0.21 * shape.z * t + phase), cos(0.17 * shape.z * t + 1.3 * phase));
+        float2 center = (lights[i].xy - 0.5) * float2(aspect, 1.0) + drift;
+        float2 off = q - center;
+        // The haze's long lights also swing round as they wander (none for the aurora, whose reach is 1)
+        float turn = shapes[i].y * 0.0174532925 + 0.08 * (shape.y - 1.0) * sin(0.13 * shape.z * t + 2.1 * phase);
+        float along = (off.x * cos(turn) + off.y * sin(turn)) / (lights[i].z * shapes[i].x);
+        float across = (off.y * cos(turn) - off.x * sin(turn)) / lights[i].z;
+        float strength = lights[i].w * (1.0 + 0.05 * sin(0.29 * shape.z * t + phase));
+        reach += strength * exp(-along * along - across * across);
+    }
+    float u = clamp(reach / shape.w, 0.0, 1.0) * (shape.x - 1.0) + 0.5;
+    float3 color = ramp.sample(ramp.transform(float2(u, 0.5))).rgb;
+    // A level of noise against banding in its long, smooth ramps
+    float noise = fract(sin(dot(floor(dest.coord()), float2(12.9898, 78.233))) * 43758.5453) - 0.5;
+    return float4(max(color + noise / 255.0, 0.0), 1.0);
+}
+#endif
+
+#ifdef washLight_ONLY
+/// A wash's light (spec 0015), as Lovable's box was washed when sent: a front of light growing out of a corner, curved, its
+/// edge brightest and soft, the light it leaves behind falling to a glow, coloured from `ramp` (its last colour at the
+/// front, its first deep behind it). Premultiplied. `front`: the corner (output pixels, y up), the front's radius, the ramp's
+/// width. `shape`: the edge's softness, how deep the bright edge is, the glow left behind, how deep the colours run (pixels).
+[[stitchable]] float4 washLight(coreimage::sampler ramp, float4 front, float4 shape, coreimage::destination dest) {
+    float behind = front.z - distance(dest.coord(), front.xy);
+    float edge = smoothstep(-shape.x, 0.5 * shape.x, behind);
+    float light = edge * (shape.z + (1.0 - shape.z) * exp(-max(behind, 0.0) / shape.y));
+    float u = (1.0 - clamp(max(behind, 0.0) / shape.w, 0.0, 1.0)) * (front.w - 1.0) + 0.5;
+    float3 color = ramp.sample(ramp.transform(float2(u, 0.5))).rgb;
+    return float4(color * light, light);
+}
+#endif
+
+#ifdef meltSeam_ONLY
+/// A melt (``MotionSeam/melt``): `before` dissolves into `next` along a front ordered by the light of `order` (the scene before,
+/// blurred: its darks first) and by place (from the top left), its edge broken by grain; at the front the scene before runs
+/// down a little and turns to the brand's colours, `deep` at its heart and `pale` round it (Vantae's room going blue and white
+/// into its ground). `frame`: progress, the front's width, the drip (pixels), the grain's cell (pixels). `shape`: the frame's
+/// size, the share of the order by place, how much grain breaks the front.
+[[stitchable]] float4 meltSeam(
+    coreimage::sampler before, coreimage::sampler next, coreimage::sampler order, float4 frame, float4 shape, float4 deep, float4 pale,
+    coreimage::destination dest
+) {
+    float2 p = dest.coord();
+    float width = frame.y;
+    float front = frame.x * (1.0 + 2.0 * width) - width;
+    float grain = fract(sin(dot(floor(p / frame.w), float2(12.9898, 78.233))) * 43758.5453) - 0.5;
+    float light = dot(order.sample(order.transform(p)).rgb, float3(0.2126, 0.7152, 0.0722));
+    float place = 0.5 * (p.x / shape.x + 1.0 - p.y / shape.y);
+    float key = mix(light, place, shape.z) + shape.w * grain;
+    float melted = smoothstep(key - width, key + width, front);
+    // Coming loose a little before it goes, running down
+    float loose = smoothstep(key - 3.0 * width, key + width, front);
+    float3 old = before.sample(before.transform(p + float2(0.0, frame.z * loose))).rgb;
+    float band = saturate(1.0 - abs(front - key) / (2.5 * width));
+    float3 tinted = mix(old, mix(pale.rgb, deep.rgb, band), 0.9 * band);
+    return float4(mix(tinted, next.sample(next.transform(p)).rgb, melted), 1.0);
+}
+#endif
+
+#ifdef latticeField_ONLY
+namespace lattice {
+
+/// A staircase: flat at whole numbers, rising to the next through each half over `rise` of a step, more each step out by
+/// `growth`; each rise quadratic in and out, so where two meet the lines turn in arcs.
+inline float stair(float u, float rise, float growth) {
+    float n = floor(u);
+    float r = min(rise + growth * n, 0.9);
+    float t = saturate((u - n - 0.5 + 0.5 * r) / r);
+    return n + (t < 0.5 ? 2.0 * t * t : 1.0 - 2.0 * (1.0 - t) * (1.0 - t));
+}
+
+/// The lattice's level at `pixel` (pixels at 1080p from the middle, y down): each axis read through the lens (the middle
+/// magnified, in steps further out) into steps, the two staircases summed. `shape`: the lens's reach and width and the step
+/// (pixels), the rise and its growth.
+inline float level(float2 pixel, float4 shape, float growth) {
+    float2 r = abs(pixel);
+    float2 u = (r - shape.x * tanh(r / shape.y)) / shape.z;
+    return stair(u.x, shape.w, growth) + stair(u.y, shape.w, growth);
+}
+
+/// How much of a line of `width` pixels covers `pixel` in one colour channel, seen at `zoom`: lines lie where the level is
+/// half way between whole numbers, their distance in pixels its distance there over its slope.
+inline float line(float2 pixel, float zoom, float4 shape, float growth, float width) {
+    float2 p = pixel / zoom;
+    float e = 0.5 / zoom;
+    float f = level(p, shape, growth);
+    float2 slope = float2(level(p + float2(e, 0.0), shape, growth) - level(p - float2(e, 0.0), shape, growth),
+                          level(p + float2(0.0, e), shape, growth) - level(p - float2(0.0, e), shape, growth));
+    float distance = abs(fract(f) - 0.5) / max(length(slope), 1e-6);
+    return saturate(0.5 * width + 0.5 - distance);
+}
+
+}
+
+/// Paper with the editorial film's lattice (spec 0017, ElevenLabs' launch film): rounded stepped rings round the frame's
+/// middle in hairlines, the middle magnified as through a lens. `frame`: the output's width and height, its pixels per pixel
+/// at 1080p. `view`: the lattice's zoom, its middle's shift (output pixels, y up), and how far the colour channels' zooms part
+/// (lines split into colours while it zooms, as a lens's do). `shape`: the lens's reach and width, the step (pixels at
+/// 1080p), the rise. `ink`: the line's width (pixels at 1080p), the rise's growth a step. `paper` under `line`'s colour.
+[[stitchable]] float4 latticeField(float4 frame, float4 view, float4 shape, float4 ink, float4 paper, float4 line, coreimage::destination dest) {
+    float2 size = frame.xy;
+    float2 pixel = (dest.coord() - 0.5 * size - view.yz) / frame.z;
+    pixel.y = -pixel.y;
+    float3 cover = float3(
+        lattice::line(pixel, view.x * (1.0 + view.w), shape, ink.y, ink.x),
+        lattice::line(pixel, view.x, shape, ink.y, ink.x),
+        lattice::line(pixel, view.x * (1.0 - view.w), shape, ink.y, ink.x)
+    );
+    return float4(mix(paper.rgb, line.rgb, cover), 1.0);
+}
+#endif
+
+#ifdef lensField_ONLY
+namespace lens {
+
+inline float hash(float2 p) {
+    return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
+}
+
+/// Value noise on a lattice of whole numbers, smoothly between them: grain in clumps, as film's is.
+inline float noise(float2 p) {
+    float2 i = floor(p);
+    float2 f = p - i;
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + float2(1.0, 0.0)), f.x), mix(hash(i + float2(0.0, 1.0)), hash(i + float2(1.0, 1.0)), f.x), f.y);
+}
+
+}
+
+/// A colour photograph far out of focus, grainy (spec 0017, the pictures of ElevenLabs' launch film: petals, dunes, dusk):
+/// soft lights summed and read through `ramp` (a pale ground into the picture's deepest colour), streaked along a direction,
+/// with film grain strongest in the mid-tones. Drawn over `frame`'s rect: its width and height (output pixels), seconds into
+/// the shot, output pixels per pixel at 1080p. `place`: the rect's bottom-left corner (output pixels), the grain's seed
+/// (the frame's number). `l0`–`l4`: each light's middle (fractions of the rect, y down), radius across (rect heights) and
+/// strength; `e0`–`e2` each light's elongation and angle (degrees, clockwise), two a vector. `grain`: its deviation in
+/// levels of 255 in the mid-tones, its clump (pixels at 1080p), the streaks' strength and angle. `shape`: the ramp's
+/// pixels, the lights' drift (rect heights), how fast they drift, the reach the ramp ends at.
+[[stitchable]] float4 lensField(
+    coreimage::sampler ramp, float4 frame, float4 place, float4 l0, float4 l1, float4 l2, float4 l3, float4 l4,
+    float4 e0, float4 e1, float4 e2, float4 grain, float4 shape, coreimage::destination dest
+) {
+    float2 size = frame.xy;
+    float2 local = dest.coord() - place.xy;
+    float2 q = float2(local.x - 0.5 * size.x, 0.5 * size.y - local.y) / size.y;
+    float aspect = size.x / size.y;
+    float t = frame.z;
+    float4 lights[5] = { l0, l1, l2, l3, l4 };
+    float2 shapes[5] = { e0.xy, e0.zw, e1.xy, e1.zw, e2.xy };
+    float reach = 0.0;
+    for (int i = 0; i < 5; i++) {
+        float phase = float(i) * 1.7;
+        float2 drift = shape.y * float2(sin(0.21 * shape.z * t + phase), cos(0.17 * shape.z * t + 1.3 * phase));
+        float2 off = q - ((lights[i].xy - 0.5) * float2(aspect, 1.0) + drift);
+        float turn = shapes[i].y * 0.0174532925;
+        float along = (off.x * cos(turn) + off.y * sin(turn)) / (lights[i].z * shapes[i].x);
+        float across = (off.y * cos(turn) - off.x * sin(turn)) / lights[i].z;
+        reach += lights[i].w * exp(-along * along - across * across);
+    }
+    // Streaks: the reach broken into soft bands across the direction they run
+    float turn = grain.w * 0.0174532925;
+    float bands = dot(q, float2(-sin(turn), cos(turn))) * 22.0;
+    reach *= 1.0 + grain.z * (lens::noise(float2(bands, 3.7)) + 0.5 * lens::noise(float2(2.3 * bands, 9.1)) - 0.75);
+    float u = clamp(reach / shape.w, 0.0, 1.0) * (shape.x - 1.0) + 0.5;
+    float3 color = ramp.sample(ramp.transform(float2(u, 0.5))).rgb;
+    // Grain in clumps, new each frame, strongest in the mid-tones
+    float2 cell = dest.coord() / (grain.y * frame.w) + 512.0 * fract(float2(0.618034, 0.381966) * place.z);
+    float n = (lens::noise(cell) - 0.5) * 3.4;
+    float light = dot(color, float3(0.2126, 0.7152, 0.0722));
+    float amount = grain.x / 255.0 * saturate(4.0 * light * (1.0 - light));
+    return float4(saturate(color + n * amount), 1.0);
+}
+#endif

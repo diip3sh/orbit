@@ -7,6 +7,8 @@ import AppKit
 import Foundation
 import OSLog
 
+// The existing window state and rendering intents share one observable model.
+// swiftlint:disable file_length
 /// State and intents of the Web Recording window: the script and its timeline, the live page, pick
 /// mode and the render.
 @MainActor
@@ -449,10 +451,10 @@ extension WebRecordingViewModel {
                 renderTask = nil
             }
             do {
-                let movie = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
+                let take = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
                     self?.renderProgress = progress
                 }.movie
-                onRendered(movie)
+                onRendered(take)
             } catch {
                 if !(error is CancellationError) {
                     logger.error("Couldn't render the web script: \(error.localizedDescription)")

@@ -25,7 +25,8 @@ terminal and no knowledge of selectors: address, a sentence, Return.
 - On failure the bar shows why, with **Retry**, and a notification says the same (Retry again, and a
   click opens the bar in its failed state). The bar never reopens by itself.
 - Only agents Reco found connected (spec 0006) with a command line on the login shell's `PATH` are
-  offered. Without one, the bar says what to do and has **Set Up Agents…**, which opens Settings → Agents.
+  offered; Claude Code and Cursor need only the command line, since their runs bring Reco's server
+  (spec 0008). Without one, the bar says what to do and has **Set Up Agents…**, which opens Settings → Agents.
 
 ## Decision: remove the App Sandbox (2026-10-01)
 

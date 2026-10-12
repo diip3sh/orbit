@@ -5,15 +5,15 @@
 
 import CoreGraphics
 
-/// What ``WebInspectScript`` found in a page, at scroll 0: the page's size, what it says it's about,
-/// its visible interactive elements and headings, and the boxes of the selectors asked for. Boxes are
-/// in page CSS pixels.
+/// What ``WebInspectScript`` found in a page, at scroll 0: the page's size, its visible interactive
+/// elements and the boxes of the selectors asked for. Boxes are in page CSS pixels.
 nonisolated struct PageInspection: Codable, Equatable, Sendable {
     var title: String
-
-    /// The page's meta or Open Graph description, if it has one.
-    var description: String?
     var url: String
+
+    /// The page's own summary (its meta or Open Graph description), for an agent learning what
+    /// the product does; `nil` when it has none.
+    var description: String?
     var viewport: Size
     var pageHeight: Double
     var elements: [Element]
@@ -21,12 +21,27 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
     /// Whether the page had more elements than ``elements`` lists.
     var truncated: Bool
 
+    /// What stays on screen as the page scrolls (fixed and sticky elements, outermost only): a
+    /// navigation bar, or what a take may hide, like a cookie banner or a chat button.
+    var overlays: [Overlay]?
+
+    /// The page's look, for a launch video's style (spec 0010, step 3).
+    var brand: Brand?
+
+    /// What a motion video can lift off the page alone (spec 0011, *Agent*), largest first.
+    var liftable: [Liftable]?
+
     /// The box of the first element each requested selector matches; `nil` when none were requested.
     var boxes: [String: Box]?
 
+    /// Seconds of rendering per second of video, by scale ("1", "2"), measured on this page; `nil`
+    /// until measured.
+    var renderCost: [String: Double]?
+
     private enum CodingKeys: String, CodingKey {
-        case title, description, url, viewport, elements, truncated, boxes
+        case title, url, description, viewport, elements, truncated, overlays, brand, liftable, boxes
         case pageHeight = "page_height"
+        case renderCost = "render_cost"
     }
 
     nonisolated struct Element: Codable, Equatable, Sendable {
@@ -39,11 +54,95 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
         var href: String?
     }
 
+    nonisolated struct Brand: Codable, Equatable, Sendable {
+
+        /// `#rrggbb`: behind the page's first screen, and of its main heading.
+        var background: String
+        var text: String
+
+        /// The background of the largest painted link or button on the first screen, the main call
+        /// to action; `nil` without one.
+        var accent: String?
+
+        /// `serif`, `sans` or `mono`, and the family the main heading asks for first.
+        var face: String
+        var font: String
+
+        /// The image or drawing in the link to the home page.
+        var logo: Logo?
+
+        /// How the main heading is set (spec 0019): its weight, letter spacing in ems, whether in capitals, and its size as a
+        /// share of the viewport's width.
+        var heading: Heading?
+
+        /// The colours painted on the first three screens, most area first, and the gradients painted there as their stops.
+        var palette: [String]?
+        var gradients: [[String]]?
+
+        /// The main call to action's corner radius and the one most panels share, in CSS pixels.
+        var radius: Radius?
+
+        /// The files of the faces the heading and the body are set in, to set the video in them.
+        var fonts: [Font]?
+    }
+
+    nonisolated struct Heading: Codable, Equatable, Sendable {
+        var weight: Int
+        var tracking: Double
+        var uppercase: Bool
+        var size: Double
+    }
+
+    nonisolated struct Radius: Codable, Equatable, Sendable {
+        var button: Double?
+        var card: Double?
+    }
+
+    nonisolated struct Font: Codable, Equatable, Sendable {
+
+        /// `heading` or `body`.
+        var role: String
+        var family: String
+        var weight: Int
+        var url: String
+    }
+
+    nonisolated struct Logo: Codable, Equatable, Sendable {
+        var selector: String
+        var box: Box
+    }
+
+    nonisolated struct Liftable: Codable, Equatable, Sendable {
+        var selector: String
+
+        /// `panel` for a painted box, else the picture's tag: `img`, `video`, `canvas`, `picture`.
+        var kind: String
+        var text: String
+
+        /// With its corner radius.
+        var box: Box
+
+        /// `#rrggbb`; `nil` when it's transparent.
+        var background: String?
+    }
+
+    nonisolated struct Overlay: Codable, Equatable, Sendable {
+        var selector: String
+
+        /// `fixed` or `sticky`.
+        var position: String
+        var text: String
+        var box: Box
+    }
+
     nonisolated struct Box: Codable, Equatable, Sendable {
         var left: Double
         var top: Double
         var width: Double
         var height: Double
+
+        /// The element's top-left corner radius, for requested selectors and liftable elements only.
+        var radius: Double?
 
         var rect: CGRect {
             CGRect(x: left, y: top, width: width, height: height)
@@ -53,7 +152,7 @@ nonisolated struct PageInspection: Codable, Equatable, Sendable {
         private enum CodingKeys: String, CodingKey {
             case left = "x"
             case top = "y"
-            case width, height
+            case width, height, radius
         }
     }
 

@@ -34,9 +34,8 @@ nonisolated struct OutputTail: Sendable {
     /// of `stdout` when `stderr` has none. Colors are stripped, each of `secrets` is replaced by "…",
     /// and only the last 300 characters stay.
     static func reason(stdout: String, stderr: String, redacting secrets: [String] = []) -> String {
-        let escapes = /\e\[[0-9;?]*[ -\/]*[@-~]/
         func lines(_ text: String) -> [Substring] {
-            text.replacing(escapes, with: "")
+            plain(text)
                 .split(whereSeparator: \.isNewline)
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
@@ -51,5 +50,10 @@ nonisolated struct OutputTail: Sendable {
             text = text.replacing(secret, with: "…")
         }
         return String(text.suffix(300))
+    }
+
+    /// `text` without the terminal's color and cursor codes.
+    static func plain(_ text: String) -> String {
+        text.replacing(/\e\[[0-9;?]*[ -\/]*[@-~]/, with: "")
     }
 }

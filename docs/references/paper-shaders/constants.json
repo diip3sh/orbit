@@ -1,0 +1,53 @@
+{
+  "GrainGradientShapes": {
+    "wave": 1,
+    "dots": 2,
+    "truchet": 3,
+    "corners": 4,
+    "ripple": 5,
+    "blob": 6,
+    "sphere": 7
+  },
+  "DitheringShapes": {
+    "simplex": 1,
+    "warp": 2,
+    "dots": 3,
+    "wave": 4,
+    "ripple": 5,
+    "swirl": 6,
+    "sphere": 7
+  },
+  "DitheringTypes": {
+    "random": 1,
+    "2x2": 2,
+    "4x4": 3,
+    "8x8": 4
+  },
+  "ShaderFitOptions": {
+    "none": 0,
+    "contain": 1,
+    "cover": 2
+  },
+  "defaultObjectSizing": {
+    "fit": "contain",
+    "scale": 1,
+    "rotation": 0,
+    "offsetX": 0,
+    "offsetY": 0,
+    "originX": 0.5,
+    "originY": 0.5,
+    "worldWidth": 0,
+    "worldHeight": 0
+  },
+  "defaultPatternSizing": {
+    "fit": "none",
+    "scale": 1,
+    "rotation": 0,
+    "offsetX": 0,
+    "offsetY": 0,
+    "originX": 0.5,
+    "originY": 0.5,
+    "worldWidth": 0,
+    "worldHeight": 0
+  }
+}

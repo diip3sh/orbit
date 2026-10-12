@@ -50,7 +50,7 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                     let dragged = drag.flatMap { $0.id == clip.id ? $0.offset : nil } ?? 0
 
                     // Where the block may go: its edges stay in the lane
-                    let limits = -start...max(width - end, -start)
+                    let limits: ClosedRange<Double> = -start...max(width - end, -start)
 
                     let showsHandles = clip.id == hovered || clip.id == selection || drag?.id == clip.id
 
@@ -68,7 +68,11 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in
                                     // Typed in full: Xcode 26.6 won't convert a Double into a labeled tuple's CGFloat
-                                    let offset = CGFloat(GesturePhysics.rubberbanded(value.translation.width, in: Double(limits.lowerBound)...Double(limits.upperBound), dimension: Double(width)))
+                                    let offset = CGFloat(GesturePhysics.rubberbanded(
+                                        value.translation.width,
+                                        in: Double(limits.lowerBound)...Double(limits.upperBound),
+                                        dimension: Double(width)
+                                    ))
                                     drag = (id: clip.id, offset: offset)
                                 }
                                 .onEnded { value in

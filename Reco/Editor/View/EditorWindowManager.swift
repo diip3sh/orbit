@@ -36,10 +36,19 @@ final class EditorWindowManager: NSObject {
         let viewModel: WebRecordingViewModel
     }
 
+    private struct MotionEditor {
+        let window: NSWindow
+        let viewModel: MotionEditorViewModel
+        let chat: AgentChatViewModel
+        let accessesOutputDirectory: Bool
+    }
+
     private let settings: SettingsStore
+
     private var editors: [URL: Editor] = [:]
     private var library: Library?
     private var webRecording: WebRecording?
+    private var motionEditors: [URL: MotionEditor] = [:]
 
     /// What the Library's New menu starts; set by `AppDelegate`
     var libraryActions = LibraryViewModel.Actions()
@@ -83,7 +92,8 @@ final class EditorWindowManager: NSObject {
 
     /// Opens the editor for a recording in the output folder, or brings its window forward. Without
     /// `activates`, the window goes behind every other and Reco stays in the background.
-    func open(_ videoURL: URL, activates: Bool = true) {
+    func open(_ videoURL: URL, activates: Bool = true, conversation: [AgentChatMessage] = []) {
+        guard let agentRecording else { return }
         let videoURL = videoURL.standardizedFileURL
         if let window = editors[videoURL]?.window {
             if activates {
@@ -96,7 +106,8 @@ final class EditorWindowManager: NSObject {
         let accessesOutputDirectory = settings.startAccessingOutputDirectory()
 
         let viewModel = EditorViewModel(videoURL: videoURL)
-        let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel).themed())
+        let chat = AgentChatViewModel(movie: videoURL, runner: agentRecording, conversation: conversation)
+        let hostingController = editorController(viewModel, chat)
         // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
         hostingController.sizingOptions = .minSize
         // The name field, export and inspector buttons are SwiftUI toolbar items. The title isn't bridged: the
@@ -121,6 +132,38 @@ final class EditorWindowManager: NSObject {
             activate(window)
         } else {
             window.orderBack(nil)
+        }
+    }
+
+    /// Replaces the take in its editor window after an agent records it again, keeping its style.
+    func open(_ take: AgentRecordedTake) {
+        let movie = take.movie.standardizedFileURL
+        if movie.pathExtension == MotionStore.bundleExtension {
+            openMotion(movie, conversation: take.conversation)
+            return
+        }
+        guard let agentRecording,
+              let replaced = take.replacing?.standardizedFileURL,
+              let editor = editors[replaced], editors[movie] == nil else {
+            open(movie, conversation: take.conversation)
+            return
+        }
+        let viewModel = EditorViewModel(videoURL: movie, style: editor.viewModel.project)
+        let chat = AgentChatViewModel(movie: movie, runner: agentRecording, conversation: take.conversation)
+        Task {
+            await viewModel.load()
+            guard let current = editors[replaced], current.window === editor.window,
+                  let controller = editor.window.contentViewController as? NSHostingController<EditorView> else {
+                open(movie, conversation: take.conversation)
+                return
+            }
+            controller.rootView = EditorView(viewModel: viewModel, chat: chat)
+            editor.window.title = movie.deletingPathExtension().lastPathComponent
+            editor.window.representedURL = movie
+            editors[replaced] = nil
+            editors[movie] = Editor(window: editor.window, viewModel: viewModel, accessesOutputDirectory: editor.accessesOutputDirectory)
+            await editor.viewModel.close()
+            activate(editor.window)
         }
     }
 
@@ -190,6 +233,13 @@ final class EditorWindowManager: NSObject {
         activate(webRecording.window)
     }
 
+    func showWebRecording(at url: URL) {
+        let webRecording = webRecording ?? makeWebRecording()
+        webRecording.viewModel.address = url.absoluteString
+        webRecording.viewModel.commitAddress()
+        activate(webRecording.window)
+    }
+
     /// The Web Recording window with its last script, kept until it closes. Each render opens in the editor.
     private func makeWebRecording() -> WebRecording {
         let viewModel = WebRecordingViewModel(settings: settings) { [weak self] url in
@@ -204,6 +254,70 @@ final class EditorWindowManager: NSObject {
         self.webRecording = webRecording
         NSApp.setActivationPolicy(.regular)
         return webRecording
+    }
+
+    /// Opens a motion bundle (spec 0011) in its own window, or brings its window forward.
+    /// - Parameter conversation: The agent chat a run just ended with on it.
+    func openMotion(_ bundleURL: URL, conversation: [AgentChatMessage] = []) {
+        guard let agentRecording else { return }
+        let bundleURL = bundleURL.standardizedFileURL
+        if let editor = motionEditors[bundleURL] {
+            if !conversation.isEmpty {
+                editor.chat.update(conversation)
+            }
+            activate(editor.window)
+            return
+        }
+
+        let accessesOutputDirectory = settings.startAccessingOutputDirectory()
+        let viewModel = MotionEditorViewModel(bundleURL: bundleURL)
+        let chat = AgentChatViewModel(movie: bundleURL, runner: agentRecording, conversation: conversation)
+        chat.selection = { [weak viewModel] in
+            guard let viewModel, let scene = viewModel.scene else { return (nil, nil) }
+            return (scene.id, viewModel.selectedLayer)
+        }
+        let hostingController = NSHostingController(rootView: MotionEditorView(viewModel: viewModel, chat: chat))
+        hostingController.sizingOptions = []
+        hostingController.sceneBridgingOptions = [.toolbars]
+        let window = makeWindow(contained(hostingController), title: bundleURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1280, height: 800))
+        window.representedURL = bundleURL
+        motionEditors[bundleURL] = MotionEditor(window: window, viewModel: viewModel, chat: chat, accessesOutputDirectory: accessesOutputDirectory)
+
+        NSApp.setActivationPolicy(.regular)
+        activate(window)
+    }
+
+    /// The open window's view model of a motion bundle, which an agent's edits go through.
+    func motionViewModel(for bundleURL: URL) -> MotionEditorViewModel? {
+        motionEditors[bundleURL.standardizedFileURL]?.viewModel
+    }
+
+    private func editorController(_ viewModel: EditorViewModel, _ chat: AgentChatViewModel) -> NSHostingController<EditorView> {
+        let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel, chat: chat))
+        // No sizes from the content: the window holds the minimum itself (`open`)
+        hostingController.sizingOptions = []
+        // The export and inspector buttons are SwiftUI toolbar items
+        hostingController.sceneBridgingOptions = [.toolbars]
+        return hostingController
+    }
+
+    /// `controller` filling a plain view controller. As a window's own content, a hosting view
+    /// resizes the window to its smallest size once the recording has loaded
+    /// (`NSHostingView.updateAnimatedWindowSize`); a level down it leaves the window alone.
+    private func contained(_ controller: NSViewController) -> NSViewController {
+        let container = NSViewController()
+        container.view = NSView()
+        container.addChild(controller)
+        let (view, content) = (container.view, controller.view)
+        content.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            content.topAnchor.constraint(equalTo: view.topAnchor),
+            content.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+        return container
     }
 
     /// A centred window in the editor's look: the content running under a transparent title bar and toolbar.
@@ -245,6 +359,9 @@ extension EditorWindowManager: NSWindowDelegate {
         if let webRecording, window === webRecording.window {
             return webRecording.viewModel.undoManager
         }
+        if let motion = motionEditors.values.first(where: { $0.window === window }) {
+            return motion.viewModel.undoManager
+        }
         return editor(for: window)?.editor.viewModel.undoManager
     }
 
@@ -282,6 +399,16 @@ extension EditorWindowManager: NSWindowDelegate {
         } else if let webRecording, window === webRecording.window {
             self.webRecording = nil
             webRecording.viewModel.close()
+        } else if let (bundleURL, motion) = motionEditors.first(where: { $0.value.window === window }).map({ ($0.key, $0.value) }) {
+            motionEditors[bundleURL] = nil
+            let settings = settings
+            Task {
+                // Saving needs the folder, so its scope is released only afterwards
+                await motion.viewModel.close()
+                if motion.accessesOutputDirectory {
+                    settings.stopAccessingOutputDirectory()
+                }
+            }
         } else if let (videoURL, editor) = editor(for: window) {
             editors[videoURL] = nil
             let settings = settings

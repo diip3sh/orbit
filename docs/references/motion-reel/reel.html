@@ -1,0 +1,579 @@
+<title>Reco Motion Reel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* A screening-room reel like the background one: dark committed look, 16:9 frames two up, a fixed picks bar.
+   Rows pair a move Reco makes today (left) with the proposed one (right). Every frame is drawn by script
+   from a pure function of time, so motion blur comes from each layer's speed: its state now against one
+   shutter earlier. */
+:root {
+  --ground: #0b0c0e;
+  --ink: #ecebe8;
+  --dim: #9a9aa0;
+  --faint: #5c5d63;
+  --rule: #24252b;
+  --pick: #e8b04b;
+  --accent: #8b93ff;
+  --display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --brand: "Inter Tight", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--ink); font: 15px/1.55 var(--display); padding-inline: clamp(16px, 4vw, 48px); padding-block: 40px 120px; margin: 0; }
+.wrap { max-width: 1320px; margin-inline: auto; display: grid; gap: 44px; }
+header { display: grid; gap: 14px; max-width: 74ch; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+h1 { font-size: clamp(30px, 4.4vw, 52px); line-height: 1.04; letter-spacing: -0.02em; font-weight: 600; margin: 0; text-wrap: balance; }
+header p { color: var(--dim); margin: 0; }
+header b { color: var(--ink); font-weight: 500; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font: 12px/1 var(--mono); color: var(--dim); }
+.controls .gap { width: 10px; }
+#sections { display: grid; gap: 64px; }
+.section { display: grid; gap: 18px; }
+.section h2 { font-size: 13px; font-family: var(--mono); font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin: 0; padding-bottom: 10px; border-bottom: 1px solid var(--rule); }
+.section > p, .intro-cell p { color: var(--dim); margin: 0; max-width: 72ch; }
+.intro-cell { align-self: center; display: grid; gap: 10px; max-width: 46ch; }
+.intro-cell p:first-child { color: var(--ink); font-size: 18px; line-height: 1.45; text-wrap: pretty; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 32px 24px; }
+
+figure { margin: 0; display: grid; gap: 12px; min-width: 0; align-content: start; }
+.frame { position: relative; aspect-ratio: 16 / 9; max-width: 100%; overflow: hidden; border-radius: 6px; background: #000; isolation: isolate; container-type: inline-size; }
+.frame:fullscreen { border-radius: 0; }
+.fx { position: absolute; width: 0; height: 0; }
+.grain { position: absolute; inset: -50%; pointer-events: none; opacity: .05; mix-blend-mode: overlay; z-index: 5;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation: grain 1s steps(12) infinite; }
+@keyframes grain { 0%{transform:translate(0,0)} 25%{transform:translate(-7%,4%)} 50%{transform:translate(5%,-6%)} 75%{transform:translate(-3%,-2%)} 100%{transform:translate(6%,5%)} }
+.vignette { position: absolute; inset: 0; pointer-events: none; z-index: 4; background: radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(0,0,0,.25) 100%); }
+
+/* The shot: fields, type and UI, as Reco composites them */
+.lay { position: absolute; inset: 0; }
+.sc { overflow: hidden; }
+.fld { inset: -10%; }
+.fa { background: radial-gradient(60% 80% at 24% 20%, rgba(124,136,255,.30), transparent 62%), radial-gradient(55% 70% at 88% 92%, rgba(92,52,160,.26), transparent 66%), #08080d; }
+.fb { background: radial-gradient(70% 85% at 80% 18%, rgba(70,110,255,.24), transparent 62%), radial-gradient(60% 70% at 8% 100%, rgba(40,90,120,.30), transparent 66%), #06080c; }
+.fc { background: radial-gradient(45% 60% at 50% 46%, rgba(139,147,255,.20), transparent 70%), #050507; }
+.headline { font: 600 5cqw/1.04 var(--brand); letter-spacing: -0.03em; color: #f1f1f6; margin: 0; }
+.ln { display: block; overflow: hidden; padding-bottom: .16em; margin-bottom: -.16em; }
+.wl { display: block; }
+.in, .ch, .w { display: inline-block; white-space: pre; }
+.copy { position: absolute; left: 7%; top: 35%; width: 42%; display: grid; gap: 1.6cqw; }
+.sub { font: 400 1.75cqw/1.35 var(--brand); color: #a9aab8; margin: 0; }
+.brand { position: absolute; left: 7%; top: 22%; width: 4cqw; aspect-ratio: 1; border-radius: 50%; background: var(--accent); }
+.cardw { position: absolute; left: 53%; top: 22%; width: 41%; }
+.card { transform: perspective(1400px) rotateX(8deg) rotateY(-14deg) rotateZ(1.5deg); border-radius: 1.2cqw; background: rgba(16,17,24,.88);
+  border: 1px solid rgba(255,255,255,.09); box-shadow: 0 3cqw 6cqw rgba(0,0,0,.55); padding: 2cqw; display: grid; gap: 1.3cqw; color: #e9e9f2; }
+.chead { display: flex; justify-content: space-between; align-items: center; }
+.merge { font: 600 1.3cqw/1 var(--brand); color: #10111a; background: var(--accent); padding: .6cqw 1.2cqw; border-radius: 99px; }
+.row { position: relative; display: grid; grid-template-columns: 1.4cqw 1fr 5cqw; gap: 1.2cqw; align-items: center; padding: .5cqw .6cqw; }
+.hi { position: absolute; inset: 0; border-radius: .6cqw; background: rgba(139,147,255,.18); transform: scaleX(0); transform-origin: 0 50%; }
+.dot { width: 1.1cqw; height: 1.1cqw; border-radius: 50%; }
+.bar { display: block; height: .9cqw; border-radius: .45cqw; background: #e9e9f2; opacity: .22; }
+.tag { display: block; height: 1.5cqw; border-radius: .75cqw; background: var(--accent); opacity: .28; }
+.fg { display: none; }
+.withfg .fg { display: block; }
+.pill { position: absolute; font: 600 1.4cqw/1 var(--brand); color: #e9e9f2; background: rgba(28,29,40,.92); border: 1px solid rgba(255,255,255,.12); padding: .9cqw 1.4cqw; border-radius: 99px; box-shadow: 0 1.5cqw 3cqw rgba(0,0,0,.5); }
+.panel, .morph { border-radius: 1.2cqw; background: rgba(14,15,22,.92); border: 1px solid rgba(255,255,255,.09); box-shadow: 0 3cqw 6cqw rgba(0,0,0,.55); }
+.panel { position: absolute; left: 20%; top: 12%; width: 60%; height: 64%; padding: 2.2cqw; display: grid; align-content: start; gap: 1.6cqw; overflow: hidden; }
+.morph { position: absolute; display: block; }
+.ph { display: grid; gap: .8cqw; padding-left: 5.2cqw; min-height: 4cqw; align-content: center; }
+.diff { display: grid; gap: .55cqw; }
+.dl { display: grid; grid-template-columns: 1.6cqw 1fr; align-items: center; gap: .8cqw; padding: .35cqw .6cqw; border-radius: .4cqw; }
+.dl i:first-child { font: 500 1.2cqw/1 var(--mono); font-style: normal; color: #6b6d7c; }
+.dl.add { background: rgba(62,207,142,.09); } .dl.add i:first-child { color: #3ecf8e; }
+.dl.del { background: rgba(242,96,96,.09); } .dl.del i:first-child { color: #f26060; }
+.av { position: absolute; left: 22.4%; top: 15.6%; width: 4cqw; aspect-ratio: 1; border-radius: 50%; background: var(--accent); }
+.band { position: absolute; top: -20%; bottom: -20%; left: 0; width: 40%; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.13) 50%, transparent 70%); mix-blend-mode: screen; transform: translateX(-120%); }
+.hB { position: absolute; left: 20%; top: 81%; margin: 0; font: 600 3cqw/1.1 var(--brand); letter-spacing: -0.02em; color: #f1f1f6; }
+.hT { position: absolute; left: 8%; top: 31%; font-size: 7.6cqw; }
+.mono { font-family: var(--mono); font-weight: 500; letter-spacing: -0.02em; font-size: 6.2cqw; }
+.caret { display: inline-block; width: .09em; height: .92em; background: currentColor; vertical-align: -.1em; margin-left: .05em; }
+.roll { display: inline-grid; overflow: hidden; padding-bottom: .16em; margin-bottom: -.16em; color: var(--accent); }
+.roll.open { overflow: visible; }
+.roll .w { grid-area: 1 / 1; }
+.hR { position: absolute; left: 8%; top: 40%; font-size: 6.4cqw; }
+.hHook { position: absolute; left: 0; right: 0; top: 40%; text-align: center; font-size: 8cqw; }
+.hBig { position: absolute; left: 8%; top: 34%; font-size: 11cqw; letter-spacing: -0.045em; }
+.hHero { position: absolute; left: 0; right: 0; top: 34%; text-align: center; font-size: 12cqw; letter-spacing: -0.05em; }
+.scrim { background: radial-gradient(58% 48% at 50% 44%, rgba(4,5,9,.9), rgba(4,5,9,.62) 55%, rgba(4,5,9,0) 100%); }
+.titleblock { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 2cqw; text-align: center; }
+.hTitle { font-size: 6cqw; }
+.endmark { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 2.2cqw; }
+.brand2 { width: 6cqw; aspect-ratio: 1; border-radius: 50%; background: var(--accent); }
+.hEnd { font-size: 6cqw; }
+
+figcaption { display: grid; gap: 6px; min-width: 0; }
+.top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.num { font: 500 12px/1 var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; }
+.name { font-weight: 600; font-size: 17px; letter-spacing: -0.01em; }
+.chip { font: 500 11px/1 var(--mono); padding: 5px 8px; border-radius: 99px; border: 1px solid var(--rule); color: var(--dim); }
+.spacer { flex: 1; }
+.why { color: var(--dim); margin: 0; max-width: 68ch; }
+.params { font: 12px/1.5 var(--mono); color: var(--faint); overflow-wrap: anywhere; }
+button { font: 500 13px/1 var(--display); color: var(--ink); background: transparent; border: 1px solid var(--rule); border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+button:hover { background: #1b1c21; }
+button:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--pick); border-color: var(--pick); color: #17130a; }
+.picks { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 12px clamp(16px, 4vw, 48px) calc(12px + env(safe-area-inset-bottom, 0px));
+  background: rgba(11,12,14,.92); backdrop-filter: blur(12px); border-top: 1px solid var(--rule); display: flex; gap: 10px; align-items: center; }
+.picks span { color: var(--dim); font-size: 13px; min-width: 0; flex: 1; }
+.picks strong { color: var(--ink); font-weight: 500; }
+.note { color: var(--faint); font-size: 13px; margin: 0; max-width: 80ch; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Reco · spec 0012 · Q3 motion reel</span>
+    <h1>Pick how Reco's videos move</h1>
+    <p>Each row puts a move Reco makes today (left, marked <b>Today</b>, with its real timings from the code) next to the proposed one (right). Every frame plays live at its real speed with the same headline and UI card, so only the motion differs. Pick everything you'd ship, including today's moves worth keeping.</p>
+    <div class="controls" role="group" aria-label="Playback">Speed
+      <button type="button" class="speed" data-speed="1" aria-pressed="true">1×</button>
+      <button type="button" class="speed" data-speed="0.5" aria-pressed="false">½×</button>
+      <button type="button" class="speed" data-speed="0.25" aria-pressed="false">¼×</button>
+      <span class="gap"></span>
+      <button type="button" id="pause" aria-pressed="false">Pause</button>
+      <span>Space pauses; ← → step a frame</span>
+    </div>
+  </header>
+  <div id="sections"></div>
+  <p class="note">Motion blur on the proposed moves comes from each layer's speed: a 180° shutter at 30 fps, 300° on whips. Today's frames have none, as Reco's renderer has none yet. Every frame uses one typeface so only the motion differs. Timings and curves are the numbers in spec 0012 (Carbon, Material, HyperFrames); “Northline” and its UI are made up.</p>
+</div>
+
+<div class="picks" role="region" aria-label="Your picks">
+  <span id="pickText">No picks yet.</span>
+  <button id="copyPicks" type="button">Copy picks</button>
+  <button id="clearPicks" type="button">Clear</button>
+</div>
+
+<script>
+// ---------- Curves ----------
+const c01 = v => Math.min(1, Math.max(0, v));
+const prog = (t, a, d) => c01((t - a) / d);
+const pin = (t, a, d) => Math.min(1, (t - a) / d);   // not clamped below 0, so a cut's first frame has a speed
+const lerp = (a, b, p) => a + (b - a) * p;
+const bez = (x1, y1, x2, y2) => {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const X = t => ((ax * t + bx) * t + cx) * t, Y = t => ((ay * t + by) * t + cy) * t;
+  return p => {
+    if (p <= 0) return 0; if (p >= 1) return 1;
+    let lo = 0, hi = 1, t = p;
+    for (let i = 0; i < 26; i++) { const x = X(t); if (Math.abs(x - p) < 1e-6) break; x < p ? lo = t : hi = t; t = (lo + hi) / 2; }
+    return Y(t);
+  };
+};
+// The proposal's curves (spec 0012, Craft numbers)
+const E = {
+  prod: bez(.2, 0, .38, .9),      // Carbon productive
+  expr: bez(0, 0, .3, 1),         // Carbon expressive entrance
+  emph: bez(.05, .7, .1, 1),      // Material emphasized decelerate
+  std: bez(.2, 0, 0, 1),          // Material emphasized, for a shared element
+  exit: bez(.4, .14, 1, 1),       // Carbon exit
+  inOut: bez(.65, 0, .35, 1),
+  over: bez(.2, 1, .3, 1.09),     // one overshoot, bold arrivals only
+  expoOut: p => p >= 1 ? 1 : 1 - 2 ** (-10 * p),
+  expoInOut: p => p <= 0 ? 0 : p >= 1 ? 1 : p < .5 ? 2 ** (20 * p - 10) / 2 : (2 - 2 ** (-20 * p + 10)) / 2,
+  quintOut: p => 1 - (1 - p) ** 5,
+  p3out: p => 1 - (1 - p) ** 3,
+  p3in: p => Math.max(0, p) ** 3,
+  p4in: p => Math.max(0, p) ** 4,
+};
+// Reco's curves today (MotionEasing+Grammar.swift)
+const RE = { enter: bez(.33, 1, .68, 1), enterFast: bez(.16, 1, .3, 1), cascade: bez(.25, 1, .5, 1), exit: bez(.32, 0, .67, 0), move: bez(.5, 0, .2, 1) };
+// A spring by response and bounce (WWDC23), from elapsed seconds to progress
+const spring = (response, bounce) => e => {
+  if (e <= 0) return 0;
+  const w = 2 * Math.PI / response, z = 1 - bounce;
+  if (z >= 1) return 1 - Math.exp(-w * e) * (1 + w * e);
+  const wd = w * Math.sqrt(1 - z * z);
+  return 1 - Math.exp(-z * w * e) * (Math.cos(wd * e) + (z * w / wd) * Math.sin(wd * e));
+};
+const stagger = (j, base, decay = .84) => base * (1 - decay ** j) / (1 - decay);  // offsets shrink ×0.84
+const F = 1 / 30, PXH = 1 / 1080, PXW = 1 / 1920;   // a frame; a pixel of a 1920×1080 canvas
+
+// Reco's moves today (MoveExpansion.swift, SeamExpansion.swift), as states. y is a share of the height,
+// x and blur of the width.
+const reco = {
+  blurIn: (t, s) => { const p = RE.enter(prog(t, s, .55)); return { o: p, blur: 10 * PXW * (1 - p) }; },
+  fadeUp: (t, s) => { const p = RE.enter(prog(t, s, .45)); return { o: p, y: 16 * PXH * (1 - p) }; },
+  rise: (t, s, d = .6) => { const p = RE.cascade(prog(t, s, d)); return { o: p, s: .96 + .04 * p, y: 16 * PXH * (1 - p) }; },
+  exit: (t, s) => { const p = RE.exit(prog(t, s, .25)); return { o: 1 - p, y: -8 * PXH * p, blur: 6 * PXW * p }; },
+  detach: (t, s) => ({ s: 1 + .03 * RE.move(prog(t, s, .6)) }),
+  // Drift and cut: 2% of the width a second, at most 4% over its scene, pushing 1% a second
+  drift: (t, scene, way = 1) => { const k = Math.min(1, .04 / (.02 * Math.max(scene, 1))), e = Math.max(0, t); return { x: -way * .02 * k * e, s: (1 + .01 * k) ** e }; },
+  // A text reveal's part: characters wipe in sharpening from 8% of the line; words rise a quarter line from 4%
+  wipe: (t, s, line) => { const p = RE.enter(prog(t, s, .3)); return { o: p, blur: .08 * line * (1 - p) }; },
+  word: (t, s, line) => { const p = RE.enter(prog(t, s, .45)); return { o: p, yp: 25 * (1 - p), blur: .04 * line * (1 - p) }; },
+  zoomOut: (t, cut) => { const p = RE.exit(prog(t, cut - .2, .2)); return { s: 1 + .2 * p, blur: 10 * PXW * p }; },
+  zoomIn: (t, cut) => ({ s: .75 + .25 * RE.enterFast(prog(t, cut, .5)), blur: 10 * PXW * (1 - RE.enter(prog(t, cut, .3))) }),
+};
+// States multiply in opacity and scale and add in the rest
+const mix = (...states) => states.reduce((a, b) => ({ ...a, ...b, x: (a.x ?? 0) + (b.x ?? 0), y: (a.y ?? 0) + (b.y ?? 0), yp: (a.yp ?? 0) + (b.yp ?? 0),
+  s: (a.s ?? 1) * (b.s ?? 1), o: (a.o ?? 1) * (b.o ?? 1), blur: (a.blur ?? 0) + (b.blur ?? 0) }), {});
+
+// ---------- Drawing ----------
+let filterSeq = 0;
+// A layer whose state is a pure function of time; `mb` turns on motion blur from its speed.
+function N(el, f, opts = {}) {
+  const n = { el, f, sh: opts.sh ?? F / 2, mb: !!opts.mb };
+  if (n.mb) {
+    const svg = el.closest(".frame").querySelector("svg.fx");
+    const id = "mb" + (++filterSeq);
+    svg.insertAdjacentHTML("beforeend", `<filter id="${id}" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="0 0"/></filter>`);
+    n.fid = id; n.g = svg.lastElementChild.firstElementChild;
+  }
+  return n;
+}
+function apply(n, st, pv, W, H) {
+  const el = n.el, o = st.o ?? 1;
+  if (o <= .001) { if (!n.hidden) { el.style.visibility = "hidden"; n.hidden = true; } return; }
+  if (n.hidden) { el.style.visibility = ""; n.hidden = false; }
+  const x = (st.x ?? 0) * W, y = (st.y ?? 0) * H, s = st.s ?? 1;
+  let tr = "";
+  if (x || y) tr += `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) `;
+  if (st.xp || st.yp) tr += `translate(${(st.xp ?? 0).toFixed(3)}%,${(st.yp ?? 0).toFixed(3)}%) `;
+  if (st.rx || st.ry) tr += `perspective(${Math.round(W * 1.4)}px) rotateX(${st.rx ?? 0}deg) rotateY(${st.ry ?? 0}deg) `;
+  if (s !== 1) tr += `scale(${s.toFixed(5)}) `;
+  if (st.sx !== undefined) tr += `scaleX(${st.sx.toFixed(4)})`;
+  el.style.transform = tr || "none";
+  if (st.ox !== undefined) el.style.transformOrigin = `${st.ox * 100}% ${st.oy * 100}%`;
+  el.style.opacity = o < 1 ? o.toFixed(3) : "";
+  el.style.clipPath = st.clip ?? "";
+  let filter = "";
+  if (n.g && pv) {
+    let dx = Math.abs(((st.x ?? 0) - (pv.x ?? 0)) * W), dy = Math.abs(((st.y ?? 0) - (pv.y ?? 0)) * H);
+    if (st.yp !== undefined) dy += Math.abs((st.yp ?? 0) - (pv.yp ?? 0)) / 100 * (n.h ??= el.offsetHeight);
+    if (st.xp !== undefined) dx += Math.abs((st.xp ?? 0) - (pv.xp ?? 0)) / 100 * (n.w ??= el.offsetWidth);
+    const z = Math.abs(Math.log((st.s ?? 1) / (pv.s ?? 1))) * W * .35;
+    const cap = W * .05, sx = Math.min(cap, (dx + z) / 2.2), sy = Math.min(cap, (dy + z) / 2.2);
+    if (sx > .35 || sy > .35) { n.g.setAttribute("stdDeviation", `${sx.toFixed(2)} ${sy.toFixed(2)}`); filter += `url(#${n.fid}) `; }
+  }
+  if (st.blur > 1e-4) filter += `blur(${(st.blur * W).toFixed(2)}px)`;
+  el.style.filter = filter;
+}
+// An element's centre in fractions of the frame, measured before anything moves
+function centerOf(el, frame) {
+  const r = el.getBoundingClientRect(), f = frame.getBoundingClientRect();
+  return { x: (r.left + r.width / 2 - f.left) / f.width, y: (r.top + r.height / 2 - f.top) / f.height };
+}
+// Where a point of the frame sits in an element's own box, to scale it about that point
+function originAt(el, frame, fx = .5, fy = .5) {
+  const r = el.getBoundingClientRect(), f = frame.getBoundingClientRect();
+  return { ox: (f.left + fx * f.width - r.left) / r.width, oy: (f.top + fy * f.height - r.top) / r.height };
+}
+// A camera pushing into point c by k at progress p: the point travels to the centre as it scales
+const toward = (c, k, p) => ({ x: (.5 - c.x) * p, y: (.5 - c.y) * p, s: k ** p, ox: c.x, oy: c.y });
+
+// ---------- Shots ----------
+const chars = s => [...s].map(c => `<span class="ch">${c}</span>`).join("");
+const words = s => s.split(" ").map((w, i, a) => `<span class="ch">${w}${i < a.length - 1 ? " " : ""}</span>`).join("");
+const lines = (...ls) => ls.map(l => `<span class="ln"><span class="in">${l}</span></span>`).join("");   // each line in its mask
+const charLines = (...ls) => ls.map(l => `<span class="wl">${chars(l)}</span>`).join("");             // characters, no mask
+const ROWS = [["62%", "#8b93ff"], ["48%", "#f2b45a"], ["70%", "#3ecf8e"], ["40%", "#8b93ff"]];
+const card = () => `<div class="cardw"><div class="card"><div class="chead"><i class="bar" style="width:34%;opacity:.5"></i><span class="merge">Merge</span></div>${
+  ROWS.map(([w, c], i) => `<div class="row">${i === 1 ? '<i class="hi"></i>' : ""}<i class="dot" style="background:${c}"></i><i class="bar" style="width:${w}"></i><i class="tag"></i></div>`).join("")}</div></div>`;
+// Shot A: the logo dot, a headline and a line, a UI card; `wipe` sets the headline as characters for today's blur wipe
+const sceneA = ({ l1 = "Plan the work.", l2 = "Then ship it.", sub = "Issues, cycles and roadmaps in one fast tool.", wipe = false } = {}) =>
+  `<div class="lay sc sa"><div class="lay fld fa"></div><div class="lay ct"><div class="lay tx"><i class="brand"></i><div class="copy"><h3 class="headline">${wipe ? charLines(l1, l2) : lines(l1, l2)}</h3>${
+    sub ? `<p class="sub">${wipe ? sub : lines(sub)}</p>` : ""}</div></div>${card()}<div class="lay fg"><span class="pill" style="left:46%;top:74%">Cycle 24</span><span class="pill" style="left:82%;top:12%">3 merged</span></div></div></div>`;
+const DIFF = [["", "58%"], ["add", "72%"], ["add", "46%"], ["", "64%"], ["del", "52%"], ["add", "80%"], ["", "38%"], ["add", "60%"]];
+// Shot B: a diff panel and the reviewer's avatar; `under` goes between its field and content, `over` on top
+const sceneB = ({ under = "", over = "" } = {}) =>
+  `<div class="lay sc sb"><div class="lay fld fb"></div>${under}<div class="lay ct"><div class="panel"><div class="ph"><i class="bar" style="width:40%;opacity:.5"></i><i class="bar" style="width:22%"></i></div><div class="diff">${
+    DIFF.map(([k, w]) => `<div class="dl ${k}"><i>${k === "add" ? "+" : k === "del" ? "−" : " "}</i><i class="bar" style="width:${w}"></i></div>`).join("")}</div><i class="band"></i></div><i class="av"></i><p class="hB">${lines("Review every diff.")}</p></div>${over}</div>`;
+const sceneT = (inner, cls = "") => `<div class="lay sc st"><div class="lay fld fa"></div><div class="lay ct"><h3 class="headline hT ${cls}">${inner}</h3></div></div>`;
+const beatType = (text, field, cls = "hBig") => `<div class="lay sc bt"><div class="lay fld ${field}"></div><div class="lay ct"><h3 class="headline ${cls}">${lines(text)}</h3></div></div>`;
+const titleBeat = (text, detail, field) => `<div class="lay sc bt"><div class="lay fld ${field}"></div><div class="lay ct"><div class="titleblock"><h3 class="headline hTitle">${charLines(text)}</h3><p class="sub">${detail}</p></div></div></div>`;
+const endCard = () => `<div class="lay sc end"><div class="lay fld fc"></div><div class="lay ct"><div class="endmark"><i class="brand2"></i><h3 class="headline hEnd">${lines("Northline")}</h3></div></div></div>`;
+
+const $ = (f, s) => f.querySelector(s), $$ = (f, s) => [...f.querySelectorAll(s)];
+const ab = f => ({ A: $(f, ".sa"), Ac: $(f, ".sa .ct"), Af: $(f, ".sa .fld"), B: $(f, ".sb"), Bc: $(f, ".sb .ct"), Bf: $(f, ".sb .fld") });
+const before = (t, c) => ({ o: t < c ? 1 : 0 }), after = (t, c) => ({ o: t < c ? 0 : 1 });
+
+// ---------- Transitions: A holds, B from TC ----------
+const TC = 1.6;
+const transitions = [
+  { id: "fade", today: true, name: "Crossfade", why: "Today's fade seam, used into every end card: the shot fades out over the next for half a second, both at half strength midway.", params: "fade · 0.5 s linear",
+    build: f => { const { A, B } = ab(f); return [N(A, t => before(t, TC + .5)), N(B, t => ({ o: prog(t, TC, .5) }))]; } },
+  { id: "morph", name: "Shared-element morph", why: "The card becomes the next shot's panel: it flies, grows and straightens while the rest of the shot clears, then the panel's rows arrive.", params: "0.65 s on (0.2, 0, 0, 1) · tilt 8° / −14° / 1.5° → 0 · rows 2 frames apart, ×0.84",
+    html: sceneA() + sceneB({ under: '<i class="morph"></i>' }),
+    build: f => { const { A, B } = ab(f), W = f.clientWidth, H = f.clientHeight, D = .65, land = TC + D;
+      const cw = $(f, ".sa .cardw"), pn = $(f, ".sb .panel"), m = $(f, ".sb .morph");
+      const from = [cw.offsetLeft / W, cw.offsetTop / H, cw.offsetWidth / W, $(f, ".sa .card").offsetHeight / H];
+      const to = [pn.offsetLeft / W, pn.offsetTop / H, pn.offsetWidth / W, pn.offsetHeight / H];
+      return { nodes: [
+        N(A, t => before(t, land)), N($(f, ".sa .tx"), t => { const p = E.exit(prog(t, TC, .22)); return { o: 1 - p, y: -.015 * p }; }), N(cw, t => before(t, TC)),
+        N(B, t => after(t, TC)), N($(f, ".sb .fld"), t => ({ o: E.inOut(prog(t, TC, D)) })), N(m, t => ({ o: t >= TC && t < land ? 1 : 0 })),
+        N($(f, ".sb .ct"), t => after(t, land)), N($(f, ".sb .ph"), t => ({ o: prog(t, land, .2) })), N($(f, ".sb .av"), t => ({ o: prog(t, land, .2) })),
+        ...$$(f, ".sb .dl").map((el, j) => N(el, t => { const p = E.quintOut(prog(t, land + .05 + stagger(j, 2 * F), 14 * F)); return { o: c01(p * 2), yp: 40 * (1 - p) }; })),
+        N($(f, ".sb .hB .in"), t => ({ yp: 115 * (1 - E.quintOut(prog(t, land + .15, 16 * F))) }), { mb: 1 })],
+        extra: t => { if (t < TC || t >= land) return; const p = E.std(prog(t, TC, D)), r = from.map((v, i) => lerp(v, to[i], p)), k = 1 - p;
+          m.style.left = `${r[0] * 100}%`; m.style.top = `${r[1] * 100}%`; m.style.width = `${r[2] * 100}%`; m.style.height = `${r[3] * 100}%`;
+          m.style.transform = `perspective(1400px) rotateX(${8 * k}deg) rotateY(${-14 * k}deg) rotateZ(${1.5 * k}deg)`; } }; } },
+  { id: "blurCut", today: true, name: "Blur cut", why: "Today's blur cut: the shot blurs to 10 px in its last 0.15 s and the next sharpens over 0.3 s. At that size it plays as a plain cut.", params: "blurCut · out in-cubic 0.15 s · in out-cubic 0.3 s · 10 px at 1080p",
+    build: f => { const { A, Ac, B, Bc } = ab(f); return [
+      N(A, t => before(t, TC)), N(Ac, t => ({ blur: 10 * PXW * RE.exit(prog(t, TC - .15, .15)) })),
+      N(B, t => after(t, TC)), N(Bc, t => ({ blur: 10 * PXW * (1 - RE.enter(prog(t, TC, .3))) }))]; } },
+  { id: "whip", name: "Whip pan", why: "A fast pan with a long shutter: the blur peaks on the cut and hides it. For high-energy beats only.", params: "10 frames, 5 each side · 300° shutter · field at 0.15× parallax",
+    build: f => { const { A, Ac, Af, B, Bc, Bf } = ab(f), sh = 1 / 36;
+      const out = t => -.5 * E.p3in((t - TC + 5 * F) / (5 * F)), inn = t => .5 * (1 - E.p3out(pin(t, TC, 5 * F)));
+      return [N(A, t => before(t, TC)), N(Ac, t => ({ x: out(t) }), { mb: 1, sh }), N(Af, t => ({ x: .15 * out(t) })),
+        N(B, t => after(t, TC)), N(Bc, t => ({ x: inn(t) }), { mb: 1, sh }), N(Bf, t => ({ x: .15 * inn(t) }))]; } },
+  { id: "pushSeam", today: true, name: "Push", why: "Today's push: the next shot slides in from the right and shoves this one out, whole frames moving together.", params: "push · 0.5 s on (0.5, 0, 0.2, 1) · full width",
+    build: f => { const { A, B } = ab(f), p = t => RE.move(prog(t, TC, .5)); return [
+      N(A, t => ({ x: -p(t), ...before(t, TC + .5) })), N(B, t => ({ x: 1 - p(t), ...after(t, TC) }))]; } },
+  { id: "maskedPush", name: "Masked push", why: "The next shot rises from behind the bottom edge while this one is pushed up more slowly: a hard edge, two speeds, no fade.", params: "expo.in-out 0.75 s · next shot travels 14%, this one 8% · motion blur",
+    build: f => { const { A, Ac, B, Bc } = ab(f), p = t => E.expoInOut(prog(t, TC, .75)); return [
+      N(A, t => before(t, TC + .75)), N(Ac, t => ({ y: -.08 * p(t) }), { mb: 1 }),
+      N(B, t => t < TC ? { o: 0 } : p(t) >= 1 ? {} : { clip: `inset(${((1 - p(t)) * 100).toFixed(2)}% 0 0 0)` }),
+      N(Bc, t => ({ y: .14 * (1 - p(t)) }), { mb: 1 })]; } },
+  { id: "zoomThrough", today: true, name: "Zoom-through", why: "Today's zoom-through, already on HyperFrames' numbers: the shot rushes in and the next lands from 75%, blurred across the cut. The agent uses it after the hook.", params: "zoomThrough · out 1 → 1.2 in-cubic 0.2 s · in 0.75 → 1 out-expo 0.5 s · blur 10 px",
+    build: f => { const { A, Ac, B, Bc } = ab(f); return [
+      N(A, t => before(t, TC)), N(Ac, t => reco.zoomOut(t, TC)), N(B, t => after(t, TC)), N(Bc, t => reco.zoomIn(t, TC))]; } },
+  { id: "inverseZoomThrough", name: "Inverse zoom-through", why: "The opposite direction: the shot falls away and the next arrives from in front of the lens. For an arrival or a step back.", params: "out 1 → 0.8 power3.in 0.2 s · in 1.25 → 1 expo.out 0.5 s · blur 10 px · motion blur",
+    build: f => { const { A, Ac, B, Bc } = ab(f); return [
+      N(A, t => before(t, TC)), N(Ac, t => { const p = E.p3in((t - TC + .2) / .2); return { s: 1 - .2 * p, blur: 10 * PXW * c01(p) }; }, { mb: 1 }),
+      N(B, t => after(t, TC)), N(Bc, t => { const p = pin(t, TC, .5); return { s: 1.25 - .25 * E.expoOut(p), blur: 10 * PXW * (1 - E.expoOut(c01(p * 1.67))) }; }, { mb: 1 })]; } },
+  { id: "cutOnMotion", today: true, name: "Cut on motion", why: "Today's cut on motion carries the camera's speed into the next shot. The only speed is the drift, about 1% of the width a second, so it plays as a plain cut.", params: "cutOnMotion · carried speed settles with τ 0.45 s · drift 2% of the width a second, at most 4% a scene",
+    build: f => { const { A, Ac, B, Bc } = ab(f), k = Math.min(1, .04 / (.02 * 4)), v = .02 * k, vz = Math.log(1 + .01 * k), tau = .45;
+      const carry = e => tau * (1 - Math.exp(-Math.max(0, e) / tau));
+      return [N(A, t => before(t, TC)), N(Ac, t => reco.drift(t + 2.4, 4)),
+        N(B, t => after(t, TC)), N(Bc, t => mix({ x: -v * carry(t - TC), s: Math.exp(vz * carry(t - TC)) }, reco.drift(t - TC, 4, -1)))]; } },
+  { id: "cutCurve", name: "Cut the curve", why: "The shot accelerates out and the next arrives already moving at the same speed and direction, so the cut reads as one move. It replaces cut on motion.", params: "out 12% on power4.in, 0.3 s · in 13.9% on expo.out, 0.6 s · 1.6 widths a second each side",
+    build: f => { const { A, Ac, B, Bc } = ab(f); return [
+      N(A, t => before(t, TC)), N(Ac, t => ({ x: -.12 * E.p4in((t - TC + .3) / .3) }), { mb: 1 }),
+      N(B, t => after(t, TC)), N(Bc, t => ({ x: .139 * (1 - E.expoOut(pin(t, TC, .6))) }), { mb: 1 })]; } },
+  { id: "matchCut", name: "Match cut", why: "The camera dives into the logo dot and comes out of the reviewer's avatar: the same shape, place and size across the cut.", params: "push to 4× on power3.in 0.55 s · pull out expo.out 1.2 s, speeds matched",
+    // The content dives; the soft field stays, as a far background would
+    build: f => { const { A, Ac, B, Bc } = ab(f), a = centerOf($(f, ".sa .brand"), f), b = centerOf($(f, ".sb .av"), f); return [
+      N(A, t => before(t, TC)), N(Ac, t => toward(a, 4, E.p3in(prog(t, TC - .55, .55))), { mb: 1 }),
+      N(B, t => after(t, TC)), N(Bc, t => toward(b, 4, 1 - E.expoOut(pin(t, TC, 1.2))), { mb: 1 })]; } },
+  { id: "shapeWipe", name: "Shape wipe", why: "The next shot grows out of a rounded square with the brand's corner radius: a signature move made from a brand asset.", params: "expo.in-out 0.8 s · radius held, squared off at the end · next shot settles from 108%",
+    build: f => { const { A, Ac, B, Bc } = ab(f); return [
+      N(A, t => before(t, TC + .8)), N(Ac, t => { const p = E.expoInOut(prog(t, TC, .8)); return { s: 1 - .05 * p, o: 1 - .45 * p }; }),
+      N(B, t => { if (t < TC) return { o: 0 }; const p = E.expoInOut(prog(t, TC, .8)); if (p >= 1) return {};
+        return { clip: `inset(${lerp(44, 0, p).toFixed(2)}% ${lerp(46.5, 0, p).toFixed(2)}% round ${lerp(1.6, 0, p ** 4).toFixed(3)}cqw)` }; }),
+      N(Bc, t => ({ s: 1.08 ** (1 - E.expoOut(prog(t, TC + .1, 1))) }))]; } },
+];
+
+// ---------- Text reveals ----------
+const T0 = .4, L1 = "Plan the work.", L2 = "Then ship it.", LINE = .076 * 1.04;   // .hT's line, a share of the width
+const textOut = t => ({ o: 1 - prog(t, 3.7, .2) });
+const reveal = (spec, inner, cls, nodes) => ({ ...spec, loop: 4.2, html: sceneT(inner, cls),
+  build: f => [N($(f, ".ct"), textOut), ...nodes(f)] });
+const maskRise = (el, at, d = 16 * F, ease = E.quintOut) => N(el, t => ({ yp: 115 * (1 - ease(prog(t, at, d))) }), { mb: 1 });
+// Typing into the two lines' `.in`: `times` are when each character lands; a caret for the proposal
+const typing = (f, times, caret) => { const ins = $$(f, ".in"), texts = ["npx northline", "init --cycle"], end = times.at(-1); let last = "";
+  return t => { const n = times.filter(v => v <= t).length, on = caret && (n < times.length || Math.floor((t - end) / .53) % 2 === 0);
+    const a = Math.min(n, texts[0].length), b = Math.max(0, n - texts[0].length), key = `${a}/${b}/${on}`;
+    if (key === last) return; last = key; const c = on ? '<span class="caret"></span>' : "";
+    ins[0].innerHTML = texts[0].slice(0, a) + (b === 0 ? c : "") || "&#8203;"; ins[1].innerHTML = b > 0 ? texts[1].slice(0, b) + c : "&#8203;"; }; };
+const textReveals = [
+  reveal({ id: "blurWipe", today: true, name: "Blur wipe", why: "Today's headline reveal for sans brands, after Linear: each character sharpens and fades in, 44 ms after the last.", params: "blurWipe · 0.3 s a character, out-cubic · blur from 8% of the line" },
+    charLines(L1, L2), "", f => $$(f, ".ch").map((el, i) => N(el, t => reco.wipe(t, T0 + i * .044, LINE)))),
+  reveal({ id: "perChar", name: "Per character", why: "Characters rise from behind the line's edge, no fade, the stagger tightening so the line accelerates into place.", params: "15 frames each · offsets from 2.4 frames, ×0.84 per character · motion blur" },
+    [L1, L2].map(l => `<span class="ln">${chars(l)}</span>`).join(""), "", f => $$(f, ".ch").map((el, j) => maskRise(el, T0 + stagger(j, 2.4 * F), 15 * F))),
+  reveal({ id: "lineMask", today: true, name: "Line mask", why: "Today's reveal for serif brands: each line rises out of its own box.", params: "lineMask · 0.6 s a line, 0.12 s apart, out-cubic" },
+    lines(L1, L2), "", f => $$(f, ".in").map((el, i) => N(el, t => ({ yp: 100 * (1 - RE.enter(prog(t, T0 + i * .12, .6))) })))),
+  reveal({ id: "maskRise", name: "Mask rise", why: "The line mask with a sharper attack, a longer tail and motion blur. It would replace the blur wipe as the default headline reveal for every face.", params: "16 frames a line, 4 frames apart · quint.out · motion blur" },
+    lines(L1, L2), "", f => $$(f, ".in").map((el, i) => maskRise(el, T0 + i * 4 * F))),
+  reveal({ id: "wordByWord", today: true, name: "Word by word", why: "Today's word reveal, used on feature captions: each word rises a quarter line, sharpening and fading in, 0.12 s after the last.", params: "wordByWord · 0.45 s a word, out-cubic · blur from 4% of the line" },
+    [L1, L2].map(l => `<span class="wl">${words(l)}</span>`).join(""), "", f => $$(f, ".ch").map((el, i) => N(el, t => reco.word(t, T0 + i * .12, LINE)))),
+  reveal({ id: "wordStagger", name: "Word by word, masked", why: "Words rise from behind the line's edge with no fade; the gaps shrink so the line gathers pace.", params: "14 frames a word · offsets from 4 frames, ×0.84 · quint.out · motion blur" },
+    [L1, L2].map(l => `<span class="ln">${words(l)}</span>`).join(""), "", f => $$(f, ".ch").map((el, j) => maskRise(el, T0 + stagger(j, 4 * F), 14 * F))),
+  { ...reveal({ id: "type", today: true, name: "Typing", why: "Today's reveal for mono brands: characters appear at an even 15 a second, with no caret.", params: "type · 15 characters a second" }, lines("", ""), "mono", () => []),
+    extra: f => typing(f, Array.from({ length: 25 }, (_, i) => T0 + i / 15), false) },
+  { ...reveal({ id: "typeCaret", name: "Typing with a caret", why: "Typed at a human, uneven pace with a caret that blinks once it stops.", params: "55 ms a key ± 25 ms · caret blinks at rest" }, lines("", ""), "mono", () => []),
+    extra: f => { const times = []; let k = T0; for (let i = 0; i < 25; i++) { times.push(k); k += .055 + .025 * Math.sin(i * 12.9898); } return typing(f, times, true); } },
+  reveal({ id: "roll", today: true, name: "Word roll", why: "Today's roll: once the line is in, its last word swaps every 0.5 s, fading as it moves 0.35 em.", params: "roll · 0.2 s swaps every 0.5 s, from 0.5 s after the reveal · fade and 0.35 em" },
+    `<span class="wl">${chars(L1)}</span><span class="wl">${chars("Ship it ")}<span class="roll open"><span class="w">${chars("faster.")}</span><span class="w">together.</span><span class="w">today.</span></span></span>`, "",
+    f => { const cs = $$(f, ".ch"), ws = $$(f, ".w"), R0 = T0 + (cs.length - 1) * .044 + .3 + .5;
+      return [...cs.map((el, i) => N(el, t => reco.wipe(t, T0 + i * .044, LINE))),
+        ...ws.map((el, i) => N(el, t => { const ein = i === 0 ? 1 : RE.enter(prog(t, R0 + (i - 1) * .5, .2)), eout = i === ws.length - 1 ? 0 : RE.exit(prog(t, R0 + i * .5, .2));
+          return { o: ein * (1 - eout), yp: 34 * (1 - ein) - 34 * eout }; }))]; }),
+  reveal({ id: "maskedRoll", name: "Word roll, masked", why: "The line lands, then its last word swaps behind a mask: in from below, out above, no fade.", params: "words every 0.75 s · in 0.25 s quint.out, out 0.22 s · masked" },
+    `${lines(L1)}<span class="ln"><span class="in">Ship it <span class="roll"><span class="w">faster.</span><span class="w">together.</span><span class="w">today.</span></span></span></span>`, "",
+    f => { const R0 = 1.5, iv = .75, ws = $$(f, ".w"); return [
+      ...$$(f, ".ln > .in").map((el, i) => maskRise(el, T0 + i * 4 * F)),
+      ...ws.map((el, i) => N(el, t => { const inn = i === 0 ? 0 : 125 * (1 - E.quintOut(prog(t, R0 + (i - 1) * iv, .25)));
+        const out = i === ws.length - 1 ? 0 : -125 * E.exit(prog(t, R0 + i * iv, .22)); return { yp: inn + out }; }, { mb: 1 }))]; }),
+  reveal({ id: "blurIn", today: true, name: "Blur-in", why: "Today's reveal for the hook and the logo: the whole text fades in sharpening from 10 px, the first tell on every list of AI motion.", params: "blurIn · 0.55 s out-cubic · blur 10 px at 1080p" },
+    lines(L1, L2), "", f => [N($(f, ".hT"), t => reco.blurIn(t, T0))]),
+  reveal({ id: "riseSettle", name: "Rise and settle", why: "Lines rise masked while the whole headline settles from 108%: a long, high-friction tail for calm brands.", params: "lines 0.7 s expressive, 3 frames apart · scale 1.08 → 1 over 32 frames, log-quartic" },
+    lines(L1, L2), "", f => [N($(f, ".hT"), t => ({ s: 1.08 ** ((1 - prog(t, T0, 32 * F)) ** 4), ox: 0, oy: .5 })),
+      ...$$(f, ".in").map((el, i) => maskRise(el, T0 + i * 3 * F, .7, E.expr))]),
+  reveal({ id: "fadeUp", today: true, name: "Fade up", why: "Today's reveal for detail lines and the end card: the text fades in rising 16 px.", params: "fadeUp · 0.45 s out-cubic · 16 px at 1080p" },
+    lines(L1, L2), "", f => [N($(f, ".hT"), t => reco.fadeUp(t, T0))]),
+  { ...reveal({ id: "trackBreathe", name: "Tracking breathe", why: "The line comes in wide and draws together over almost two seconds. Calm, premium brands.", params: "tracking +16% → −3% on expressive, 1.8 s · fade 0.3 s" },
+    lines(L1, L2), "", f => [N($(f, ".hT"), t => ({ o: prog(t, T0, .3) }))]),
+    extra: f => { const h = $(f, ".hT"); return t => { h.style.letterSpacing = lerp(.16, -.03, E.expr(prog(t, T0, 1.8))).toFixed(4) + "em"; }; } },
+];
+
+// ---------- Registers: the same 6 s shot ----------
+const REG = {
+  precise: { name: "Precise", why: "Linear, Vercel, Supabase: quick, exact, nothing overshoots. Short moves, tight staggers.", params: "quint.out 14 frames · stagger 2 frames · move Carbon productive 0.5 s · exit 0.4 s",
+    in: e => E.quintOut(c01(e / .47)), text: e => E.quintOut(c01(e / .5)), gap: 3 * F, stag: 2 * F, card: { y: .05, s: 1 }, move: e => E.prod(c01(e / .5)), mx: -.04, exit: e => E.exit(c01(e / .4)), exitY: -.03 },
+  calm: { name: "Calm", why: "Apple, Stripe: long tails, scale settles, wide staggers. Things arrive and keep easing for a second.", params: "expressive 32 frames · settle from 105% · stagger 4 frames ×0.84 · move 1.3 s",
+    in: e => E.expr(c01(e / 1.05)), text: e => E.expr(c01(e / 1)), gap: 5 * F, stag: 4 * F, card: { y: .035, s: 1.05 }, move: e => E.expr(c01(e / 1.3)), mx: -.04, exit: e => E.exit(c01(e / .9)), exitY: -.02 },
+  playful: { name: "Playful", why: "Notion, consumer apps: things pop from 86% on a spring with one small bounce. Text never bounces.", params: "spring 0.5 s, bounce 0.3 · pop from 86% · stagger 3 frames · text emphasized 0.6 s",
+    in: spring(.5, .3), text: e => E.emph(c01(e / .6)), gap: 3 * F, stag: 3 * F, card: { y: .03, s: .86 }, move: spring(.45, .25), mx: -.05, exit: e => E.exit(c01(e / .35)), exitY: -.02 },
+  bold: { name: "Bold", why: "Launch hype: things arrive from far and fast with one overshoot, move on expo in-out and leave hard.", params: "0.42 s with a 9% overshoot · from 32% below · move expo.in-out 0.35 s · exit power4.in 0.25 s",
+    in: e => E.over(c01(e / .42)), text: e => E.expoOut(c01(e / .35)), gap: 2 * F, stag: 1.5 * F, card: { y: .32, s: 1.12 }, move: e => E.expoInOut(c01(e / .35)), mx: -.09, exit: e => E.p4in(c01(e / .25)), exitY: -.25 },
+};
+const registers = [
+  { id: "oneRegister", today: true, name: "One register", why: "Every brand moves alike: a blur wipe on the headline, the card rising from 96%, rows cascading, the card detaching, a slow drift, and a blurred fade out.", params: "blurWipe · rise 0.6 s out-quart · cascade 0.075 s apart · detach 0.6 s · exit 0.25 s",
+    loop: 6.2, html: sceneA({ wipe: true }), build: f => { const S = .2, TX = 5, line = .05 * 1.04; return [
+      N($(f, ".ct"), t => reco.drift(t, 6.2)),
+      N($(f, ".brand"), t => mix(reco.blurIn(t, S), reco.exit(t, TX))),
+      N($(f, ".copy"), t => reco.exit(t, TX)),
+      ...$$(f, ".copy .ch").map((el, i) => N(el, t => reco.wipe(t, S + .1 + i * .044, line))),
+      N($(f, ".sub"), t => reco.fadeUp(t, S + 1)),
+      N($(f, ".cardw"), t => mix(reco.rise(t, S + .1), reco.detach(t, 2.7), reco.exit(t, TX))),
+      ...$$(f, ".card .row").map((el, j) => N(el, t => reco.rise(t, S + .2 + j * .075, 1.05)))]; } },
+  ...Object.entries(REG).map(([id, R]) => ({ id, name: R.name, why: R.why, params: R.params, loop: 6.2, html: sceneA(),
+    build: f => { const S = .2, TM = 2.7, TX = 5, ex = t => R.exit(t - TX); return [
+      N($(f, ".brand"), t => { const p = R.in(t - S); return { s: .6 ** (1 - p), o: c01((t - S) / .1) * (1 - ex(t)) }; }),
+      ...$$(f, ".copy .in").map((el, i) => N(el, t => ({ yp: 115 * (1 - R.text(t - S - .1 - i * R.gap)) - 115 * R.exit(t - TX - i * R.gap * .5) }), { mb: 1 })),
+      N($(f, ".cardw"), t => { const p = R.in(t - S - .1), e = ex(t);
+        return { y: R.card.y * (1 - p) + R.exitY * e, x: R.mx * R.move(t - TM), s: R.card.s ** (1 - p), o: c01((t - S - .1) / .12) * (1 - e) }; }, { mb: 1 }),
+      ...$$(f, ".card .row").map((el, j) => N(el, t => { const p = R.in(t - S - .1 - 2 * F - stagger(j, R.stag)); return { y: .03 * (1 - p), o: c01(p * 2.5) }; })),
+      N($(f, ".hi"), t => ({ sx: Math.max(0, R.move(t - TM - .1)) }))]; } })),
+];
+
+// ---------- Camera ----------
+const planes = (f, move) => { const c = $(f, ".cardw"), o = originAt(c, f); return [
+  N($(f, ".fld"), t => move(t, .3)), N($(f, ".tx"), t => move(t, 1)), N(c, t => ({ ...move(t, 1, true), ...o })), N($(f, ".fg"), t => move(t, 1.5))]; };
+const camera = [
+  { id: "drift", today: true, name: "Drift", why: "Today every shot drifts sideways and pushes in a little, everything on one plane. Slowed to fit its scene, it reads as a still camera.", params: "drift · 2% of the width a second, at most 4% over the scene · zoom 1% a second",
+    loop: 6, html: sceneA(), build: f => [N($(f, ".ct"), t => reco.drift(t, 6))] },
+  { id: "truck", name: "Parallax truck", why: "A sideways move: the background barely shifts and the foreground passes fastest, so the UI has depth.", params: "planes 0.3× / 1× / 1.5× · 7% across · yaw ±3° · in-out 5.6 s",
+    loop: 6, html: sceneA(), cls: "withfg", build: f => planes(f, (t, k, yaw) => { const p = E.inOut(prog(t, .2, 5.6)); return { x: (.035 - .07 * p) * k, ry: yaw ? (p - .5) * -6 : 0 }; }) },
+  { id: "cameraPush", today: true, name: "Push", why: "Today's push: the lens zooms in 12% and stops, the whole picture moving as one plane.", params: "push · 1 → 1.12 over 1.2 s on (0.5, 0, 0.2, 1)",
+    loop: 6, html: sceneA(), build: f => [N($(f, ".ct"), t => ({ s: 1 + .12 * RE.move(prog(t, .2, 1.2)) }))] },
+  { id: "pushOrbit", name: "Push with orbit", why: "The camera pushes in while swinging a few degrees round the card; three planes move at their own depth.", params: "planes 0.3× / 1× / 1.5× · push 10% · yaw 6° · in-out 5.2 s",
+    loop: 6, html: sceneA(), cls: "withfg", build: f => planes(f, (t, k, yaw) => { const p = E.inOut(prog(t, .3, 5.2)); return { x: .015 * p * k, s: 1 + .1 * p * k, ry: yaw ? 6 * p : 0 }; }) },
+  { id: "rackFocus", name: "Rack focus", why: "Focus pulls from the card to the headline and back, with the slight breathing of a real lens.", params: "16 frames in-out · blur 0.7% · breathing 0.6%",
+    loop: 6, html: sceneA(), build: f => { const pf = t => t < 4.6 ? E.inOut(prog(t, 2.2, 16 * F)) : 1 - E.inOut(prog(t, 4.6, 16 * F)); return [
+      N($(f, ".ct"), t => ({ s: 1 + .03 * t / 6 })),
+      N($(f, ".cardw"), t => ({ blur: .007 * pf(t), s: 1 + .006 * pf(t) })), N($(f, ".tx"), t => ({ blur: .006 * (1 - pf(t)) }))]; } },
+  { id: "punchIn", name: "Punch-in", why: "A fast push onto one control, held while it keeps creeping in, then a hard cut back wide.", params: "to 3.2× in 0.32 s expo.in-out · creep 4% · cut back",
+    loop: 6, html: sceneA(), build: f => { const m = centerOf($(f, ".merge"), f); return [N($(f, ".sa .ct"), t => {
+      if (t < 1.6 || t >= 4.6) return {}; const p = E.expoInOut(prog(t, 1.6, .32)), st = toward(m, 3.2, p); st.s *= 1 + .04 * prog(t, 1.92, 2.68); return st; }, { mb: 1 })]; } },
+];
+
+// ---------- Rhythm: one 15 s story ----------
+const beatsOf = f => [...f.querySelector(".stage").children], ct = b => b.querySelector(".ct");
+const rhythm = [
+  { id: "todayPace", today: true, name: "Paced as today", why: "Five scenes of 2.5–3.5 s, each drifting, with today's reveals and seams: a zoom-through after the hook, cuts, a fade into the end card. Every beat has the same energy.", params: "2.5 · 3.5 · 3 · 3 · 3 s · blurIn, blurWipe, rise, cascade, fadeUp · zoomThrough, cut, cut, fade",
+    loop: 15, html: beatType("Plan the work.", "fa", "hHook") + sceneA({ l1: "Issues that", l2: "write themselves.", sub: "", wipe: true }) +
+      titleBeat("Cycles, roadmaps, reviews.", "Everything in one fast tool.", "fb") + sceneB() + endCard(),
+    build: f => { const [b0, b1, b2, b3, end] = beatsOf(f), line1 = .05 * 1.04, line2 = .06 * 1.04; return [
+      N(b0, t => before(t, 2.5)), N(ct(b0), t => mix(reco.drift(t, 2.5, 1), reco.zoomOut(t, 2.5))), N(b0.querySelector(".headline"), t => reco.blurIn(t, .2)),
+      N(b1, t => ({ o: t >= 2.5 && t < 6 ? 1 : 0 })), N(ct(b1), t => mix(reco.drift(t - 2.5, 3.5, -1), reco.zoomIn(t, 2.5))),
+      ...$$(b1, ".copy .ch").map((el, i) => N(el, t => reco.wipe(t, 2.7 + i * .044, line1))),
+      N(b1.querySelector(".cardw"), t => reco.rise(t, 2.8)), ...$$(b1, ".card .row").map((el, j) => N(el, t => reco.rise(t, 2.9 + j * .075, 1.05))),
+      N(b2, t => ({ o: t >= 6 && t < 9 ? 1 : 0 })), N(ct(b2), t => reco.drift(t - 6, 3, 1)),
+      ...$$(b2, ".ch").map((el, i) => N(el, t => reco.wipe(t, 6.2 + i * .044, line2))), N(b2.querySelector(".sub"), t => reco.fadeUp(t, 7.1)),
+      N(b3, t => ({ o: t >= 9 && t < 12.5 ? 1 : 0 })), N(ct(b3), t => reco.drift(t - 9, 3, -1)),
+      N(b3.querySelector(".panel"), t => reco.rise(t, 9.2)), N(b3.querySelector(".av"), t => reco.rise(t, 9.2)), N(b3.querySelector(".hB"), t => reco.fadeUp(t, 9.5)),
+      N(end, t => ({ o: prog(t, 12, .5) })), N(end.querySelector(".brand2"), t => reco.blurIn(t, 12.2)), N(end.querySelector(".hEnd"), t => reco.fadeUp(t, 12.35))]; } },
+  { id: "energy", name: "Energy curve", why: "Calm open, rising features, cuts getting shorter, the hero at 61–69% (whip, punch-in, big type), 1.5 s of stillness, a calm end card.", params: "beats 3.6 · 2.2 · 1.3 · 1.0 · 1.0 · hero 2.8 (1.3 moving, 1.5 still) · end 3.1 s",
+    loop: 15, html: beatType("Plan the work.", "fa", "hR") + sceneA({ l1: "Issues that", l2: "write themselves.", sub: "" }) + beatType("Cycles.", "fb") + beatType("Roadmaps.", "fa") +
+      beatType("Reviews.", "fb") + sceneB({ over: `<div class="lay over"><i class="lay scrim"></i><h3 class="headline hHero">${lines("Merged.")}</h3></div>` }) + endCard(),
+    build: f => { const [b0, b1, b2, b3, b4, hero, end] = beatsOf(f), ins = b => [...b.querySelectorAll(".in")];
+      const push = t => E.expoInOut(prog(t, 3.3, .7)), sh = 1 / 36;
+      const whipOut = t => -.5 * E.p3in((t - 9.1 + 5 * F) / (5 * F)), whipIn = t => .5 * (1 - E.p3out(pin(t, 9.1, 5 * F)));
+      return [
+        N(b0, t => before(t, 4)), N(ct(b0), t => ({ x: -.012 * Math.min(t, 3.3) / 3.3, y: -.08 * push(t) }), { mb: 1 }), maskRise(ins(b0)[0], .5, 1, E.expr),
+        N(b1, t => t < 3.3 || t >= 5.8 ? { o: 0 } : push(t) >= 1 ? {} : { clip: `inset(${((1 - push(t)) * 100).toFixed(2)}% 0 0 0)` }),
+        N(ct(b1), t => ({ y: .14 * (1 - push(t)), x: -.12 * E.p4in((t - 5.5) / .3) }), { mb: 1 }),
+        ...ins(b1).map((el, i) => maskRise(el, 3.75 + i * 4 * F, .6, E.expr)),
+        N(b1.querySelector(".cardw"), t => { const p = E.expr(prog(t, 3.9, .8)); return { y: .05 * (1 - p), o: c01((t - 3.9) / .12) }; }),
+        ...$$(b1, ".row").map((el, j) => N(el, t => { const p = E.expr(prog(t, 3.97 + stagger(j, 3 * F), .8)); return { y: .03 * (1 - p), o: c01(p * 2.5) }; })),
+        N(b2, t => ({ o: t >= 5.8 && t < 7.1 ? 1 : 0 })), N(ct(b2), t => ({ x: .139 * (1 - E.expoOut(pin(t, 5.8, .6))) - .01 * prog(t, 6.4, .7) }), { mb: 1 }),
+        N(b3, t => ({ o: t >= 7.1 && t < 8.1 ? 1 : 0 })), maskRise(ins(b3)[0], 7.1, .3),
+        N(b4, t => ({ o: t >= 8.1 && t < 9.1 ? 1 : 0 })), maskRise(ins(b4)[0], 8.1, .25), N(ct(b4), t => ({ x: whipOut(t) }), { mb: 1, sh }),
+        N(hero, t => ({ o: t >= 9.1 && t < 11.9 ? 1 : 0 })), N(ct(hero), t => ({ x: whipIn(t), s: 1 + .3 * E.expoOut(prog(t, 9.35, .45)) }), { mb: 1, sh }),
+        N(hero.querySelector(".scrim"), t => ({ o: E.expr(prog(t, 9.45, .4)) })), maskRise(hero.querySelector(".over .in"), 9.55, .32, E.expoOut),
+        N(hero.querySelector(".band"), t => ({ xp: lerp(-120, 300, E.inOut(prog(t, 9.8, .6))) })),
+        N(end, t => after(t, 11.9)), N(end.querySelector(".brand2"), t => { const p = E.expr(prog(t, 12.2, 1)); return { s: .9 ** (1 - p), o: prog(t, 12.2, .2) }; }),
+        maskRise(ins(end)[0], 12.35, 1, E.expr)]; } },
+];
+
+// ---------- Page ----------
+const SECTIONS = [
+  { key: "Transitions", intro: "Shot A holds, then leaves for shot B. Each row pairs a seam Reco has today (left, with its real timings) with a proposed one (right); the last row is new moves only.", items: transitions },
+  { key: "Text", intro: "The same two lines revealed fourteen ways. Each row pairs a reveal Reco has today (left) with the proposed one (right).", items: textReveals },
+  { key: "Registers", intro: "One 6 s shot played in each motion register. Today every brand gets the same motion; with registers Reco would pick one from the brand.", items: registers, hint: "Pick every register you'd ship." },
+  { key: "Camera", intro: "How the camera moves through one shot. Rows pair Reco's camera today (left) with the proposal (right); the last row is new.", items: camera },
+  { key: "Rhythm", intro: "The same 15 s story paced as Reco paces it today and paced with an energy curve. Watch them side by side.", items: rhythm },
+];
+const params = new URLSearchParams(location.search), freeze = params.has("t") ? +params.get("t") : null;
+const all = [], picks = new Set((() => { try { return JSON.parse(localStorage.getItem("motion-picks-v2") || "[]"); } catch { return []; } })());
+const pickText = document.getElementById("pickText");
+const showPicks = () => {
+  const names = all.filter(x => picks.has(x.spec.id)).map(x => x.spec.name);
+  pickText.innerHTML = names.length ? `Picked: <strong>${names.join(", ")}</strong>` : "No picks yet. Press “Pick” under the motion you like.";
+  try { localStorage.setItem("motion-picks-v2", JSON.stringify([...picks])); } catch {}
+};
+const io = new IntersectionObserver(es => es.forEach(e => { const x = all.find(a => a.frame === e.target); if (x) x.visible = e.isIntersecting; }), { rootMargin: "100px" });
+const ro = new ResizeObserver(es => es.forEach(e => { const x = all.find(a => a.frame === e.target); if (!x) return;
+  x.W = e.contentRect.width; x.H = e.contentRect.height; x.nodes.forEach(n => { n.h = undefined; n.w = undefined; }); }));
+let num = 0;
+for (const sec of SECTIONS) {
+  const el = document.createElement("section"), odd = sec.items.length % 2 === 1;
+  el.className = "section";
+  // An odd count takes its intro into the grid, so no frame sits alone in a row
+  el.innerHTML = `<h2>${sec.key}</h2>${odd ? "" : `<p>${sec.intro}</p>`}<div class="grid">${odd ? `<div class="intro-cell"><p>${sec.intro}</p>${sec.hint ? `<p>${sec.hint}</p>` : ""}</div>` : ""}</div>`;
+  document.getElementById("sections").append(el);
+  for (const spec of sec.items) {
+    const fig = document.createElement("figure"); num++;
+    fig.innerHTML = `<div class="frame ${spec.cls ?? ""}"><div class="lay stage">${spec.html ?? sceneA() + sceneB()}</div><div class="vignette"></div><div class="grain"></div><svg class="fx" aria-hidden="true"></svg></div>
+      <figcaption><div class="top"><span class="num">${String(num).padStart(2, "0")}</span><span class="name">${spec.name}</span>${spec.today ? '<span class="chip">Today</span>' : ""}<span class="spacer"></span>
+      <button type="button" class="large">View large</button><button type="button" class="pick" aria-pressed="${picks.has(spec.id)}">Pick</button></div>
+      <p class="why">${spec.why}</p><div class="params">${spec.today ? "" : `${spec.id} · `}${spec.params}</div></figcaption>`;
+    el.querySelector(".grid").append(fig);
+    const frame = fig.querySelector(".frame"), built = spec.build(frame);
+    const entry = { spec, section: sec.key, frame, nodes: built.nodes ?? built, extra: built.extra ?? spec.extra?.(frame), loop: spec.loop ?? 4.2, visible: false, W: frame.clientWidth, H: frame.clientHeight };
+    all.push(entry); io.observe(frame); ro.observe(frame);
+    fig.querySelector(".large").addEventListener("click", () => frame.requestFullscreen?.().catch(() => {}));
+    fig.querySelector(".pick").addEventListener("click", e => {
+      picks.has(spec.id) ? picks.delete(spec.id) : picks.add(spec.id);
+      e.currentTarget.setAttribute("aria-pressed", picks.has(spec.id)); showPicks();
+    });
+  }
+}
+showPicks();
+document.getElementById("copyPicks").addEventListener("click", async () => {
+  const text = "Motion picks: " + (SECTIONS.map(s => { const p = all.filter(x => x.section === s.key && picks.has(x.spec.id)).map(x => `${x.spec.name} (${x.spec.id}${x.spec.today ? ", today" : ""})`);
+    return p.length ? `${s.key}: ${p.join(", ")}` : null; }).filter(Boolean).join("; ") || "none");
+  try { await navigator.clipboard.writeText(text); pickText.textContent = "Copied. Paste it back into the chat."; }
+  catch { pickText.textContent = text; getSelection().selectAllChildren(pickText); }
+});
+document.getElementById("clearPicks").addEventListener("click", () => {
+  picks.clear(); document.querySelectorAll(".pick").forEach(b => b.setAttribute("aria-pressed", "false")); showPicks();
+});
+let speed = 1, paused = false, clock = 0, last = performance.now();
+document.querySelectorAll(".speed").forEach(b => b.addEventListener("click", () => {
+  speed = +b.dataset.speed; document.querySelectorAll(".speed").forEach(x => x.setAttribute("aria-pressed", x === b));
+}));
+const pauseButton = document.getElementById("pause");
+const togglePause = () => { paused = !paused; pauseButton.setAttribute("aria-pressed", paused); pauseButton.textContent = paused ? "Play" : "Pause"; };
+pauseButton.addEventListener("click", togglePause);
+document.addEventListener("keydown", e => {
+  if (e.key === " " && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); togglePause(); }
+  if (paused && (e.key === "ArrowRight" || e.key === "ArrowLeft")) { e.preventDefault(); clock = Math.max(0, clock + (e.key === "ArrowRight" ? F : -F)); }
+});
+function draw(x, t) {
+  for (const n of x.nodes) apply(n, n.f(t), n.mb ? n.f(Math.max(0, t - n.sh)) : null, x.W, x.H);
+  x.extra?.(t);
+}
+function tick(now) {
+  if (!paused) clock += Math.min(.1, (now - last) / 1000) * speed;
+  last = now;
+  for (const x of all) if (x.visible || freeze !== null) draw(x, (freeze ?? clock) % x.loop);
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script>

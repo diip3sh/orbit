@@ -14,6 +14,9 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
     var duration: Double?
     var steps: [Step]
 
+    /// Selectors to hide for the whole take, from `inspect_page`'s overlays.
+    var hide: [String]?
+
     nonisolated struct Step: Codable, Equatable, Sendable {
 
         /// `hover`, `click`, `type` or `scroll`.
@@ -71,16 +74,21 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         guard duration <= WebScript.maximumDuration else {
             throw .invalidArgument("The take would last \(duration) s; the most is \(WebScript.maximumDuration) s.")
         }
-        return RecordPlan(url: url, viewport: viewport, scale: scale, duration: duration, steps: timed)
+        let hide = (hide ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        return RecordPlan(url: url, viewport: viewport, scale: scale, duration: duration, steps: timed, hide: hide.isEmpty ? nil : hide)
     }
 
+    // A step's action and timing are validated together, so errors can name the same step.
+    // swiftlint:disable:next cyclomatic_complexity
     private func timing(of step: Step, at index: Int, after previousEnd: Double?) throws(AgentToolError) -> RecordPlan.TimedStep {
         let name = "steps[\(index)]"
         let selector = step.selector?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasSelector = !(selector ?? "").isEmpty
+        let show = step.show?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shows = !(show ?? "").isEmpty
         let action: PointerClip.Action?
         let minimum: Double
-        let fallback: Double
+        var fallback: Double
         switch step.action {
         case "hover", "click", "type":
             guard hasSelector else { throw .invalidArgument("\(name): \(step.action) needs a selector from inspect_page.") }
@@ -117,7 +125,7 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
         guard length >= minimum else { throw .invalidArgument("\(name): duration must be at least \(minimum) s.") }
         return RecordPlan.TimedStep(
             index: index, action: action, selector: hasSelector ? selector : nil, offset: step.offset, range: start..<start + length,
-            show: step.show?.trimmingCharacters(in: .whitespacesAndNewlines), text: step.text
+            show: shows ? show : nil, text: step.text
         )
     }
 
@@ -136,5 +144,44 @@ nonisolated struct RecordPageRequest: Codable, Equatable, Sendable {
             throw .invalidArgument("viewport must be one of: \(WebScript.Viewport.allCases.map(\.rawValue).joined(separator: ", ")).")
         }
         return viewport.size
+    }
+}
+
+// MARK: - From a take
+
+nonisolated extension RecordPageRequest {
+
+    /// The arguments that record `script` again, for an agent to change (spec 0008). Scrolls Reco
+    /// added to bring a cursor's target into view are left out, since it adds them again, and so
+    /// are cursor clips without a selector, which `record_page` can't aim.
+    init(script: WebScript) {
+        let pointer = script.pointer.compactMap { clip in
+            clip.target.selector.map { selector in
+                Step(
+                    action: clip.text == nil ? clip.action.rawValue : "type", selector: selector,
+                    start: Self.rounded(clip.range.lowerBound), duration: Self.rounded(clip.range.upperBound - clip.range.lowerBound),
+                    show: clip.show, text: clip.text
+                )
+            }
+        }
+        let scrolls = script.scrolls.filter { $0.target?.placement != .intoView }.map { clip in
+            Step(
+                action: "scroll", selector: clip.target?.selector, offset: clip.target == nil ? Self.rounded(clip.offset.y) : nil,
+                start: Self.rounded(clip.range.lowerBound), duration: Self.rounded(clip.range.upperBound - clip.range.lowerBound)
+            )
+        }
+        self.init(
+            url: script.url?.absoluteString ?? "",
+            viewport: WebScript.Viewport.allCases.first { $0.size == script.viewport }?.rawValue,
+            scale: script.scale,
+            duration: Self.rounded(script.duration),
+            steps: (pointer + scrolls).sorted { ($0.start ?? 0) < ($1.start ?? 0) },
+            hide: script.hide
+        )
+    }
+
+    /// To the hundredth of a second or pixel, so the agent reads 2.5 rather than 2.4999999999999996.
+    private static func rounded(_ value: Double) -> Double {
+        (value * 100).rounded() / 100
     }
 }

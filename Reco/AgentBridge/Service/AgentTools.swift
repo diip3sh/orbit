@@ -5,8 +5,10 @@
 
 import CoreGraphics
 import Foundation
+import OSLog
 
-/// Runs the tools an agent calls (spec 0006): inspect a page, record it, and follow the render.
+/// Runs the tools an agent calls (spec 0006): inspect a page, record it, follow the render and
+/// export the recording.
 ///
 /// A render takes longer than most agents wait for a tool, so `record_page` and `render_status` wait
 /// up to ``waitLimit`` and report how far it is; the agent asks again. One render runs at a time and
@@ -15,8 +17,24 @@ import Foundation
 @Observable
 final class AgentTools {
 
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "AgentTools")
+
     /// The latest render, or `nil` before the first. Only this type sets it, except in tests.
     var job: RenderStatus?
+
+    private(set) var inspecting: URL?
+    var motionActivity: String?
+    var motionEdits = 0
+    var lastMotionBundle: URL?
+    @ObservationIgnored var motionEditor: (URL) -> MotionEditorViewModel? = { _ in nil }
+    @ObservationIgnored var onMotionEdited: (URL) -> Void = { _ in }
+    @ObservationIgnored var motionJob: MotionJob?
+
+    struct MotionJob {
+        let key: String
+        let task: Task<Reply, Never>
+        var isDone = false
+    }
 
     /// Called with each page an agent inspects, for the Web Recording window to show (spec 0008).
     @ObservationIgnored var onInspected: ((PageInspection) -> Void)?
@@ -46,13 +64,6 @@ final class AgentTools {
     /// The Web Recording window, opened if it isn't, whose live page an agent browses (spec 0011).
     @ObservationIgnored var browser: (() -> WebRecordingViewModel?)?
 
-    /// A tool's answer: JSON text for the agent, and what the page looks like after a browsing step.
-    struct Reply {
-        var text: String
-        var image: Data?
-        var isError: Bool
-    }
-
     /// How long a browsing step waits for the page to react before it looks: menus open, a click's
     /// page starts loading. A guess that covers typical transitions; not measured.
     static let settleTime = Duration.milliseconds(600)
@@ -61,7 +72,11 @@ final class AgentTools {
     static let readLimit = 15_000
 
     @ObservationIgnored private var renderTask: Task<Void, Never>?
-    @ObservationIgnored private let settings: SettingsStore
+
+    /// The latest export and what asked for it, or `nil` before the first.
+    @ObservationIgnored private var export: (request: ExportRecordingRequest, status: ExportStatus)?
+    @ObservationIgnored private var exportTask: Task<Void, Never>?
+    @ObservationIgnored let settings: SettingsStore
     @ObservationIgnored private let onRendered: (URL) -> Void
 
     /// How long `record_page` and `render_status` wait for a render. Under the 60 s default tool
@@ -71,7 +86,20 @@ final class AgentTools {
     /// How long `inspect_page` waits for a page, under the same timeout.
     static let inspectLimit = Duration.seconds(40)
 
-    private static let pollInterval = Duration.milliseconds(250)
+    static let pollInterval = Duration.milliseconds(250)
+
+    /// A tool's answer: JSON text for the agent, and a picture for `preview_motion`.
+    nonisolated struct Reply: Sendable {
+        var text: String
+        var image: Data?
+        var isError: Bool
+
+        init(text: String, image: Data? = nil, isError: Bool) {
+            self.text = text
+            self.image = image
+            self.isError = isError
+        }
+    }
 
     /// - Parameter onRendered: Called with each rendered movie, to open it in the editor.
     init(settings: SettingsStore, onRendered: @escaping (URL) -> Void) {
@@ -92,12 +120,17 @@ final class AgentTools {
             case AgentToolCatalog.renderStatus:
                 let status = try await status(arguments)
                 return Reply(text: try Self.encode(status), isError: status.status == .failed)
-            case AgentToolCatalog.openPage, AgentToolCatalog.look, AgentToolCatalog.readPage, AgentToolCatalog.click,
-                 AgentToolCatalog.hover, AgentToolCatalog.type:
-                guard hostsRun else {
-                    throw AgentToolError.invalidArgument("Browsing works only in runs started from Orbit. Use inspect_page, then record_page.")
-                }
-                return try await browse(name, arguments: arguments)
+            case AgentToolCatalog.exportRecording:
+                let status = try await export(arguments)
+                return Reply(text: try Self.encode(status), isError: status.status == .failed)
+            case AgentToolCatalog.editMotion:
+                return Reply(text: try Self.encode(try await editMotion(arguments)), isError: false)
+            case AgentToolCatalog.captureUI:
+                return try await captureUI(arguments)
+            case AgentToolCatalog.previewMotion:
+                return try await previewMotion(arguments)
+            case _ where AgentToolCatalog.browsingNames.contains(name):
+                return try await browseIfHosted(name, arguments: arguments)
             default:
                 throw AgentToolError.unknownTool(name)
             }
@@ -108,10 +141,20 @@ final class AgentTools {
 
     // MARK: - Tools
 
+    private func browseIfHosted(_ name: String, arguments: Data) async throws -> Reply {
+        guard hostsRun else {
+            throw AgentToolError.invalidArgument("Browsing works only in runs started from Orbit. Use inspect_page, then record_page.")
+        }
+        return try await browse(name, arguments: arguments)
+    }
+
     private func inspect(_ arguments: Data) async throws -> PageInspection {
-        let script = try Self.decode(InspectPageRequest.self, from: arguments).validated()
+        let request = try Self.decode(InspectPageRequest.self, from: arguments)
+        let script = try request.validated()
+        inspecting = script.url
+        defer { inspecting = nil }
         let page = try await Self.withDeadline(Self.inspectLimit) {
-            try await WebPageRenderer(script: script).inspect(selectors: [])
+            try await WebPageRenderer(script: script).inspect(selectors: request.selectors ?? [])
         }
         onInspected?(page)
         return page
@@ -145,6 +188,42 @@ final class AgentTools {
         try await wait(for: try Self.decode(RenderStatusRequest.self, from: arguments).renderID)
     }
 
+    /// Starts the export, or follows it when it's the one already running, for up to ``waitLimit``.
+    private func export(_ arguments: Data) async throws -> ExportStatus {
+        let request = try Self.decode(ExportRecordingRequest.self, from: arguments)
+        let (movie, settings) = try request.validated()
+        if let export, export.status.status == .exporting {
+            guard export.request == request else { throw AgentToolError.exporting }
+        } else {
+            export = (request, ExportStatus(status: .exporting, progress: 0))
+            exportTask = Task {
+                do {
+                    // Progress comes from its own task, which can still report after the export has returned
+                    let progress: @MainActor @Sendable (Double) -> Void = { progress in
+                        if self.export?.status.status == .exporting {
+                            self.export?.status.progress = progress
+                        }
+                    }
+                    let file = if movie.pathExtension == MotionStore.bundleExtension {
+                        try await MotionExporter.export(try await motionDocument(at: movie), bundle: movie, settings: settings, progress: progress)
+                    } else {
+                        try await exportRecording(at: movie, settings: settings)
+                    }
+                    export?.status = ExportStatus(status: .done, progress: 1, file: file.path(percentEncoded: false))
+                } catch {
+                    export?.status.status = .failed
+                    export?.status.error = error.localizedDescription
+                }
+            }
+        }
+
+        let deadline = ContinuousClock.now + Self.waitLimit
+        while let export, export.status.status == .exporting, ContinuousClock.now < deadline {
+            try await Task.sleep(for: Self.pollInterval)
+        }
+        return export?.status ?? ExportStatus(status: .failed, progress: 0)
+    }
+
     // MARK: - Render
 
     /// Looks at the page to aim the plan, renders it and records the outcome in ``job``.
@@ -167,6 +246,21 @@ final class AgentTools {
         }
     }
 
+    private func exportRecording(at movie: URL, settings: ExportSettings) async throws -> URL {
+        let editor = EditorViewModel(videoURL: movie)
+        await editor.load()
+        do {
+            guard let file = try await editor.export(settings) else {
+                throw AgentToolError.invalidArgument("Could not open the recording for export.")
+            }
+            await editor.close()
+            return file
+        } catch {
+            await editor.close()
+            throw error
+        }
+    }
+
     /// The plan as a script, aimed by looking at the page, and what the page lacks that its steps need.
     private func script(for plan: RecordPlan) async throws -> (WebScript, [String]) {
         let page = try await WebPageRenderer(script: plan.inspectionScript).inspect(selectors: plan.selectors)
@@ -185,8 +279,9 @@ final class AgentTools {
 
     // MARK: - Browsing
 
-    /// One step of an agent learning a site in the window's live page: what it did, as JSON, and a
-    /// picture of the page after it.
+    // One step of an agent learning a site in the window's live page: what it did, as JSON, and a
+    // picture of the page after it.
+    // swiftlint:disable:next cyclomatic_complexity
     private func browse(_ name: String, arguments: Data) async throws -> Reply {
         guard let window = browser?() else { throw AgentToolError.invalidArgument("The Web Recording window isn't available.") }
         let preview = window.preview
@@ -243,13 +338,13 @@ final class AgentTools {
 
     // MARK: - JSON
 
-    private static func encode(_ value: some Encodable) throws -> String {
+    static func encode(_ value: some Encodable) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return String(data: try encoder.encode(value), encoding: .utf8) ?? ""
     }
 
-    private static func decode<Request: Decodable>(_ type: Request.Type, from data: Data) throws(AgentToolError) -> Request {
+    static func decode<Request: Decodable>(_ type: Request.Type, from data: Data) throws(AgentToolError) -> Request {
         do {
             return try JSONDecoder().decode(type, from: data)
         } catch let error as DecodingError {

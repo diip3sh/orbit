@@ -30,7 +30,7 @@ nonisolated enum AgentStreamEvent: Equatable, Sendable {
     /// cursor-agent 2026.09.10 (`--output-format stream-json`). Claude puts tool calls in `assistant`
     /// messages and results in `user` ones; Cursor sends `tool_call` events, started and completed, and
     /// first looks a tool's schema up through `getMcpToolsToolCall`, which isn't a call to it.
-    static func parse(_ line: Data, agent: AgentKind) -> [AgentStreamEvent] {
+    static func parse(_ line: Data, agent: AgentKind) -> [AgentStreamEvent] { // swiftlint:disable:this cyclomatic_complexity
         guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
               let type = object["type"] as? String else { return [] }
         switch type {

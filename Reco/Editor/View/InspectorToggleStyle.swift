@@ -7,20 +7,35 @@
 
 import SwiftUI
 
-/// The title on the left and a small switch on the right edge.
+/// The title on the left and ``EditorSwitch`` on the right edge. The whole row switches it.
 struct InspectorToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
             configuration.label
-            Spacer()
+        }
+        .buttonStyle(SwitchRowStyle(isOn: configuration.isOn))
+        .accessibilityRepresentation {
             Toggle(configuration)
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .labelsHidden()
         }
     }
 }
 
 extension ToggleStyle where Self == InspectorToggleStyle {
     static var inspector: Self { InspectorToggleStyle() }
+}
+
+/// The row as a button, so the switch knows when it's pressed.
+private struct SwitchRowStyle: ButtonStyle {
+    let isOn: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack {
+            configuration.label
+            Spacer()
+            EditorSwitch(isOn: isOn, isPressed: configuration.isPressed)
+        }
+        .contentShape(.rect)
+    }
 }

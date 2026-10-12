@@ -41,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var agentBridge = AgentBridgeServer(tools: AgentTools(settings: viewModel.settings) { [editorWindows] url in editorWindows.openWhenReady(url) })
 
     /// Runs coding agents on a request typed into the Record with AI Agent panel.
-    lazy var agentRecording = AgentRecordingViewModel(
+    lazy var agentRecording: AgentRecordingViewModel = AgentRecordingViewModel(
         tools: agentBridge.tools,
         reportFailure: { [notifications = viewModel.notificationService] in notifications.sendAgentRecordingFailedNotification(reason: $0) },
         token: AgentBridgeServer.token()
@@ -76,6 +76,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The agent browses in the Web Recording window's live page, so the user sees it learn the site
         agentBridge.tools.browser = { [editorWindows] in editorWindows.webRecordingForAgent() }
         viewModel.notificationService.retryAgentRecording = { [agentRecording] in agentRecording.retry() }
+        agentRecording.onRecorded = { [editorWindows] in editorWindows.open($0) }
+        agentRecording.onSignIn = { [editorWindows] in editorWindows.showWebRecording(at: $0) }
+        // An agent's edits go through an open window; a video an agent the user runs edits opens
+        // right away, one of a run of Reco's own when the run ends
+        agentBridge.tools.motionEditor = { [editorWindows] in editorWindows.motionViewModel(for: $0) }
+        agentBridge.tools.onMotionEdited = { [weak self] url in
+            guard let self, !agentRecording.isRunning else { return }
+            editorWindows.openMotion(url)
+        }
         viewModel.notificationService.showAgentRecording = { [weak self] in self?.showAgentRecording() }
 
         // Hidden first so the last card, the capture toolbar and the notch shelf never land in the next
@@ -191,6 +200,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        registerCancelShortcuts()
+
         KeyboardShortcuts.onKeyUp(for: .recordWithAgent) { [weak self] in
             Task { @MainActor in
                 self?.showAgentRecording()
@@ -228,9 +239,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logger.info("Registered global keyboard shortcuts")
     }
 
+    private func registerCancelShortcuts() {
+        KeyboardShortcuts.onKeyUp(for: .cancelRecording) { [viewModel] in
+            Task { @MainActor in
+                await viewModel.cancelRecording()
+            }
+        }
+
+        KeyboardShortcuts.onKeyUp(for: .restartRecording) { [viewModel] in
+            Task { @MainActor in
+                await viewModel.restartRecording()
+            }
+        }
+    }
+
+    /// `reco://record-agent?url=<page>&prompt=<what the video should show>&mode=launch|walkthrough`:
+    /// opens the Record with AI Agent panel with them filled in and starts the run with the remembered
+    /// agent, once the agents have been looked for. Without a `url`, it only opens the panel; without a
+    /// `mode`, the remembered one. The prompt is percent-encoded; a `+` in it is a space.
+    private func recordWithAgent(_ url: URL) {
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        agentRecording.address = items.first { $0.name == "url" }?.value ?? ""
+        // Form encoding writes spaces as pluses, which URLComponents leaves in
+        agentRecording.instructions = (items.first { $0.name == "prompt" }?.value ?? "").replacing("+", with: " ")
+        if let mode = items.first(where: { $0.name == "mode" })?.value.flatMap(AgentRecordingRequest.Mode.init(rawValue:)) {
+            agentRecording.mode = mode
+        }
+        showAgentRecording()
+        guard !agentRecording.address.isEmpty else { return }
+        Task {
+            // The panel looks for agents as it opens; the remembered one is only offered once found
+            await agentRecording.refreshAgents()
+            if let field = agentRecording.submit() {
+                logger.warning("reco://record-agent didn't start: the \(String(describing: field)) is missing or invalid")
+            }
+        }
+    }
+
     // MARK: - URL Scheme
 
-    private func handle(_ url: URL) {
+    private func handle(_ url: URL) { // swiftlint:disable:this cyclomatic_complexity
         logger.info("Handling URL: \(url.absoluteString)")
 
         switch url.host {
@@ -254,6 +302,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             captureScreenshot(from: url)
         case "edit-last":
             editLastRecording()
+        case "record-agent":
+            recordWithAgent(url)
         case "open-recordings":
             let settings = viewModel.settings
             let didStart = settings.startAccessingOutputDirectory()

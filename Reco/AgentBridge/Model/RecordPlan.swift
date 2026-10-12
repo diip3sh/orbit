@@ -15,6 +15,9 @@ nonisolated struct RecordPlan: Equatable, Sendable {
     var duration: Double
     var steps: [TimedStep]
 
+    /// Selectors hidden for the whole take.
+    var hide: [String]?
+
     /// One step on its lane, from `steps[index]` of the request.
     nonisolated struct TimedStep: Equatable, Sendable {
         var index: Int
@@ -59,6 +62,7 @@ nonisolated struct RecordPlan: Equatable, Sendable {
         var script = WebScript()
         script.url = url
         script.viewport = viewport
+        script.hide = hide
         return script
     }
 
@@ -156,6 +160,22 @@ nonisolated struct RecordPlan: Equatable, Sendable {
         if let rect {
             offset = target.offset(showing: rect.offsetBy(dx: -current.x, dy: -current.y), from: current, viewport: viewport, pageHeight: page.pageHeight)
         }
+        script.scrolls = script.scrolls.inserting(ScrollClip(range: start..<time, offset: offset, target: target))
+    }
+
+    /// Adds a scroll bringing the element of cursor `step` into view as the step starts, after
+    /// `earliest` and the scroll before; none when a scroll is going on then or there isn't room.
+    private func insertScrollIntoView(before step: TimedStep, after earliest: Double, on page: PageInspection, in script: inout WebScript) {
+        let time = step.range.lowerBound
+        guard let selector = step.selector, !script.scrolls.contains(where: { $0.range.lowerBound < time && $0.range.upperBound > time }) else { return }
+        let previous = script.scrolls.last { $0.range.upperBound <= time }?.range.upperBound ?? 0
+        let start = max(previous, earliest, time - Self.intoViewDuration)
+        guard time - start >= ScrollClip.minimumDuration else { return }
+        let target = ScrollClip.Target(selector: selector, placement: .intoView)
+        let current = script.scrollOffset(at: start)
+        let offset = page.boxes?[selector].map { box in
+            target.offset(showing: box.rect.offsetBy(dx: -current.x, dy: -current.y), from: current, viewport: viewport, pageHeight: page.pageHeight)
+        } ?? current
         script.scrolls = script.scrolls.inserting(ScrollClip(range: start..<time, offset: offset, target: target))
     }
 }

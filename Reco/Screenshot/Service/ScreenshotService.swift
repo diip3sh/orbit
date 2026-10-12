@@ -157,6 +157,12 @@ final class ScreenshotService {
         return data as Data
     }
 
+    @concurrent
+    nonisolated static func writePNG(_ image: CGImage, to url: URL) async throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try await pngData(of: image).write(to: url, options: .atomic)
+    }
+
     /// ImageIO embeds the image's colour space as an ICC profile
     nonisolated private static func encode(_ image: CGImage, into destination: CGImageDestination?, options: [CFString: Any] = [:]) throws {
         guard let destination else { throw CocoaError(.fileWriteUnknown) }

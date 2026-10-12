@@ -11,7 +11,7 @@ nonisolated struct BrowseRequest: Decodable, Sendable {
     var url: String?
     var viewport: String?
 
-    /// look: where to scroll to, in CSS pixels from the page's top.
+    // look: where to scroll to, in CSS pixels from the page's top.
     // swiftlint:disable:next identifier_name - the tool's argument, as record_page's scroll names it
     var y: Double?
 

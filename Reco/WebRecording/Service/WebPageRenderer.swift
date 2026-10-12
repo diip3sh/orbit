@@ -30,6 +30,14 @@ final class WebPageRenderer: NSObject {
     private var frameCall: (id: Int, continuation: CheckedContinuation<PageFrame?, Never>)?
     private var frameCallCount = 0
 
+    /// Whether a frame call outlasted ``frameTimeout``.
+    private var frameStalled = false
+
+    /// A frame waits at most 5 s for media and 5 s for images; one not back in 30 s never will: with
+    /// Reco hidden, WebKit stopped the page's animation frames and a live take waited 13 minutes for
+    /// one, holding an agent's run until its time ran out.
+    static let frameTimeout = Duration.seconds(30)
+
     /// How long a page runs in real time once loaded, before the take freezes its clock.
     static let settleTime = Duration.seconds(1)
 
@@ -43,7 +51,7 @@ final class WebPageRenderer: NSObject {
     init(script: WebScript) {
         self.script = script
         let configuration = WKWebViewConfiguration()
-        for source in [WebClockScript.source, WebMuteScript.source] {
+        for source in [WebClockScript.source, WebMuteScript.source] + [script.hide.map(WebHideScript.source(hiding:))].compactMap({ $0 }) {
             configuration.userContentController.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         // Media plays as it would for a visitor who clicked, silenced by the mute script
@@ -71,22 +79,22 @@ final class WebPageRenderer: NSObject {
 
     /// Renders the take into a movie at `url`, reporting progress from 0 to 1. Cancelling the task
     /// stops it; the caller removes the partial movie.
-    func render(to url: URL, bitsPerPixel: Double, progress: (Double) -> Void) async throws -> Output {
+    func render(to url: URL, crop: CGRect? = nil, bitsPerPixel: Double, progress: (Double) -> Void) async throws -> Output {
         guard let pageURL = script.url else { throw WebRenderError.noURL }
-        // Ordered in, off every display, so WebKit sees a visible window
-        window.orderFrontRegardless()
+        orderIn()
         defer { window.orderOut(nil) }
 
         try await load(pageURL)
         try await Task.sleep(for: Self.settleTime)
 
-        let writer = try WebMovieWriter(url: url, size: script.videoSize, frameRate: WebScript.frameRate, bitsPerPixel: bitsPerPixel)
+        let size = crop.map { CGSize(width: $0.width * CGFloat(script.scale), height: $0.height * CGFloat(script.scale)) } ?? script.videoSize
+        let writer = try WebMovieWriter(url: url, size: size, frameRate: WebScript.frameRate, bitsPerPixel: bitsPerPixel)
         var take = Take(script: script, page: webView.url)
         do {
             for frame in 0..<script.frameCount {
                 try Task.checkCancellation()
                 try await play(Double(frame) / Double(WebScript.frameRate), of: &take)
-                try await writer.append(try await snapshot(), frame: frame)
+                try await writer.append(try await snapshot(of: crop), frame: frame)
                 progress(Double(frame + 1) / Double(script.frameCount))
             }
             try await writer.finish(frameCount: script.frameCount)
@@ -95,6 +103,21 @@ final class WebPageRenderer: NSObject {
             throw error
         }
         return Output(telemetry: take.telemetry.finished { StandardCursors.sprite(of: $0, id: $1) }, shots: take.shots, warnings: take.issues.messages)
+    }
+
+    /// Loads a page for lifting its elements into a motion video.
+    func withLoadedPage<T>(_ body: (WKWebView) async throws -> T) async throws -> T {
+        guard let pageURL = script.url else { throw WebRenderError.noURL }
+        orderIn()
+        defer { window.orderOut(nil) }
+        try await load(pageURL)
+        try await Task.sleep(for: Self.settleTime)
+        return try await body(webView)
+    }
+
+    private func orderIn() {
+        NSApp.unhideWithoutActivation()
+        window.orderFrontRegardless()
     }
 
     // MARK: - Page
@@ -109,7 +132,11 @@ final class WebPageRenderer: NSObject {
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 loading = continuation
-                webView.load(URLRequest(url: url))
+                if let page = Self.imagePage(for: url) {
+                    webView.loadHTMLString(page, baseURL: url)
+                } else {
+                    webView.load(URLRequest(url: url))
+                }
             }
         } onCancel: {
             Task { @MainActor [weak self] in
@@ -140,6 +167,7 @@ final class WebPageRenderer: NSObject {
                 return frame
             }
             guard !hasCrashed else { throw WebRenderError.pageCrashed }
+            guard !frameStalled else { throw WebRenderError.stalled }
             reloads += 1
             guard reloads <= Self.maximumReloads else { throw WebRenderError.loadFailed("The page kept reloading.") }
             try await waitWhileLoading()
@@ -154,6 +182,12 @@ final class WebPageRenderer: NSObject {
         let id = frameCallCount
         return await withCheckedContinuation { continuation in
             frameCall = (id, continuation)
+            Task { [weak self] in
+                try? await Task.sleep(for: Self.frameTimeout)
+                guard let self, frameCall?.id == id else { return }
+                frameStalled = true
+                finishFrameCall(id)
+            }
             Task {
                 var frame: PageFrame?
                 do {
@@ -209,11 +243,23 @@ final class WebPageRenderer: NSObject {
         return (values?["cursor"] as? String ?? "default", values?["cover"] as? String)
     }
 
-    /// The page drawn at the take's scale. WebKit paints it for the requested width, so a 2× take
-    /// is sharp on any display.
-    private func snapshot() async throws -> CGImage {
+    /// Types `character` into the element `selector` matches. False when the page has none, or is
+    /// being replaced.
+    private func type(_ character: Character, into selector: String) async -> Bool {
+        let result = try? await webView.callAsyncJavaScript(
+            WebTypeScript.source, arguments: ["selector": selector, "text": String(character)], contentWorld: .defaultClient
+        )
+        return result as? Bool == true
+    }
+
+    /// The page, or its box `rect`, drawn at the take's scale. WebKit paints it for the requested
+    /// width, so a 2× take is sharp on any display.
+    func snapshot(of rect: CGRect? = nil, scale: Int? = nil) async throws -> CGImage {
         let configuration = WKSnapshotConfiguration()
-        configuration.snapshotWidth = NSNumber(value: script.viewport.width * CGFloat(script.scale) / window.backingScaleFactor)
+        if let rect {
+            configuration.rect = rect
+        }
+        configuration.snapshotWidth = NSNumber(value: (rect?.width ?? script.viewport.width) * CGFloat(scale ?? script.scale) / window.backingScaleFactor)
         let image = try await webView.takeSnapshot(configuration: configuration)
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             throw WebRenderError.snapshotFailed
@@ -332,7 +378,8 @@ extension WebPageRenderer {
         if let arriving {
             check(arriving, in: &take, at: frame, cover: cover)
         }
-        take.telemetry.record(time: time, cursor: location, presses: presses, shape: CursorKind(css: cursor), scrolled: scrolled)
+        let typed = take.script.keystrokes(after: previous, through: time).map(\.character)
+        take.telemetry.record(time: time, cursor: location, presses: presses, shape: CursorKind(css: cursor), scrolled: scrolled, typed: typed)
         take.time = time
     }
 
@@ -382,69 +429,15 @@ extension WebPageRenderer {
     }
 }
 
-// MARK: - Inspecting
-
-extension WebPageRenderer {
-
-    /// Loads the script's page and lists what it shows at scroll 0: see ``WebInspectScript``.
-    /// `selectors` are the ones to also return the box of.
-    func inspect(selectors: [String]) async throws -> PageInspection {
-        guard let pageURL = script.url else { throw WebRenderError.noURL }
-        window.orderFrontRegardless()
-        defer { window.orderOut(nil) }
-
-        try await load(pageURL)
-        // Real time, as in a take: the page's own scripts finish drawing before it's read
-        try await Task.sleep(for: Self.settleTime)
-        let result = try await webView.callAsyncJavaScript(
-            WebInspectScript.source, arguments: ["selectors": selectors], contentWorld: .defaultClient
-        )
-        guard let json = result as? String else { throw WebRenderError.loadFailed("The page couldn't be read.") }
-        return try JSONDecoder().decode(PageInspection.self, from: Data(json.utf8))
-    }
-}
-
-// MARK: - Output folder
-
-extension WebPageRenderer {
-
-    /// Renders `script` into a new movie in the output folder, with its telemetry and editor project
-    /// beside it, and returns the movie and what went wrong on the page. A failed or cancelled take
-    /// leaves no movie.
-    static func renderTake(_ script: WebScript, settings: SettingsStore, progress: (Double) -> Void) async throws -> (movie: URL, warnings: [String]) {
-        let accessesOutputDirectory = settings.startAccessingOutputDirectory()
-        defer {
-            if accessesOutputDirectory {
-                settings.stopAccessingOutputDirectory()
-            }
-        }
-        let filename = SettingsStore.filename(prefix: "Reco_Web", fileExtension: "mov", date: .now)
-        let movie = settings.outputDirectory.appending(path: filename)
-        do {
-            let output = try await WebPageRenderer(script: script).render(
-                to: movie, bitsPerPixel: VideoQuality.high.hevcBitsPerPixel, progress: progress
-            )
-            try JSONEncoder().encode(output.telemetry).write(to: InputTelemetry.sidecarURL(for: movie), options: .atomic)
-            // The script's zooms, exactly, for the editor, even none when it shows elements; without
-            // any it auto-zooms as on any recording
-            let zooms = WebCamera.segments(for: script, telemetry: output.telemetry, shots: output.shots)
-            if !zooms.isEmpty || WebCamera.showsElements(script) {
-                try await ProjectStore.write(EditorProject(zooms: zooms), for: movie)
-            }
-            Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "WebPageRenderer").info("Rendered \(filename)")
-            return (movie, output.warnings)
-        } catch {
-            try? FileManager.default.removeItem(at: movie)
-            throw error
-        }
-    }
-}
-
 // MARK: - WKNavigationDelegate
 
 extension WebPageRenderer: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // A refused connection commits a blank page instead of failing (measured on macOS 26.5)
+        guard webView.url?.scheme != "about" else {
+            return finishLoading(.failure(WebRenderError.loadFailed("nothing answered at that address.")))
+        }
         finishLoading(.success(()))
     }
 

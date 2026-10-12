@@ -9,6 +9,8 @@ import Foundation
 /// in order, plus the conversation a follow-up goes into.
 nonisolated struct AgentTranscript: Equatable, Sendable {
 
+    // The entry's kind and tool status belong to its transcript row.
+    // swiftlint:disable nesting
     nonisolated struct Entry: Identifiable, Equatable, Sendable {
         enum Kind: Equatable, Sendable {
             case request
@@ -26,6 +28,7 @@ nonisolated struct AgentTranscript: Equatable, Sendable {
         var kind: Kind
         var text: String
     }
+    // swiftlint:enable nesting
 
     private(set) var entries: [Entry] = []
 

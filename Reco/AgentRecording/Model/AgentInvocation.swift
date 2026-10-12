@@ -5,8 +5,9 @@
 
 import Foundation
 
-/// The command line that runs one agent headlessly on a request, with only Reco's tools allowed
-/// (spec 0007). All argument building is here, so a CLI changing a flag is a change to one function.
+/// The command line that runs one agent headlessly on a request, with only Reco's tools allowed,
+/// plus web search and fetch where the agent has them (spec 0007). All argument building is here,
+/// so a CLI changing a flag is a change to one function.
 nonisolated struct AgentInvocation: Equatable, Sendable {
 
     /// The executable's name, looked up on the login shell's `PATH`.
@@ -32,6 +33,14 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
         }
     }
 
+    /// Whether the run gives the agent Reco's server itself, so it works without Settings → Agents
+    /// connecting it, whatever the agent's own settings say (e.g. Claude Code with `CLAUDE_CONFIG_DIR`
+    /// set reads another file than the one Reco connects).
+    static func bringsOwnServer(_ kind: AgentKind) -> Bool {
+        kind == .claudeCode || kind == .cursor
+    }
+
+    private static let serversFile = "reco-mcp.json"
     private static let policyFile = "reco-policy.toml"
     private static let claudeServersFile = "reco-mcp.json"
     private static let cursorFile = ".cursor/cli.json"
