@@ -180,7 +180,7 @@ final class NotchShelfViewModel {
 
     /// Puts the screenshot on the pasteboard as PNG and shows Copied on its tile for a moment.
     func copy(_ item: LibraryItem) async {
-        guard let png = await Self.contents(of: item.url) else {
+        guard let png = try? await ScreenshotService.pngData(ofFile: item.url) else {
             logger.error("Couldn't read \(item.url.lastPathComponent)")
             return
         }
@@ -193,10 +193,5 @@ final class NotchShelfViewModel {
         if copyCount == count {
             copiedURL = nil
         }
-    }
-
-    @concurrent
-    private static func contents(of url: URL) async -> Data? {
-        try? Data(contentsOf: url)
     }
 }

@@ -992,7 +992,9 @@ Key facts:
   sRGB); `image` is drawn from it in 8-bit sRGB, highlights clipped (`standardRange(of:)`), for the card, pins, Copy (still a
   PNG) and Recognize Text. Files (Save, history, drag-out) go through `ScreenshotService.write`: an HDR shot is a `.heic`
   with an SDR base and an ISO gain map (`kCGImageDestinationEncodeToISOGainmap`), anything else a PNG; the Library and history
-  pruning take both (`Screenshot.contentTypes`, `LibraryItem.isScreenshot`). Window shots stay SDR: the HDR configuration has
+  pruning take both (`Screenshot.contentTypes`, `LibraryItem.isScreenshot`). Copying a saved one (Library, notch shelf) goes
+  through `ScreenshotService.pngData(ofFile:)`: a PNG as it is, a `.heic` as its SDR base re-encoded, since its own bytes under
+  `public.png` are not PNG (seen 2026-10-12: the shelf put an 89,698-byte HEIC there; now a 341,170-byte PNG). Window shots stay SDR: the HDR configuration has
   no `scalesToFit`. Measured 2026-10-08 on macOS 27.0, M2: the HDR picture comes back as `sdrImage`, and `hdrImage` is nil
   even for `.bothSDRAndHDR`, hence one `.hdr` capture (and both images from the same frame); a 3420×2224 capture took
   100–126 ms, drawing its SDR picture 4–6 ms. Not yet checked with HDR content on screen.
@@ -1344,7 +1346,7 @@ Area…, Record Window or Display…, New Web Recording…). With one of them op
 it (`ToolbarMenuSwitcher`): AppKit's menu tracking keeps the press that closes a menu, so it took a second click; when
 a menu closes with the button down over another of the window's toolbar items, the press is posted again. A click opens a movie in the
 editor and a picture in Quick Look (`quickLookPreview`; the arrow keys go through the pictures shown); the context menu
-opens it in Preview, shows in Finder, copies (a screenshot as PNG, a movie
+opens it in Preview, shows in Finder, copies (a screenshot as PNG, an HDR one's `.heic` converted, a movie
 as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`. The grid is under date
 headers, newest first (or oldest first; sorted by name it is one grid without headers): Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
 list the screenshot history folder (spec 0012). Down the right edge the dates repeat as a rail
@@ -1402,7 +1404,8 @@ text sent to the agent never includes a password's value.
 
 A black shape over the notch of every screen (a 120×8 pt pill at the top centre where there is none). The pointer
 on it makes it peek (+7.5 pt each side, +5 down, shadow); staying 300 ms opens it into a 560 pt panel with the
-newest 20 screenshots (saved and history): click copies the PNG (tile says Copied for 1.2 s), drag drops the file.
+newest 20 screenshots (saved and history): click copies it as PNG (`ScreenshotService.pngData(ofFile:)`; tile says Copied for
+1.2 s), drag drops the file under its own name (`suggestedName`: without it Finder named the drop "HEIF Image.heic").
 Collapses 500 ms after the pointer leaves. **Settings → Screenshots → History → Show Screenshots in the Notch** (default off).
 Hidden while a take records or saves (`AppDelegate.hideNotchShelfWhileRecording`), so a display recording never shows it as a bar over the notch, Show Reco or not. Hover rings a tile in the accent; a press dims and shrinks it on the frame it lands and lets go after 4 pt, so the file drag still starts.
 
@@ -1428,8 +1431,14 @@ Key facts:
   out 0.28/0.96; open 0.5/0.78; collapse 0.36/0.88. Shadows black, blur 6: 0.3 peeking, 0.7 open. Radii: top (inward
   ears) 6→19 pt, bottom 14→24 pt, clamped to the pill. Strip enters y −12 `easeOut(0.22)` +0.08 s, leaves y −6
   `easeIn(0.12)`; header enters y −8 `easeOut(0.2)` +0.12 s, leaves y −4 `easeIn(0.1)`. Reduce Motion: no spring, a fade.
-- Tiles use `onTapGesture` + `onDrag`, not a `Button`, whose press tracking would swallow the drag.
-- Not yet seen running on a notched Mac: hover while Reco is inactive, full-screen Spaces, several displays.
+- Tiles use `onTapGesture` + `onDrag`, not a `Button`, whose press tracking would swallow the drag. The press's
+  `LongPressGesture` is a `simultaneousGesture` attached **after** both: attached before them it outranked the tap, which
+  never fired (2026-10-12, cliclick: the hosting view got every mouse-down, a plain `onTapGesture` in the strip fired, the
+  tile's didn't). No `allowsWindowActivationEvents` needed: with the shelf's panel never key and Finder active, the tap and
+  the drag work without it.
+- Seen on a notched M2 (2026-10-12, macOS 27): hover, click-to-copy and drag-out into Finder while another app is active;
+  the shelf collapsing mid-drag (the pointer left it) doesn't cancel the drop, which copies, leaving the original. Not
+  yet: full-screen Spaces, several displays.
 
 ### S5 — Agent chat and reliable web takes (`feat/ui-polish`, spec 0008)
 

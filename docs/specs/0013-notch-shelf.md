@@ -1,6 +1,7 @@
 # 0013 — Notch shelf
 
-Status: built 2026-10-03 (`feat/screenshot-history`, on top of spec 0012). Not yet seen running: see "Unverified".
+Status: built 2026-10-03 (`feat/screenshot-history`, on top of spec 0012). Click and drag fixed and seen running on a
+notched Mac 2026-10-12; the rest: see "Unverified".
 
 ## Why
 
@@ -17,8 +18,9 @@ grows out of it shows the newest screenshots at once, like Alcove, NotchNook or 
   panel collapses it after 500 ms; coming back cancels that. Reduce Motion: no spring, the shape changes at
   once and the content cross-fades.
 - Open: "Screenshots" and their count, and a scrolling strip of the newest 20 (saved ones in the
-  screenshot folder and unsaved ones in the history), newest first. **Click** copies the PNG and the tile
-  says Copied for 1.2 s; **drag** drops the file into another app. No screenshots: "No screenshots yet".
+  screenshot folder and unsaved ones in the history), newest first. **Click** copies it as PNG (an HDR
+  screenshot's `.heic` converted, `ScreenshotService.pngData(ofFile:)`) and the tile says Copied for 1.2 s;
+  **drag** drops the file into another app under its own name. No screenshots: "No screenshots yet".
 - **Settings → Screenshots → History → Show Screenshots in the Notch** (on by default; in General until 2026-10-08).
 - Taken away as a screenshot starts and brought back as it ends, so it isn't in the shot.
 
@@ -65,6 +67,9 @@ grows out of it shows the newest screenshots at once, like Alcove, NotchNook or 
   as the strip enters (the tile's own `.task` stays as a fallback). The previous items and pictures stay
   until a read finishes, so a second opening never starts empty; those of screenshots no longer shown are let go.
 - Timings live in the view model with an injectable sleep (as `RecordingCountdown`).
+- A tile is `onTapGesture` + `onDrag` (a `Button`'s press tracking would swallow the drag), and its press look is a
+  `LongPressGesture` attached as a `simultaneousGesture` after both. Attached before them it outranked the tap, which
+  never fired: clicks did nothing, while hover, drawn from the tracking area, still looked alive (fixed 2026-10-12).
 
 ## Files
 
@@ -80,10 +85,10 @@ grows out of it shows the newest screenshots at once, like Alcove, NotchNook or 
 
 ## Unverified
 
-Built and unit tested only; the app wasn't run on a notched Mac. Still to check by hand: hover while Reco
-isn't the active app (an `.activeAlways` tracking area is documented to deliver enter/exit then, but a
-nonactivating panel's first click and SwiftUI's `onHover` in it were not seen), the panel above the
-notch and in full-screen Spaces, more than one display, a click and a drag on the same tile
-(`onTapGesture` + `onDrag`), the look of the ears, and that the springs feel like notchi's (matched by number, never side by side).
+Checked on a notched M2 (2026-10-12, macOS 27, with cliclick, Finder active): the shelf opens over the
+notch, tiles ring on hover, a click copies a PNG and a drag into a Finder window drops a copy of the file
+under its name, even though the shelf collapses mid-drag. Still to check by hand: full-screen Spaces, more
+than one display, the look of the ears, and that the springs feel like notchi's (matched by number, never
+side by side).
 
 Not yet: other contents (recordings, files), a keyboard way in, a size or position preference.

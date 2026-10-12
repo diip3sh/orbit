@@ -157,6 +157,17 @@ final class ScreenshotService {
         return data as Data
     }
 
+    /// A saved screenshot as PNG, for the clipboard: a PNG file as it is, an HDR one's HEIC as its SDR base
+    /// re-encoded, since the HEIC's own bytes aren't PNG whatever the pasteboard type says.
+    @concurrent
+    nonisolated static func pngData(ofFile url: URL) async throws -> Data {
+        let data = try Data(contentsOf: url)
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { throw CocoaError(.fileReadCorruptFile) }
+        if CGImageSourceGetType(source) as String? == UTType.png.identifier { return data }
+        guard let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw CocoaError(.fileReadCorruptFile) }
+        return try await pngData(of: image)
+    }
+
     @concurrent
     nonisolated static func writePNG(_ image: CGImage, to url: URL) async throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

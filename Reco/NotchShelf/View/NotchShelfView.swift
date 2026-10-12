@@ -164,16 +164,20 @@ private struct NotchShelfTile: View {
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
         .editorMotion(EditorTheme.quickMotion, value: isHovered)
         .editorMotion(isPressed ? nil : EditorTheme.quickMotion, value: isPressed)
-        // A press shows on the frame it lands; moving 4 pt ends it, so the file drag takes over
-        .simultaneousGesture(
-            LongPressGesture(minimumDuration: .infinity, maximumDistance: 4).updating($isPressed) { _, pressed, _ in pressed = true }
-        )
         .editorMotion(EditorTheme.quickMotion, value: isCopied)
         // Not a Button: its press tracking would swallow the mouse-down that starts a drag
         .onTapGesture(perform: copy)
         .onDrag {
-            NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
+            let provider = NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
+            // Without it Finder names the drop after its type ("HEIF Image.heic")
+            provider.suggestedName = item.url.deletingPathExtension().lastPathComponent
+            return provider
         }
+        // A press shows on the frame it lands; moving 4 pt ends it, so the file drag takes over. Outside the tap
+        // and the drag, so it runs alongside them: inside, it outranked the tap, which never fired.
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: .infinity, maximumDistance: 4).updating($isPressed) { _, pressed, _ in pressed = true }
+        )
         .accessibilityElement()
         .accessibilityLabel(item.name)
         .accessibilityHint("Copies the screenshot")

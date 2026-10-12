@@ -164,8 +164,8 @@ final class LibraryViewModel {
     }
 
     /// A screenshot as its PNG, to paste anywhere; a movie or GIF as its file, to drop into an app.
-    func copy(_ item: LibraryItem) {
-        if item.kind == .screenshot, let png = try? Data(contentsOf: item.url) {
+    func copy(_ item: LibraryItem) async {
+        if item.kind == .screenshot, let png = try? await ScreenshotService.pngData(ofFile: item.url) {
             ImagePasteboard.copy(png: png, to: pasteboard)
         } else {
             pasteboard.clearContents()

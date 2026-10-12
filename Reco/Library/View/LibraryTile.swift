@@ -130,7 +130,7 @@ private struct LibraryItemActions: View {
             viewModel.reveal(item)
         }
         Button("Copy", systemImage: "doc.on.doc") {
-            viewModel.copy(item)
+            Task { await viewModel.copy(item) }
         }
         Divider()
         Button("Move to Trash", systemImage: "trash", role: .destructive) {
