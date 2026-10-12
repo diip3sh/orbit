@@ -7,13 +7,16 @@ import SwiftUI
 
 /// A choice among a few short options: a track in the control fill with a raised fill that slides to the
 /// chosen one. Replaces the system segmented control, whose accent fill would put the accent on every choice in
-/// the inspectors (the accent is kept for the playhead, the selection and the chosen tab).
+/// the inspectors (the accent is kept for the playhead and the timeline's selection).
 struct SegmentedChoice<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, title: String)]
 
     /// Whether an option can be chosen; one that can't is dimmed.
     var isEnabled: (Value) -> Bool = { _ in true }
+
+    /// The track's fill: the control fill on the column, a step under it (`panel`) inside a card.
+    var trackFill: Color = EditorTheme.control
 
     @Namespace private var highlight
 
@@ -48,7 +51,7 @@ struct SegmentedChoice<Value: Hashable>: View {
             }
         }
         .padding(2)
-        .background(EditorTheme.control, in: .rect(cornerRadius: 8))
+        .background(trackFill, in: .rect(cornerRadius: 8))
         .editorMotion(EditorTheme.quickMotion, value: selection)
     }
 }

@@ -8,7 +8,7 @@
 import SwiftUI
 
 /// The inspector's tabs as icons on one track, a line between groups; the chosen one's raised fill slides to
-/// it, as in ``SegmentedChoice``, and its icon is in the accent. A tab with nothing to edit is dimmed and says
+/// it, as in ``SegmentedChoice``, and its icon is in ink. A tab with nothing to edit is dimmed and says
 /// why in its tooltip.
 struct InspectorTabBar: View {
     @Binding var selection: InspectorTab
@@ -44,7 +44,7 @@ struct InspectorTabBar: View {
         } label: {
             Label(tab.title, systemImage: tab.symbol)
                 .labelStyle(.iconOnly)
-                .foregroundStyle(isSelected ? EditorTheme.accent : EditorTheme.dim)
+                .foregroundStyle(isSelected ? EditorTheme.ink : EditorTheme.dim)
                 .frame(maxWidth: .infinity, minHeight: 26)
                 .background {
                     if isSelected {

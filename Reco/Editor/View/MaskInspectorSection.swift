@@ -2,6 +2,8 @@
 //  MaskInspectorSection.swift
 //  Reco
 //
+//  Created by Diip3sh on 08.10.26.
+//
 
 import SwiftUI
 
@@ -13,43 +15,64 @@ struct MaskInspectorSection: View {
     @State private var selectedRect = 0
 
     var body: some View {
-        InspectorSection("Mask") {
-            if let mask = Binding(unwrapping: $viewModel.selectedMask) {
-                let rects = mask.rects
-                InspectorField("Effect") {
-                    SegmentedChoice(selection: mask.kind, options: MaskSegment.Kind.allCases.map { ($0, $0.title) })
-                }
-                if let videoSize = viewModel.videoSize {
-                    RegionPad(
-                        image: viewModel.croppedThumbnail(at: mask.wrappedValue.range.lowerBound),
-                        videoSize: videoSize,
-                        regions: rects,
-                        selection: $selectedRect,
-                        minimumSize: MaskSegment.minimumSize,
-                        label: "Masked Areas"
-                    )
-                }
-                HStack {
-                    Button("Add Area", systemImage: "plus") {
-                        rects.wrappedValue.append(MaskSegment.defaultRect)
-                        selectedRect = rects.wrappedValue.count - 1
+        VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
+            InspectorSectionHeader("Mask")
+            InspectorCard {
+                VStack(spacing: 0) {
+                    if let mask = Binding(unwrapping: $viewModel.selectedMask) {
+                        let rects = mask.rects
+                        HStack {
+                            Text("Effect")
+                            Spacer()
+                            SegmentedChoice(
+                                selection: mask.kind,
+                                options: MaskSegment.Kind.allCases.map { ($0, $0.title) },
+                                trackFill: EditorTheme.panel
+                            )
+                            .fixedSize()
+                        }
+                        .inspectorCardRow()
+                        if let videoSize = viewModel.videoSize {
+                            InspectorHairline()
+                            RegionPad(
+                                image: viewModel.croppedThumbnail(at: mask.wrappedValue.range.lowerBound),
+                                videoSize: videoSize,
+                                regions: rects,
+                                selection: $selectedRect,
+                                minimumSize: MaskSegment.minimumSize,
+                                label: "Masked Areas"
+                            )
+                            .padding(6)
+                        }
+                        InspectorHairline()
+                        HStack(spacing: EditorTheme.spacing) {
+                            Button("Add Area", systemImage: "plus") {
+                                rects.wrappedValue.append(MaskSegment.defaultRect)
+                                selectedRect = rects.wrappedValue.count - 1
+                            }
+                            Button("Remove Area", systemImage: "minus") {
+                                rects.wrappedValue.remove(at: min(selectedRect, rects.wrappedValue.count - 1))
+                                selectedRect = max(selectedRect - 1, 0)
+                            }
+                            .disabled(rects.wrappedValue.count < 2)
+                        }
+                        .buttonStyle(.borderless)
+                        .inspectorCardRow()
+                    } else {
+                        Label("Press M to hide part of the frame from the playhead, or select a mask on the timeline.", systemImage: "eye.slash")
+                            .foregroundStyle(EditorTheme.dim)
+                            .inspectorCardRow()
                     }
-                    Button("Remove Area", systemImage: "minus") {
-                        rects.wrappedValue.remove(at: min(selectedRect, rects.wrappedValue.count - 1))
-                        selectedRect = max(selectedRect - 1, 0)
-                    }
-                    .disabled(rects.wrappedValue.count < 2)
                 }
-                .buttonStyle(.borderless)
-            } else {
-                Label("Press M to hide part of the frame from the playhead, or select a mask on the timeline.", systemImage: "eye.slash")
-                    .foregroundStyle(EditorTheme.dim)
             }
             if let progress = viewModel.sensitiveInfoProgress {
-                HStack {
-                    ProgressView(value: progress)
-                    Button("Cancel", action: viewModel.cancelFindingSensitiveInfo)
-                        .buttonStyle(.borderless)
+                InspectorCard {
+                    HStack {
+                        ProgressView(value: progress)
+                        Button("Cancel", action: viewModel.cancelFindingSensitiveInfo)
+                            .buttonStyle(.borderless)
+                    }
+                    .inspectorCardRow()
                 }
             } else {
                 Button {
@@ -61,11 +84,12 @@ struct MaskInspectorSection: View {
                 .buttonStyle(.editorSecondary)
                 .disabled(viewModel.source == nil)
             }
-        } footer: {
             if let found = viewModel.sensitiveInfoFound {
-                Text(found == 0 ? "Found no emails, phone numbers, card numbers or API keys." : "Masked \(found) emails, phone numbers, card numbers or API keys.")
+                InspectorNote(found == 0
+                    ? "Found no emails, phone numbers, card numbers or API keys."
+                    : "Masked \(found) emails, phone numbers, card numbers or API keys.")
                 // Never claims to have found everything: frames are read once a second
-                Text("Check the recording before sharing it: text that shows for under a second, moves, or is very small can be missed.")
+                InspectorNote("Check the recording before sharing it: text that shows for under a second, moves, or is very small can be missed.")
             }
         }
         .editorMotion(value: viewModel.selectedMask?.id)

@@ -12,8 +12,12 @@ struct BackgroundSwatch: View {
     let background: CanvasStyle.Background
     let canvas: CanvasStyle
 
+    /// The swatch's width, and its height when the context doesn't give one (a segmented option's glyph).
+    var width: CGFloat = 30
+    var height: CGFloat?
+
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 5)
+        let shape = RoundedRectangle(cornerRadius: width / 6)
 
         Group {
             switch background {
@@ -38,6 +42,6 @@ struct BackgroundSwatch: View {
         .overlay {
             shape.strokeBorder(EditorTheme.hairline)
         }
-        .frame(width: 30)
+        .frame(width: width, height: height)
     }
 }
