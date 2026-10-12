@@ -10,8 +10,16 @@ upstream, and only run when a release is published by hand.
 Every push to `main` that touches the app is released automatically by
 `.github/workflows/fork-release.yml`. It:
 
-1. Builds a universal (Intel and Apple silicon) app, signed with the Apple Development certificate.
-2. Packs it into a DMG whose volume icon is the app's, and signs the DMG with the Sparkle key.
+1. Builds an Apple silicon app, signed with the Apple Development certificate. The project's Release
+   configuration sets `ARCHS = arm64` (Intel was dropped on 2026-10-09; the appcast's
+   `sparkle:hardwareRequirements` keeps Intel Macs on the last universal build), and the app target's sets
+   `DEPLOYMENT_POSTPROCESSING = YES`, so `xcodebuild build` strips the executable as an archive would
+   (symbols were 31 of the universal executable's 47 MB). The symbols stay in the `.dSYM` beside the app,
+   which isn't published. Setting it on the command line instead strips the packages' object files too,
+   and the link fails.
+2. Packs it into an LZMA-compressed DMG (`ULMO`) whose volume icon is the app's, and signs the DMG with the
+   Sparkle key. Measured 2026-10-09: 17.5 MB universal and unstripped in `UDZO`, 11.6 MB stripped, 8.6 MB in
+   `ULMO`, 5.6 MB arm64 only.
 3. Publishes a GitHub Release with the DMG and `appcast.xml`, Sparkle's update feed.
 
 CI doesn't run the tests (removed 2026-10-09: the runner's Xcode 26 never finished type-checking

@@ -10,7 +10,7 @@ ScreenCaptureKit, AVFoundation and SwiftUI.
 
 ## Install
 
-Requires **macOS 15.2 or later**, on Apple silicon or Intel.
+Requires **macOS 15.2 or later** on Apple silicon. Intel Macs aren't supported.
 
 Orbit isn't notarized by Apple yet, so macOS blocks the first launch. You only do this once.
 

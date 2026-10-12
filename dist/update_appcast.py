@@ -220,6 +220,11 @@ elem.text = version
 elem = ET.SubElement(item, f"{{{SPARKLE_NS}}}minimumSystemVersion")
 elem.text = "15.2"
 
+# Apple silicon only since 2026-10-09: Intel Macs aren't offered builds they can't run and keep
+# the last universal one
+elem = ET.SubElement(item, f"{{{SPARKLE_NS}}}hardwareRequirements")
+elem.text = "arm64"
+
 if release_url:
     elem = ET.SubElement(item, f"{{{SPARKLE_NS}}}fullReleaseNotesLink")
     elem.text = release_url

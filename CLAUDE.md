@@ -58,7 +58,7 @@ xcodebuild -scheme Reco -configuration Debug -destination 'platform=macOS,arch=a
 - Never subclass `NSHostingView<Content>` with a generic `Content`: Swift 6.3.3's Release optimizer
   (Xcode 26.6, `EarlyPerfInliner`, x86_64 whole-module) crashes in the deinit of such a subclass. Measured
   2026-10-05: Debug was fine and so was a local arm64 Release build, so it showed up only in CI's Release
-  job. `FirstMouseHostingView` (capture toolbar) and `NotchHostingView` (notch shelf) are
+  job (universal until 2026-10-09, arm64 only since). `FirstMouseHostingView` (capture toolbar) and `NotchHostingView` (notch shelf) are
   `NSHostingView<AnyView>`, their call sites wrapping the root in `AnyView(...)`. `xcodebuild`'s summary
   hides a compiler crash like this; read the raw log or the `.xcresult` for it.
 - **Never launch an ad-hoc signed build.** Its designated requirement is pinned to its cdhash
