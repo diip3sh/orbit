@@ -21,6 +21,7 @@ struct SpeedInspectorSection: View {
                 Label("Speed Up Typing", systemImage: "keyboard.badge.ellipsis")
                     .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.editorSecondary)
             .disabled(speedUps.isEmpty)
         } footer: {
             if viewModel.source?.telemetry?.keystrokesAvailable == false {

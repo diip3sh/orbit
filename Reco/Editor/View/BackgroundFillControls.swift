@@ -38,13 +38,16 @@ struct BackgroundFillControls: View {
                         )
                     }
                 )
-                HStack {
+                InspectorColorRow("Colors") {
                     ColorPicker("Start", selection: $canvas.gradientStart.cgColor, supportsOpacity: false)
-                    Spacer()
+                        .help("Start color")
                     ColorPicker("End", selection: $canvas.gradientEnd.cgColor, supportsOpacity: false)
+                        .help("End color")
                 }
             case .color:
-                ColorPicker("Color", selection: $canvas.color.cgColor, supportsOpacity: false)
+                InspectorColorRow("Color") {
+                    ColorPicker("Color", selection: $canvas.color.cgColor, supportsOpacity: false)
+                }
             case .image:
                 if !wallpapers.isEmpty {
                     SwatchGrid(
@@ -115,7 +118,9 @@ struct CanvasStyleControls: View {
                 $0 == 0 ? Text("Off") : Text($0, format: .percent.precision(.fractionLength(1)))
             }
             if canvas.borderWidth > 0 {
-                ColorPicker("Border Color", selection: $canvas.borderColor.cgColor, supportsOpacity: false)
+                InspectorColorRow("Border Color") {
+                    ColorPicker("Border Color", selection: $canvas.borderColor.cgColor, supportsOpacity: false)
+                }
             }
         }
         .disabled(hasNoRoomForBorder)

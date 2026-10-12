@@ -251,7 +251,9 @@ struct ClicksInspectorSection: View {
             }
             // Dimmed rather than hidden, so the column doesn't jump
             Group {
-                ColorPicker("Color", selection: $viewModel.clickHighlights.color.cgColor)
+                InspectorColorRow("Color") {
+                    ColorPicker("Color", selection: $viewModel.clickHighlights.color.cgColor)
+                }
                 InspectorSlider("Size", value: $viewModel.clickHighlights.size, in: 16...120) {
                     Text("\($0, format: .number.precision(.fractionLength(0))) pt")
                 }

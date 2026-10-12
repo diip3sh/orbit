@@ -190,15 +190,9 @@ struct ExportOptions: View {
 
     /// Side by side when the column is wide enough for both, else one above the other.
     private var buttons: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: EditorTheme.smallSpacing) {
-                exportButton
-                copyButton
-            }
-            VStack(spacing: EditorTheme.smallSpacing) {
-                exportButton
-                copyButton
-            }
+        EqualWidthRow(spacing: EditorTheme.smallSpacing) {
+            exportButton
+            copyButton
         }
     }
 

@@ -58,6 +58,7 @@ struct MaskInspectorSection: View {
                     Label("Find Sensitive Info", systemImage: "text.viewfinder")
                         .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.editorSecondary)
                 .disabled(viewModel.source == nil)
             }
         } footer: {

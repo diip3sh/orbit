@@ -150,8 +150,13 @@ struct EditorView: View {
         }
         if export == nil {
             ToolbarItem(placement: .primaryAction) {
+                // A circle like the inspector's button: the only glass in the editor is the primary button's
                 StyleMenu(viewModel: viewModel)
+                    .menuStyle(.button)
+                    .menuIndicator(.hidden)
+                    .buttonStyle(.editorIcon)
             }
+            .hidingSharedBackground()
             if #available(macOS 26, *) {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
             }
