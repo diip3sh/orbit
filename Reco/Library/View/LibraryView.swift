@@ -43,8 +43,9 @@ struct LibraryView: View {
 private struct LibraryGrid: View {
     @Bindable var viewModel: LibraryViewModel
 
-    /// The grid's content, which the date headers measure themselves in, for the rail's active date.
-    static let gridSpace = "libraryGrid"
+    /// The grid's content, which the date headers measure themselves in, for the rail's active date. Nonisolated:
+    /// `onGeometryChange` reads it in a `Sendable` closure.
+    nonisolated static let gridSpace = "libraryGrid"
 
     /// The content area's colour: the window's ground.
     static let background = EditorTheme.stage
