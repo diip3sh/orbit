@@ -1340,15 +1340,18 @@ Recordings, Web Recordings, Exports, Screenshots, with counts), the title bar's 
 (`navigationTitle`/`navigationSubtitle`, bridged with `sceneBridgingOptions = [.toolbars, .title]`), a masonry grid of
 pictures, and in the toolbar search, **Filter** (Shape: Any, Landscape, Portrait, Square; Sort By: Newest First, Oldest
 First, Name; its icon fills while a shape is chosen) and **New** (Capture Area/Window/Screen, Record
-Area…, Record Window or Display…, New Web Recording…). A click opens a movie in the
-editor and a screenshot in Preview; the context menu shows in Finder, copies (a screenshot as PNG, a movie
+Area…, Record Window or Display…, New Web Recording…). With one of them open, a click on another toolbar item opens
+it (`ToolbarMenuSwitcher`): AppKit's menu tracking keeps the press that closes a menu, so it took a second click; when
+a menu closes with the button down over another of the window's toolbar items, the press is posted again. A click opens a movie in the
+editor and a picture in Quick Look (`quickLookPreview`; the arrow keys go through the pictures shown); the context menu
+opens it in Preview, shows in Finder, copies (a screenshot as PNG, a movie
 as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`. The grid is under date
 headers, newest first (or oldest first; sorted by name it is one grid without headers): Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
 list the screenshot history folder (spec 0012). Down the right edge the dates repeat as a rail
 (`LibraryDateRail`), adapted from Chánh Đại's Line Nav: only a short line per date, 10 pt apart, that lengthens
 and brightens for the date at the top of the grid and for the one under the pointer, whose title shows to the
 line's left, over the grid, in large text with no background; a click scrolls the grid to it. The grid reserves only the lines'
-44 pt and hides the rail for a single date. The grid sits on the content colour (`controlBackgroundColor`): on the
+36 pt (12 pt lines, 20 pt marked) and hides the rail for a single date. The grid sits on the content colour (`controlBackgroundColor`): on the
 window's own colour it matched the sidebar within a few levels (55 against 57 in dark mode). Tiles are pictures only,
 at their own shape (`MasonryLayout`: columns at least 200 pt wide, each tile in the shortest column so far,
 `MasonryPlacement`), 16:10 until the shape is read; a movie has a play badge, the name shows on hover, VoiceOver reads
@@ -1356,8 +1359,13 @@ name and date. Shapes are read once per item before the list shows (`LibraryStor
 with its EXIF orientation, a movie's video track with its transform), and thumbnails are drawn at that shape, 640 px
 wide, up to 1280 tall. Square is within 5% (`LibraryOrientation`); with a shape chosen, an unreadable item is left out.
 Which date is current is
-`LibraryDateGroup.active(in:headerTops:topLine:)`, fed by each header's own offset — a lazy grid measures
-only the headers it has built, so an unmeasured date is one below the fold and is skipped.
+`LibraryDateGroup.active(in:headerTops:topLine:)`, fed by each header's offset in the grid's content — a lazy grid
+measures only the headers it has built, so an unmeasured date is one below the fold and is skipped — against the
+scroll offset (`onScrollGeometryChange`), so state changes only when another date reaches the top. Measured
+2026-10-09 (M2, Release, 266 screenshots, a scripted 15 s scroll): the headers' offsets in the scroll view, written
+to state every frame, ran the grid's body (filter, sort, grouping) as often, 10–13 s of CPU. Each tile holds its own
+thumbnail (the view model's cache isn't observed, so one arriving redraws one tile) and builds its ••• menu only
+while hovered. The first scroll through decodes every thumbnail (a 3420×2224 PNG each), most of the CPU then.
 
 | File | Role |
 |---|---|

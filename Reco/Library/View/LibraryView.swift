@@ -3,6 +3,7 @@
 //  Reco
 //
 
+import QuickLook
 import SwiftUI
 
 /// Reco's main window (spec 0010): a sidebar of sections, everything Reco made as a grid of pictures,
@@ -40,17 +41,23 @@ struct LibraryView: View {
 
 /// The section's items, or why there are none.
 private struct LibraryGrid: View {
-    let viewModel: LibraryViewModel
+    @Bindable var viewModel: LibraryViewModel
 
-    /// The coordinate space the date headers measure themselves in, for the rail's active date.
+    /// The grid's content, which the date headers measure themselves in, for the rail's active date.
     static let gridSpace = "libraryGrid"
 
     /// The content area's colour: the window's ground.
     static let background = EditorTheme.stage
 
-    /// Each date header's distance below the top of the grid, by ``LibraryDateGroup/id``. Only the
-    /// headers a lazy grid has built have one, and one below the fold is treated as not reached yet.
+    /// Each date header's distance below the top of the grid's content, by ``LibraryDateGroup/id``. Only the
+    /// headers a lazy grid has built have one, and one below the fold is treated as not reached yet. In the
+    /// content, not the scroll view, so it changes with the layout and not on every frame of a scroll: a
+    /// state write per frame ran this body (filtering, sorting and grouping every item) as often, 10–13 s of
+    /// CPU over 15 s of scrolling 266 items (M2, Release, 2026-10-09).
     @State private var headerTops: [String: CGFloat] = [:]
+
+    /// The date the rail marks, written only when another one reaches the top.
+    @State private var activeDate: String?
 
     var body: some View {
         let shown = viewModel.shown
@@ -98,7 +105,9 @@ private struct LibraryGrid: View {
                                             .foregroundStyle(EditorTheme.ink)
                                             // Where the rail scrolls to, and what it measures
                                             .id(group.id)
-                                            .background { headerTop(of: group) }
+                                            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.gridSpace)).minY } action: { top in
+                                                headerTops[group.id] = top
+                                            }
                                         LibraryMasonry(items: group.items, viewModel: viewModel)
                                     }
                                 }
@@ -106,15 +115,22 @@ private struct LibraryGrid: View {
                                 LibraryMasonry(items: shown, viewModel: viewModel)
                             }
                         }
+                        .coordinateSpace(name: Self.gridSpace)
                         .padding(EditorTheme.largeSpacing)
                         // The rail floats over the grid, so the last column keeps clear of it
                         .padding(.trailing, showsRail ? LibraryDateRail.width : 0)
                     }
-                    .coordinateSpace(name: Self.gridSpace)
+                    // A header is at the grid's top padding, where it counts as read, once the content has scrolled by its
+                    // top: the content starts that padding down
+                    .onScrollGeometryChange(for: String?.self) { geometry in
+                        LibraryDateGroup.active(in: groups, headerTops: headerTops, topLine: geometry.contentOffset.y)
+                    } action: { _, date in
+                        activeDate = date
+                    }
                     .softTopEdge()
                     .overlay(alignment: .trailing) {
                         if showsRail {
-                            LibraryDateRail(groups: groups, active: activeDate) { date in
+                            LibraryDateRail(groups: groups, active: activeDate ?? groups.first?.id) { date in
                                 withMotion {
                                     proxy.scrollTo(date, anchor: .top)
                                 }
@@ -131,30 +147,10 @@ private struct LibraryGrid: View {
                     .padding(EditorTheme.spacing)
             }
         }
+        // The pictures shown, in the grid's order, so the arrow keys go from one to the next
+        .quickLookPreview($viewModel.previewed, in: shown.filter { !$0.isMovie }.map(\.url))
         .navigationTitle(viewModel.section.heading)
         .navigationSubtitle(Text("^[\(shown.count) item](inflect: true)"))
-    }
-
-    /// The date the grid is looking at: the last one whose header has passed the top, or the first one
-    /// still below it, which is the first date before anything has scrolled.
-    private var activeDate: String? {
-        LibraryDateGroup.active(in: viewModel.shownGroups, headerTops: headerTops, topLine: Self.topLine)
-    }
-
-    /// Where a header counts as the one being read: the grid's own top padding, so the first date is
-    /// marked as soon as the grid is at its top.
-    private static let topLine = EditorTheme.largeSpacing
-
-    /// Reports where a date's header sits, which moves as the grid scrolls. Only a few headers exist at
-    /// a time, so this is a handful of updates per frame at most.
-    private func headerTop(of group: LibraryDateGroup) -> some View {
-        GeometryReader { proxy in
-            let top = proxy.frame(in: .named(Self.gridSpace)).minY
-            Color.clear
-                .onChange(of: top, initial: true) { _, newTop in
-                    headerTops[group.id] = newTop
-                }
-        }
     }
 }
 
@@ -168,12 +164,7 @@ private struct LibraryMasonry: View {
         // Columns at least this wide, filling the row; tiles sit closer than date to date
         MasonryLayout(minimumColumnWidth: 200, spacing: EditorTheme.smallSpacing) {
             ForEach(items) { item in
-                LibraryTile(item: item, aspectRatio: viewModel.aspectRatios[item], thumbnail: viewModel.thumbnails[item.url], viewModel: viewModel)
-                    .onScrollVisibilityChange(threshold: 0.01) { isVisible in
-                        if isVisible {
-                            Task { await viewModel.loadThumbnail(for: item) }
-                        }
-                    }
+                LibraryTile(item: item, aspectRatio: viewModel.aspectRatios[item], viewModel: viewModel)
             }
         }
     }

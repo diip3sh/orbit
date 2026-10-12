@@ -48,9 +48,9 @@ private struct LibraryDateRailDate: View {
     @State private var isHovered = false
 
     /// The line column, so a marked line grows leftward inside it, and the line at rest and marked.
-    static let lineColumn: CGFloat = 28
-    private static let lineWidth: CGFloat = 16
-    private static let markedLineWidth: CGFloat = 28
+    static let lineColumn: CGFloat = 20
+    private static let lineWidth: CGFloat = 12
+    private static let markedLineWidth: CGFloat = 20
     private static let lineHeight: CGFloat = 2
 
     /// Each date's row, which is also the gap between lines: tall enough to point at.

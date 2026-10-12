@@ -29,6 +29,7 @@ final class EditorWindowManager: NSObject {
         let viewModel: LibraryViewModel
         let watcher: FolderWatcher
         let accessesOutputDirectory: Bool
+        let menuSwitcher: ToolbarMenuSwitcher
     }
 
     private struct WebRecording {
@@ -201,7 +202,8 @@ final class EditorWindowManager: NSObject {
         // The section's title and its count, which macOS 26 shows large in the toolbar
         hostingController.sceneBridgingOptions = [.toolbars, .title]
         let window = makeWindow(hostingController, title: "Reco", size: NSSize(width: 1100, height: 720))
-        library = Library(window: window, viewModel: viewModel, watcher: FolderWatcher(), accessesOutputDirectory: accessesOutputDirectory)
+        library = Library(window: window, viewModel: viewModel, watcher: FolderWatcher(), accessesOutputDirectory: accessesOutputDirectory,
+                          menuSwitcher: ToolbarMenuSwitcher(window: window))
 
         NSApp.setActivationPolicy(.regular)
         activate(window)

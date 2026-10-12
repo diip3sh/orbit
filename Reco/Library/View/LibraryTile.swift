@@ -6,22 +6,31 @@
 import SwiftUI
 
 /// One item in the Library's grid: its picture at its own shape, a play mark on a movie, and its name while
-/// pointed at. Clicking opens it; the context menu and the ••• button on hover reveal, copy or trash it.
+/// pointed at. Clicking opens a movie in the editor and a picture in Quick Look; the context menu and the •••
+/// button on hover open, reveal, copy or trash it.
 struct LibraryTile: View {
     let item: LibraryItem
 
     /// Width over height, `nil` until read (or unreadable), when the tile is a recording's usual 16:10.
     let aspectRatio: Double?
-    let thumbnail: CGImage?
     let viewModel: LibraryViewModel
 
+    /// Loaded the first time the tile scrolls into view.
+    @State private var thumbnail: CGImage?
     @State private var isHovered = false
+
+    init(item: LibraryItem, aspectRatio: Double?, viewModel: LibraryViewModel) {
+        self.item = item
+        self.aspectRatio = aspectRatio
+        self.viewModel = viewModel
+        _thumbnail = State(initialValue: viewModel.loadedThumbnail(for: item))
+    }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: EditorTheme.radius, style: .continuous)
 
         Button {
-            viewModel.open(item)
+            viewModel.preview(item)
         } label: {
             EditorTheme.control
                 .aspectRatio(aspectRatio ?? 16 / 10, contentMode: .fit)
@@ -68,25 +77,32 @@ struct LibraryTile: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        // The same actions as the context menu, for those who don't right-click
+        .onScrollVisibilityChange(threshold: 0.01) { isVisible in
+            guard isVisible, thumbnail == nil else { return }
+            Task { thumbnail = await viewModel.thumbnail(for: item) }
+        }
+        // The same actions as the context menu, for those who don't right-click. Built only while pointed at:
+        // a menu is an AppKit pop-up button, too much to keep under every tile
         .overlay(alignment: .topTrailing) {
-            Menu {
-                LibraryItemActions(item: item, viewModel: viewModel)
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(EditorTheme.ink)
-                    .frame(width: 24, height: 24)
-                    .editorSurface(in: .circle, fill: EditorTheme.raised)
+            if isHovered {
+                Menu {
+                    LibraryItemActions(item: item, viewModel: viewModel)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(EditorTheme.ink)
+                        .frame(width: 24, height: 24)
+                        .editorSurface(in: .circle, fill: EditorTheme.raised)
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .padding(EditorTheme.smallSpacing)
+                .transition(.opacity)
+                .help("More")
+                .accessibilityLabel("More")
             }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .padding(EditorTheme.smallSpacing)
-            .opacity(isHovered ? 1 : 0)
-            .help("More")
-            .accessibilityLabel("More")
         }
         .contextMenu {
             LibraryItemActions(item: item, viewModel: viewModel)

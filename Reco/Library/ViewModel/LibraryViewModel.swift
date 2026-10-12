@@ -32,8 +32,12 @@ final class LibraryViewModel {
     /// Newest first, or `nil` until the folders have been read.
     private(set) var items: [LibraryItem]?
 
-    /// The items' pictures, loaded as their tiles appear.
-    private(set) var thumbnails: [URL: CGImage] = [:]
+    /// The items' pictures, loaded as their tiles appear. Not observed: each tile holds its own, so a picture
+    /// arriving redraws its tile, not every tile that reads this.
+    @ObservationIgnored private var thumbnails: [URL: CGImage] = [:]
+
+    /// The picture Quick Look shows, `nil` while it's closed.
+    var previewed: URL?
 
     /// Each item's width over height, read once when it is first listed, for the masonry grid and the shape
     /// filter. By item, not URL: an export written again under its name may have another shape.
@@ -123,9 +127,27 @@ final class LibraryViewModel {
         }
     }
 
-    func loadThumbnail(for item: LibraryItem) async {
-        guard thumbnails[item.url] == nil else { return }
-        thumbnails[item.url] = await LibraryStore.thumbnail(of: item, maximumSize: Self.thumbnailSize(aspectRatio: aspectRatios[item]))
+    /// The picture already loaded, for a tile built again as it scrolls back in.
+    func loadedThumbnail(for item: LibraryItem) -> CGImage? {
+        thumbnails[item.url]
+    }
+
+    func thumbnail(for item: LibraryItem) async -> CGImage? {
+        if let thumbnail = thumbnails[item.url] {
+            return thumbnail
+        }
+        let thumbnail = await LibraryStore.thumbnail(of: item, maximumSize: Self.thumbnailSize(aspectRatio: aspectRatios[item]))
+        thumbnails[item.url] = thumbnail
+        return thumbnail
+    }
+
+    /// A click: a recording opens in the editor, a picture in Quick Look, as Finder's space bar shows it.
+    func preview(_ item: LibraryItem) {
+        if item.isMovie {
+            openMovie(item.url)
+        } else {
+            previewed = item.url
+        }
     }
 
     /// A recording opens in the editor, a screenshot in the system's viewer.
@@ -157,6 +179,9 @@ final class LibraryViewModel {
             try await trashItem(item)
             items?.removeAll { $0.id == item.id }
             thumbnails[item.url] = nil
+            if previewed == item.url {
+                previewed = nil
+            }
         } catch {
             logger.error("Couldn't move \(item.url.lastPathComponent) to the Trash: \(error.localizedDescription)")
             self.error = error.localizedDescription
