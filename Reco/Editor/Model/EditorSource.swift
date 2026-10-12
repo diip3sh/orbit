@@ -48,4 +48,9 @@ nonisolated struct EditorSource: Sendable {
         default: audioTrackIDs.indices.map { "Audio \($0 + 1)" }
         }
     }
+
+    /// The audio track that may hold a voice: the microphone's, or the single track, which could be it.
+    var voiceTrackIndex: Int? {
+        audioTrackIDs.count <= 2 ? audioTrackIDs.indices.last : nil
+    }
 }

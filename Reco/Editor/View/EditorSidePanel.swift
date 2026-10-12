@@ -5,11 +5,11 @@
 
 import SwiftUI
 
-/// The glass panel floating beside the stage: the inspector, and for a web take the agent chat,
-/// with a switch between them on top.
+/// The editor's inspector and agent chat, with a switch between them.
 struct EditorSidePanel: View {
     let viewModel: EditorViewModel
     let chat: AgentChatViewModel
+    @Binding var tab: InspectorTab
 
     /// The panel the user picked, if they did.
     @Binding var picked: Panel?
@@ -19,8 +19,6 @@ struct EditorSidePanel: View {
         case style
         case agent
     }
-
-    private static let width: CGFloat = 320
 
     /// The picked panel, else the chat when an agent made the take.
     private var panel: Binding<Panel> {
@@ -33,29 +31,17 @@ struct EditorSidePanel: View {
 
     var body: some View {
         let panel = panel
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-
-        // Each panel comes in from its side of the switch and leaves that way
-        ZStack {
-            if chat.isAvailable, panel.wrappedValue == .agent {
-                AgentChatView(chat: chat)
-                    .transition(.materialize(sideways: 48))
-            } else {
-                EditorInspector(viewModel: viewModel)
-                    .transition(.materialize(sideways: -48))
-            }
-        }
-        .editorMotion(value: panel.wrappedValue)
-        .editorBar(edge: .top) {
+        VStack(spacing: 0) {
             if chat.isAvailable {
                 EditorSegmentedPicker(selection: panel, options: [(.style, "Style"), (.agent, "Agent")])
                     .padding(EditorTheme.mediumSpacing)
             }
+            if chat.isAvailable, panel.wrappedValue == .agent {
+                EditorAgentChatView(chat: chat)
+            } else {
+                EditorInspector(viewModel: viewModel, tab: $tab)
+            }
         }
-        .frame(width: Self.width)
-        .frame(maxHeight: .infinity)
-        .clipShape(shape)
-        .editorGlass(in: shape)
-        .padding([.trailing, .bottom], EditorTheme.mediumSpacing)
+        .editorMotion(value: panel.wrappedValue)
     }
 }

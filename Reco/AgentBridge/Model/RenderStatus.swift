@@ -17,23 +17,21 @@ nonisolated struct RenderStatus: Codable, Equatable, Sendable {
     var movie: String?
     var telemetry: String?
 
-    /// Selectors the page had no match for before any click, so their cursor clips aim at the
-    /// middle of the viewport. Misses on pages clicks open come back as `warnings` instead.
-    var unmatchedSelectors: [String]?
-
-    /// What went wrong on the page during the take (``WebTakeIssues``), for the agent to fix.
+    /// What went wrong on the page, one message per step and problem, each with its time
+    /// (``WebTakeIssues``): from the take when it rendered, else from the page the plan was aimed at.
     var warnings: [String]?
     var error: String?
 
     nonisolated enum Status: String, Codable, Sendable {
         case rendering
+        /// On the Web Recording window's timeline, for the user to render.
+        case planned
         case done
         case failed
     }
 
     private enum CodingKeys: String, CodingKey {
         case renderID = "render_id"
-        case unmatchedSelectors = "unmatched_selectors"
         case status, progress, movie, telemetry, warnings, error
     }
 }

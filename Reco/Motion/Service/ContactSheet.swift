@@ -51,7 +51,7 @@ enum ContactSheet {
         let composition = try await MotionCompositionBuilder.composition(for: plan)
         var frames: [CGImage] = []
         for moment in moments {
-            frames.append(try await ExportService.frame(of: composition, at: CMTime(seconds: moment.time, preferredTimescale: 600)))
+            frames.append(try await FrameGrabber.image(of: composition, at: moment.time, timescale: 600))
         }
         return frames
     }

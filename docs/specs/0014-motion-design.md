@@ -282,4 +282,3 @@ changes it doesn't cut. The engine's moves were measured again where they read d
   19.4 s at 4K, −16.0 LUFS, −3.9 dBFS peak.
 - A test helper read Core Image's bitmaps bottom-up (`MotionDesignTests.pixels`): the shapes it measured are symmetric,
   so no test had noticed.
-

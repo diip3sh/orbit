@@ -94,6 +94,11 @@ final class InputTelemetryRecorder {
         }
     }
 
+    /// Drops the buffered telemetry of a take that was thrown away.
+    func discard() {
+        telemetry = nil
+    }
+
     /// Writes the buffered telemetry next to `videoURL`, moved onto the video's timeline.
     ///
     /// Does nothing when no telemetry was recorded. Failures are only logged: the recording

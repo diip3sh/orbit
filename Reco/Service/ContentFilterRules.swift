@@ -26,6 +26,12 @@ enum ContentFilterRules {
     /// It is not reliably owned by the Dock, so it is matched by title alone.
     private static let backstopTitleFragment = "Backstop"
 
+    /// Finder draws every desktop icon into one window, display-sized, at this level. Measured on macOS 27.0.1:
+    /// left out of a display capture, the icons are gone and nothing else changes.
+    static let desktopIconLevel = Int(CGWindowLevelForKey(.desktopIconWindow))
+
+    private static let finderBundleID = "com.apple.finder"
+
     // MARK: - Display Capture
 
     /// Whether a display capture needs its filter rebuilt at all.
@@ -33,7 +39,7 @@ enum ContentFilterRules {
     /// Rebuilding costs a `SCShareableContent` query, so a capture that hides nothing keeps
     /// the filter the content picker produced.
     static func requiresRebuild(visibility: ContentVisibility) -> Bool {
-        !(visibility.showWallpaper && visibility.showDock && visibility.showReco)
+        !(visibility.showWallpaper && visibility.showDock && visibility.showReco && visibility.showDesktopIcons)
     }
 
     /// Windows to exclude from a display capture.
@@ -49,6 +55,8 @@ enum ContentFilterRules {
             if !visibility.showWallpaper && isBackstop(window) { return true }
 
             if !visibility.showReco && isOwnWindow(window, visibility: visibility) { return true }
+
+            if !visibility.showDesktopIcons && isDesktopIcons(window) { return true }
 
             return isHiddenDockOwnedWindow(window, visibility: visibility)
         }
@@ -93,6 +101,10 @@ enum ContentFilterRules {
 
     private static func isBackstop(_ window: CapturableWindow) -> Bool {
         window.title.contains(backstopTitleFragment)
+    }
+
+    private static func isDesktopIcons(_ window: CapturableWindow) -> Bool {
+        window.bundleID == finderBundleID && window.layer == desktopIconLevel
     }
 
     private static func isWallpaper(_ window: CapturableWindow) -> Bool {

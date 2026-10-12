@@ -3,6 +3,7 @@
 //  Reco
 //
 
+import CoreGraphics
 import Foundation
 import OSLog
 
@@ -21,25 +22,12 @@ final class AgentTools {
     /// The latest render, or `nil` before the first. Only this type sets it, except in tests.
     var job: RenderStatus?
 
-    /// The page an `inspect_page` call is looking at now, if one is.
     private(set) var inspecting: URL?
-
-    /// What a motion tool is doing now ("Capturing the UI…"), if one is.
     var motionActivity: String?
-
-    /// How many motion videos `edit_motion` has changed since launch, and the last: a run that
-    /// edited one succeeded without rendering (spec 0011, *Agent*).
     var motionEdits = 0
     var lastMotionBundle: URL?
-
-    /// The open window's view model of a motion bundle, which edits go through: the file is never
-    /// changed behind an open window.
     @ObservationIgnored var motionEditor: (URL) -> MotionEditorViewModel? = { _ in nil }
-
-    /// Called with each motion video `edit_motion` changes.
     @ObservationIgnored var onMotionEdited: (URL) -> Void = { _ in }
-
-    /// The capture or preview going on or last finished, by its arguments.
     @ObservationIgnored var motionJob: MotionJob?
 
     struct MotionJob {
@@ -47,6 +35,41 @@ final class AgentTools {
         let task: Task<Reply, Never>
         var isDone = false
     }
+
+    /// Called with each page an agent inspects, for the Web Recording window to show (spec 0008).
+    @ObservationIgnored var onInspected: ((PageInspection) -> Void)?
+
+    /// Called with each script an agent's plan became, before it renders, for the window to adopt.
+    @ObservationIgnored var onPlanned: ((WebScript) -> Void)?
+
+    /// Whether an agent run Reco started (the bar or the chat) is going. Only then can an agent browse:
+    /// the live page shares the default website data store, so it has the user's logins.
+    /// ponytail: any connection may browse during such a run, not just its agent; tell them apart by a
+    /// per-run token if that matters.
+    @ObservationIgnored var hostsRun = false {
+        didSet { recordings = 0 }
+    }
+
+    /// How many times `record_page` was called in the run going on.
+    @ObservationIgnored private var recordings = 0
+
+    /// How many times an agent Reco runs may call `record_page` in one run: a take and one more with its
+    /// warnings fixed. An agent on a page whose warning re-recording can't fix would otherwise record forever.
+    static let maximumRecordings = 2
+
+    /// Whether `record_page` only puts the plan on the window's timeline, for the user to render: for
+    /// the chat, where the user reviews and edits before rendering. Set for a run, cleared when it ends.
+    @ObservationIgnored var stagesPlans = false
+
+    /// The Web Recording window, opened if it isn't, whose live page an agent browses (spec 0011).
+    @ObservationIgnored var browser: (() -> WebRecordingViewModel?)?
+
+    /// How long a browsing step waits for the page to react before it looks: menus open, a click's
+    /// page starts loading. A guess that covers typical transitions; not measured.
+    static let settleTime = Duration.milliseconds(600)
+
+    /// How much page text `read_page` returns, about 3,000 words.
+    static let readLimit = 15_000
 
     @ObservationIgnored private var renderTask: Task<Void, Never>?
 
@@ -87,12 +110,6 @@ final class AgentTools {
     /// Runs tool `name` with its JSON `arguments`. The text is JSON for the agent; a failure is
     /// reported as an error text, not thrown.
     func call(_ name: String, arguments: Data) async -> Reply {
-        // How long each call takes: a launch run's 20 minutes are its calls and the agent's turns between
-        let started = ContinuousClock.now
-        defer {
-            let took = (ContinuousClock.now - started).formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 1)))
-            Self.logger.info("\(name, privacy: .public) took \(took, privacy: .public)")
-        }
         do {
             switch name {
             case AgentToolCatalog.inspectPage:
@@ -112,6 +129,8 @@ final class AgentTools {
                 return try await captureUI(arguments)
             case AgentToolCatalog.previewMotion:
                 return try await previewMotion(arguments)
+            case _ where AgentToolCatalog.browsingNames.contains(name):
+                return try await browseIfHosted(name, arguments: arguments)
             default:
                 throw AgentToolError.unknownTool(name)
             }
@@ -122,14 +141,23 @@ final class AgentTools {
 
     // MARK: - Tools
 
+    private func browseIfHosted(_ name: String, arguments: Data) async throws -> Reply {
+        guard hostsRun else {
+            throw AgentToolError.invalidArgument("Browsing works only in runs started from Orbit. Use inspect_page, then record_page.")
+        }
+        return try await browse(name, arguments: arguments)
+    }
+
     private func inspect(_ arguments: Data) async throws -> PageInspection {
         let request = try Self.decode(InspectPageRequest.self, from: arguments)
         let script = try request.validated()
         inspecting = script.url
         defer { inspecting = nil }
-        return try await Self.withDeadline(Self.inspectLimit) {
+        let page = try await Self.withDeadline(Self.inspectLimit) {
             try await WebPageRenderer(script: script).inspect(selectors: request.selectors ?? [])
         }
+        onInspected?(page)
+        return page
     }
 
     private func record(_ arguments: Data) async throws -> RenderStatus {
@@ -137,7 +165,20 @@ final class AgentTools {
         if let job, job.status == .rendering {
             throw AgentToolError.busy(renderID: job.renderID)
         }
+        if hostsRun, recordings >= Self.maximumRecordings {
+            throw AgentToolError.invalidArgument("This run has recorded \(recordings) times, the most it may. Report what the last result said.")
+        }
         let id = UUID().uuidString
+        if stagesPlans {
+            let (script, warnings) = try await script(for: plan)
+            recordings += 1
+            var planned = RenderStatus(renderID: id, status: .planned, progress: 0)
+            planned.warnings = warnings.isEmpty ? nil : warnings
+            job = planned
+            onPlanned?(script)
+            return planned
+        }
+        recordings += 1
         job = RenderStatus(renderID: id, status: .rendering, progress: 0)
         renderTask = Task { await render(plan, id: id) }
         return try await wait(for: id)
@@ -158,15 +199,15 @@ final class AgentTools {
             exportTask = Task {
                 do {
                     // Progress comes from its own task, which can still report after the export has returned
-                    let progress = { [weak self] (progress: Double) in
-                        if self?.export?.status.status == .exporting {
-                            self?.export?.status.progress = progress
+                    let progress: @MainActor @Sendable (Double) -> Void = { progress in
+                        if self.export?.status.status == .exporting {
+                            self.export?.status.progress = progress
                         }
                     }
                     let file = if movie.pathExtension == MotionStore.bundleExtension {
                         try await MotionExporter.export(try await motionDocument(at: movie), bundle: movie, settings: settings, progress: progress)
                     } else {
-                        try await ExportService.export(recordingAt: movie, settings: settings, progress: progress)
+                        try await exportRecording(at: movie, settings: settings)
                     }
                     export?.status = ExportStatus(status: .done, progress: 1, file: file.path(percentEncoded: false))
                 } catch {
@@ -188,22 +229,42 @@ final class AgentTools {
     /// Looks at the page to aim the plan, renders it and records the outcome in ``job``.
     private func render(_ plan: RecordPlan, id: String) async {
         do {
-            let page = try await WebPageRenderer(script: plan.inspectionScript).inspect(selectors: plan.selectors)
-            let (script, unmatched) = try plan.script(page: page)
-            job?.unmatchedSelectors = unmatched.isEmpty ? nil : unmatched
-            let take = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
+            let (script, _) = try await script(for: plan)
+            onPlanned?(script)
+            let (movie, warnings) = try await WebPageRenderer.renderTake(script, settings: settings) { [weak self] progress in
                 self?.job?.progress = progress
             }
+            job?.warnings = warnings.isEmpty ? nil : warnings
             job?.status = .done
             job?.progress = 1
-            job?.movie = take.movie.path(percentEncoded: false)
-            job?.telemetry = InputTelemetry.sidecarURL(for: take.movie).path(percentEncoded: false)
-            job?.warnings = take.issues.isEmpty ? nil : take.issues
-            onRendered(take.movie)
+            job?.movie = movie.path(percentEncoded: false)
+            job?.telemetry = InputTelemetry.sidecarURL(for: movie).path(percentEncoded: false)
+            onRendered(movie)
         } catch {
             job?.status = .failed
             job?.error = error.localizedDescription
         }
+    }
+
+    private func exportRecording(at movie: URL, settings: ExportSettings) async throws -> URL {
+        let editor = EditorViewModel(videoURL: movie)
+        await editor.load()
+        do {
+            guard let file = try await editor.export(settings) else {
+                throw AgentToolError.invalidArgument("Could not open the recording for export.")
+            }
+            await editor.close()
+            return file
+        } catch {
+            await editor.close()
+            throw error
+        }
+    }
+
+    /// The plan as a script, aimed by looking at the page, and what the page lacks that its steps need.
+    private func script(for plan: RecordPlan) async throws -> (WebScript, [String]) {
+        let page = try await WebPageRenderer(script: plan.inspectionScript).inspect(selectors: plan.selectors)
+        return try plan.script(page: page)
     }
 
     /// The render `id` once it's over, or as it is after ``waitLimit``.
@@ -214,6 +275,65 @@ final class AgentTools {
         }
         guard let job, job.renderID == id else { throw AgentToolError.unknownRender }
         return job
+    }
+
+    // MARK: - Browsing
+
+    // One step of an agent learning a site in the window's live page: what it did, as JSON, and a
+    // picture of the page after it.
+    // swiftlint:disable:next cyclomatic_complexity
+    private func browse(_ name: String, arguments: Data) async throws -> Reply {
+        guard let window = browser?() else { throw AgentToolError.invalidArgument("The Web Recording window isn't available.") }
+        let preview = window.preview
+        let request = try Self.decode(BrowseRequest.self, from: arguments)
+        var result: [String: Any] = [:]
+        switch name {
+        case AgentToolCatalog.openPage:
+            let url = try RecordPageRequest.pageURL(request.url ?? "")
+            let viewport = try RecordPageRequest.viewportSize(request.viewport)
+            try await window.agentOpen(url, viewport: viewport)
+            try await Task.sleep(for: Self.settleTime)
+            let json = try await preview.evaluate(WebInspectScript.source, arguments: ["selectors": [String]()]) as? String ?? ""
+            let page = try Self.decode(PageInspection.self, from: Data(json.utf8))
+            window.showAgentInspection(page)
+            return Reply(text: try Self.encode(page), image: try await preview.screenshot(), isError: false)
+        case AgentToolCatalog.look:
+            await preview.scroll(toY: max(0, request.y ?? 0))
+        case AgentToolCatalog.readPage:
+            let text = try await preview.evaluate(WebBrowseScript.read, arguments: ["limit": Self.readLimit]) as? String ?? "{}"
+            return Reply(text: text, isError: false)
+        case AgentToolCatalog.click, AgentToolCatalog.hover, AgentToolCatalog.type:
+            let selector = try request.requiredSelector(for: name)
+            guard let found = try await preview.evaluate(WebBrowseScript.locate, arguments: ["selector": selector]) as? [Any], found.count == 5,
+                  let left = found[0] as? Double, let top = found[1] as? Double, let width = found[2] as? Double, let height = found[3] as? Double else {
+                throw AgentToolError.invalidArgument("No element matches \"\(selector)\". Use a selector from open_page or inspect_page.")
+            }
+            let frame = CGRect(x: left, y: top, width: width, height: height)
+            let center = CGPoint(x: frame.midX, y: frame.midY)
+            window.showAgentTarget(frame)
+            if name == AgentToolCatalog.hover {
+                preview.hover(at: center)
+            } else {
+                preview.click(at: center)
+            }
+            if name == AgentToolCatalog.type {
+                guard let text = request.text, !text.isEmpty else { throw AgentToolError.invalidArgument("type needs text.") }
+                let typing = [WebScript.Typing(clip: UUID(), selector: selector, text: text)]
+                _ = try await preview.evaluate(WebTypingScript.source, arguments: ["fields": WebTypingScript.fields(typing)])
+            }
+            result["element"] = found[4] as? String ?? ""
+        default:
+            throw AgentToolError.unknownTool(name)
+        }
+        try await Task.sleep(for: Self.settleTime)
+        // A click may have opened another page: wait for it, and say so
+        try await preview.waitUntilLoaded()
+        if let position = try await preview.evaluate(WebBrowseScript.position) as? String,
+           let object = try? JSONSerialization.jsonObject(with: Data(position.utf8)) as? [String: Any] {
+            result.merge(object) { current, _ in current }
+        }
+        let text = String(data: try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys, .withoutEscapingSlashes]), encoding: .utf8) ?? "{}"
+        return Reply(text: text, image: try await preview.screenshot(), isError: false)
     }
 
     // MARK: - JSON

@@ -21,7 +21,7 @@ struct FrameSeamTests {
 
         let (start, plain) = (try Self.color(of: draw(0), at: CGPoint(x: 120, y: 60)), try Self.color(of: Self.before, at: .zero))
         #expect(start == plain, "\(start) \(plain)")
-        let middle = try draw(0.5)
+        let middle = draw(0.5)
         // The card's top edge is half way up: the next scene under it, the scene before above it, darker
         #expect(try Self.color(of: middle, at: CGPoint(x: 120, y: 20))[2] > 150)
         let above = try Self.color(of: middle, at: CGPoint(x: 120, y: 120))
@@ -39,7 +39,7 @@ struct FrameSeamTests {
         }
 
         // The control, green, where it was; the scene before, red, round it
-        let start = try draw(0.05)
+        let start = draw(0.05)
         #expect(try Self.color(of: start, at: CGPoint(x: 200, y: 70))[1] > 150)
         #expect(try Self.color(of: start, at: CGPoint(x: 10, y: 10))[0] > 150)
         // Most of the way, the rectangle is the next scene, blue, round its middle

@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// The page's address on glass: ⏎ loads what's typed, the button reloads the script's page.
+/// The page's address on a solid capsule: ⏎ loads what's typed, the button reloads the script's page.
 struct WebAddressBar: View {
     @Bindable var viewModel: WebRecordingViewModel
 
@@ -27,8 +27,10 @@ struct WebAddressBar: View {
             .help("Load the script's page again")
             .disabled(viewModel.script.url == nil)
         }
+        // The script's page stays put while it renders
+        .disabled(!viewModel.isEditable)
         .padding(.horizontal, EditorTheme.mediumSpacing)
         .frame(maxWidth: 560, minHeight: 32)
-        .editorGlass(in: .capsule)
+        .editorSurface(in: .capsule)
     }
 }

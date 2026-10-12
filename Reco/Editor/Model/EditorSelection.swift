@@ -14,4 +14,6 @@ nonisolated enum EditorSelection: Equatable, Sendable {
     case segment(Range<Double>)
 
     case zoom(ZoomSegment.ID)
+
+    case mask(MaskSegment.ID)
 }

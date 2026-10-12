@@ -34,7 +34,7 @@ struct FlowFilmTests {
         let source = CGRect(x: 180, y: 60, width: 40, height: 20)
         let draw = { (progress: Double) in MotionFrameRenderer.dived(Self.red, into: Self.blue, from: source, progress: progress, size: Self.size) }
 
-        let start = try draw(0.05)
+        let start = draw(0.05)
         #expect(try Self.color(of: start, at: CGPoint(x: 200, y: 70))[2] > 150)
         #expect(try Self.color(of: start, at: CGPoint(x: 20, y: 20))[0] > 150)
         #expect(try Self.color(of: draw(1), at: CGPoint(x: 10, y: 10)) == Self.color(of: Self.blue, at: .zero))
@@ -49,7 +49,7 @@ struct FlowFilmTests {
         let draw = { (progress: Double) in MotionFrameRenderer.melted(before, into: Self.blue, progress: progress, palette: nil, size: Self.size) }
 
         #expect(try Self.color(of: draw(0), at: CGPoint(x: 20, y: 67)) == [0, 0, 0])
-        let middle = try draw(0.45)
+        let middle = draw(0.45)
         let dark = try Self.color(of: middle, at: CGPoint(x: 20, y: 67))
         let (end, next) = (try Self.color(of: draw(1), at: CGPoint(x: 220, y: 67)), try Self.color(of: Self.blue, at: .zero))
         #expect(zip(dark, next).allSatisfy { abs(Int($0) - Int($1)) <= 2 }, "\(dark) \(next)")

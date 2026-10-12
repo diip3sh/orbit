@@ -15,6 +15,9 @@ enum RecoMain {
             AgentBridgeClient.run()
         }
         ContainerMigration.run()
+        #if DEBUG
+        DebugInjection.load()
+        #endif
         RecoApp.main()
     }
 }

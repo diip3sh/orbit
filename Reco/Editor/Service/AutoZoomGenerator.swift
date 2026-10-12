@@ -70,7 +70,7 @@ nonisolated enum AutoZoomGenerator {
     /// The automatic zooms for a recording, sorted and apart.
     /// - Parameter duration: The recording's length in seconds.
     /// - Parameter configuration: By default, ``Configuration/init(for:)``.
-    static func segments(for telemetry: InputTelemetry, duration: Double, configuration: Configuration? = nil) -> [ZoomSegment] {
+    static func segments(for telemetry: InputTelemetry, duration: Double, configuration: Configuration? = nil) -> [ZoomSegment] { // swiftlint:disable:this function_body_length
         let configuration = configuration ?? Configuration(for: telemetry)
         let reach = configuration.usableFraction / configuration.scale
         let fits = { (group: Group) in group.bounds.width <= reach && group.bounds.height <= reach }
@@ -120,7 +120,7 @@ nonisolated enum AutoZoomGenerator {
             }
         }
 
-        return zooms.map { zoom in
+        let segments = zooms.map { zoom in
             ZoomSegment(
                 range: zoom.range,
                 scale: configuration.scale,
@@ -128,6 +128,9 @@ nonisolated enum AutoZoomGenerator {
                 isAutomatic: true
             )
         }
+        // A web take's page scrolls and is replaced under the cursor: a zoom on what was there ends with it,
+        // so one on a link doesn't hang over the page it opened
+        return telemetry.capture.kind == .web ? PageChanges.ending(segments, at: PageChanges.times(in: telemetry)) : segments
     }
 
     /// Presses inside the video, in time order: clicks where they were, keys at the last click.

@@ -8,7 +8,7 @@
 import AppKit
 import SwiftUI
 
-/// Opens one editor window per recording, the Recordings window and the Web Recording window, and
+/// Opens one editor window per recording, the Library window and the Web Recording window, and
 /// keeps the app in the Dock while any is open.
 ///
 /// The app is a menu bar app (`LSUIElement`), and its entry points - notifications, URLs, the menu
@@ -24,9 +24,10 @@ final class EditorWindowManager: NSObject {
         let accessesOutputDirectory: Bool
     }
 
-    private struct Recordings {
+    private struct Library {
         let window: NSWindow
-        let viewModel: RecordingsViewModel
+        let viewModel: LibraryViewModel
+        let watcher: FolderWatcher
         let accessesOutputDirectory: Bool
     }
 
@@ -44,24 +45,60 @@ final class EditorWindowManager: NSObject {
 
     private let settings: SettingsStore
 
-    /// Runs what a web take's agent chat asks.
-    private let agentRecording: AgentRecordingViewModel
     private var editors: [URL: Editor] = [:]
-    private var recordings: Recordings?
+    private var library: Library?
     private var webRecording: WebRecording?
     private var motionEditors: [URL: MotionEditor] = [:]
 
-    init(settings: SettingsStore, agentRecording: AgentRecordingViewModel) {
-        self.settings = settings
-        self.agentRecording = agentRecording
+    /// What the Library's New menu starts; set by `AppDelegate`
+    var libraryActions = LibraryViewModel.Actions()
+
+    /// The agent runs the Web Recording window's Agent tab shows and starts; set by `AppDelegate`
+    var agentRecording: AgentRecordingViewModel?
+
+    /// The open Web Recording window's state, which follows what an agent does (spec 0008)
+    var webRecordingViewModel: WebRecordingViewModel? {
+        webRecording?.viewModel
     }
 
-    /// Opens the editor for a recording in the output folder, or brings its window forward.
-    /// - Parameter conversation: The agent chat that made it, when a run just recorded it.
-    func open(_ videoURL: URL, conversation: [AgentChatMessage] = []) {
+    /// The Web Recording window for an agent to browse in (spec 0011): the open one, or opened with its
+    /// last script, without taking focus from the agent's window.
+    func webRecordingForAgent() -> WebRecordingViewModel? {
+        if let webRecording {
+            return webRecording.viewModel
+        }
+        let webRecording = makeWebRecording()
+        webRecording.window.orderFront(nil)
+        return webRecording.viewModel
+    }
+
+    init(settings: SettingsStore) {
+        self.settings = settings
+    }
+
+    /// Tells the user a movie that opened behind their work is ready; set by `AppDelegate`
+    var announceReady: ((URL) -> Void)?
+
+    /// Opens a movie that finished rendering on its own (an agent's, or the Web Recording window's) without
+    /// interrupting: in front while Reco is the active app, otherwise behind the user's windows, announced.
+    func openWhenReady(_ videoURL: URL) {
+        guard !NSApp.isActive else {
+            open(videoURL)
+            return
+        }
+        open(videoURL, activates: false)
+        announceReady?(videoURL)
+    }
+
+    /// Opens the editor for a recording in the output folder, or brings its window forward. Without
+    /// `activates`, the window goes behind every other and Reco stays in the background.
+    func open(_ videoURL: URL, activates: Bool = true, conversation: [AgentChatMessage] = []) {
+        guard let agentRecording else { return }
         let videoURL = videoURL.standardizedFileURL
         if let window = editors[videoURL]?.window {
-            activate(window)
+            if activates {
+                activate(window)
+            }
             return
         }
 
@@ -70,101 +107,159 @@ final class EditorWindowManager: NSObject {
 
         let viewModel = EditorViewModel(videoURL: videoURL)
         let chat = AgentChatViewModel(movie: videoURL, runner: agentRecording, conversation: conversation)
-        let window = makeWindow(contained(editorController(viewModel, chat)), title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1280, height: 800))
+        let hostingController = editorController(viewModel, chat)
+        // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
+        hostingController.sizingOptions = .minSize
+        // The name field, export and inspector buttons are SwiftUI toolbar items. The title isn't bridged: the
+        // window keeps it for the Window menu, hidden, since SwiftUI draws a bridged title whatever titleVisibility
+        // says, and removing it from its toolbar also took the space that holds the buttons at the trailing edge
+        hostingController.sceneBridgingOptions = [.toolbars]
+        let window = makeWindow(hostingController, title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1533, height: 943))
         window.representedURL = videoURL
-        window.contentMinSize = EditorView.minimumSize
+        window.titleVisibility = .hidden
         editors[videoURL] = Editor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
+        // A renamed recording is found, and reopened, under its new name
+        viewModel.onRename = { [weak self] old, new in
+            guard let self, let editor = editors.removeValue(forKey: old.standardizedFileURL) else { return }
+            editors[new.standardizedFileURL] = editor
+            editor.window.representedURL = new
+            editor.window.title = new.deletingPathExtension().lastPathComponent
+        }
 
         // A regular app gets a Dock icon, ⌘-Tab and the main menu with Undo and Redo
         NSApp.setActivationPolicy(.regular)
-        activate(window)
+        if activates {
+            activate(window)
+        } else {
+            window.orderBack(nil)
+        }
     }
 
-    /// Opens a take an agent recorded, with its conversation: in the window of the take it changes,
-    /// keeping that take's look, or in a new window. The window shows the take it has until the new
-    /// one has loaded.
+    /// Replaces the take in its editor window after an agent records it again, keeping its style.
     func open(_ take: AgentRecordedTake) {
         let movie = take.movie.standardizedFileURL
         if movie.pathExtension == MotionStore.bundleExtension {
             openMotion(movie, conversation: take.conversation)
             return
         }
-        guard let replaced = take.replacing?.standardizedFileURL, let editor = editors[replaced], editors[movie] == nil else {
+        guard let agentRecording,
+              let replaced = take.replacing?.standardizedFileURL,
+              let editor = editors[replaced], editors[movie] == nil else {
             open(movie, conversation: take.conversation)
             return
         }
         let viewModel = EditorViewModel(videoURL: movie, style: editor.viewModel.project)
         let chat = AgentChatViewModel(movie: movie, runner: agentRecording, conversation: take.conversation)
         Task {
-            // Loaded first: the window would size itself to the loading placeholder
             await viewModel.load()
             guard let current = editors[replaced], current.window === editor.window,
-                  let hostingController = editor.window.contentViewController?.children.first as? NSHostingController<EditorView> else {
+                  let controller = editor.window.contentViewController as? NSHostingController<EditorView> else {
                 open(movie, conversation: take.conversation)
                 return
             }
-            hostingController.rootView = EditorView(viewModel: viewModel, chat: chat)
+            controller.rootView = EditorView(viewModel: viewModel, chat: chat)
             editor.window.title = movie.deletingPathExtension().lastPathComponent
             editor.window.representedURL = movie
             editors[replaced] = nil
-            // The folder's scope moves with the window
             editors[movie] = Editor(window: editor.window, viewModel: viewModel, accessesOutputDirectory: editor.accessesOutputDirectory)
             await editor.viewModel.close()
             activate(editor.window)
         }
     }
 
-    /// Shows the output folder's recordings, or brings their window forward.
-    func showRecordings() {
-        if let recordings {
-            activate(recordings.window)
+    /// A `.recostyle` file opened from Finder (spec 0004, S19): applied in the key editor window, or an open one;
+    /// with no editor open, only kept with the saved styles, where the next editor's Style menu lists it.
+    func importStyle(from url: URL) {
+        if let editor = editors.values.first(where: { $0.window.isKeyWindow }) ?? editors.values.first {
+            editor.viewModel.importStyle(from: url)
+            activate(editor.window)
+        } else {
+            _ = try? StylePresetStore.save(StylePresetStore.read(from: url))
+        }
+    }
+
+    /// Shows the Library, Reco's main window, or brings it forward (spec 0010).
+    func showLibrary() {
+        if let library {
+            activate(library.window)
             return
         }
 
         // Held while the window is open: it lists the folder and reads the recordings' pictures
         let accessesOutputDirectory = settings.startAccessingOutputDirectory()
-        let viewModel = RecordingsViewModel(folder: settings.outputDirectory) { [weak self] url in
+        let settings = settings
+        let openMovie: (URL) -> Void = { [weak self] url in
             self?.open(url)
         }
-        let hostingController = NSHostingController(rootView: RecordingsView(viewModel: viewModel))
+        let viewModel = LibraryViewModel(
+            folders: { LibraryFolders(recordings: settings.outputDirectory, screenshots: settings.screenshotDirectory, history: ScreenshotHistory.directory) },
+            actions: libraryActions,
+            openMovie: openMovie
+        )
+        let hostingController = NSHostingController(rootView: LibraryView(viewModel: viewModel).themed())
         hostingController.sizingOptions = .minSize
-        let window = makeWindow(hostingController, title: "Recordings", size: NSSize(width: 860, height: 600))
-        recordings = Recordings(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
+        // The section's title and its count, which macOS 26 shows large in the toolbar
+        hostingController.sceneBridgingOptions = [.toolbars, .title]
+        let window = makeWindow(hostingController, title: "Reco", size: NSSize(width: 1100, height: 720))
+        library = Library(window: window, viewModel: viewModel, watcher: FolderWatcher(), accessesOutputDirectory: accessesOutputDirectory)
 
         NSApp.setActivationPolicy(.regular)
         activate(window)
     }
 
-    /// Shows the Web Recording window, or brings it forward, on `url` when given. Each render opens
-    /// in the editor.
-    func showWebRecording(at url: URL? = nil) {
-        defer {
-            if let url, let viewModel = webRecording?.viewModel {
-                viewModel.address = url.absoluteString
-                viewModel.commitAddress()
-            }
-        }
+    /// Shows the Web Recording window with a blank script, as New Web Recording means; the last one is
+    /// an undo away. Each render opens in the editor.
+    func showNewWebRecording() {
         if let webRecording {
+            webRecording.viewModel.startNew()
             activate(webRecording.window)
             return
         }
 
-        let viewModel = WebRecordingViewModel(settings: settings) { [weak self] url in
-            self?.open(url)
+        let webRecording = makeWebRecording()
+        webRecording.viewModel.startNew()
+        activate(webRecording.window)
+    }
+
+    /// The Web Recording window with its agent panel open, where Record with AI Agent starts: a blank page and a
+    /// new conversation, unless an agent is still running in it.
+    func showAgentChat() {
+        let webRecording = webRecording ?? makeWebRecording()
+        if agentRecording?.isRunning != true {
+            webRecording.viewModel.startNew()
+            agentRecording?.startNewChat()
         }
-        let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel))
+        withMotion { webRecording.viewModel.showsAgent = true }
+        activate(webRecording.window)
+    }
+
+    func showWebRecording(at url: URL) {
+        let webRecording = webRecording ?? makeWebRecording()
+        webRecording.viewModel.address = url.absoluteString
+        webRecording.viewModel.commitAddress()
+        activate(webRecording.window)
+    }
+
+    /// The Web Recording window with its last script, kept until it closes. Each render opens in the editor.
+    private func makeWebRecording() -> WebRecording {
+        let viewModel = WebRecordingViewModel(settings: settings) { [weak self] url in
+            self?.agentRecording?.didRender(url)
+            self?.openWhenReady(url)
+        }
+        let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel, agent: agentRecording).themed())
         hostingController.sizingOptions = .minSize
         hostingController.sceneBridgingOptions = [.toolbars]
-        let window = makeWindow(hostingController, title: "Web Recording", size: NSSize(width: 1280, height: 860))
-        webRecording = WebRecording(window: window, viewModel: viewModel)
-
+        let window = makeWindow(hostingController, title: "Web Recording", size: NSSize(width: 1533, height: 943))
+        let webRecording = WebRecording(window: window, viewModel: viewModel)
+        self.webRecording = webRecording
         NSApp.setActivationPolicy(.regular)
-        activate(window)
+        return webRecording
     }
 
     /// Opens a motion bundle (spec 0011) in its own window, or brings its window forward.
     /// - Parameter conversation: The agent chat a run just ended with on it.
     func openMotion(_ bundleURL: URL, conversation: [AgentChatMessage] = []) {
+        guard let agentRecording else { return }
         let bundleURL = bundleURL.standardizedFileURL
         if let editor = motionEditors[bundleURL] {
             if !conversation.isEmpty {
@@ -232,11 +327,16 @@ final class EditorWindowManager: NSObject {
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
         window.toolbarStyle = .unified
-        window.backgroundColor = .windowBackgroundColor
+        // See-through, so the inspectors and the Library's sidebar can show the desktop (`translucentColumn`); the
+        // content paints its own solid ground
+        window.isOpaque = false
+        window.backgroundColor = .clear
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.setContentSize(size)
+        // Never larger than the screen it opens on, with a little desktop showing around it.
+        let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame.size ?? size
+        window.setContentSize(NSSize(width: min(size.width, visible.width - 40), height: min(size.height, visible.height - 40)))
         window.center()
         return window
     }
@@ -265,19 +365,35 @@ extension EditorWindowManager: NSWindowDelegate {
         return editor(for: window)?.editor.viewModel.undoManager
     }
 
-    /// The list is read whenever it comes forward, so recordings saved meanwhile show.
+    /// The Library is read whenever it comes forward, and its folders watched, which Settings may have
+    /// changed meanwhile.
     func windowDidBecomeKey(_ notification: Notification) {
-        guard let recordings, notification.object as? NSWindow === recordings.window else { return }
-        Task {
-            await recordings.viewModel.reload()
+        guard let library, notification.object as? NSWindow === library.window else { return }
+        library.watcher.watch(library.viewModel.watchedFolders) {
+            Task { await library.viewModel.reload() }
         }
+        Task {
+            await library.viewModel.reload()
+        }
+    }
+
+    /// Closing the Web Recording window stops its render, so it asks first while one runs.
+    func windowShouldClose(_ window: NSWindow) -> Bool {
+        guard let webRecording, window === webRecording.window, !webRecording.viewModel.isEditable else { return true }
+        let alert = NSAlert()
+        alert.messageText = "Stop Rendering?"
+        alert.informativeText = "Closing the window stops the render. Nothing is saved."
+        alert.addButton(withTitle: "Keep Rendering")
+        alert.addButton(withTitle: "Stop and Close").hasDestructiveAction = true
+        return alert.runModal() == .alertSecondButtonReturn
     }
 
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
-        if let recordings, window === recordings.window {
-            self.recordings = nil
-            if recordings.accessesOutputDirectory {
+        if let library, window === library.window {
+            self.library = nil
+            library.watcher.stop()
+            if library.accessesOutputDirectory {
                 settings.stopAccessingOutputDirectory()
             }
         } else if let webRecording, window === webRecording.window {
@@ -304,7 +420,7 @@ extension EditorWindowManager: NSWindowDelegate {
                 }
             }
         }
-        if editors.isEmpty, motionEditors.isEmpty, recordings == nil, webRecording == nil {
+        if editors.isEmpty, library == nil, webRecording == nil {
             NSApp.setActivationPolicy(.accessory)
         }
     }

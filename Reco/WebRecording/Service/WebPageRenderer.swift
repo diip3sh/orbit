@@ -66,13 +66,20 @@ final class WebPageRenderer: NSObject {
         webView.uiDelegate = self
     }
 
-    /// Renders the take into a movie at `url`, reporting progress from 0 to 1, and returns its
-    /// telemetry, the zooms its script asked for (``WebTakeZooms``) and what went wrong on the page
-    /// (``WebTakeIssues``). Cancelling the task stops it; the caller removes the partial movie.
-    ///
-    /// With `crop`, a box of the viewport in whole CSS pixels, only that box is drawn and written: a
-    /// motion document's live layer (spec 0011). The telemetry stays the viewport's.
-    func render(to url: URL, crop: CGRect? = nil, bitsPerPixel: Double, progress: (Double) -> Void) async throws -> Rendered {
+    /// What a render finds besides the movie.
+    struct Output {
+        var telemetry: InputTelemetry
+
+        /// Where the elements the script's show clips zoom on were.
+        var shots: [WebCamera.Shot]
+
+        /// What went wrong on the page, for the agent that wrote the script (``WebTakeIssues``).
+        var warnings: [String]
+    }
+
+    /// Renders the take into a movie at `url`, reporting progress from 0 to 1. Cancelling the task
+    /// stops it; the caller removes the partial movie.
+    func render(to url: URL, crop: CGRect? = nil, bitsPerPixel: Double, progress: (Double) -> Void) async throws -> Output {
         guard let pageURL = script.url else { throw WebRenderError.noURL }
         orderIn()
         defer { window.orderOut(nil) }
@@ -82,7 +89,7 @@ final class WebPageRenderer: NSObject {
 
         let size = crop.map { CGSize(width: $0.width * CGFloat(script.scale), height: $0.height * CGFloat(script.scale)) } ?? script.videoSize
         let writer = try WebMovieWriter(url: url, size: size, frameRate: WebScript.frameRate, bitsPerPixel: bitsPerPixel)
-        var take = Take(script: script)
+        var take = Take(script: script, page: webView.url)
         do {
             for frame in 0..<script.frameCount {
                 try Task.checkCancellation()
@@ -95,145 +102,22 @@ final class WebPageRenderer: NSObject {
             await writer.cancel()
             throw error
         }
-        let telemetry = take.telemetry.finished { StandardCursors.sprite(of: $0, id: $1) }
-        // A zoom on an element ends as the page scrolls or is replaced under it, as a held rest's does
-        let scrolls = take.script.scrolls.map(\.range.lowerBound) + telemetry.navigations.map(\.time)
-        return Rendered(telemetry: telemetry, zooms: take.zooms.segments(endingAt: scrolls), issues: take.issues.messages)
+        return Output(telemetry: take.telemetry.finished { StandardCursors.sprite(of: $0, id: $1) }, shots: take.shots, warnings: take.issues.messages)
     }
 
-    /// What a take leaves besides its movie.
-    nonisolated struct Rendered: Sendable {
-        var telemetry: InputTelemetry
-        var zooms: [ZoomSegment]
-        var issues: [String]
+    /// Loads a page for lifting its elements into a motion video.
+    func withLoadedPage<T>(_ body: (WKWebView) async throws -> T) async throws -> T {
+        guard let pageURL = script.url else { throw WebRenderError.noURL }
+        orderIn()
+        defer { window.orderOut(nil) }
+        try await load(pageURL)
+        try await Task.sleep(for: Self.settleTime)
+        return try await body(webView)
     }
 
-    /// What a take keeps from one frame to the next.
-    private struct Take {
-
-        /// The script, its scrolls to an element aimed again as they start, at the page as it is then.
-        var script: WebScript
-        var aimed = Set<UUID>()
-        var pointer: PointerTrack
-        var telemetry: WebTakeTelemetry
-        var zooms: WebTakeZooms
-        var issues: WebTakeIssues
-
-        /// Where the pointer and the page were in the last frame.
-        var location: CGPoint?
-        var scroll: CGPoint?
-        var page: URL?
-        var time = -Double.infinity
-
-        init(script: WebScript) {
-            self.script = script
-            pointer = PointerTrack(script: script)
-            telemetry = WebTakeTelemetry(script: script)
-            zooms = WebTakeZooms(viewport: script.viewport)
-            issues = WebTakeIssues(viewport: script.viewport)
-        }
-    }
-
-    /// Plays the take's frame at `time` on the page: steps its clock, scrolls it, moves and presses
-    /// the pointer, and records what happened.
-    private func play(_ time: Double, of take: inout Take) async throws {
-        let scroll = take.script.scrollOffset(at: time)
-        let aiming = take.script.scrolls.filter { $0.target != nil && !take.aimed.contains($0.id) && $0.range.lowerBound <= time }
-        // The cursor clip starting this frame: its target is checked and its shown element measured
-        let arriving = script.pointer.first {
-            $0.range.lowerBound > take.time + WebScript.pressTolerance && $0.range.lowerBound <= time + WebScript.pressTolerance
-        }
-        // The fields typed into this frame too: the cursor rests while it types, so it measures none
-        let keystrokes = script.keystrokes(after: take.time, through: time)
-        let selectors = take.pointer.selectors(at: time) + aiming.compactMap(\.target?.selector) + [arriving?.show].compactMap { $0 }
-            + keystrokes.compactMap(\.target.selector)
-        let page = try await advance(to: time, scroll: scroll, selectors: selectors)
-        for clip in aiming {
-            take.aimed.insert(clip.id)
-            aim(clip, in: &take, at: page, scrolledTo: scroll)
-        }
-
-        let location = take.pointer.location(at: time, elementFrames: page.boxes)
-        // WebKit hit-tests only on a move, and a window that's never active gets none of its own when
-        // the page scrolls or changes under the pointer
-        if let location, location != take.location || scroll != take.scroll || webView.url != take.page {
-            webView.sendPointer(.move, at: location)
-        }
-        let scrolled = take.scroll.map { CGVector(dx: $0.x - scroll.x, dy: $0.y - scroll.y) }
-        // The page after the first that replaced the last frame's; the first is the one asked for
-        let opened = take.page != nil && Self.isAnotherPage(webView.url, than: take.page) ? webView.url : nil
-        (take.location, take.scroll, take.page) = (location, scroll, webView.url)
-        // A page a click opened shows from its top: where the script had scrolled belongs to the page before
-        if opened != nil, let index = take.script.scrolls.lastIndex(where: { $0.range.lowerBound <= time }) {
-            take.script.scrolls[index].offset = .zero
-        }
-        // Not on a target the page doesn't have now: the press would land on whatever is there
-        let presses = script.presses(after: take.time, through: time).filter { press in
-            guard let selector = press.target.selector, page.boxes[selector] == nil else { return true }
-            take.issues.skippedClick(selector, at: time)
-            return false
-        }
-        if let location {
-            for press in presses {
-                webView.sendPointer(press.isDown ? .press : .release, at: location)
-            }
-        }
-        // After the press, which put the caret in the field. Not into a field the page doesn't have now
-        var typed: [Character] = []
-        for key in keystrokes {
-            guard let selector = key.target.selector, page.boxes[selector] != nil, await type(key.character, into: selector) else { continue }
-            typed.append(key.character)
-        }
-        // Checked where each cursor clip starts, as Playwright checks an action's target
-        let (cursor, cover) = await hold(at: location, aimingAt: arriving?.target.selector)
-        if let selector = arriving?.target.selector {
-            take.issues.check(selector, at: time, frame: page.boxes[selector], cover: cover)
-        }
-        if let arriving {
-            show(arriving, at: page, in: &take, time: time)
-        }
-        take.telemetry.record(
-            time: time, cursor: location, presses: presses, shape: CursorKind(css: cursor), scrolled: scrolled, typed: typed, opened: opened
-        )
-        take.time = time
-    }
-
-    /// Frames the element `clip` shows, where `page` has it as the clip starts at `time`.
-    private func show(_ clip: PointerClip, at page: PageFrame, in take: inout Take, time: Double) {
-        guard let show = clip.show else { return }
-        if let frame = page.boxes[show], WebTakeZooms.canFrame(frame, in: script.viewport) {
-            take.zooms.show(frame, during: clip.range)
-        } else {
-            take.issues.notShown(show, at: time)
-        }
-    }
-
-    /// Whether `url` is another page than `page`, not another place on it: a link to an anchor
-    /// changes the fragment, and the page scrolls there without being replaced.
-    private static func isAnotherPage(_ url: URL?, than page: URL?) -> Bool {
-        func withoutFragment(_ url: URL?) -> URL? {
-            guard let url, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
-            components.fragment = nil
-            return components.url
-        }
-        return withoutFragment(url) != withoutFragment(page)
-    }
-
-    /// Aims `clip` at its element where `page`, scrolled to `scroll`, shows it now.
-    private func aim(_ clip: ScrollClip, in take: inout Take, at page: PageFrame, scrolledTo scroll: CGPoint) {
-        guard let target = clip.target, let index = take.script.scrolls.firstIndex(where: { $0.id == clip.id }) else { return }
-        let start = take.script.scrollOffset(at: clip.range.lowerBound)
-        guard let frame = page.boxes[target.selector] else {
-            // A scroll Reco added before a cursor clip is that clip's check to report
-            if target.placement == .top {
-                take.issues.notFound(target.selector, at: clip.range.lowerBound)
-            }
-            // Nowhere, rather than to where it was planned on a page that may be another
-            take.script.scrolls[index].offset = start
-            return
-        }
-        let shown = frame.offsetBy(dx: scroll.x - start.x, dy: scroll.y - start.y)
-        take.script.scrolls[index].offset = target.offset(showing: shown, from: start, viewport: script.viewport, pageHeight: page.pageHeight)
+    private func orderIn() {
+        NSApp.unhideWithoutActivation()
+        window.orderFrontRegardless()
     }
 
     // MARK: - Page
@@ -291,8 +175,8 @@ final class WebPageRenderer: NSObject {
         }
     }
 
-    /// Runs the clock script's frame step, or returns `nil` when the page isn't ready or is
-    /// replaced meanwhile.
+    /// Runs the clock script's frame step, or returns `nil` when the page isn't ready or is replaced
+    /// meanwhile.
     private func callFrame(time: Double, scroll: CGPoint, selectors: [String]) async -> PageFrame? {
         frameCallCount += 1
         let id = frameCallCount
@@ -370,7 +254,7 @@ final class WebPageRenderer: NSObject {
 
     /// The page, or its box `rect`, drawn at the take's scale. WebKit paints it for the requested
     /// width, so a 2× take is sharp on any display.
-    private func snapshot(of rect: CGRect? = nil, scale: Int? = nil) async throws -> CGImage {
+    func snapshot(of rect: CGRect? = nil, scale: Int? = nil) async throws -> CGImage {
         let configuration = WKSnapshotConfiguration()
         if let rect {
             configuration.rect = rect
@@ -384,61 +268,164 @@ final class WebPageRenderer: NSObject {
     }
 }
 
-// MARK: - Inspecting
+// MARK: - Playing
 
 extension WebPageRenderer {
 
-    /// Loads the script's page and lists what it shows at scroll 0: see ``WebInspectScript``.
-    /// `selectors` are the ones to also return the box of.
-    func inspect(selectors: [String]) async throws -> PageInspection {
-        // Settled in real time, as in a take: the page's own scripts finish drawing before it's read
-        try await withLoadedPage { webView in
-            let result = try await webView.callAsyncJavaScript(
-                WebInspectScript.source, arguments: ["selectors": selectors], contentWorld: .defaultClient
-            )
-            guard let json = result as? String else { throw WebRenderError.loadFailed("The page couldn't be read.") }
-            var inspection = try JSONDecoder().decode(PageInspection.self, from: Data(json.utf8))
-            inspection.renderCost = try await renderCost()
-            return inspection
+    /// What a take keeps from one frame to the next.
+    private struct Take {
+
+        /// The script, with each scroll aimed as it starts at the page as it is then, and the scrolls of
+        /// a page another replaced dropped.
+        var script: WebScript
+        var aimed = Set<UUID>()
+        var pointer: PointerTrack
+        var telemetry: WebTakeTelemetry
+        var issues: WebTakeIssues
+        var shots: [WebCamera.Shot] = []
+
+        /// The page shown, without its fragment: a link to an anchor on it doesn't open another.
+        var page: URL?
+
+        /// Where the pointer and the page were in the last frame, and when it was.
+        var location: CGPoint?
+        var scroll: CGPoint?
+        var time = -Double.infinity
+
+        /// Whether the button is down: a press whose element was missing is left out with its release.
+        var isPressed = false
+
+        /// What each type clip's field was last given, so the page hears only new letters.
+        var typed: [UUID: String] = [:]
+
+        init(script: WebScript, page: URL?) {
+            self.script = script
+            pointer = PointerTrack(script: script)
+            telemetry = WebTakeTelemetry(script: script)
+            issues = WebTakeIssues(viewport: script.viewport)
+            self.page = page.map(Self.withoutFragment)
+        }
+
+        static func withoutFragment(_ url: URL) -> URL {
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            components?.fragment = nil
+            return components?.url ?? url
+        }
+
+        /// Whether `url` is another page than the one shown.
+        func isNew(_ url: URL?) -> Bool {
+            url.map(Self.withoutFragment).map { $0 != page } ?? false
+        }
+
+        /// The page at `url` replaced the one shown at `time`. It shows from its top: the scrolls that
+        /// started before belonged to the page it replaced.
+        mutating func navigate(to url: URL, at time: Double) {
+            page = Self.withoutFragment(url)
+            telemetry.navigated(to: url, at: time)
+            script.scrolls.removeAll { $0.range.lowerBound < time }
+            scroll = nil
         }
     }
 
-    /// Seconds of rendering per second of video at scale 1 and 2, from one snapshot of the page at
-    /// each: the snapshot is the cost of a frame, 14 ms on a simple page and 310 ms on linear.app at
-    /// 2× (M5), the rest of a frame a few ms. Lets an agent choose a scale the run's time allows.
-    private func renderCost() async throws -> [String: Double] {
-        var cost: [String: Double] = [:]
-        for scale in [1, 2] {
-            let start = ContinuousClock.now
-            _ = try await snapshot(scale: scale)
-            let seconds = (ContinuousClock.now - start) / .seconds(1)
-            cost[String(scale)] = (seconds * Double(WebScript.frameRate) * 100).rounded() / 100
+    /// Plays the take's frame at `time` on the page: steps its clock, scrolls it, moves and presses
+    /// the pointer, types, and records what happened. Each cursor clip is checked where it starts.
+    private func play(_ time: Double, of take: inout Take) async throws {
+        let previous = take.time
+        let arriving = take.script.pointer.first {
+            $0.range.lowerBound > previous + WebScript.pressTolerance && $0.range.lowerBound <= time + WebScript.pressTolerance
         }
-        return cost
+        var aiming: [ScrollClip] = []
+        var frame: PageFrame
+        repeat {
+            if let url = webView.url, take.isNew(url) {
+                take.navigate(to: url, at: time)
+            }
+            aiming = take.script.scrolls.filter { !take.aimed.contains($0.id) && $0.range.lowerBound <= time }
+            let selectors = take.pointer.selectors(at: time) + aiming.compactMap(\.target?.selector) + [arriving?.show].compactMap(\.self)
+            frame = try await advance(to: time, scroll: take.script.scrollOffset(at: time), selectors: selectors)
+        // A page that a click opened while the frame waited for it is played again from its top
+        } while take.isNew(webView.url)
+        let scroll = take.script.scrollOffset(at: time)
+        for clip in aiming {
+            take.aimed.insert(clip.id)
+            aim(clip, in: &take, at: frame, scrolledTo: scroll)
+        }
+
+        let location = take.pointer.location(at: time, elementFrames: frame.boxes)
+        // Only when the cursor moves: WebKit hit-tests only on a move, so what scrolls under a resting
+        // cursor (a sticky nav's menu) doesn't react, as only the script's targets should
+        if let location, location != take.location {
+            webView.sendPointer(.move, at: location)
+        }
+        let scrolled = take.scroll.map { CGVector(dx: $0.x - scroll.x, dy: $0.y - scroll.y) } ?? .zero
+        (take.location, take.scroll) = (location, scroll)
+        let presses = take.script.presses(after: previous, through: time).filter { press in
+            // Not on an element the page doesn't have now: the press would land on whatever is there
+            if press.isDown, let selector = press.target.selector, frame.boxes[selector] == nil {
+                take.issues.skippedClick(selector, at: press.time)
+                return false
+            }
+            defer { take.isPressed = press.isDown }
+            return press.isDown || take.isPressed
+        }
+        if let location {
+            for press in presses {
+                webView.sendPointer(press.isDown ? .press : .release, at: location)
+            }
+        }
+        await type(at: time, in: &take)
+        let (cursor, cover) = await hold(at: location, aimingAt: arriving?.target.selector)
+        if let arriving {
+            check(arriving, in: &take, at: frame, cover: cover)
+        }
+        let typed = take.script.keystrokes(after: previous, through: time).map(\.character)
+        take.telemetry.record(time: time, cursor: location, presses: presses, shape: CursorKind(css: cursor), scrolled: scrolled, typed: typed)
+        take.time = time
     }
-}
 
-// MARK: - Loaded page
-
-extension WebPageRenderer {
-
-    /// Loads the script's page, lets it settle as a take does, and runs `body` on its web view while
-    /// it's ordered in: what lifts UI for motion documents (``UICapture``).
-    func withLoadedPage<T>(_ body: (WKWebView) async throws -> T) async throws -> T {
-        guard let pageURL = script.url else { throw WebRenderError.noURL }
-        orderIn()
-        defer { window.orderOut(nil) }
-
-        try await load(pageURL)
-        try await Task.sleep(for: Self.settleTime)
-        return try await body(webView)
+    /// Gives each type clip's field the letters typed since the last frame.
+    private func type(at time: Double, in take: inout Take) async {
+        let typing = take.script.typing(at: time).filter { $0.text != take.typed[$0.clip, default: ""] }
+        guard !typing.isEmpty else { return }
+        _ = try? await webView.callAsyncJavaScript(WebTypingScript.source, arguments: ["fields": WebTypingScript.fields(typing)], contentWorld: .defaultClient)
+        for field in typing {
+            take.typed[field.clip] = field.text
+        }
     }
 
-    /// Orders the window in, off every display, so WebKit sees a visible window and draws. A hidden
-    /// app's windows aren't visible, so Reco is unhidden first, without coming forward.
-    private func orderIn() {
-        NSApp.unhideWithoutActivation()
-        window.orderFrontRegardless()
+    /// Checks cursor `clip`'s element as the clip starts, the way Playwright checks an action's
+    /// target, and finds where the element it shows is.
+    private func check(_ clip: PointerClip, in take: inout Take, at frame: PageFrame, cover: String?) {
+        let start = clip.range.lowerBound
+        if let selector = clip.target.selector {
+            take.issues.check(selector, at: start, frame: frame.boxes[selector], cover: cover)
+        }
+        if let show = clip.show, let visible = take.issues.shown(show, at: start, frame: frame.boxes[show]) {
+            take.shots.append(WebCamera.Shot(range: clip.range, visible: visible))
+        }
+    }
+
+    /// Aims `clip` at its element where `frame`, scrolled to `scroll`, shows it now, and keeps it
+    /// inside the page.
+    private func aim(_ clip: ScrollClip, in take: inout Take, at frame: PageFrame, scrolledTo scroll: CGPoint) {
+        guard let index = take.script.scrolls.firstIndex(where: { $0.id == clip.id }) else { return }
+        let start = take.script.scrollOffset(at: clip.range.lowerBound)
+        let bottom = max(frame.pageHeight - script.viewport.height, 0)
+        guard let target = clip.target else {
+            take.script.scrolls[index].offset.y = min(clip.offset.y, bottom)
+            return
+        }
+        guard let box = frame.boxes[target.selector] else {
+            // A scroll Reco added before a cursor clip is that clip's check to report
+            if target.placement == .top {
+                take.issues.notFound(target.selector, at: clip.range.lowerBound)
+            }
+            // Nowhere, rather than to where it was planned on a page that may be another
+            take.script.scrolls[index].offset = start
+            return
+        }
+        let shown = box.offsetBy(dx: scroll.x - start.x, dy: scroll.y - start.y)
+        take.script.scrolls[index].offset = target.offset(showing: shown, from: start, viewport: script.viewport, pageHeight: frame.pageHeight)
     }
 }
 

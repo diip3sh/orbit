@@ -118,9 +118,9 @@ struct TypingTests {
     /// A whip is sampled every 3 pixels a point travels in an export, up to 96 times; the editor
     /// keeps every 4.
     @Test func samplesAWhipAsTheFilmDid() {
-        #expect(FrameRenderer.blurOffsets(distance: 30, most: 96, spacing: 3).count == 10)
-        #expect(FrameRenderer.blurOffsets(distance: 600, most: 96, spacing: 3).count == 96)
-        #expect(FrameRenderer.blurOffsets(distance: 30, most: 16).count == 8)
+        #expect(MotionFrameRenderer.blurOffsets(distance: 30, most: 96, spacing: 3).count == 10)
+        #expect(MotionFrameRenderer.blurOffsets(distance: 600, most: 96, spacing: 3).count == 96)
+        #expect(MotionFrameRenderer.blurOffsets(distance: 30, most: 16, spacing: 4).count == 8)
     }
 
     /// Typing is lifted apart from the plain still.

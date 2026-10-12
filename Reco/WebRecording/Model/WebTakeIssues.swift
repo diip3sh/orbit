@@ -7,13 +7,14 @@ import CoreGraphics
 import Foundation
 
 /// What went wrong on the page during a take, in words for the agent that wrote the steps, so it can
-/// change them and record again (spec 0008). Each cursor target is checked where its clip starts,
-/// the way Playwright checks an action's target: on the page, in view, and not covered.
+/// change them and record again. Each step is checked where it starts, the way Playwright checks an
+/// action's target: on the page, in view, and not covered. One message per selector and kind, each
+/// with its time, so the agent can tell which step it was.
 nonisolated struct WebTakeIssues: Sendable {
 
     let viewport: CGSize
 
-    /// One per selector and kind of problem, in the order they happened.
+    /// In the order they happened.
     private(set) var messages: [String] = []
     private var reported = Set<String>()
 
@@ -46,16 +47,22 @@ nonisolated struct WebTakeIssues: Sendable {
             + "from inspect_page of the page shown then.")
     }
 
-    /// The element a cursor clip starting at `time` shows wasn't in view, so the video doesn't zoom there.
-    mutating func notShown(_ selector: String, at time: Double) {
-        report("show", selector, "At \(Self.seconds(time)) \"\(selector)\", which the step shows, wasn't on the page or mostly in view, so the "
-            + "video doesn't zoom there. Scroll to it first, or show an element in view then.")
-    }
-
     /// A scroll at `time` found nothing matching `selector`, so the page didn't move.
     mutating func notFound(_ selector: String, at time: Double) {
         report("scroll", selector, "At \(Self.seconds(time)) the scroll found no element matching \"\(selector)\", so the page didn't move. "
             + "Scroll with y instead, or use a selector from inspect_page of the page shown then.")
+    }
+
+    /// The part of shown element `selector`'s `frame` (viewport CSS pixels, `nil` when nothing
+    /// matched) that's in view at `time`, or `nil`, reported, when there's too little of it
+    /// (``WebCamera/visiblePart(of:in:)``): the video doesn't zoom there.
+    mutating func shown(_ selector: String, at time: Double, frame: CGRect?) -> CGRect? {
+        guard let visible = frame.flatMap({ WebCamera.visiblePart(of: $0, in: viewport) }) else {
+            report("shown", selector, "At \(Self.seconds(time)) the shown element \"\(selector)\" wasn't on the page or mostly in view, so the "
+                + "video doesn't zoom there. Scroll to it first, or show an element in view then.")
+            return nil
+        }
+        return visible
     }
 
     private mutating func report(_ kind: String, _ selector: String, _ message: String) {

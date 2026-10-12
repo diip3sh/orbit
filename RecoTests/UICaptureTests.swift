@@ -385,8 +385,8 @@ extension UICaptureTests {
         #expect(field.contains(CGPoint(x: point.x - live.origin.x, y: point.y - live.origin.y)))
 
         let composition = try await MotionCompositionBuilder.composition(for: plan)
-        let before = try Pixels(try await ExportService.frame(of: composition, at: CMTime(value: 30, timescale: 60)))
-        let after = try Pixels(try await ExportService.frame(of: composition, at: CMTime(value: 285, timescale: 60)))
+        let before = try Pixels(try await FrameGrabber.image(of: composition, at: 0.5, timescale: 60))
+        let after = try Pixels(try await FrameGrabber.image(of: composition, at: 4.75, timescale: 60))
         // The layer spans 280...680 × 170...370 on the canvas: white inside, the canvas outside its rounded corner
         #expect(before.color(column: 480, row: 340).red > 240)
         #expect(before.color(column: 281, row: 171).red < 40)

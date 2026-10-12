@@ -8,7 +8,7 @@
 import CoreGraphics
 import Vision
 
-/// Recognizes text in screenshots with Vision (roadmap C7)
+/// Recognizes text, QR codes and barcodes in screenshots with Vision (roadmap C7, spec 0004 N16)
 nonisolated enum TextRecognizer {
 
     /// The image's text, one recognized line per line, top to bottom; empty when there is none.
@@ -23,6 +23,16 @@ nonisolated enum TextRecognizer {
         let observations = try await request.perform(on: image)
         return joined(observations.compactMap { observation in
             observation.topCandidates(1).first.map { (text: $0.string, boundingBox: observation.boundingBox.cgRect) }
+        })
+    }
+
+    /// The payloads of the image's QR codes and barcodes, top to bottom, one per line; empty when there are none.
+    /// Codes without a text payload (binary QR codes) are skipped.
+    @concurrent
+    static func codes(in image: CGImage) async throws -> String {
+        let observations = try await DetectBarcodesRequest().perform(on: image)
+        return joined(observations.compactMap { observation in
+            observation.payloadString.map { (text: $0, boundingBox: observation.boundingBox.cgRect) }
         })
     }
 

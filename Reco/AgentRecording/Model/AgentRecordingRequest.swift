@@ -24,6 +24,14 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
     /// The model to use, or `nil` for the agent's own default.
     var model: String?
 
+    var resuming: String?
+    var rendersVideo = true
+
+    var summary: String {
+        let wanted = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        return wanted.isEmpty ? "Record \(url.host() ?? url.absoluteString)" : wanted
+    }
+
     /// The take the chat asks to change, or `nil` for a new one.
     var take: Take?
 
@@ -140,6 +148,15 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         }
         if mode == .launch, take == nil {
             return launchPrompt
+        }
+        if resuming != nil {
+            return """
+                Change the recording of \(url.absoluteString): \(instructions)
+
+                Inspect the page again if needed, then call record_page with the changed steps. Every hover, click and type \
+                needs a show. \(rendersVideo ? "Call render_status until the recording finishes." : "The plan is staged for review; don't wait for a render.") \
+                Don't ask questions. Reply briefly with what changed, or with the error.
+                """
         }
         let wanted = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
         var parts = ["Record a video of this web page with Reco: \(url.absoluteString)"]

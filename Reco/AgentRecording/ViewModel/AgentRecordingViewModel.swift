@@ -31,10 +31,13 @@ final class AgentRecordingViewModel {
     var address = ""
     var instructions = ""
 
-    /// What Record makes: a launch video or a walkthrough.
     var mode: AgentRecordingRequest.Mode {
         didSet { defaults.set(mode.rawValue, forKey: Self.modeKey) }
     }
+
+    /// Every run's request, what the agent said and the tools it used, for the Web Recording window's
+    /// Agent tab (spec 0008). A run from the panel shows there too.
+    private(set) var transcript = AgentTranscript()
 
     /// The agent the panel runs.
     var agent: AgentKind? {
@@ -59,23 +62,25 @@ final class AgentRecordingViewModel {
     private(set) var isLookingForAgents = false
     private(set) var phase = Phase.idle
 
+    /// The movie the chat's last run ended with, for its result card: the agent's own render, or the one
+    /// the window made from the plan it staged.
+    private(set) var lastMovie: URL?
+
     /// What the last run asked, for Retry.
     private(set) var lastRequest: AgentRecordingRequest?
 
-    /// Whether the panel is on screen, for its entrance and exit.
-    var isPresented = false
-
-    /// Called when a run ends with a movie, after ``onRecorded``.
+    /// Called when a run ends with a movie, which the editor has opened.
     @ObservationIgnored var onSucceeded: (() -> Void)?
-
-    /// Called with the take a run recorded, to open it in the editor.
     @ObservationIgnored var onRecorded: ((AgentRecordedTake) -> Void)?
-
-    /// Called with the typed page, to open it where the user can sign in (spec 0010, step 1).
     @ObservationIgnored var onSignIn: ((URL) -> Void)?
 
-    /// How a command line is run: executable, arguments, environment, working folder, time limit.
-    typealias RunProcess = @Sendable (URL, [String], [String: String], URL, Duration) async -> AgentProcess.Result
+    /// Called when a chat run ends with its plan on the Web Recording window's timeline, for the window
+    /// to render it; the movie then opens in the editor like any render.
+    @ObservationIgnored var onPlanStaged: (() -> Void)?
+
+    /// How a command line is run: executable, arguments, environment, working folder, time limit, and
+    /// where each line it prints goes.
+    typealias RunProcess = @Sendable (URL, [String], [String: String], URL, Duration, (@Sendable (Data) -> Void)?) async -> AgentProcess.Result
 
     @ObservationIgnored let tools: AgentTools
     @ObservationIgnored private let reportFailure: (String) -> Void
@@ -113,8 +118,11 @@ final class AgentRecordingViewModel {
         directory: URL = URL.recoSupport.appending(path: "AgentRun"),
         loadEnvironment: @escaping @Sendable () async throws -> [String: String] = { try await AgentProcess.loginEnvironment() },
         isExecutable: @escaping (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) },
-        runProcess: @escaping RunProcess = { executable, arguments, environment, directory, timeout in
-            await AgentProcess.run(executable: executable, arguments: arguments, environment: environment, directory: directory, timeout: timeout)
+        runProcess: @escaping RunProcess = { executable, arguments, environment, directory, timeout, onOutputLine in
+            await AgentProcess.run(
+                executable: executable, arguments: arguments, environment: environment, directory: directory, timeout: timeout,
+                onOutputLine: onOutputLine
+            )
         }
     ) {
         self.tools = tools
@@ -126,9 +134,9 @@ final class AgentRecordingViewModel {
         self.loadEnvironment = loadEnvironment
         self.isExecutable = isExecutable
         self.runProcess = runProcess
+        mode = defaults.string(forKey: Self.modeKey).flatMap(AgentRecordingRequest.Mode.init(rawValue:)) ?? .walkthrough
         agent = defaults.string(forKey: Self.agentKey).flatMap(AgentKind.init(rawValue:))
         model = defaults.string(forKey: Self.modelKey)
-        mode = defaults.string(forKey: Self.modeKey).flatMap(AgentRecordingRequest.Mode.init(rawValue:)) ?? .walkthrough
     }
 
     // MARK: - State
@@ -187,8 +195,6 @@ final class AgentRecordingViewModel {
     func refreshAgents() async {
         isLookingForAgents = true
         defer { isLookingForAgents = false }
-        let headless = AgentKind.allCases.filter { AgentInvocation.executableName(for: $0) != nil }
-        let connected = headless.filter { store.state(of: $0) == .connected }
         do {
             environment = try await loadEnvironment()
         } catch {
@@ -197,18 +203,18 @@ final class AgentRecordingViewModel {
             }
         }
         let environment = environment ?? [:]
-        let found = headless.filter { kind in
-            (AgentInvocation.bringsOwnServer(kind) || connected.contains(kind)) && executable(for: kind, in: environment) != nil
+        // Every agent whose command line is on the login shell's PATH; ready when its runs bring Reco's
+        // server or Settings → Agents has connected it
+        let installed = AgentKind.allCases.filter { executable(for: $0, in: environment) != nil }
+        let ready = installed.filter { AgentInvocation.bringsServer(for: $0) || store.state(of: $0) == .connected }
+        guard ready.isEmpty else {
+            return setAvailable(ready, reason: nil)
         }
-        guard found.isEmpty else { return setAvailable(found, reason: nil) }
-        if let first = connected.first, let command = AgentInvocation.executableName(for: first) {
-            setAvailable([], reason: "\(first.displayName) is connected, but Reco couldn't find `\(command)` in your login shell.")
-        } else if let outdated = headless.first(where: { !AgentInvocation.bringsOwnServer($0) && store.state(of: $0) == .outdated }) {
-            setAvailable([], reason: "Reconnect \(outdated.displayName) in Settings → Agents.")
-        } else {
-            setAvailable([], reason: "Install Claude Code or Cursor's command line, or connect Codex, OpenCode, Gemini CLI or Grok Build "
-                + "in Settings → Agents.")
+        guard let first = installed.first else {
+            return setAvailable([], reason: "Install a coding agent's command line first: Claude Code, Codex, OpenCode, Gemini CLI, Grok Build or Cursor.")
         }
+        let verb = store.state(of: first) == .outdated ? "Reconnect" : "Connect"
+        setAvailable([], reason: "\(verb) \(first.displayName) in Settings → Agents.")
     }
 
     private func setAvailable(_ kinds: [AgentKind], reason: String?) {
@@ -245,8 +251,12 @@ final class AgentRecordingViewModel {
     func run(_ request: AgentRecordingRequest) {
         guard !isRunning else { return }
         lastRequest = request
+        lastMovie = nil
+        transcript.addRequest(request.summary)
         startingRenderID = tools.job?.renderID
         startingMotionEdits = tools.motionEdits
+        tools.hostsRun = true
+        tools.stagesPlans = !request.rendersVideo
         phase = .running(request.agent)
         task = Task { await execute(request) }
     }
@@ -258,12 +268,40 @@ final class AgentRecordingViewModel {
         }
     }
 
+    /// Starts the chat over: the next message begins a new conversation.
+    func startNewChat() {
+        guard !isRunning else { return }
+        transcript = AgentTranscript()
+        lastMovie = nil
+        if case .failed = phase {
+            phase = .idle
+        }
+    }
+
+    /// The Web Recording window rendered a movie, which the chat shows once its run is over.
+    func didRender(_ movie: URL) {
+        lastMovie = movie
+    }
+
+    /// Adds what the agent streamed to the transcript.
+    func applyToTranscript(_ event: AgentStreamEvent, from agent: AgentKind) {
+        transcript.apply(event, from: agent)
+    }
+
     /// Stops the agent. A render it already started carries on.
     func cancel() {
         guard isRunning else { return }
         task?.cancel()
         task = nil
+        endRun()
         phase = .idle
+    }
+
+    /// Takes back what a run allowed its agent, so agents run elsewhere can't browse and their
+    /// `record_page` renders.
+    private func endRun() {
+        tools.hostsRun = false
+        tools.stagesPlans = false
     }
 
     private func execute(_ request: AgentRecordingRequest) async {
@@ -275,13 +313,23 @@ final class AgentRecordingViewModel {
         } catch {
             outcome = Task.isCancelled ? .cancelled : .failed(reason: error.localizedDescription)
         }
+        // A cancelled run was ended by cancel(), and a new one may have started since
         guard !Task.isCancelled else { return }
+        endRun()
         switch outcome {
         case .succeeded(let path), .edited(let path):
             phase = .idle
-            let reply = token.isEmpty ? output : output.replacing(token, with: "…")
-            onRecorded?(AgentRecordedTake(movie: URL(filePath: path), request: request, output: reply))
-            onSucceeded?()
+            // A success is this run's render, so a planned job is the plan the run staged
+            if tools.job?.status == .planned {
+                onPlanStaged?()
+            } else {
+                lastMovie = tools.job?.movie.map { URL(fileURLWithPath: $0) }
+                if !path.isEmpty {
+                    let reply = token.isEmpty ? output : output.replacing(token, with: "…")
+                    onRecorded?(AgentRecordedTake(movie: URL(filePath: path), request: request, output: reply))
+                }
+                onSucceeded?()
+            }
         case .cancelled:
             phase = .idle
         case .failed(let reason):
@@ -303,7 +351,7 @@ final class AgentRecordingViewModel {
         }
         guard let invocation = AgentInvocation.make(for: request, in: directory, server: store.command),
               let executable = executable(for: request.agent, in: environment) else {
-            return (.failed(reason: "Reco couldn't find \(request.agent.displayName)'s command in your login shell."), "")
+            return (.failed(reason: "Orbit couldn't find \(request.agent.displayName)'s command in your login shell."), "")
         }
         // The command runs in it, so it must exist even when the agent needs no files there
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -312,9 +360,12 @@ final class AgentRecordingViewModel {
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data(contents.utf8).write(to: file, options: .atomic)
         }
-        let result = await runProcess(
-            executable, invocation.arguments, environment.merging(invocation.environment) { $1 }, directory, max(.seconds(1), ContinuousClock.now.duration(to: deadline))
-        )
+        let result = await streamingTranscript(of: request.agent) { onOutputLine in
+            await runProcess(
+                executable, invocation.arguments, environment.merging(invocation.environment) { $1 }, directory,
+                max(.seconds(1), ContinuousClock.now.duration(to: deadline)), onOutputLine
+            )
+        }
         var end = result.end
         // The agent may stop waiting for a render that carries on
         if case .exited = end, !(await waitForRender(until: deadline)) {
@@ -322,8 +373,13 @@ final class AgentRecordingViewModel {
         }
         let outcome = AgentRunOutcome.classify(
             end: end, agent: request.agent, job: tools.job, startingRenderID: startingRenderID,
-            outputReason: OutputTail.reason(stdout: result.stdout, stderr: result.stderr, redacting: [token]),
-            editedMotion: tools.motionEdits > startingMotionEdits ? tools.lastMotionBundle : nil, limit: request.timeLimit
+            // A streaming agent's stdout is JSON; what it last said explains a failure instead
+            outputReason: OutputTail.reason(
+                stdout: AgentStreamEvent.streams(request.agent) ? transcript.lastReply ?? "" : result.stdout,
+                stderr: result.stderr, redacting: [token]
+            ),
+            editedMotion: tools.motionEdits > startingMotionEdits ? tools.lastMotionBundle : nil,
+            limit: request.timeLimit
         )
         return (outcome, result.stdout)
     }

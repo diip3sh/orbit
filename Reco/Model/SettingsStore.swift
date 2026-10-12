@@ -8,6 +8,8 @@
 import AppKit
 import Foundation
 
+// Recording settings and migration of saved defaults are kept in this existing store.
+// swiftlint:disable file_length
 /// Video codec options for recording
 enum VideoCodec: String, CaseIterable, Identifiable {
     case h264 = "H.264"
@@ -239,11 +241,11 @@ enum HDRPreset {
 /// Persists user preferences using UserDefaults
 @MainActor
 @Observable
-final class SettingsStore {
+final class SettingsStore { // swiftlint:disable:this type_body_length
 
     // MARK: - Dependencies
 
-    private let defaults: UserDefaults
+    let defaults: UserDefaults
 
     // MARK: - Initialization
 
@@ -772,34 +774,5 @@ final class SettingsStore {
     /// Returns the full output URL for a new recording
     func generateOutputURL() -> URL {
         outputDirectory.appending(path: generateFilename())
-    }
-}
-
-// MARK: - Cursor Capture
-
-extension SettingsStore {
-
-    /// Whether the system cursor stays in the video while input telemetry is recorded. Off by
-    /// default: the cursor is left out so the editor can redraw it from telemetry.
-    var keepSystemCursorInVideo: Bool {
-        get {
-            access(keyPath: \.keepSystemCursorInVideo)
-            return defaults.bool(forKey: "keepSystemCursorInVideo")
-        }
-        set {
-            withMutation(keyPath: \.keepSystemCursorInVideo) {
-                defaults.set(newValue, forKey: "keepSystemCursorInVideo")
-            }
-        }
-    }
-
-    /// Whether the cursor is left out of the video for the editor to draw. Show Cursor has no effect then.
-    var leavesCursorToEditor: Bool {
-        recordInputTelemetry && !keepSystemCursorInVideo
-    }
-
-    /// Whether the capture draws the system cursor into the video.
-    var capturesCursor: Bool {
-        showCursor && !leavesCursorToEditor
     }
 }

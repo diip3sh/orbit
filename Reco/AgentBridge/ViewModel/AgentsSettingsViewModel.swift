@@ -64,6 +64,7 @@ final class AgentsSettingsViewModel {
         guard let job = server.tools.job else { return "None yet" }
         switch job.status {
         case .rendering: return "Rendering \(job.progress.formatted(.percent.precision(.fractionLength(0))))"
+        case .planned: return "On the timeline"
         case .done: return job.movie.map { URL(filePath: $0).lastPathComponent } ?? "Done"
         case .failed: return "Failed"
         }
@@ -74,7 +75,8 @@ final class AgentsSettingsViewModel {
         rows = AgentKind.allCases.map { Row(kind: $0, state: store.state(of: $0)) }
     }
 
-    /// Connects, disconnects or reconnects `row`'s agent, as its button says.
+    /// Connects, disconnects or reconnects `row`'s agent, as its button says. Only ever on the user's
+    /// click: connecting writes the bridge token into the agent's own settings.
     func perform(_ row: Row) {
         do {
             if row.state == .connected {

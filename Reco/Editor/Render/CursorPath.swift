@@ -35,14 +35,6 @@ nonisolated struct CursorPath: Sendable {
     static let idleDelay = 2.0
     static let fadeDuration = 0.3
 
-    /// How long the glide back to the first position takes when the cursor loops.
-    static let loopDuration = 1.0
-
-    /// The lean at full speed, in radians, and the speed in screen points per second that gives
-    /// three quarters of it.
-    static let maximumTilt = 0.2
-    static let tiltSpeed = 1500.0
-
     /// The smoothed positions in Core Image pixels (bottom-left origin).
     private let samples: [CGPoint]
 
@@ -60,21 +52,44 @@ nonisolated struct CursorPath: Sendable {
     /// Video pixels per screen point times the style's size, whenever the capture geometry changed.
     private let scales: [(time: Double, scale: Double)]
 
-    /// The cursor stays where it is from this time on. Infinite when it never stops.
-    private let holdTime: Double
+    /// What a video that loops makes of the path: it glides onto the first frame's position.
+    nonisolated struct Loop: Sendable {
+        /// Source time of the first frame shown.
+        let start: Double
 
-    /// The glide back to the position at its `home` time, or `nil` when the cursor doesn't loop.
-    private let loop: (home: Double, range: Range<Double>)?
+        /// Source times the glide covers, ending at the last frame shown.
+        let glide: Range<Double>
+    }
 
-    private let tilts: Bool
+    /// How long a video that loops takes to bring the cursor back to where it started.
+    static let loopDuration = 1.0
+
+    /// Where the path glides to, and when. Set last, since the target is the path without the glide.
+    private var loop: (target: CGPoint, glide: Range<Double>)?
+
+    /// The source time from which the cursor holds still: its position, size and opacity stay as they are then.
+    /// Infinity when it never does.
+    private let stop: Double
+
+    /// The most the cursor leans, in radians (12°), and the speed in screen points per second at which it leans
+    /// 76% of that (tanh 1). Picked 2026-10-08, not yet checked by eye.
+    static let maximumTilt = 12 * Double.pi / 180
+    static let tiltSpeed = 800.0
+
+    /// How quickly the lean follows the speed: the cursor's Smooth spring, so it settles as a move does.
+    static let tiltFrequency = 12.5
+
+    /// The lean at ``sampleRate``, in radians, counterclockwise. Empty when the cursor doesn't tilt.
+    private var tilts: [Double] = []
 
     /// - Parameters:
     ///   - duration: The recording's length in seconds.
     ///   - videoHeight: The video's height in pixels, to flip positions into Core Image space.
-    ///   - shown: From the first source time the output shows to the last. The whole recording when `nil`.
+    ///   - stop: The source time from which the cursor holds still, if it does.
     /// - Returns: `nil` without cursor positions or capture geometry.
-    init?(telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, shown: Range<Double>? = nil) {
-        let moves = Self.withoutJitter(telemetry.cursor)
+    init?(telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, loop: Loop? = nil, stop: Double? = nil) {
+        // Without smoothing the cursor is where it was recorded, jitter included
+        let moves = style.smoothing == .off ? telemetry.cursor : Self.withoutJitter(telemetry.cursor)
         guard !moves.isEmpty, !telemetry.geometry.isEmpty else { return nil }
         // A web take's path is smooth already, and exact: a spring would trail the hover effects the page shows
         let samples = Self.smoothed(
@@ -96,39 +111,32 @@ nonisolated struct CursorPath: Sendable {
         hidden = Self.merged((style.hidesWhenIdle ? Self.idleSpans(moves: moves, clicks: telemetry.clicks) : [])
             + Self.typingSpans(keys: telemetry.keys, moves: moves, clicks: telemetry.clicks))
         scales = telemetry.geometry.map { ($0.time, $0.contentScale * $0.scaleFactor * style.size) }
-
-        let shown = shown ?? 0..<duration
-        holdTime = style.stopsBeforeEnd > 0 ? max(shown.upperBound - style.stopsBeforeEnd, shown.lowerBound) : .infinity
-        let glide = min(Self.loopDuration, (shown.upperBound - shown.lowerBound) / 2)
-        loop = style.loopsToStart && glide > 0 ? (shown.lowerBound, shown.upperBound - glide..<shown.upperBound) : nil
-        tilts = style.tilts
+        self.stop = stop ?? .infinity
+        if let loop {
+            self.loop = (position(at: loop.start), loop.glide)
+        }
+        // From the finished path, so the cursor straightens as it stops and leans into the loop's glide
+        if style.tilts {
+            tilts = leans(duration: duration, size: style.size)
+        }
     }
 
     /// Where the cursor's hot spot is at source time `time`, in Core Image pixels: where it was
     /// recorded, held before the end and gliding home over the last second when the style says so.
     func position(at time: Double) -> CGPoint {
-        var position = recorded(at: min(time, holdTime))
-        if let loop, time > loop.range.lowerBound {
-            let home = recorded(at: loop.home)
-            let weight = Self.ease((time - loop.range.lowerBound) / (loop.range.upperBound - loop.range.lowerBound))
-            position.x += (home.x - position.x) * weight
-            position.y += (home.y - position.y) * weight
+        var position = held(at: time)
+        if let loop, time >= loop.glide.lowerBound {
+            // At the glide's end, the last frame's position is the first frame's
+            let weight = time >= loop.glide.upperBound ? 1 : Self.ease((time - loop.glide.lowerBound) / (loop.glide.upperBound - loop.glide.lowerBound))
+            position.x = position.x * (1 - weight) + loop.target.x * weight
+            position.y = position.y * (1 - weight) + loop.target.y * weight
         }
         return position
     }
 
-    /// How far the cursor leans at `time`, in radians, counterclockwise: against its horizontal
-    /// speed, so it leans the way it moves. Zero at rest.
-    func tilt(at time: Double) -> Double {
-        guard tilts else { return 0 }
-        let step = 1 / Self.sampleRate
-        let pixelsPerPoint = scales[max(scales.partitioningIndex { $0.time > time } - 1, 0)].scale
-        let speed = (position(at: time + step).x - position(at: time - step).x) / (2 * step) / pixelsPerPoint
-        return -Self.maximumTilt * tanh(speed / Self.tiltSpeed)
-    }
-
-    /// The smoothed position at `time`, on the click points at their times.
-    private func recorded(at time: Double) -> CGPoint {
+    /// The position before the loop's glide: the smoothed path eased onto each click, still from ``stop``.
+    private func held(at time: Double) -> CGPoint {
+        let time = min(time, stop)
         var position = Self.interpolated(samples, at: time)
         let next = clickOffsets.partitioningIndex { $0.time > time }
         if next < clickOffsets.count {
@@ -153,17 +161,53 @@ nonisolated struct CursorPath: Sendable {
     /// How many video pixels each of the cursor image's points covers at `time`: the capture's
     /// pixels per point times the style's size, less while a mouse button is held.
     func scale(at time: Double) -> Double {
-        let scale = scales[max(scales.partitioningIndex { $0.time > time } - 1, 0)].scale
-        return scale * (1 - (1 - Self.pressedScale) * Self.ease(pressDepth(at: time)))
+        let time = min(time, stop)
+        return pixelsPerPoint(at: time) * (1 - (1 - Self.pressedScale) * Self.ease(pressDepth(at: time)))
+    }
+
+    /// How far the cursor leans at `time`, in radians, counterclockwise about its hot spot: away from where it's
+    /// heading, as if pulled by its tip. 0 at rest, and when it doesn't tilt.
+    func tilt(at time: Double) -> Double {
+        guard !tilts.isEmpty else { return 0 }
+        let position = min(max(time * Self.sampleRate, 0), Double(tilts.count - 1))
+        let index = Int(position)
+        guard index < tilts.count - 1 else { return tilts[index] }
+        return tilts[index] + (tilts[index + 1] - tilts[index]) * (position - Double(index))
     }
 
     /// How visible the cursor is at `time`, from 0 to 1.
     func opacity(at time: Double) -> Double {
+        let time = min(time, stop)
         let index = hidden.partitioningIndex { $0.lowerBound > time } - 1
         guard index >= 0, hidden[index].contains(time) else { return 1 }
         let fadingOut = 1 - (time - hidden[index].lowerBound) / Self.fadeDuration
         let fadingIn = 1 - (hidden[index].upperBound - time) / Self.fadeDuration
         return min(max(fadingOut, fadingIn, 0), 1)
+    }
+
+    /// The capture's video pixels per screen point at `time`, times the style's size.
+    private func pixelsPerPoint(at time: Double) -> Double {
+        scales[max(scales.partitioningIndex { $0.time > time } - 1, 0)].scale
+    }
+
+    /// The lean at each sample: the horizontal speed in screen points (the path's, so with the style's size taken
+    /// out) mapped to an angle by tanh, then followed by a spring so it eases in and out. Moving right leans the
+    /// arrow clockwise, its tail trailing.
+    private func leans(duration: Double, size: Double) -> [Double] {
+        var spring = Spring(position: 0, frequency: Self.tiltFrequency, rate: Self.sampleRate)
+        let last = Int((duration * Self.sampleRate).rounded(.up))
+        var leans: [Double] = []
+        leans.reserveCapacity(last + 1)
+        var previous = position(at: 0)
+        for index in 0...last {
+            let time = Double(index) / Self.sampleRate
+            let current = position(at: time)
+            let speed = (current.x - previous.x) * Self.sampleRate / (pixelsPerPoint(at: time) / size)
+            previous = current
+            leans.append(spring.position)
+            spring.advance(to: -Self.maximumTilt * tanh(speed / Self.tiltSpeed))
+        }
+        return leans
     }
 
     /// How far into a press the cursor is at `time`, from 0 to 1: 1 once a button has been held
@@ -207,7 +251,7 @@ nonisolated extension CursorPath {
     }
 
     /// The positions held until the next and placed with the geometry in effect, followed by a
-    /// spring at ``sampleRate``, or not when `frequency` is `nil`.
+    /// spring at ``sampleRate``, or just held when `frequency` is `nil`.
     /// - Parameter moves: Not empty, sorted by time.
     /// - Parameter geometry: Not empty, sorted by time.
     private static func smoothed(
@@ -216,8 +260,7 @@ nonisolated extension CursorPath {
         var moveIndex = 0
         var geometryIndex = 0
         let start = RenderPlan.coreImagePoint(InputTelemetry.videoPixel(for: moves[0].location, geometry: geometry[0]), videoHeight: videoHeight)
-        var horizontal = frequency.map { Spring(position: start.x, frequency: $0, rate: sampleRate) }
-        var vertical = frequency.map { Spring(position: start.y, frequency: $0, rate: sampleRate) }
+        var springs = frequency.map { (Spring(position: start.x, frequency: $0, rate: sampleRate), Spring(position: start.y, frequency: $0, rate: sampleRate)) }
 
         let last = Int((duration * sampleRate).rounded(.up))
         var samples: [CGPoint] = []
@@ -233,9 +276,9 @@ nonisolated extension CursorPath {
             let pixel = InputTelemetry.videoPixel(for: moves[moveIndex].location, geometry: geometry[geometryIndex])
             let target = RenderPlan.coreImagePoint(pixel, videoHeight: videoHeight)
 
-            samples.append(CGPoint(x: horizontal?.position ?? target.x, y: vertical?.position ?? target.y))
-            horizontal?.advance(to: target.x)
-            vertical?.advance(to: target.y)
+            samples.append(springs.map { CGPoint(x: $0.0.position, y: $0.1.position) } ?? target)
+            springs?.0.advance(to: target.x)
+            springs?.1.advance(to: target.y)
         }
         return samples
     }

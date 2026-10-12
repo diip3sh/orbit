@@ -46,7 +46,7 @@ struct MotionScenesLane: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .padding(EditorTheme.smallSpacing)
-        .background(EditorTheme.tray, in: EditorTheme.trayShape)
+        .background(EditorTheme.panel, in: .rect(cornerRadius: 10))
     }
 }
 

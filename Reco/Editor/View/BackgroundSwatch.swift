@@ -25,7 +25,7 @@ struct BackgroundSwatch: View {
             case .color:
                 shape.fill(Color(cgColor: canvas.color.cgColor))
             case .image:
-                shape.fill(.primary.opacity(0.1))
+                shape.fill(EditorTheme.control)
                     .overlay {
                         Image(systemName: "photo")
                             .imageScale(.small)

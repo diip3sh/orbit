@@ -1,0 +1,26 @@
+{
+  "images": [
+    {
+      "filename": "toolbar-stop.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "toolbar-stop@2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "toolbar-stop@3x.png",
+      "idiom": "universal",
+      "scale": "3x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  },
+  "properties": {
+    "template-rendering-intent": "template"
+  }
+}

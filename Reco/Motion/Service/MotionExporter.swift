@@ -15,10 +15,20 @@ enum MotionExporter {
     /// Up to twice the canvas: a motion video is drawn, not scaled, and its UI is lifted again at
     /// the scale shown, so a 1080p canvas exports as sharp 4K.
     static func export(
-        _ document: MotionDocument, bundle: URL, settings: ExportSettings, progress: @escaping (Double) -> Void
+        _ document: MotionDocument, bundle: URL, settings: ExportSettings, progress: @escaping @MainActor @Sendable (Double) -> Void
     ) async throws -> URL {
         let canvas = document.canvas
-        let settings = settings.conformed(shorterSide: 2 * min(canvas.size.width, canvas.size.height) + 1, frameRate: Double(canvas.frameRate))
+        var settings = settings
+        if settings.format == .gif {
+            settings.resolution = settings.resolution ?? 540
+            settings.frameRate = settings.frameRate ?? min(canvas.frameRate, 25)
+        }
+        if let resolution = settings.resolution, CGFloat(resolution) > 2 * min(canvas.size.width, canvas.size.height) {
+            settings.resolution = nil
+        }
+        if let frameRate = settings.frameRate, frameRate > canvas.frameRate {
+            settings.frameRate = nil
+        }
         let plan = try await UICapture.plan(
             for: document, bundle: bundle, shorterSide: settings.resolution.map { CGFloat($0) }, frameRate: settings.frameRate
         )
@@ -26,7 +36,7 @@ enum MotionExporter {
         let sound = settings.format == .gif ? nil : try await SoundCache.sound(for: plan.sound, in: bundle)
         let composition = try await MotionCompositionBuilder.composition(for: plan, sound: sound)
         let url = settings.format.outputURL(for: bundle)
-        try await ExportService.export(composition, to: url, as: settings.format, progress: progress)
+        try await ExportService.export(composition, to: url, as: settings, progress: progress)
         return url
     }
 }

@@ -24,8 +24,8 @@ struct MotionExportMenu: View {
             }
         } else {
             Menu("Export", systemImage: "square.and.arrow.up") {
-                ForEach([ExportFormat.hevc, .proRes4444, .gif]) { format in
-                    Button(format.rawValue) {
+                ForEach(ExportFormat.allCases) { format in
+                    Button(format == .mp4 ? "MP4" : format == .proRes ? "ProRes" : "GIF") {
                         export = Task {
                             await viewModel.export(format)
                         }

@@ -36,15 +36,14 @@ nonisolated struct InputTelemetry: Codable, Equatable, Sendable {
     var scrolls: [Scroll] = []
     var keys: [Key] = []
 
-    /// When the recorded page was replaced by another, in a web take: a click opened it. Empty for
-    /// screen recordings.
-    var navigations: [Navigation] = []
-
     /// Each distinct cursor image, stored once and referenced by ``cursorShapes``.
     var cursorSprites: [CursorSprite] = []
 
     /// The cursor's appearance, recorded whenever it changed. Each entry applies until the next.
     var cursorShapes: [CursorShape] = []
+
+    /// When a web take's page was replaced by another, e.g. by a click on a link (spec 0009).
+    var navigations: [Navigation] = []
 
     // MARK: - Types
 
@@ -132,12 +131,6 @@ nonisolated struct InputTelemetry: Codable, Equatable, Sendable {
         var isRepeat: Bool
     }
 
-    /// A page replacing the one recorded, in a web take.
-    nonisolated struct Navigation: Codable, Equatable, Sendable {
-        var time: Double
-        var url: String
-    }
-
     /// A cursor image, so an editor can redraw the cursor on a video recorded without it.
     nonisolated struct CursorSprite: Codable, Equatable, Sendable {
         var id: Int
@@ -159,6 +152,12 @@ nonisolated struct InputTelemetry: Codable, Equatable, Sendable {
     nonisolated struct CursorShape: Codable, Equatable, Sendable {
         var time: Double
         var sprite: Int
+    }
+
+    /// A new page, at its address.
+    nonisolated struct Navigation: Codable, Equatable, Sendable {
+        var time: Double
+        var url: String
     }
 
     // MARK: - Conversion

@@ -18,7 +18,7 @@ struct AgentChatEmptyState: View {
                 .font(.title2)
                 .foregroundStyle(EditorTheme.dim)
                 .frame(width: 44, height: 44)
-                .background(EditorTheme.tray, in: .circle)
+                .background(EditorTheme.control, in: .circle)
                 .accessibilityHidden(true)
 
             VStack(spacing: EditorTheme.tightSpacing) {

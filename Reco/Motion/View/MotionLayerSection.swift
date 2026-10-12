@@ -33,7 +33,7 @@ struct MotionLayerSection: View {
                     }
                 }
                 .menuStyle(.button)
-                .buttonStyle(.editorGhost)
+                .buttonStyle(.editorSecondary)
             }
         }
     }

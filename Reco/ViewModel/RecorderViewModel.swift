@@ -97,9 +97,13 @@ final class RecorderViewModel {
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
     private var videoSize: CGSize = .zero
-    private let areaSelectionOverlay = AreaSelectionOverlay()
+    /// Observed by the capture toolbar, whose Record confirms a selection it opened
+    let areaSelectionOverlay = AreaSelectionOverlay()
     private let selectionBorderFrame = SelectionBorderFrame()
-    private let recordingOverlay = RecordingOverlayCoordinator()
+
+    /// Called when content is chosen to record, or the picker is cancelled, so the capture toolbar can follow
+    @ObservationIgnored var onSelectionChange: (() -> Void)?
+    @ObservationIgnored var onRecordingFinished: ((URL) -> Void)?
 
     /// The countdown before a user-started recording; read by the menu bar UI
     let countdown = RecordingCountdown()
@@ -170,12 +174,20 @@ final class RecorderViewModel {
         captureEngine.presentPicker()
     }
 
-    /// Presents the area selection overlay on the display under the cursor
-    func presentAreaSelection() async {
+    /// Selects content chosen in Reco's own picker, as if the system picker had chosen it
+    func selectContent(_ filter: SCContentFilter) async {
+        // Throws only while capturing, and content is chosen only when idle
+        try? await captureEngine.updateFilter(filter)
+        captureEngine(captureEngine, didUpdateFilter: filter)
+    }
+
+    /// Presents the area selection overlay on the display under the cursor; `showsActions` false when
+    /// another control confirms it
+    func presentAreaSelection(showsActions: Bool = true) async {
         // Dismiss any existing border frame so it doesn't overlap the selection overlay
         selectionBorderFrame.dismiss()
 
-        guard let result = await areaSelectionOverlay.present() else {
+        guard let result = await areaSelectionOverlay.present(showsActions: showsActions) else {
             logger.info("Area selection cancelled")
             return
         }
@@ -219,8 +231,7 @@ final class RecorderViewModel {
             // Update preview with the display filter and source rect
             await previewService.setContentFilter(filter, sourceRect: sourceRect)
 
-            // Show the recording overlay on the screen where the area was selected
-            recordingOverlay.show(viewModel: self, screen: selectedScreen)
+            onSelectionChange?()
 
         } catch {
             selectionBorderFrame.dismiss()
@@ -235,9 +246,6 @@ final class RecorderViewModel {
             return
         }
 
-        // Dismiss the recording overlay if it's still visible
-        recordingOverlay.dismiss()
-
         do {
             state = .recording
             lastError = nil
@@ -251,7 +259,7 @@ final class RecorderViewModel {
 
             // Determine video size from filter
             if let filter = selectedContentFilter {
-                videoSize = await getContentSize(from: filter)
+                videoSize = contentSize(of: filter)
             }
             logger.info("Video size: \(self.videoSize.width)x\(self.videoSize.height)")
 
@@ -334,16 +342,9 @@ final class RecorderViewModel {
         guard isRecording else { return }
 
         state = .stopping
-        stopTimer()
-        isPaused = false
-        selectionBorderFrame.dismiss()
-        inputTelemetry.stop()
 
         do {
-            // Stop capture and camera session
-            try await captureEngine.stopCapture()
-            cameraSession.stop()
-            isPresenterOverlayActive = false
+            try await endCapture()
 
             // Finalize file. The session start and pauses are read first because finishing resets them.
             let sessionStart = assetWriter.sessionStartTime
@@ -364,10 +365,10 @@ final class RecorderViewModel {
             // Brief delay to ensure screen sharing mode has fully stopped before sending notification
             try? await Task.sleep(for: .milliseconds(100))
 
-            reportSaved(outputURL, videoFrameCount: videoFrameCount, cursorLeftToEditor: cursorLeftToEditor)
+            reportSaved(outputURL, videoFrameCount: videoFrameCount, cursorLeftToEditor: cursorLeftToEditor, copied: copyToClipboard)
 
             if copyToClipboard {
-                copyFileToClipboard(outputURL)
+                FilePasteboard.copy(file: outputURL)
             }
 
             settings.stopAccessingOutputDirectory()
@@ -382,6 +383,19 @@ final class RecorderViewModel {
         }
     }
 
+    /// Stops everything that feeds the take, leaving the writer to be finished or cancelled.
+    private func endCapture() async throws {
+        stopTimer()
+        isPaused = false
+        selectionBorderFrame.dismiss()
+        inputTelemetry.stop()
+        defer {
+            cameraSession.stop()
+            isPresenterOverlayActive = false
+        }
+        try await captureEngine.stopCapture()
+    }
+
     /// Resets the capture selection, removing the border frame and clearing state
     ///
     /// Covers both area and picker selections, so the capture engine's filter is cleared
@@ -393,20 +407,8 @@ final class RecorderViewModel {
         selectedContentFilter = nil
         captureEngine.clearSelection()
         selectionBorderFrame.dismiss()
-        recordingOverlay.dismiss()
         await previewService.stopPreview()
         previewService.clearPreview()
-    }
-
-    /// Starts the live preview stream (call when menu bar window opens)
-    func startPreview() async {
-        guard !isRecording else { return }
-        await previewService.startPreview()
-    }
-
-    /// Stops the live preview stream (call when menu bar window closes)
-    func stopPreview() async {
-        await previewService.stopPreview()
     }
 
     // MARK: - Timer Management
@@ -429,67 +431,25 @@ final class RecorderViewModel {
         recordingTimer = nil
         recordingStartTime = nil
     }
-
-    // MARK: - Helper Methods
-
-    private func copyFileToClipboard(_ url: URL) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects([url as NSURL])
-    }
-
-    private func getContentSize(from filter: SCContentFilter) async -> CGSize {
-        // Apply scale if Capture Native Resolution setting is enabled
-        let applyScale: Bool = settings.captureNativeResolution
-
-        // If area selection is active, use the source rect dimensions.
-        // The sourceRect is already snapped to even pixel counts in presentAreaSelection().
-        if let sourceRect = selectedSourceRect {
-            return CaptureSizeCalculator.videoSize(
-                contentRect: sourceRect,
-                scale: CGFloat(filter.pointPixelScale),
-                useNativeResolution: applyScale
-            )
-        }
-
-        // Get the content rect from the filter
-        let rect = filter.contentRect
-
-        if rect.width > 0 && rect.height > 0 {
-            return CaptureSizeCalculator.videoSize(
-                contentRect: rect,
-                scale: filter.captureScale,
-                useNativeResolution: applyScale
-            )
-        }
-
-        // Fallback to main screen size
-        if let screen = NSScreen.main {
-            return CGSize(
-                width: applyScale ? screen.frame.width * screen.backingScaleFactor : screen.frame.width,
-                height: applyScale ? screen.frame.height * screen.backingScaleFactor : screen.frame.height
-            )
-        }
-
-        return CGSize(width: 1920, height: 1080)
-    }
 }
 
 // MARK: - Saved Recordings
 
 extension RecorderViewModel {
 
-    /// Notifies the user of a saved recording, and keeps it for Edit Last Recording when it has video.
-    ///
-    /// The file is kept either way - an audio-only recording is still worth more than a deleted
-    /// one - but the user has to be told about it.
-    private func reportSaved(_ outputURL: URL, videoFrameCount: Int, cursorLeftToEditor: Bool) {
-        if videoFrameCount == 0 {
+    /// Opens a recording with video in the editor, or only notifies when it was copied for automation
+    /// (`reco://toggle-copy`), so a script isn't interrupted. An audio-only file is kept, and reported.
+    private func reportSaved(_ outputURL: URL, videoFrameCount: Int, cursorLeftToEditor: Bool, copied: Bool) {
+        guard videoFrameCount > 0 else {
             logger.error("Recording contains no video frames: \(outputURL.lastPathComponent)")
             notificationService.sendRecordingMissingVideoNotification(fileURL: outputURL)
-        } else {
-            lastRecordingURL = outputURL
+            return
+        }
+        lastRecordingURL = outputURL
+        if copied || onRecordingFinished == nil {
             notificationService.sendRecordingSavedNotification(fileURL: outputURL, opensEditor: cursorLeftToEditor)
+        } else {
+            onRecordingFinished?(outputURL)
         }
     }
 }
@@ -523,29 +483,26 @@ extension RecorderViewModel {
 
 extension RecorderViewModel {
 
-    /// Stops the recording and throws it away: nothing is left in the output folder.
+    /// Ends the take and throws it away: neither the movie nor its telemetry is kept. Cancels a countdown too.
     func cancelRecording() async {
+        cancelCountdown()
         guard isRecording else { return }
 
         state = .stopping
-        stopTimer()
-        isPaused = false
-        selectionBorderFrame.dismiss()
-        inputTelemetry.stop()
-        // The file is removed whether or not the stream stops cleanly
-        try? await captureEngine.stopCapture()
-        cameraSession.stop()
-        isPresenterOverlayActive = false
+        do {
+            try await endCapture()
+        } catch {
+            logger.error("Failed to stop capture while cancelling: \(error.localizedDescription)")
+        }
+        inputTelemetry.discard()
         assetWriter.cancel()
         settings.stopAccessingOutputDirectory()
-
         state = .idle
         recordingDuration = 0
         logger.info("Recording cancelled")
     }
 
-    /// Throws the recording away and starts again with the same selection.
-    /// - Parameter countdown: Whether the new start waits for the countdown from Settings.
+    /// Throws the take away and records the same selection again, after the countdown unless `countdown` is false.
     func restartRecording(countdown useCountdown: Bool = true) async {
         guard isRecording else { return }
         await cancelRecording()
@@ -577,7 +534,6 @@ extension RecorderViewModel {
             return
         }
 
-        recordingOverlay.dismiss()
         countdownOverlay.show(countdown: countdown, center: countdownCenter) { [weak self] in
             self?.cancelCountdown()
         }
@@ -634,9 +590,7 @@ extension RecorderViewModel: CaptureEngineDelegate {
             await previewService.setContentFilter(filter)
         }
 
-        // Show the recording overlay. For picker selections there is no stored screen
-        // (selectedScreen is nil), so the overlay positions itself below the status item.
-        recordingOverlay.show(viewModel: self, screen: selectedScreen)
+        onSelectionChange?()
     }
 
     func captureEngine(_ engine: CaptureEngine, didStopWithError error: Error?) {
@@ -657,8 +611,9 @@ extension RecorderViewModel: CaptureEngineDelegate {
                     await stopRecording()
                 }
             } else {
-                // Stream error during recording - try to save what we have
+                // Stream error during recording - try to save what we have, and say why it stopped
                 logger.warning("Stream stopped unexpectedly, attempting to save recording...")
+                notificationService.sendRecordingStoppedNotification(error: error)
                 Task {
                     await stopRecording()
                 }
@@ -683,8 +638,7 @@ extension RecorderViewModel: CaptureEngineDelegate {
         // Clear the selected content filter
         selectedContentFilter = nil
 
-        // Dismiss the overlay if it was shown after a previous selection
-        recordingOverlay.dismiss()
+        onSelectionChange?()
 
         // Stop and clear the preview
         Task {
@@ -707,5 +661,15 @@ extension RecorderViewModel: PreviewServiceDelegate {
         // Clear the content filter in capture engine and deactivate picker
         captureEngine.clearSelection()
         captureEngine.deactivatePicker()
+    }
+}
+
+// MARK: - Errors
+
+extension RecorderViewModel {
+
+    /// Puts away the last failure the popover shows; the next start clears it too.
+    func dismissError() {
+        lastError = nil
     }
 }

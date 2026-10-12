@@ -10,19 +10,17 @@ struct MotionTransportBar: View {
     let viewModel: MotionEditorViewModel
 
     var body: some View {
-        EditorGlassGroup {
-            HStack {
-                Spacer()
-                PlaybackTime(playback: viewModel.playback, duration: viewModel.duration)
-                    .padding(.horizontal, EditorTheme.spacing)
-                    .frame(height: 38)
-                    .editorGlass(in: .capsule)
-            }
-            .overlay {
-                PlaybackControls(playback: viewModel.playback)
-                    .padding(EditorTheme.tightSpacing)
-                    .editorGlass(in: .capsule)
-            }
+        HStack {
+            Spacer()
+            PlaybackTime(playback: viewModel.playback, duration: viewModel.duration)
+                .padding(.horizontal, EditorTheme.spacing)
+                .frame(height: 38)
+                .editorSurface(in: .capsule)
+        }
+        .overlay {
+            PlaybackControls(playback: viewModel.playback)
+                .padding(EditorTheme.tightSpacing)
+                .editorSurface(in: .capsule)
         }
         .buttonStyle(.editorIcon)
     }

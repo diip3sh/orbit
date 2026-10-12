@@ -35,7 +35,7 @@ enum MotionCompositionBuilder {
         }
         return EditorComposition(
             asset: composition, videoComposition: videoComposition(for: plan, placeholderTrackID: track.trackID, liveTracks: liveTracks),
-            audioMix: AVMutableAudioMix()
+            audioMix: AVMutableAudioMix(), extraAudio: ExtraAudio()
         )
     }
 

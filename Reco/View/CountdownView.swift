@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// The remaining seconds on a glass disc floating over the screen. It grows in from its centre;
+/// The remaining seconds on a disc of the capture toolbar's surface, floating over the screen. It grows in from its centre;
 /// it has no exit of its own, since the panel must be gone before the first recorded frame
 /// (`CountdownOverlay.dismiss()` removes it at once).
 struct CountdownView: View {
@@ -20,13 +20,13 @@ struct CountdownView: View {
             if let remaining = countdown.remaining {
                 Text(remaining, format: .number)
                     // Sized to sit in the fixed 150 pt disc; macOS has no Dynamic Type to follow
-                    .font(.system(size: 80, weight: .bold, design: .rounded))
+                    .font(Font(Typeface.sans.font(size: 80, weight: Font.Weight.bold.axisValue) as CTFont))
                     .monospacedDigit()
                     .contentTransition(reducesMotion ? .opacity : .numericText(countsDown: true))
                     .foregroundStyle(EditorTheme.ink)
                     .frame(width: 150, height: 150)
-                    // The glass keeps it readable over light and dark content
-                    .editorGlass(in: .circle)
+                    // The 200 pt panel leaves 25 pt around the disc, room for the floating shadow
+                    .editorSurface(in: Circle(), floats: true)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

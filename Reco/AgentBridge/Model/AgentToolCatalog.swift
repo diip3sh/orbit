@@ -16,13 +16,12 @@ nonisolated enum AgentToolCatalog {
     }
 
     static let instructions = """
-        Call inspect_page to get selectors, then record_page; if it returns status rendering, \
-        call render_status with its render_id until done. If the result has warnings, fix those steps and record again. \
-        For a finished file (MP4 or GIF) call export_recording with the movie. For a product walkthrough: research first \
-        (inspect_page on the page and on the two to four pages its navigation links to; their descriptions and headings say \
-        what the product does), plan four to six beats (what it is, its two or three strongest features, the call to action), \
-        then record with a show on every step: the element the video zooms on, a product screenshot or feature card rather \
-        than a heading. Without show, the video zooms wherever the cursor stops.
+        Learn what the product is before recording: open_page (or inspect_page) the page and the product or feature pages \
+        its navigation links to, read_page for what they say, look further down and hover or click into menus and tabs. \
+        Then plan four to six beats that tell one story (what it is, its strongest features each on its own page or \
+        section, the call to action) and record_page them, giving every hover, click and type a show: the element the \
+        video zooms on. If that returns status rendering, call render_status with its render_id until done. If the result \
+        has warnings, fix those steps and record once more, only once.
         """
 
     static let inspectPage = "inspect_page"
@@ -32,23 +31,28 @@ nonisolated enum AgentToolCatalog {
     static let editMotion = "edit_motion"
     static let captureUI = "capture_ui"
     static let previewMotion = "preview_motion"
+    static let openPage = "open_page"
+    static let look = "look"
+    static let readPage = "read_page"
+    static let click = "click"
+    static let hover = "hover"
+    static let type = "type"
+    static let browsingNames = Set(browsingTools.map(\.name))
 
-    static let tools: [Definition] = [
+    /// Every tool, for agents whose permissions list them one by one.
+    static var names: [String] {
+        tools.map(\.name)
+    }
+
+    static let tools: [Definition] = browsingTools + [
         Definition(
             name: inspectPage,
             description: """
-                Loads a web page in Reco and lists what it shows: size, title, description and its visible links, buttons, inputs and \
-                headings, each with a CSS selector, role, text, box in page pixels at scroll 0, and a link's href; and its overlays, \
-                what stays on screen as it scrolls (a navigation bar, a cookie banner, a chat button), for record_page's hide; and its \
-                brand: background, text and accent colors, serif or sans, the logo, the heading's weight, tracking, case and size, \
-                the palette (painted colours, most area first), gradients, corner radii (button, card) and fonts (the heading's \
-                and body's font files, for a motion video's style.fonts); and what a motion video can lift alone \
-                (liftable: cards, panels, app mockups and pictures with their boxes and corner radius, largest first). Reco scrolls \
-                through the page first, so content that loads on the way is listed too. Call it before record_page to get \
-                selectors to hover, click or scroll to, and on the page a click opens (its href) for the steps after that click. \
-                render_cost says how many seconds a second of video takes to render at scale 1 and 2 on this page: record at 2 \
-                (sharp when the video zooms in) unless that would take longer than the run allows. With selectors, boxes gives \
-                the box of the first element each matches: the parts of a panel a motion video frames.
+                Loads a web page in Reco and lists what it shows: size, title, meta description and its visible links (with \
+                href), buttons, inputs and headings, each with a CSS selector, role, text and box in page pixels at scroll 0. \
+                It scrolls down the page and back first, so sections that load on the way are listed. Call it on the page and \
+                the pages its product navigation links to before record_page, to learn what each shows and get selectors to \
+                hover, click, show or scroll to.
                 """,
             schema: #"""
             {"type":"object","properties":{"url":{"type":"string","description":"Page address; https:// added if missing"},
@@ -60,34 +64,32 @@ nonisolated enum AgentToolCatalog {
         Definition(
             name: recordPage,
             description: """
-                Records a web page as a demo video with a smooth cursor: Reco plays the steps (hover, click, type, scroll) on the live \
-                page frame by frame into a movie with input telemetry, and opens it in its editor. The video zooms in on each \
-                step's show element while the step runs; when no step has one, it zooms in wherever the cursor stops and clicks. \
-                Before each hover or click Reco scrolls its element into view if needed; a scroll to a selector \
-                finds the element again as the page is then. Rendering can take longer than a minute: this returns when the movie \
-                is done or after 45 s with status rendering and a render_id; then call render_status until it is done. One render \
-                at a time. Pacing that reads well: about 1 s still first, 1.5 to 3 s per hover or click so viewers can read it, \
-                0.8 to 1 s between steps for the cursor to travel, 1.5 to 3 s per scroll. A hover menu stays open while the cursor \
-                is over it. A type step clicks its field, then types the text key by key (12 a second); end the text with \\n to press Enter, \
-                which submits the field's form. A click that opens another page cuts to it. The result's warnings say which steps missed their element.
+                Records a web page as a video with a smooth cursor: Reco plays the steps (hover, click, type, scroll) on the live \
+                page frame by frame into a movie with input telemetry, and opens it in its editor for styling. The camera zooms \
+                only on what a step's show names, framed where the step starts: once any step has show, steps without it don't \
+                zoom (a take without any is auto-zoomed where the cursor rests). There's no zoom on an element that is nearly the \
+                whole view, on a click that opens a page, or when the page scrolls within 0.5 s. Before each hover, click or type \
+                Reco scrolls its selector's element into view (not the shown one). A page a click opens shows from its top. type \
+                clicks an input and types its text into it letter by letter; its duration comes from the text. The result's \
+                warnings say which steps missed their element and when. Rendering can take longer than a minute: this returns when \
+                the movie is done or after 45 s with status rendering and a render_id; then call render_status until it is done. \
+                From Reco's chat it returns status planned instead: the steps are on the user's timeline and Reco renders them \
+                when you're done, so there is nothing to wait for. One render at a time. Steps are spaced automatically (0.8 s \
+                apart, the first at 1 s) unless they give a start.
                 """,
             schema: #"""
             {"type":"object","properties":{"url":{"type":"string","description":"Page address; https:// added if missing"},
             "viewport":{"type":"string","enum":["desktop","laptop","tablet","phone"],"default":"desktop"},
-            "scale":{"type":"integer","enum":[1,2],"default":2,"description":"2 is sharp when zoomed; 1 renders faster (see inspect_page's render_cost)"},
+            "scale":{"type":"integer","enum":[1,2],"default":1,"description":"2 only when asked: a minute of a heavy page takes 15+ minutes to render"},
             "duration":{"type":"number","description":"Seconds, max 120; default: last step end + 1.5"},
-            "hide":{"type":"array","items":{"type":"string"},"description":"CSS selectors hidden for the whole take: overlays from \#
-            inspect_page's overlays that aren't part of the product, like a cookie banner, chat button or announcement bar"},
             "steps":{"type":"array","items":{"type":"object","properties":{
             "action":{"type":"string","enum":["hover","click","type","scroll"]},
             "selector":{"type":"string","description":"CSS selector from inspect_page; for scroll, the element to bring near the top"},
+            "show":{"type":"string","description":"hover/click/type only: selector of what the video zooms on in the step: a screenshot, card or short heading in view, not nav"},
             "y":{"type":"number","description":"scroll only: page offset in CSS px"},
             "start":{"type":"number","description":"seconds; default: 0.8 s after the previous step, the first at 1 s"},
-            "duration":{"type":"number","description":"seconds; default 1.5 (hover/click), 2 (scroll), the typing plus 1.1 (type)"},
-            "text":{"type":"string","description":"type only: what to type into the selector's field"},
-            "show":{"type":"string","description":"hover, click, type: CSS selector of the element the video zooms on during the step, framed with room \#
-            around it (up to 3x; a whole section stays zoomed out). Must be in view when the step starts, so hover something in or beside it. \#
-            Once any step shows, only shown steps zoom"}},
+            "duration":{"type":"number","description":"seconds; default 1.5 (hover/click), 2 (scroll)"},
+            "text":{"type":"string","maxLength":500,"description":"type only: what to type into the input"}},
             "required":["action"],"additionalProperties":false}}},"required":["url","steps"],"additionalProperties":false}
             """#
         ),
@@ -107,16 +109,16 @@ nonisolated enum AgentToolCatalog {
                 Exports a recording as a finished video with Reco's edit: the zooms, the drawn cursor, click highlights and the \
                 background, as its editor shows it; or a motion video (a .motion bundle from edit_motion) as it plays. Saved next to \
                 the movie or bundle as <name>-edited. Use gif for READMEs, pull requests \
-                and chats (silent, loops, 540 px at 25 fps unless set), hevc for a small MP4, h264 for an MP4 that plays \
-                everywhere. Returns when the file is written or after 45 s with status exporting; then call it again with the \
+                and chats (silent, loops, 540 px at 25 fps for motion videos), hevc for a small MP4. Returns when the file is \
+                written or after 45 s with status exporting; then call it again with the \
                 same arguments until done. One export at a time.
                 """,
             schema: #"""
             {"type":"object","properties":{"movie":{"type":"string","description":"Path of the movie, from record_page or render_status, or of a .motion bundle"},
-            "format":{"type":"string","enum":["hevc","h264","gif","prores422","prores4444"],"default":"hevc"},
+            "format":{"type":"string","enum":["hevc","gif","prores422","prores4444"],"default":"hevc"},
             "resolution":{"type":"integer","description":"Shorter side in px, smaller than the recording's (a motion video's: up to \#
-            twice its canvas): 2160, 1440, 1080 or 720; gif: 720, 540 or 360"},
-            "frame_rate":{"type":"integer","description":"Lower than the recording's: 60, 30 or 24; gif: 50 or 25"}},
+            twice its canvas); motion GIF defaults to 540"},
+            "frame_rate":{"type":"integer","description":"No higher than the recording's; GIFs should be 30 fps or less"}},
             "required":["movie"],"additionalProperties":false}
             """#
         ),
@@ -147,6 +149,64 @@ nonisolated enum AgentToolCatalog {
             schema: #"""
             {"type":"object","properties":{"bundle":{"type":"string","description":"The .motion bundle's path from edit_motion"}},
             "required":["bundle"],"additionalProperties":false}
+            """#
+        )
+    ]
+
+    /// The browsing session (spec 0011): the Reco window's live page, which the user watches. Each
+    /// step answers with JSON and a screenshot of the viewport after it.
+    static let browsingTools: [Definition] = [
+        Definition(
+            name: openPage,
+            description: """
+                Opens a page in Reco's live browser (the user watches it in the Web Recording window) and returns a \
+                screenshot plus the page's size, title, meta description and its visible links (with href), buttons, inputs and \
+                headings, each with a CSS selector, role, text and box in page pixels. Start here, then look, read_page, hover and \
+                click to learn the site.
+                """,
+            schema: #"""
+            {"type":"object","properties":{"url":{"type":"string","description":"Page address; https:// added if missing"},
+            "viewport":{"type":"string","enum":["desktop","laptop","tablet","phone"],"default":"desktop"}},
+            "required":["url"],"additionalProperties":false}
+            """#
+        ),
+        Definition(
+            name: look,
+            description: "Scrolls the live page to y (CSS pixels from the top) and returns a screenshot of what the viewport shows there.",
+            schema: #"""
+            {"type":"object","properties":{"y":{"type":"number","minimum":0}},"required":["y"],"additionalProperties":false}
+            """#
+        ),
+        Definition(
+            name: readPage,
+            description: "Returns the live page's text as a reader sees it, with its headings and where each is (y), to learn what the page says.",
+            schema: #"""
+            {"type":"object","properties":{},"additionalProperties":false}
+            """#
+        ),
+        Definition(
+            name: hover,
+            description: "Moves the pointer onto an element of the live page, opening hover menus and tooltips, and returns a screenshot.",
+            schema: #"""
+            {"type":"object","properties":{"selector":{"type":"string"}},"required":["selector"],"additionalProperties":false}
+            """#
+        ),
+        Definition(
+            name: click,
+            description: """
+                Clicks an element of the live page as a person would (menus, tabs, links, buttons) and returns a screenshot; \
+                if it opened another page, the result has its url. Avoid buttons that buy, delete or send anything.
+                """,
+            schema: #"""
+            {"type":"object","properties":{"selector":{"type":"string"}},"required":["selector"],"additionalProperties":false}
+            """#
+        ),
+        Definition(
+            name: type,
+            description: "Clicks an input of the live page and types text into it, e.g. a search box, and returns a screenshot.",
+            schema: #"""
+            {"type":"object","properties":{"selector":{"type":"string"},"text":{"type":"string","maxLength":500}},
+            "required":["selector","text"],"additionalProperties":false}
             """#
         )
     ]

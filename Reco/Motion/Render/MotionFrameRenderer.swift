@@ -19,6 +19,7 @@ nonisolated enum MotionFrameRenderer {
     static let previewBlurSamples = 8
     static let exportBlurSamples = 96
     static let exportBlurSpacing = 3.0
+    static let previewBlurSpacing = 4.0
 
     /// The frame at `time` seconds into the video, in output pixels from Core Image's bottom-left
     /// origin. `frames` are the live layers' takes at that time; a live layer without one isn't drawn.
@@ -29,14 +30,14 @@ nonisolated enum MotionFrameRenderer {
     static func image(at time: Double, plan: MotionPlan, frames: [MotionPlan.LayerKey: CIImage] = [:]) -> CIImage {
         let shutter = 0.5 / Double(plan.frameRate)
         // An editorial film is drawn sharp, as ElevenLabs' is: its card's edge stayed a pixel wide growing 52 px a frame
-        let offsets = plan.isEditorial ? [0] : FrameRenderer.blurOffsets(
+        let offsets = plan.isEditorial ? [0] : blurOffsets(
             distance: travel(at: time, across: shutter, plan: plan), most: plan.isPreview ? previewBlurSamples : exportBlurSamples,
-            spacing: plan.isPreview ? FrameRenderer.blurSampleSpacing : exportBlurSpacing
+            spacing: plan.isPreview ? previewBlurSpacing : exportBlurSpacing
         )
         let scene = plan.scenes[plan.sceneIndex(at: time)]
         // Inside the scene: a shutter open across a cut would blend the two shots
         let times = offsets.map { min(max(time + $0 * shutter, scene.start), scene.start + scene.duration - 1e-6) }
-        var frame = FrameRenderer.average(times.map { still(at: $0, sharpAt: time, plan: plan, frames: frames) })
+        var frame = average(times.map { still(at: $0, sharpAt: time, plan: plan, frames: frames) })
         // A pool's light falls on the UI too
         if scene.field == .pool {
             frame = FieldRenderer.pooled(frame, at: time, size: plan.outputSize, shot: shot(of: scene, at: time - scene.start, plan: plan))
@@ -44,6 +45,14 @@ nonisolated enum MotionFrameRenderer {
         // Satin's grain goes over the whole frame, its UI too, once a frame
         guard scene.field == .satin else { return frame }
         return FieldRenderer.grained(frame, index: Int((time * Double(plan.frameRate)).rounded()), size: plan.outputSize)
+    }
+
+    private static func average(_ images: [CIImage]) -> CIImage {
+        guard images.count > 1 else { return images[0] }
+        let shares = images.map { $0.fading(to: 1 / Double(images.count)) }
+        return shares.dropFirst().reduce(shares[0]) { image, next in
+            next.applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: image])
+        }
     }
 
     /// How far the planes and pointers on screen at `time` move while a shutter `shutter` seconds long is open, in
@@ -385,5 +394,13 @@ nonisolated enum MotionFrameRenderer {
             "inputBottomRight": CIVector(cgPoint: output[2]),
             "inputBottomLeft": CIVector(cgPoint: output[3])
         ])
+    }
+}
+
+extension MotionFrameRenderer {
+    nonisolated static func blurOffsets(distance: Double, most: Int, spacing: Double) -> [Double] {
+        guard distance >= 0.5 else { return [0] }
+        let count = min(max(Int((distance / spacing).rounded(.up)), 2), most)
+        return (0..<count).map { (Double($0) + 0.5) / Double(count) - 0.5 }
     }
 }

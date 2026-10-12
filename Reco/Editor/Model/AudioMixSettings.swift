@@ -13,6 +13,18 @@ nonisolated struct AudioMixSettings: Codable, Equatable, Sendable {
     /// One per audio track, in the recording's order. Tracks past the end play unchanged.
     var tracks: [Track] = []
 
+    /// The volume of a click sound at every press, from 0 (none) to 1. Here because it is mixed audio: the plan
+    /// doesn't depend on it.
+    var clickVolume = 0.0
+
+    /// Music looped under the whole video, if one was chosen.
+    var background: BackgroundAudio?
+
+    /// Whether the mix has audio of its own, besides the recording's tracks.
+    var addsAudio: Bool {
+        clickVolume > 0 || background != nil
+    }
+
     /// The settings of audio track `index`, which exist for every track.
     subscript(track index: Int) -> Track {
         get { index < tracks.count ? tracks[index] : Track() }
@@ -24,6 +36,11 @@ nonisolated struct AudioMixSettings: Codable, Equatable, Sendable {
         }
     }
 
+    /// The tracks whose voice is isolated (see ``VoiceEnhancer``), by index.
+    var enhancedTracks: [Int] {
+        tracks.indices.filter { tracks[$0].enhancesVoice }
+    }
+
     nonisolated struct Track: Codable, Equatable, Sendable {
 
         /// From 0 to 1, the range `AVAudioMix` takes.
@@ -32,9 +49,37 @@ nonisolated struct AudioMixSettings: Codable, Equatable, Sendable {
         /// Silences the track without losing its volume.
         var isMuted = false
 
+        /// Plays the track with its voice isolated from the noise around it.
+        var enhancesVoice = false
+
         /// What the track plays at.
         var effectiveVolume: Float {
             isMuted ? 0 : Float(volume)
         }
+    }
+}
+
+// MARK: - Decoding
+
+extension AudioMixSettings {
+
+    /// Settings added after a project was saved take their defaults when missing.
+    nonisolated init(from decoder: any Decoder) throws {
+        self.init()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        tracks = try container.decodeIfPresent([Track].self, forKey: .tracks) ?? tracks
+        clickVolume = try container.decodeIfPresent(Double.self, forKey: .clickVolume) ?? clickVolume
+        background = try container.decodeIfPresent(BackgroundAudio.self, forKey: .background)
+    }
+}
+
+extension AudioMixSettings.Track {
+
+    nonisolated init(from decoder: any Decoder) throws {
+        self.init()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        volume = try container.decodeIfPresent(Double.self, forKey: .volume) ?? volume
+        isMuted = try container.decodeIfPresent(Bool.self, forKey: .isMuted) ?? isMuted
+        enhancesVoice = try container.decodeIfPresent(Bool.self, forKey: .enhancesVoice) ?? enhancesVoice
     }
 }

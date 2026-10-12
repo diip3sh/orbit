@@ -91,7 +91,7 @@ enum UICapture {
         // Last: a take is whole once its info has a scale
         info.scale = scale
         try JSONEncoder().encode(info).write(to: UILiftCache.infoURL(of: asset, in: bundle), options: .atomic)
-        for issue in rendered.issues {
+        for issue in rendered.warnings {
             logger.warning("\(asset.id, privacy: .public): \(issue, privacy: .public)")
         }
         logger.info("Baked \(asset.id, privacy: .public): \(script.duration) s of \(Int(crop.width))x\(Int(crop.height)) CSS px at \(scale)x in \(ContinuousClock.now - start)")

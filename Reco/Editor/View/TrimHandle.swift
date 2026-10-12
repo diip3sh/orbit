@@ -23,6 +23,10 @@ struct TrimHandle: View {
     /// The timeline's width: the handle may go from 0 to here before it resists.
     let width: CGFloat
 
+    /// Whether it shows at rest; hidden, it still appears under the pointer and while dragged. Clips
+    /// in a lane show theirs only when hovered or selected: on a short clip two handles hide the clip.
+    var isShown = true
+
     let onDrop: (CGFloat) -> Void
 
     @State private var dragPosition: CGFloat?
@@ -34,14 +38,15 @@ struct TrimHandle: View {
         let isActive = isHovered || dragPosition != nil
 
         RoundedRectangle(cornerRadius: 3)
-            .fill(isActive ? EditorTheme.accent : EditorTheme.primary)
+            .fill(isActive ? EditorTheme.accent : EditorTheme.ink)
             .overlay {
                 Capsule()
-                    .fill(.black.opacity(0.45))
+                    .fill(EditorTheme.stage.opacity(0.6))
                     .frame(width: 2, height: 14)
             }
             .shadow(color: .black.opacity(0.4), radius: 2)
             .frame(width: Self.width)
+            .opacity(isShown || isActive ? 1 : 0)
             .offset(x: (dragPosition ?? position) - (edge == .leading ? 0 : Self.width))
             .pointerStyle(.frameResize(position: edge == .leading ? .leading : .trailing))
             .onHover { isHovered = $0 }

@@ -11,16 +11,15 @@ import ScreenCaptureKit
 /// The main menu bar interface for Reco
 struct MenuBarView: View {
     @Bindable var viewModel: RecorderViewModel
-    let screenshots: ScreenshotController
+    let showScreenshotToolbar: () -> Void
+    let showRecordingToolbar: () -> Void
     let editLastRecording: () -> Void
-    let showRecordings: () -> Void
+    let quickAccess: QuickAccessController
+    let showLibrary: () -> Void
     let showWebRecording: () -> Void
-    let showAgentRecording: () -> Void
     let agentRecording: AgentRecordingViewModel
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
-    @State private var currentPreview: NSImage?
-
     private var isRecording: Bool { viewModel.isRecording }
 
     var body: some View {
@@ -38,305 +37,135 @@ struct MenuBarView: View {
                 MenuBarDivider()
             }
 
-            // Recording button (stop + timer) or Start button
-            if isRecording {
-                RecordingButton(
-                    duration: viewModel.formattedDuration
-                ) {
-                    Task {
-                        await viewModel.stopRecording()
+            // Why the last recording failed, until dismissed: notifications may be off
+            if let error = viewModel.lastError, !isRecording {
+                MenuBarErrorRow(message: error.localizedDescription, dismiss: viewModel.dismissError)
+                MenuBarDivider()
+            }
+
+            // The ways in first; saving, the take's controls and choosing what to capture are on the capture toolbar
+            VStack(spacing: 0) {
+                if viewModel.state == .stopping {
+                    // Finishing the file takes a moment; nothing can start meanwhile
+                    HStack(spacing: EditorTheme.mediumSpacing) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 20)
+                        Text("Saving Recording…")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, EditorTheme.mediumSpacing)
+                    .padding(.vertical, EditorTheme.smallSpacing)
+                } else if viewModel.state == .idle {
+                    MenuBarActionButton(
+                        title: "Screenshot", systemImage: "camera.viewfinder", isDisabled: viewModel.countdown.isRunning,
+                        shortcut: .showScreenshotToolbar
+                    ) {
+                        dismiss()
+                        showScreenshotToolbar()
+                    }
+                    MenuBarActionButton(
+                        title: "Record", systemImage: "record.circle", isDisabled: viewModel.countdown.isRunning,
+                        shortcut: .showRecordingToolbar
+                    ) {
+                        dismiss()
+                        showRecordingToolbar()
                     }
                 }
-                .padding(.top, 8)
 
-                MenuBarActionButton(
-                    title: viewModel.isPaused ? "Resume Recording" : "Pause Recording",
-                    systemImage: viewModel.isPaused ? "play.circle" : "pause.circle"
-                ) {
-                    viewModel.togglePause()
+                MenuBarActionButton(title: "Product Record", systemImage: "globe") {
+                    showWebRecording()
+                    dismiss()
                 }
 
-                MenuBarActionButton(title: "Restart Recording", systemImage: "arrow.counterclockwise.circle") {
-                    Task {
-                        await viewModel.restartRecording()
-                    }
+                MenuBarActionButton(title: "Library", systemImage: "square.grid.2x2") {
+                    showLibrary()
+                    dismiss()
                 }
 
-                MenuBarActionButton(title: "Cancel Recording", systemImage: "xmark.circle") {
-                    Task {
-                        await viewModel.cancelRecording()
-                    }
-                }
-            } else if let remaining = viewModel.countdown.remaining {
-                MenuBarActionButton(
-                    title: "Cancel Countdown (\(remaining))",
-                    systemImage: "xmark.circle"
-                ) {
-                    viewModel.cancelCountdown()
-                }
-                .padding(.top, 8)
-            } else {
-                MenuBarActionButton(
-                    title: "Start Recording",
-                    systemImage: "record.circle",
-                    isDisabled: !viewModel.canStartRecording
-                ) {
-                    Task {
-                        await viewModel.startRecordingWithCountdown()
+                if viewModel.lastRecordingURL != nil {
+                    MenuBarActionButton(title: "Edit Last Recording", systemImage: "film") {
+                        editLastRecording()
                         dismiss()
                     }
                 }
-                .padding(.top, 8)
-                ScreenshotButtons(controller: screenshots, recorder: viewModel)
+
+                // Idle only, like the screenshots themselves: a card shown mid-take could land in the video
+                if viewModel.state == .idle, quickAccess.closedScreenshot != nil {
+                    MenuBarActionButton(title: "Restore Last Screenshot", systemImage: "arrow.uturn.backward") {
+                        dismiss()
+                        quickAccess.restoreClosed()
+                    }
+                }
+
+                if quickAccess.pins.hasClickThroughPins {
+                    MenuBarActionButton(title: "Unlock Pins", systemImage: "lock.open") {
+                        dismiss()
+                        quickAccess.pins.unlockPins()
+                    }
+                }
+
+                if agentRecording.isRunning {
+                    MenuBarActionButton(title: "Cancel Agent Recording", systemImage: "xmark.circle") {
+                        agentRecording.cancel()
+                    }
+                }
             }
+            .padding(.top, 8)
+
+            // What each take captures (it opens with its own divider); video formats and the content filter are in Settings → Video
+            CaptureSettingsSection(
+                settings: viewModel.settings,
+                audioDeviceService: viewModel.audioDeviceService,
+                cameraDeviceService: viewModel.cameraDeviceService,
+                permissionService: viewModel.permissionService
+            )
+            // Fixed from the countdown until the file is saved
+            .disabled(viewModel.state != .idle || viewModel.countdown.isRunning)
 
             MenuBarDivider()
 
-            // Content Selection
-            ContentSelectionButton(viewModel: viewModel) { dismiss() }
-                .disabled(isRecording)
-
-            // Preview thumbnail
-            if viewModel.hasContentSelected {
-                PreviewThumbnailView(
-                    previewImage: currentPreview,
-                    isLivePreviewActive: viewModel.previewService.isCapturing,
-                    onStartLivePreview: {
-                        Task {
-                            await viewModel.startPreview()
-                        }
-                    },
-                    onStopLivePreview: {
-                        Task {
-                            await viewModel.stopPreview()
-                        }
-                    }
-                )
-                .onChange(of: viewModel.previewService.previewImage) { _, newImage in
-                    currentPreview = newImage
-                }
-                .onAppear {
-                    currentPreview = viewModel.previewService.previewImage
-                }
-
-                Button {
-                    Task {
-                        await viewModel.resetSelection()
-                    }
-                } label: {
-                    Text("Reset Selection")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(.gray.opacity(0.15), in: .rect(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .disabled(isRecording)
-            }
-
-            MenuBarDivider()
-
-            // Settings Sections
-            Group {
-                VideoSettingsSection(settings: viewModel.settings)
-
-                PresenterOverlaySettingsSection(
-                    settings: viewModel.settings,
-                    cameraDeviceService: viewModel.cameraDeviceService,
-                    permissionService: viewModel.permissionService
-                )
-
-                AudioSettingsSection(
-                    settings: viewModel.settings,
-                    audioDeviceService: viewModel.audioDeviceService
-                )
-            }
-            .disabled(isRecording)
-
-            MenuBarDivider()
-
-            // Bottom Actions
-            MenuBarActionButton(title: "Edit Last Recording", systemImage: "film", isDisabled: viewModel.lastRecordingURL == nil) {
-                editLastRecording()
-                dismiss()
-            }
-
-            MenuBarActionButton(title: "Recordings…", systemImage: "film.stack") {
-                showRecordings()
-                dismiss()
-            }
-
-            MenuBarActionButton(title: "New Web Recording…", systemImage: "globe") {
-                showWebRecording()
-                dismiss()
-            }
-
-            if agentRecording.isRunning {
-                MenuBarActionButton(title: "Cancel Agent Recording", systemImage: "xmark.circle") {
-                    agentRecording.cancel()
-                }
-            } else {
-                MenuBarActionButton(title: "Record with AI Agent…", systemImage: "sparkles") {
-                    showAgentRecording()
-                    dismiss()
-                }
-            }
-
-            MenuBarActionButton(title: "Open Output Folder", systemImage: "folder") {
-                let settings = viewModel.settings
-                let didStart = settings.startAccessingOutputDirectory()
-                defer {
-                    if didStart {
-                        settings.stopAccessingOutputDirectory()
-                    }
-                }
-                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: settings.outputDirectory.path)
-            }
-
-            MenuBarActionButton(title: "Settings...", systemImage: "gear") {
+            MenuBarActionButton(title: "Settings…", systemImage: "gear") {
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 openSettings()
             }
 
-            MenuBarActionButton(title: "Quit...", systemImage: "power") {
+            MenuBarActionButton(title: "Quit Orbit", systemImage: "power") {
                 NSApplication.shared.terminate(nil)
             }
             .padding(.bottom, 8)
         }
-        .frame(width: 320)
+        .frame(width: 288)
         .background(.ultraThinMaterial)
     }
 }
 
-// MARK: - Recording Button
+// MARK: - Error
 
-/// A combined button that shows recording status and allows stopping. The red is the one color
-/// in the popover: it means stop.
-struct RecordingButton: View {
-    let duration: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: "stop.circle")
-                    .foregroundStyle(.red)
-                    .frame(width: 20)
-
-                Text("Stop Recording")
-                    .font(.body.weight(.semibold))
-
-                Spacer()
-
-                Text(duration)
-                    .font(.body.weight(.medium).monospaced())
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-        }
-        .buttonStyle(.menuRow)
-    }
-}
-
-// MARK: - Content Selection Button
-
-/// A split button that triggers the active content selection mode, with a dropdown chevron to switch modes.
-/// The left portion triggers the action; the right chevron opens a dropdown to change the mode.
-/// Styled consistently with other menu bar rows.
-struct ContentSelectionButton: View {
-    let viewModel: RecorderViewModel
-    var onDismissPanel: (() -> Void)?
-    @AppStorage(ContentSelectionMode.storageKey) private var mode: ContentSelectionMode = .pickContent
-    @State private var isDropdownExpanded = false
-
-    /// Whether content has been selected via the currently active mode
-    private var hasActiveSelection: Bool {
-        switch mode {
-        case .pickContent:
-            viewModel.hasContentSelected && !viewModel.isAreaSelection
-        case .selectArea:
-            viewModel.isAreaSelection
-        }
-    }
-
-    private var buttonLabel: String {
-        hasActiveSelection ? "Change \(mode.label.split(separator: " ").last, default: "Content")..." : "\(mode.label)..."
-    }
+/// The last recording failure, in the popover's row layout, with a button to put it away.
+struct MenuBarErrorRow: View {
+    let message: String
+    let dismiss: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Main button row: the action, and beside it the chevron that opens the modes
-            HStack(spacing: 0) {
-                Button {
-                    triggerAction()
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: mode.icon)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20)
-
-                        Text(buttonLabel)
-                            .font(.body.weight(.medium))
-
-                        Spacer()
-                    }
-                    .padding(.leading, 12)
-                    .padding(.vertical, 4)
-                }
-                .buttonStyle(.menuRow)
-
-                Button {
-                    withMotion { isDropdownExpanded.toggle() }
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isDropdownExpanded ? 90 : 0))
-                        .frame(width: 36, height: 28)
-                }
-                .buttonStyle(.menuRow)
-            }
-
-            // Dropdown options
-            if isDropdownExpanded {
-                VStack(spacing: 0) {
-                    DeviceRow(
-                        name: ContentSelectionMode.pickContent.label,
-                        icon: ContentSelectionMode.pickContent.icon,
-                        isSelected: mode == .pickContent
-                    ) {
-                        mode = .pickContent
-                        withMotion { isDropdownExpanded = false }
-                    }
-
-                    DeviceRow(
-                        name: ContentSelectionMode.selectArea.label,
-                        icon: ContentSelectionMode.selectArea.icon,
-                        isSelected: mode == .selectArea
-                    ) {
-                        mode = .selectArea
-                        withMotion { isDropdownExpanded = false }
-                    }
-                }
-                .padding(.leading, 12)
-                .background(.quaternary.opacity(0.3))
-            }
+        HStack(alignment: .firstTextBaseline, spacing: EditorTheme.mediumSpacing) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .symbolRenderingMode(.multicolor)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.callout)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button("Dismiss", systemImage: "xmark", action: dismiss)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
         }
-    }
-
-    private func triggerAction() {
-        switch mode {
-        case .pickContent:
-            viewModel.presentPicker()
-        case .selectArea:
-            onDismissPanel?()
-            Task {
-                await viewModel.presentAreaSelection()
-            }
-        }
+        .padding(.horizontal, EditorTheme.mediumSpacing)
+        .padding(.vertical, EditorTheme.smallSpacing)
+        .padding(.top, EditorTheme.tightSpacing)
     }
 }
 
@@ -416,7 +245,7 @@ struct PermissionRow: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 4)
+            .padding(.vertical, 6)
         }
         .buttonStyle(.menuRow)
     }
@@ -427,11 +256,12 @@ struct PermissionRow: View {
 #Preview {
     MenuBarView(
         viewModel: RecorderViewModel(),
-        screenshots: .init(settings: SettingsStore(), notificationService: .init(settings: SettingsStore())),
+        showScreenshotToolbar: {},
+        showRecordingToolbar: {},
         editLastRecording: {},
-        showRecordings: {},
+        quickAccess: QuickAccessController(save: { _ in false }, didCopy: { _ in }, background: { ScreenshotBackground() }),
+        showLibrary: {},
         showWebRecording: {},
-        showAgentRecording: {},
         agentRecording: AgentRecordingViewModel(
             tools: AgentTools(settings: SettingsStore()) { _ in },
             reportFailure: { _ in },

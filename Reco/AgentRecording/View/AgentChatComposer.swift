@@ -5,96 +5,103 @@
 
 import SwiftUI
 
-/// The agent chat's message box: the message, and under it the agent, the model and Record,
-/// which is Stop while a run goes; or why no agent can run, with Set Up Agents….
+/// The agent chat's message box: a field for what the video should show, or a change to the last take, with
+/// Send (Stop while the agent works), and under it New Chat and a few things to start from.
 struct AgentChatComposer: View {
-    @Bindable var chat: AgentChatViewModel
+    let model: AgentRecordingViewModel
+    let page: URL?
 
+    @State private var message = ""
     @FocusState private var isFocused: Bool
 
+    private static let suggestions = ["Tour the whole page", "Hover the main menu", "Click the main button", "Scroll to the end"]
+
     var body: some View {
-        @Bindable var runner = chat.runner
-
         VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
-            TextField("Ask for changes…", text: $chat.draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...6)
-                .focused($isFocused)
-                .onSubmit(chat.send)
-                .padding(.horizontal, EditorTheme.tightSpacing)
-                .padding(.top, EditorTheme.tightSpacing)
-
-            if runner.available.isEmpty {
-                Text(runner.unavailableReason ?? (runner.isLookingForAgents ? "Looking for agents…" : ""))
-                    .font(.caption)
-                    .foregroundStyle(EditorTheme.dim)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, EditorTheme.tightSpacing)
-            }
-
-            HStack(spacing: EditorTheme.smallSpacing) {
-                if !runner.available.isEmpty {
-                    Menu {
-                        Picker("Agent", selection: $runner.agent) {
-                            ForEach(runner.available) { kind in
-                                Text(kind.displayName).tag(AgentKind?.some(kind))
-                            }
-                        }
-                        .labelsHidden()
-                    } label: {
-                        Text(runner.agent?.displayName ?? "Agent")
-                    }
-                    .fixedSize()
-                    Menu {
-                        Picker("Model", selection: $runner.model) {
-                            Text("Default").tag(String?.none)
-                            ForEach(runner.models, id: \.self) { name in
-                                Text(name).tag(String?.some(name))
-                            }
-                        }
-                        .labelsHidden()
-                    } label: {
-                        Text(runner.model ?? "Default")
-                    }
-                    .fixedSize()
-                } else if runner.unavailableReason != nil {
-                    Button("Set Up Agents…", action: AgentRecordingFooter.openAgentSettings)
-                        .buttonStyle(.editorGhost)
-                }
-
-                Spacer(minLength: 0)
-
-                Button(chat.isRunning ? "Stop" : "Record", systemImage: chat.isRunning ? "stop.fill" : "arrow.up") {
-                    if chat.isRunning {
-                        chat.cancel()
+            let shape = RoundedRectangle(cornerRadius: EditorTheme.smallRadius, style: .continuous)
+            HStack(alignment: .bottom, spacing: EditorTheme.smallSpacing) {
+                TextField(placeholder, text: $message, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...6)
+                    .focused($isFocused)
+                    .onSubmit(send)
+                    // Nothing to type for without a page or an agent, so nothing typed is lost
+                    .disabled(!canType)
+                    .padding(.vertical, EditorTheme.tightSpacing + 2)
+                Button(model.isRunning ? "Stop" : "Send", systemImage: model.isRunning ? "stop.fill" : "arrow.up") {
+                    if model.isRunning {
+                        model.cancel()
                     } else {
-                        chat.send()
+                        send()
                     }
                 }
-                .buttonStyle(EditorIconButtonStyle(isProminent: true, diameter: 28))
+                .labelStyle(.iconOnly)
                 .contentTransition(.symbolEffect(.replace))
-                .bold()
-                .disabled(!chat.isRunning && !chat.canSend)
-                .help(chat.isRunning ? "Stop the agent" : "Record the page again as asked (↩; ⌥↩ for a new line)")
+                .buttonStyle(.agentAccentCircle)
+                .keyboardShortcut(model.isRunning ? KeyboardShortcut(".", modifiers: .command) : .defaultAction)
+                .help(model.isRunning ? "Stop the agent (⌘.)" : "Send (↩); ⌥↩ for a new line")
+                .disabled(!model.isRunning && !canSend)
+                .editorMotion(EditorTheme.quickMotion, value: model.isRunning)
             }
-            .pickerStyle(.inline)
-            .menuStyle(.button)
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-        }
-        .padding(EditorTheme.smallSpacing)
-        // A fill, not glass: the box lies on the side panel's glass
-        .background(.primary.opacity(isFocused ? 0.08 : 0.05), in: EditorTheme.trayShape)
-        .overlay {
-            EditorTheme.trayShape.strokeBorder(isFocused ? EditorTheme.faint : EditorTheme.hairline)
-        }
-        .editorMotion(EditorTheme.quickMotion, value: isFocused)
-        .padding(EditorTheme.mediumSpacing)
-        // A suggestion, or a stopped run's message, lands in the box ready to send
-        .onChange(of: chat.draft) { old, new in
-            if old.isEmpty, !new.isEmpty {
-                isFocused = true
+            .padding(.leading, EditorTheme.mediumSpacing)
+            .padding(.trailing, EditorTheme.tightSpacing)
+            .padding(.vertical, EditorTheme.tightSpacing)
+            .background(EditorTheme.surface, in: shape)
+            .overlay {
+                shape.strokeBorder(outline)
+                    .editorMotion(EditorTheme.quickMotion, value: isFocused)
+            }
+
+            ChipFlow(spacing: EditorTheme.smallSpacing) {
+                Button("New Chat", systemImage: "arrow.counterclockwise", action: model.startNewChat)
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.agentCircle)
+                    .help("Start a new conversation")
+                    .disabled(model.isRunning || model.transcript.entries.isEmpty)
+                ForEach(Self.suggestions, id: \.self) { suggestion in
+                    Button(suggestion) {
+                        message = suggestion
+                        isFocused = true
+                    }
+                    .buttonStyle(.agentChip)
+                    .disabled(!canType)
+                }
+            }
+
+            if page == nil {
+                Text("Load a page first: type its address above the preview.")
+                    .font(.theme(.caption))
+                    .foregroundStyle(EditorTheme.dim)
             }
         }
+        .padding(EditorTheme.spacing)
+        .onAppear { isFocused = page != nil }
+    }
+
+    private var outline: Color {
+        if isFocused {
+            return EditorTheme.accent.opacity(0.6)
+        }
+        return EditorTheme.hairline
+    }
+
+    /// A first message describes the video; later ones change it.
+    private var placeholder: String {
+        model.transcript.entries.isEmpty ? "Describe the video…" : "Ask for a change…"
+    }
+
+    private var canType: Bool {
+        !model.isRunning && page != nil && model.agent != nil
+    }
+
+    /// A page, an agent and something asked.
+    private var canSend: Bool {
+        canType && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func send() {
+        guard canSend, let page else { return }
+        model.send(message, about: page)
+        message = ""
     }
 }

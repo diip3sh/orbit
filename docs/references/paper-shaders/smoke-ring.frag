@@ -90,7 +90,7 @@ void main() {
   float radialOffset = .5 * l - inversesqrt(max(1e-4, l));
   vec2 polar_uv1 = vec2(atg, localTime1 - radialOffset) * u_noiseScale;
   vec2 polar_uv2 = vec2(atg, localTime2 - radialOffset) * u_noiseScale;
-  
+
   float noise1 = getNoise(shape_uv, polar_uv1, t);
   float noise2 = getNoise(shape_uv, polar_uv2, t);
 
@@ -118,7 +118,7 @@ void main() {
   color = color + bgColor * (1. - opacity);
   opacity = opacity + u_colorBack.a * (1. - opacity);
 
-  
+
   color += 1. / 256. * (fract(sin(dot(.014 * gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453123) - .5);
 
 

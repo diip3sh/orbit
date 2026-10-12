@@ -408,4 +408,3 @@ accents on cuts, D major, −16 LUFS.
 
     The hand-made MP4 differs from `score.py`'s own render by up to 1.3 dB at the logo; the engine is within
     0.3 dB of `score.py`.
-

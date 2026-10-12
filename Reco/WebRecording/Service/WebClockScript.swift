@@ -217,6 +217,32 @@ enum WebClockScript {
         if (mediaStalled.has(media)) resolve();
       });
 
+      // Wait off the take's clock for a page's API answer before drawing the frame.
+      const requests = new Set();
+      function track(promise) {
+        const token = {};
+        requests.add(token);
+        const done = () => requests.delete(token);
+        promise.then(done, done);
+        return promise;
+      }
+      const realFetch = window.fetch.bind(window);
+      window.fetch = (...args) => track(realFetch(...args));
+      for (const read of ['arrayBuffer', 'blob', 'formData', 'json', 'text']) {
+        const realRead = Response.prototype[read];
+        Response.prototype[read] = function () { return track(realRead.call(this)); };
+      }
+      const realSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function (...args) {
+        track(new Promise((resolve) => this.addEventListener('loadend', resolve, { once: true })));
+        return realSend.apply(this, args);
+      };
+      async function answerRequests() {
+        const deadline = realNow() + 5000;
+        while (requests.size && realNow() < deadline) await new Promise((resolve) => realTimeout(resolve, 10));
+        requests.clear();
+      }
+
       const settle = () => new Promise((resolve) => realFrame(() => realTimeout(resolve, 0)));
       const inView = (element) => {
         const box = element.getBoundingClientRect();
@@ -276,6 +302,7 @@ enum WebClockScript {
           this.freeze(time);
           advance(base + time * 1000);
           window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' });
+          await answerRequests();
           await syncMedia();
           await settle();
           await loadInView();

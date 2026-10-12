@@ -24,11 +24,17 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
     let onMoveStart: (UUID, Double) -> Void
     let onMoveEnd: (UUID, Double) -> Void
 
+    /// The selected clip, whose trim handles show
+    var selection: UUID?
+
     /// A clip's block, told whether it's being dragged.
     @ViewBuilder let block: (Clip, Bool) -> Block
 
     /// The clip being dragged and how far it's shown moved, in points.
     @State private var drag: (id: UUID, offset: CGFloat)?
+
+    /// The clip under the pointer, whose trim handles show.
+    @State private var hovered: UUID?
 
     static var height: CGFloat { 24 }
 
@@ -46,13 +52,28 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                     // Where the block may go: its edges stay in the lane
                     let limits: ClosedRange<Double> = -start...max(width - end, -start)
 
+                    let showsHandles = clip.id == hovered || clip.id == selection || drag?.id == clip.id
+
                     block(clip, drag?.id == clip.id)
                         .frame(width: end - start)
                         .offset(x: start + dragged)
+                        .onHover { isInside in
+                            if isInside {
+                                hovered = clip.id
+                            } else if hovered == clip.id {
+                                hovered = nil
+                            }
+                        }
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in
-                                    drag = (clip.id, CGFloat(GesturePhysics.rubberbanded(value.translation.width, in: limits, dimension: width)))
+                                    // Typed in full: Xcode 26.6 won't convert a Double into a labeled tuple's CGFloat
+                                    let offset = CGFloat(GesturePhysics.rubberbanded(
+                                        value.translation.width,
+                                        in: Double(limits.lowerBound)...Double(limits.upperBound),
+                                        dimension: Double(width)
+                                    ))
+                                    drag = (id: clip.id, offset: offset)
                                 }
                                 .onEnded { value in
                                     let shown = drag?.offset ?? value.translation.width
@@ -68,15 +89,16 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                                 }
                         )
 
-                    TrimHandle(edge: .leading, position: start, width: width) { position in
+                    TrimHandle(edge: .leading, position: start, width: width, isShown: showsHandles) { position in
                         onMoveStart(clip.id, position / width * duration)
                     }
-                    TrimHandle(edge: .trailing, position: end, width: width) { position in
+                    TrimHandle(edge: .trailing, position: end, width: width, isShown: showsHandles) { position in
                         onMoveEnd(clip.id, position / width * duration)
                     }
                 }
             }
         }
+        // minWidth 0: blocks are laid out in points of the last width, which mustn't become the window's minimum
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height, alignment: .leading)
         .background(EditorTheme.softHairline.opacity(0.6), in: .rect(cornerRadius: 6))
     }

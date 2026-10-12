@@ -22,11 +22,12 @@ struct RecoApp: App {
         MenuBarExtra {
             MenuBarView(
                 viewModel: viewModel,
-                screenshots: appDelegate.screenshots,
+                showScreenshotToolbar: { appDelegate.showCaptureToolbar(records: false) },
+                showRecordingToolbar: { appDelegate.showCaptureToolbar(records: true) },
                 editLastRecording: appDelegate.editLastRecording,
-                showRecordings: appDelegate.showRecordings,
+                quickAccess: appDelegate.quickAccess,
+                showLibrary: appDelegate.showLibrary,
                 showWebRecording: appDelegate.showWebRecording,
-                showAgentRecording: appDelegate.showAgentRecording,
                 agentRecording: appDelegate.agentRecording
             )
                 .task {
@@ -40,6 +41,7 @@ struct RecoApp: App {
         // Settings window
         Settings {
             SettingsView(settings: viewModel.settings, updaterService: updaterService, agentBridge: appDelegate.agentBridge)
+                .themed()
         }
     }
 }
@@ -57,13 +59,16 @@ struct MenuBarLabel: View {
             // Render the duration into a fixed-size image so the
             // NSStatusItem never recalculates its width on each tick.
             Image(nsImage: timerImage)
+        } else if viewModel.state == .stopping {
+            Image(systemName: "ellipsis.circle")
+                .accessibilityLabel("Saving recording")
         } else if let remaining = viewModel.countdown.remaining {
             Image(systemName: "\(remaining).circle")
         } else if let text = agentRecording.menuBarText {
             Image(nsImage: fixedWidthImage(text, reference: "100%", symbol: "sparkles"))
                 .accessibilityLabel(agentRecording.progress.map { "Recording with an agent, \(Int(($0 * 100).rounded())) percent" } ?? "Recording with an agent")
         } else {
-            Image(systemName: "record.circle")
+            Image(.menuBarIcon)
         }
     }
 

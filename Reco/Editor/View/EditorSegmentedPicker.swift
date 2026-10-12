@@ -61,7 +61,7 @@ struct EditorSegmentedPicker<Value: Hashable>: View {
                 }
         )
         .padding(Self.inset)
-        .background(EditorTheme.tray, in: .rect(cornerRadius: 8, style: .continuous))
+        .background(EditorTheme.control, in: .rect(cornerRadius: 8, style: .continuous))
         .editorMotion(EditorTheme.slideMotion, value: selection)
         // The press shows on the frame it lands; only the release eases
         .editorMotion(isPressed ? nil : EditorTheme.quickMotion, value: isPressed)

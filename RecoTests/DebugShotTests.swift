@@ -48,7 +48,9 @@ struct DebugShotTests {
             let document = try JSONDecoder().decode(MotionDocument.self, from: Data(contentsOf: bundle.appending(path: "document.json")))
             let plan = await MotionPlan.build(document, bundle: bundle)
             let ids = document.scenes.map(\.id)
-            print("CHECK \(bundle.lastPathComponent): \(DesignCheck.overlappingText(in: plan, document: DocumentExpansion.expanded(document, sizes: UILiftCache.sizes(of: document, in: bundle))) + DesignCheck.cutText(in: plan, scenes: ids))")
+            let expanded = DocumentExpansion.expanded(document, sizes: UILiftCache.sizes(of: document, in: bundle))
+            let warnings = DesignCheck.overlappingText(in: plan, document: expanded) + DesignCheck.cutText(in: plan, scenes: ids)
+            print("CHECK \(bundle.lastPathComponent): \(warnings)")
         }
     }
 
@@ -82,12 +84,12 @@ struct DebugShotTests {
         let image = FieldRenderer.image(.aurora, palette: palette, at: 1, size: CGSize(width: 960, height: 540), shot: FieldRenderer.Shot(index: 1, start: 0.5))
         print("AURORA extent \(image.extent)")
         let context = CIContext(options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
-        let cg = context.createCGImage(image, from: CGRect(x: 0, y: 0, width: 960, height: 540))
-        print("AURORA cg \(cg != nil)")
-        if let cg { try await ScreenshotService.writePNG(cg, to: URL(filePath: Self.scratch + "/look/aurora-still.png")) }
+        let cgImage = context.createCGImage(image, from: CGRect(x: 0, y: 0, width: 960, height: 540))
+        print("AURORA cg \(cgImage != nil)")
+        if let cgImage { try await ScreenshotService.writePNG(cgImage, to: URL(filePath: Self.scratch + "/look/aurora-still.png")) }
     }
 
-    @Test func auroraDraw() async throws {
+    @Test(.disabled("Requires a local Aurora.motion fixture")) func auroraDraw() async throws {
         let bundle = URL(filePath: NSHomeDirectory() + "/Movies/Reco/quality/story/Aurora.motion")
         let document = try JSONDecoder().decode(MotionDocument.self, from: Data(contentsOf: bundle.appending(path: "document.json")))
         let plan = try await UICapture.plan(for: document, bundle: bundle, shorterSide: 540, frameRate: 30)
@@ -107,8 +109,8 @@ struct DebugShotTests {
         let image = MotionFrameRenderer.gradient(colors, from: 100, to: 800, over: CGRect(x: 0, y: 0, width: 900, height: 200))
         print("AURORA gradient extent \(image.extent)")
         let context = CIContext(options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull()])
-        if let cg = context.createCGImage(image, from: CGRect(x: 0, y: 0, width: 900, height: 200)) {
-            try await ScreenshotService.writePNG(cg, to: URL(filePath: Self.scratch + "/look/gradient-still.png"))
+        if let cgImage = context.createCGImage(image, from: CGRect(x: 0, y: 0, width: 900, height: 200)) {
+            try await ScreenshotService.writePNG(cgImage, to: URL(filePath: Self.scratch + "/look/gradient-still.png"))
             print("AURORA gradient written")
         }
     }
@@ -120,7 +122,7 @@ struct DebugShotTests {
               let job = try JSONSerialization.jsonObject(with: data) as? [String: Any], let path = job["bundle"] as? String else { return }
         let bundle = URL(filePath: path)
         let document = try JSONDecoder().decode(MotionDocument.self, from: Data(contentsOf: bundle.appending(path: "document.json")))
-        var settings = ExportSettings(format: (job["format"] as? String).flatMap(ExportFormat.init(rawValue:)) ?? .hevc)
+        var settings = ExportSettings(format: (job["format"] as? String) == "gif" ? .gif : .mp4)
         settings.resolution = job["side"] as? Int ?? 1080
         let clock = ContinuousClock()
         var url: URL?
@@ -128,7 +130,7 @@ struct DebugShotTests {
         print("EXPORT \(url?.path ?? "") in \(took)")
     }
 
-    @Test func dumpForm() async throws {
+    @Test(.disabled("Requires a local Lovable Rebuild.motion fixture")) func dumpForm() async throws {
         let bundle = URL(filePath: NSHomeDirectory() + "/Movies/Reco/quality/story/Lovable Rebuild.motion")
         let document = try JSONDecoder().decode(MotionDocument.self, from: Data(contentsOf: bundle.appending(path: "document.json")))
         let plan = try await UICapture.plan(for: document, bundle: bundle, shorterSide: 540, frameRate: 30)

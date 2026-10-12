@@ -2,57 +2,14 @@
   "fill" : "system-dark",
   "groups" : [
     {
-      "blur-material" : 0.5,
       "layers" : [
         {
-          "image-name" : "Ellipse 2(1).svg",
-          "name" : "Ellipse 2(1)",
-          "position-specializations" : [
-            {
-              "idiom" : "square",
-              "value" : {
-                "scale" : 0.8,
-                "translation-in-points" : [
-                  0,
-                  0
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "image-name" : "Ellipse 1(5).svg",
-          "name" : "Ellipse 1(5)"
+          "image-name" : "Orbit.svg",
+          "name" : "Orbit"
         }
       ],
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.5
-      },
-      "specular" : false,
-      "translucency" : {
-        "enabled" : false,
-        "value" : 0.5
-      }
-    },
-    {
-      "blend-mode" : "normal",
-      "blur-material" : 1,
-      "layers" : [
-        {
-          "blend-mode" : "normal",
-          "fill" : {
-            "solid" : "display-p3:0.95596,0.94816,1.00000,0.50000"
-          },
-          "glass" : true,
-          "image-name" : "Ellipse 2 4.svg",
-          "name" : "Ellipse 2 4"
-        }
-      ],
-      "lighting" : "combined",
-      "opacity" : 0.2,
-      "shadow" : {
-        "kind" : "layer-color",
         "opacity" : 0.5
       },
       "specular" : false,

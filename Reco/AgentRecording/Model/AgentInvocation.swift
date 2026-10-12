@@ -42,6 +42,7 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
 
     private static let serversFile = "reco-mcp.json"
     private static let policyFile = "reco-policy.toml"
+    private static let claudeServersFile = "reco-mcp.json"
     private static let cursorFile = ".cursor/cli.json"
     private static let cursorServersFile = ".cursor/mcp.json"
 
@@ -59,24 +60,31 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
 
         """
 
-    /// The workspace permissions Cursor reads: Reco's tools, no shell, writes or fetches.
-    private static let cursorPermissions: String = {
-        let allowed = AgentToolCatalog.tools.map { "\"Mcp(reco:\($0.name))\"" }.joined(separator: ",")
+    /// The workspace permissions Cursor reads: the three Reco tools, no shell, writes or fetches.
+    /// Built from the catalog, so a new tool is allowed where the others are.
+    private static var cursorPermissions: String {
+        let allowed = AgentToolCatalog.names.map { "\"Mcp(reco:\($0))\"" }.joined(separator: ",")
         return #"{"permissions":{"allow":["# + allowed + #"],"deny":["Shell(*)","Write(**)","WebFetch(*)"]}}"#
-    }()
+    }
 
     /// OpenCode's permissions, merged over the user's: the last matching rule wins, and an MCP
     /// tool is `<server>_<tool>`.
     private static let openCodePermissions = #"{"permission":{"*":"deny","reco_*":"allow"}}"#
 
-    /// Reco's server as `kind` lists it in an `mcpServers` file. Cursor's CLI drops its whole
-    /// `~/.cursor/mcp.json` when one entry has a type it doesn't know (e.g. `"streamableHttp"`, which
-    /// the editor accepts), but still reads the workspace's `.cursor/mcp.json`. Measured with
-    /// cursor-agent 2026.09.26.
-    private static func servers(_ server: AgentServerCommand, for kind: AgentKind) -> String {
+    /// An `mcpServers` file with Reco's server in `entry`'s format. Cursor's CLI drops its whole
+    /// `~/.cursor/mcp.json` when one entry has a type it doesn't know (e.g. `"streamableHttp"`, which the
+    /// editor accepts), but still reads the workspace's `.cursor/mcp.json`. Measured with cursor-agent
+    /// 2026.09.26.
+    private static func mcpServers(_ server: AgentServerCommand, entry kind: AgentKind) -> String {
         let servers = [AgentServerCommand.serverName: kind.jsonEntry(for: server)]
         let data = (try? JSONSerialization.data(withJSONObject: ["mcpServers": servers], options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
         return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    /// Whether `kind`'s runs carry Reco's server themselves (see `make`), so an installed command line is
+    /// enough and Settings → Agents needn't have connected it first
+    static func bringsServer(for kind: AgentKind) -> Bool {
+        kind == .claudeCode || kind == .cursor
     }
 
     /// The command for `request`, run in `directory` and reaching Reco through `server`; `nil` when
@@ -88,29 +96,24 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
         func option(_ flag: String) -> [String] {
             model.isEmpty ? [] : [flag] + model
         }
+        // Claude Code and Cursor share the flag for a follow-up (`AgentStreamEvent.streams`)
+        let resume = request.resuming.map { ["--resume", $0] } ?? []
         var environment: [String: String] = [:]
         var files: [String: String] = [:]
         let arguments: [String]
         switch request.agent {
         case .claudeCode:
-            // --tools and --allowedTools take any number of values, so the prompt goes right after -p.
-            // Reco's server from a file in the run's folder, not the command line, which other users see
-            files[serversFile] = servers(server, for: .claudeCode)
-            // Web search and fetch too, for the research a walkthrough starts with; both only read. A motion
-            // video's run gets Reco's skills in its folder and the Skill tool, which --tools would otherwise hide, and
-            // Read allowed only inside the skills, for the references they load as they need them (spec 0014)
-            let skill = request.makesMotion ? ["Skill"] : []
-            if request.makesMotion {
-                files.merge(AgentSkill.files) { $1 }
-            }
-            let tools: [String] = ["WebSearch", "WebFetch"] + skill
-            let reading: [String] = request.makesMotion ? ["Read(./\(AgentSkill.folder)/**)"] : []
-            let available: [String] = tools + (request.makesMotion ? ["Read"] : [])
-            let allowed: [String] = ["mcp__reco__*"] + tools + reading
-            arguments = ["-p", prompt, "--tools", available.joined(separator: ","), "--allowedTools"] + allowed
-                + ["--permission-mode", "dontAsk", "--no-session-persistence",
-                   "--mcp-config", directory.appending(path: serversFile).path(percentEncoded: false), "--strict-mcp-config"]
-                + option("--model") + ["--output-format", "text"]
+            // Reco's server comes with the run, so it works before (or without) Settings → Agents adds it to
+            // the user's config; strict keeps the user's other servers from starting
+            files[claudeServersFile] = mcpServers(server, entry: AgentKind.claudeCode)
+            // --tools, --allowedTools and --mcp-config take any number of values, so the prompt goes right
+            // after -p and each list ends at the next flag
+            // stream-json (which needs --verbose) feeds the chat; the session is kept for a follow-up. Web search
+            // and fetch, read-only, are the one other thing allowed: for learning what the product is
+            arguments = ["-p", prompt, "--tools", "WebSearch,WebFetch", "--allowedTools", "mcp__reco__*", "WebSearch", "WebFetch",
+                         "--permission-mode", "dontAsk",
+                         "--mcp-config", directory.appending(path: claudeServersFile).path(percentEncoded: false),
+                         "--strict-mcp-config"] + resume + option("--model") + ["--output-format", "stream-json", "--verbose"]
         case .codex:
             arguments = ["exec", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only",
                          "-c", #"mcp_servers.reco.default_tools_approval_mode="approve""#] + option("-m") + [prompt]
@@ -127,8 +130,8 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
                          "--no-subagents", "--output-format", "plain"] + option("-m")
         case .cursor:
             files[cursorFile] = cursorPermissions
-            files[cursorServersFile] = servers(server, for: .cursor)
-            arguments = ["-p", "--trust", "--approve-mcps", "--output-format", "text"] + option("--model") + [prompt]
+            files[cursorServersFile] = mcpServers(server, entry: AgentKind.cursor)
+            arguments = ["-p", "--trust", "--approve-mcps", "--output-format", "stream-json"] + resume + option("--model") + [prompt]
         case .claudeDesktop:
             return nil
         }

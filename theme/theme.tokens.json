@@ -1,0 +1,389 @@
+{
+  "$description": "Reco's theme, in the Design Tokens format (W3C DTCG, as Refero exports it). `color` is the dark palette (herding.app's) and `lightColor` the light one (Default's); `role` is what the app uses, each role's `$value` its dark colour (an alias like {color.void} or a hex) and `$extensions.com.reco.theme` its light and Increase Contrast colours (aliases like {lightColor.snow} too). To change themes: replace `color` or `lightColor` with the new palette, point the roles at it (and set their light and high-contrast values), then run `scripts/apply-theme.py`, which writes Reco/Assets.xcassets. Check that every role still meets WCAG AA contrast. `font` and `radius` are read by Typeface.swift and EditorTheme.swift; keep them matching.",
+  "color": {
+    "off-white-ink": {
+      "$value": "#fffffe",
+      "$type": "color",
+      "$description": "Off-White Ink — Primary text, icon strokes, heading color — slightly cream warm-white reads softer than pure #fff against olive-charcoal surfaces"
+    },
+    "page-void": {
+      "$value": "#1c1c1a",
+      "$type": "color",
+      "$description": "Page Void — Deepest page background, behind everything; the recessed layer"
+    },
+    "graphite-card": {
+      "$value": "#232320",
+      "$type": "color",
+      "$description": "Graphite Card — Primary card and surface — most panels, modals, and elevated containers"
+    },
+    "slate-matte": {
+      "$value": "#2e2e2b",
+      "$type": "color",
+      "$description": "Slate Matte — Canvas-level surface, outer page background, content area baseline"
+    },
+    "ash-step": {
+      "$value": "#35352f",
+      "$type": "color",
+      "$description": "Ash Step — Subtle surface lift, nested card backgrounds, hover wash"
+    },
+    "stone-lift": {
+      "$value": "#3e3e38",
+      "$type": "color",
+      "$description": "Stone Lift — Higher elevation tier, active rows, secondary surface"
+    },
+    "pewter-button": {
+      "$value": "#45453e",
+      "$type": "color",
+      "$description": "Pewter Button — Button and chip backgrounds, pressed states"
+    },
+    "bistre-border": {
+      "$value": "#161615",
+      "$type": "color",
+      "$description": "Bistre Border — Dark border stroke, hairline separators, outline button border on hover"
+    },
+    "fog-text": {
+      "$value": "#7f7e77",
+      "$type": "color",
+      "$description": "Fog Text — Secondary muted text, captions, inactive controls; Reserved for button/dark accents"
+    },
+    "sand-label": {
+      "$value": "#a3a29c",
+      "$type": "color",
+      "$description": "Sand Label — Mid-level text, metadata, helper copy, list labels — warm gray that holds presence without competing with primary text"
+    },
+    "spray-wash": {
+      "$value": "#3fe0a6",
+      "$type": "color",
+      "$description": "Spray Wash — Decorative highlight — the only chromatic accent in the system, used exclusively inside the teal-to-lime gradient banner"
+    }
+  },
+  "lightColor": {
+    "$description": "The light appearance's palette: Default's tokens (default.com, extracted by Refero 2026-07-03), a dark theme whose light end (snow, bone, chalk) and greys make the light roles, with iris as the accent",
+    "void": {
+      "$value": "#0b0c0e",
+      "$type": "color",
+      "$description": "Void — Deepest page canvas, terminal background, behind everything"
+    },
+    "graphite": {
+      "$value": "#131416",
+      "$type": "color",
+      "$description": "Graphite — Primary card surface, panels, elevated containers, table rows"
+    },
+    "charcoal": {
+      "$value": "#1f1f21",
+      "$type": "color",
+      "$description": "Charcoal — Secondary surface, borders, dividers, rail backgrounds"
+    },
+    "smoke": {
+      "$value": "#3c3d3e",
+      "$type": "color",
+      "$description": "Smoke — Button borders, subtle separators"
+    },
+    "steel": {
+      "$value": "#71717a",
+      "$type": "color",
+      "$description": "Steel — Muted body text, captions, helper text, dimmed labels"
+    },
+    "fog": {
+      "$value": "#858687",
+      "$type": "color",
+      "$description": "Fog — Secondary text, icon strokes, inactive nav items"
+    },
+    "ash": {
+      "$value": "#9d9e9f",
+      "$type": "color",
+      "$description": "Ash — Tertiary text, placeholder text, disabled states"
+    },
+    "chalk": {
+      "$value": "#cececf",
+      "$type": "color",
+      "$description": "Chalk — Body text secondary, table cell text"
+    },
+    "snow": {
+      "$value": "#ffffff",
+      "$type": "color",
+      "$description": "Snow — Primary headings, body text, icon fills, active states — the dominant ink at 413 occurrences"
+    },
+    "bone": {
+      "$value": "#f2f2f2",
+      "$type": "color",
+      "$description": "Bone — Primary action button fill — off-white pill against dark creates the highest-contrast CTA without introducing a chromatic brand color"
+    },
+    "ink": {
+      "$value": "#333333",
+      "$type": "color",
+      "$description": "Ink — Secondary body text, navigation labels, and subdued headings. Do not promote it to the primary CTA color"
+    },
+    "signal-blue": {
+      "$value": "#3b82f6",
+      "$type": "color",
+      "$description": "Signal Blue — Brand accent — active nav indicators, link highlights, icon fills, active card borders. The one true chromatic color; used 21 times as fills, borders, and background tints"
+    },
+    "arc-blue": {
+      "$value": "#60a5fa",
+      "$type": "color",
+      "$description": "Arc Blue — Light blue text accent, informational highlights, node icons in workflow diagrams"
+    },
+    "ring-blue": {
+      "$value": "#93c5fd",
+      "$type": "color",
+      "$description": "Ring Blue — Focus rings, active card outline borders, selection state outlines at low alpha"
+    },
+    "mint": {
+      "$value": "#4ade80",
+      "$type": "color",
+      "$description": "Mint — Green outline accent for tags, dividers, and focused UI edges. Use as a supporting accent, not as a status color"
+    },
+    "fern": {
+      "$value": "#22c55e",
+      "$type": "color",
+      "$description": "Fern — Green wash for highlight backgrounds, decorative bands, and soft emphasis behind content. Use as a supporting accent, not as a status color"
+    },
+    "coral": {
+      "$value": "#f87171",
+      "$type": "color",
+      "$description": "Coral — Red text accent for links, tags, and emphasized short phrases. Use as a supporting accent, not as a status color"
+    },
+    "ember": {
+      "$value": "#ea580c",
+      "$type": "color",
+      "$description": "Ember — Decorative icon accent — orange chromatic chip in product mockups"
+    },
+    "iris": {
+      "$value": "#314ef0",
+      "$type": "color",
+      "$description": "Iris — Brand chip background tint in embedded mockups and product screenshots"
+    }
+  },
+  "role": {
+    "stage": {
+      "$value": "{color.page-void}",
+      "$type": "color",
+      "$description": "EditorTheme.stage — window grounds: the editor's preview, the Library's grid, Settings",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "{lightColor.bone}",
+          "darkHighContrast": "#121211",
+          "lightHighContrast": "{lightColor.snow}"
+        }
+      }
+    },
+    "panel": {
+      "$value": "{color.graphite-card}",
+      "$type": "color",
+      "$description": "EditorTheme.panel — under the timeline",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "{lightColor.snow}",
+          "darkHighContrast": "{color.page-void}",
+          "lightHighContrast": "{lightColor.snow}"
+        }
+      }
+    },
+    "surface": {
+      "$value": "{color.graphite-card}",
+      "$type": "color",
+      "$description": "EditorTheme.surface — cards and floating panels: the capture toolbar, the Quick Access card",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "{lightColor.snow}",
+          "darkHighContrast": "{color.page-void}",
+          "lightHighContrast": "{lightColor.snow}"
+        }
+      }
+    },
+    "raised": {
+      "$value": "{color.ash-step}",
+      "$type": "color",
+      "$description": "EditorTheme.raised — what floats over a surface: tooltips, the source picker, chosen tabs",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "{lightColor.snow}",
+          "darkHighContrast": "{color.slate-matte}",
+          "lightHighContrast": "{lightColor.snow}"
+        }
+      }
+    },
+    "control": {
+      "$value": "{color.ash-step}",
+      "$type": "color",
+      "$description": "EditorTheme.control — controls' own fill: secondary buttons, tracks, chips, chosen tiles",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "{lightColor.bone}",
+          "darkHighContrast": "{color.slate-matte}",
+          "lightHighContrast": "{lightColor.bone}"
+        }
+      }
+    },
+    "hairline": {
+      "$value": "#ffffff14",
+      "$type": "color",
+      "$description": "EditorTheme.hairline — lines between areas and around surfaces. Dark: white at 8%, a see-through ring as the web's box-shadow borders, in place of bistre border's black edge (picked 2026-10-09 against 6% and 12%)",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "{lightColor.chalk}",
+          "darkHighContrast": "{color.fog-text}",
+          "lightHighContrast": "{lightColor.steel}"
+        }
+      }
+    },
+    "softHairline": {
+      "$value": "{color.slate-matte}",
+      "$type": "color",
+      "$description": "EditorTheme.softHairline — lanes and quieter fills",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "{lightColor.bone}",
+          "darkHighContrast": "{color.pewter-button}",
+          "lightHighContrast": "{lightColor.chalk}"
+        }
+      }
+    },
+    "ink": {
+      "$value": "{color.off-white-ink}",
+      "$type": "color",
+      "$description": "EditorTheme.ink — text; at least 7:1 on every surface",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "{lightColor.void}",
+          "darkHighContrast": "#ffffff",
+          "lightHighContrast": "#000000"
+        }
+      }
+    },
+    "dim": {
+      "$value": "{color.sand-label}",
+      "$type": "color",
+      "$description": "EditorTheme.dim — values, notes and other secondary text; at least 4.5:1",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "#6b6b73",
+          "darkHighContrast": "#d6d5cf",
+          "lightHighContrast": "{lightColor.ink}"
+        }
+      }
+    },
+    "faint": {
+      "$value": "{color.fog-text}",
+      "$type": "color",
+      "$description": "EditorTheme.faint — structure marks only (ruler ticks, chevrons), never text; at least 3:1",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "{lightColor.fog}",
+          "darkHighContrast": "{color.sand-label}",
+          "lightHighContrast": "{lightColor.steel}"
+        }
+      }
+    },
+    "accent": {
+      "$value": "{color.spray-wash}",
+      "$type": "color",
+      "$description": "EditorTheme.accent (the AccentColor asset, Color.accentColor) — lines, text and marks in the accent: playhead, selection, chosen tab, native controls' tint; at least 3:1. Spray wash in dark, iris in light",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "{lightColor.iris}",
+          "darkHighContrast": "{color.spray-wash}",
+          "lightHighContrast": "#2741d6"
+        }
+      }
+    },
+    "accentFill": {
+      "$value": "{color.spray-wash}",
+      "$type": "color",
+      "$description": "EditorTheme.accentFill — the accent as a fill (primary buttons, what is on), always with onAccent on it",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "{lightColor.iris}",
+          "darkHighContrast": "{color.spray-wash}",
+          "lightHighContrast": "#2741d6"
+        }
+      }
+    },
+    "onAccent": {
+      "$value": "{color.page-void}",
+      "$type": "color",
+      "$description": "EditorTheme.onAccent — text and icons on accentFill; at least 4.5:1 on it, 7:1 with Increase Contrast (page void on spray wash is 10:1, white on iris 6:1)",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "{lightColor.snow}",
+          "darkHighContrast": "#000000",
+          "lightHighContrast": "{lightColor.snow}"
+        }
+      }
+    },
+    "success": {
+      "$value": "#34d399",
+      "$type": "color",
+      "$description": "EditorTheme.success — a status that is working, as an agent that is connected; at least 4.5:1 as text. Emerald (Tailwind's 400 in dark, 700 in light)",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "#047857",
+          "darkHighContrast": "#6ee7b7",
+          "lightHighContrast": "#065f46"
+        }
+      }
+    },
+    "warning": {
+      "$value": "#fb923c",
+      "$type": "color",
+      "$description": "EditorTheme.warning — a status that needs the user, as an agent not connected or out of date; at least 4.5:1 as text. Ember (Tailwind's orange 400 in dark, 700 in light)",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "#c2410c",
+          "darkHighContrast": "#fdba74",
+          "lightHighContrast": "#9a3412"
+        }
+      }
+    },
+    "danger": {
+      "$value": "#fb7185",
+      "$type": "color",
+      "$description": "EditorTheme.danger — an action that takes something away, as Disconnect; at least 4.5:1 as text, on the control fill too. Rose (Tailwind's 400 in dark, 700 in light)",
+      "$extensions": {
+        "com.reco.theme": {
+          "light": "#be123c",
+          "darkHighContrast": "#fda4af",
+          "lightHighContrast": "#9f1239"
+        }
+      }
+    }
+  },
+  "font": {
+    "sans": {
+      "$value": "Inter Variable",
+      "$type": "fontFamily",
+      "$description": "Typeface.sans — every label, title and control. Reco/Fonts/InterVariable.ttf (SIL OFL 1.1); a new family needs its font file there"
+    },
+    "mono": {
+      "$value": "JetBrains Mono",
+      "$type": "fontFamily",
+      "$description": "Typeface.mono — shortcuts, file names, code. Reco/Fonts/JetBrainsMono.ttf (SIL OFL 1.1), in place of the paid Berkeley Mono"
+    }
+  },
+  "radius": {
+    "md": {
+      "$value": "6px",
+      "$type": "dimension",
+      "$description": "EditorTheme.smallRadius — buttons and fields"
+    },
+    "xl": {
+      "$value": "12px",
+      "$type": "dimension",
+      "$description": "EditorTheme.radius — cards and floating panels"
+    },
+    "2xl": {
+      "$value": "16px",
+      "$type": "dimension",
+      "$description": "EditorTheme.largeRadius — large panels"
+    }
+  },
+  "$extensions": {
+    "com.refero.extraction": {
+      "url": "https://herdi.ng",
+      "siteName": "herding.app",
+      "extractedAt": "2026-06-03T19:57:05.442Z",
+      "variant": "extended"
+    }
+  }
+}

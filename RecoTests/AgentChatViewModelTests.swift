@@ -65,7 +65,7 @@ struct AgentChatViewModelTests {
         return take
     }
 
-    private static let failing: AgentRecordingViewModel.RunProcess = { _, _, _, _, _ in
+    private static let failing: AgentRecordingViewModel.RunProcess = { _, _, _, _, _, _ in
         AgentProcess.Result(end: .exited(1), stdout: "", stderr: "Overloaded")
     }
 
@@ -113,7 +113,7 @@ struct AgentChatViewModelTests {
     @Test func sendingRecordsTheTakeAgainWithItsStepsAndTheConversation() async throws {
         defer { try? FileManager.default.removeItem(at: folder) }
         let take = try await writeTake(conversation: [AgentChatMessage(role: .user, text: "Hover Buy.")])
-        let runner = try await runner { _, _, _, _, _ in
+        let runner = try await runner { _, _, _, _, _, _ in
             try? await Task.sleep(for: .seconds(60))
             return AgentProcess.Result(end: .cancelled, stdout: "", stderr: "")
         }
@@ -145,7 +145,7 @@ struct AgentChatViewModelTests {
     @Test func cancellingPutsTheMessageBackInAnEmptyBox() async throws {
         defer { try? FileManager.default.removeItem(at: folder) }
         _ = try await writeTake()
-        let runner = try await runner { _, _, _, _, _ in
+        let runner = try await runner { _, _, _, _, _, _ in
             try? await Task.sleep(for: .seconds(60))
             return AgentProcess.Result(end: .cancelled, stdout: "", stderr: "")
         }
@@ -164,7 +164,7 @@ struct AgentChatViewModelTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         _ = try await writeTake()
         let calls = Calls()
-        let runner = try await runner { _, arguments, _, _, _ in
+        let runner = try await runner { _, arguments, _, _, _, _ in
             calls.record(arguments)
             return AgentProcess.Result(end: .exited(1), stdout: "", stderr: "Overloaded")
         }

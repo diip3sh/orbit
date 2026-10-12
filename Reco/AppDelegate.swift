@@ -25,16 +25,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shares the recorder's settings and notifications
     lazy var screenshots = ScreenshotController(settings: viewModel.settings, notificationService: viewModel.notificationService)
 
-    private lazy var editorWindows: EditorWindowManager = EditorWindowManager(settings: viewModel.settings, agentRecording: agentRecording)
-    private lazy var quickAccess = QuickAccessController { [screenshots] screenshot in await screenshots.save(screenshot) }
+    /// Every control for a screenshot or a take, on screen under the status item
+    private lazy var captureToolbar = CaptureToolbarController(viewModel: CaptureToolbarViewModel(recorder: viewModel, screenshots: screenshots))
 
-    /// Serves the tools coding agents record web pages with. A movie it renders for an agent the user
-    /// runs opens in the editor right away; one for a run of Reco's own opens when the run ends, with
-    /// its conversation.
-    lazy var agentBridge: AgentBridgeServer = AgentBridgeServer(tools: AgentTools(settings: viewModel.settings) { [weak self] url in
-        guard let self, !agentRecording.isRunning else { return }
-        editorWindows.open(url)
-    })
+    private lazy var editorWindows = EditorWindowManager(settings: viewModel.settings)
+    lazy var quickAccess = QuickAccessController(
+        save: { [screenshots] screenshot in await screenshots.save(screenshot) },
+        didCopy: { [screenshots] screenshot in await screenshots.didCopy(screenshot) },
+        background: { [settings = viewModel.settings] in settings.screenshotBackground }
+    )
+    private lazy var notchShelf = NotchShelfController(settings: viewModel.settings)
+
+    /// Serves the tools coding agents record web pages with; a movie it renders opens in the editor, behind the
+    /// user's work unless Reco is in front.
+    lazy var agentBridge = AgentBridgeServer(tools: AgentTools(settings: viewModel.settings) { [editorWindows] url in editorWindows.openWhenReady(url) })
 
     /// Runs coding agents on a request typed into the Record with AI Agent panel.
     lazy var agentRecording: AgentRecordingViewModel = AgentRecordingViewModel(
@@ -43,14 +47,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         token: AgentBridgeServer.token()
     )
 
-    private lazy var agentRecordingPanel = AgentRecordingPanelController(viewModel: agentRecording)
-
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "AppDelegate")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerKeyboardShortcuts()
+        // Made now so it follows selections and takes started before it is first shown
+        _ = captureToolbar
+        ColorPanelPlacement.start()
+        notchShelf.start()
         agentBridge.start()
-        viewModel.notificationService.editRecording = { [editorWindows] (url: URL) in editorWindows.open(url) }
+        viewModel.notificationService.editRecording = { [editorWindows] url in editorWindows.open(url) }
+        viewModel.onRecordingFinished = { [editorWindows] url in editorWindows.open(url) }
+        editorWindows.announceReady = { [notifications = viewModel.notificationService] url in notifications.sendRecordingReadyNotification(fileURL: url) }
+        editorWindows.agentRecording = agentRecording
+        editorWindows.libraryActions = LibraryViewModel.Actions(
+            captureArea: { [screenshots] in Task { await screenshots.captureArea() } },
+            captureWindow: { [screenshots] in Task { await screenshots.captureWindow() } },
+            captureScreen: { [screenshots] in Task { await screenshots.captureScreen() } },
+            recordArea: { [viewModel] in Task { await viewModel.presentAreaSelection() } },
+            recordWindowOrDisplay: { [viewModel] in viewModel.presentPicker() },
+            newWebRecording: { [weak self] in self?.showWebRecording() }
+        )
+        // The Web Recording window shows what an agent looks at and plans, as it does
+        agentBridge.tools.onInspected = { [editorWindows] page in editorWindows.webRecordingViewModel?.showAgentInspection(page) }
+        agentBridge.tools.onPlanned = { [editorWindows] script in editorWindows.webRecordingViewModel?.adoptAgentScript(script) }
+        // When the chat's agent is done, its plan is rendered and opens in the editor
+        agentRecording.onPlanStaged = { [editorWindows] in editorWindows.webRecordingViewModel?.render() }
+        // The agent browses in the Web Recording window's live page, so the user sees it learn the site
+        agentBridge.tools.browser = { [editorWindows] in editorWindows.webRecordingForAgent() }
         viewModel.notificationService.retryAgentRecording = { [agentRecording] in agentRecording.retry() }
         agentRecording.onRecorded = { [editorWindows] in editorWindows.open($0) }
         agentRecording.onSignIn = { [editorWindows] in editorWindows.showWebRecording(at: $0) }
@@ -63,16 +87,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         viewModel.notificationService.showAgentRecording = { [weak self] in self?.showAgentRecording() }
 
-        // Hidden first so the last card never lands in the next shot, even with Show Reco on;
-        // a new shot replaces it, a cancelled or failed one brings it back
-        screenshots.onWillCapture = { [quickAccess] in quickAccess.hide() }
-        screenshots.onDidCapture = { [quickAccess] screenshot in
-            if let screenshot {
+        // Hidden first so the last card, the capture toolbar and the notch shelf never land in the next
+        // shot, even with Show Reco on. The card and the shelf come back when nothing was captured; the
+        // bar doesn't, because it was only ever the way in: Esc on an area selection closes it and leaves
+        // the screen as it was, rather than opening the bar again.
+        screenshots.onWillCapture = { [quickAccess, captureToolbar, notchShelf] in
+            quickAccess.hide()
+            captureToolbar.hide(animated: false)
+            notchShelf.hide()
+        }
+        screenshots.onDidCapture = { [quickAccess, notchShelf] screenshot, followUp in
+            notchShelf.restore()
+            if let screenshot, let followUp {
+                quickAccess.restore()
+                Task { await quickAccess.follow(followUp, with: screenshot) }
+            } else if let screenshot {
                 quickAccess.show(screenshot)
             } else {
                 quickAccess.restore()
             }
         }
+        hideNotchShelfWhileRecording()
+    }
+
+    /// The shelf's black shape sits over the notch, where a display recording would show it as a bar, even
+    /// with Show Reco on. `state` turns `.recording` before the stream starts, so no frame catches it.
+    private func hideNotchShelfWhileRecording() {
+        withObservationTracking {
+            _ = viewModel.state
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                if self.viewModel.state == .idle {
+                    self.notchShelf.restore()
+                } else {
+                    self.notchShelf.hide()
+                }
+                self.hideNotchShelfWhileRecording()
+            }
+        }
+    }
+
+    /// Shows the capture toolbar for a screenshot, or for a recording (`records`).
+    func showCaptureToolbar(records: Bool) {
+        captureToolbar.viewModel.open(records: records)
+        captureToolbar.show()
     }
 
     /// Opens the last recording saved since launch in the editor.
@@ -84,19 +143,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editorWindows.open(url)
     }
 
-    /// Shows the output folder's recordings, to open one in the editor.
-    func showRecordings() {
-        editorWindows.showRecordings()
+    /// Shows the Library, Reco's main window: everything it made, and New.
+    func showLibrary() {
+        editorWindows.showLibrary()
     }
 
-    /// Shows the Web Recording window, to record a web page from a script.
+    /// Clicking Reco in the Dock, or opening it again, shows the Library when no window is open.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows {
+            showLibrary()
+        }
+        return true
+    }
+
+    /// Shows the Web Recording window with a blank script, to record a web page.
     func showWebRecording() {
-        editorWindows.showWebRecording()
+        editorWindows.showNewWebRecording()
     }
 
-    /// Shows the Record with AI Agent panel, to have a coding agent record a web page.
+    /// Shows the Web Recording window with its agent panel open, to have a coding agent record a web page.
     func showAgentRecording() {
-        agentRecordingPanel.show()
+        editorWindows.showAgentChat()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -108,11 +175,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for url in urls {
             if url.scheme == "reco" {
                 handle(url)
-            } else if url.isFileURL, url.pathExtension == MotionStore.bundleExtension {
-                editorWindows.openMotion(url)
-            } else if url.isFileURL {
-                // A recording opened with Reco (`open -a Reco <movie>`) goes to the editor
-                editorWindows.open(url)
+            } else if url.pathExtension == StylePreset.fileExtension {
+                editorWindows.importStyle(from: url)
             }
         }
     }
@@ -120,15 +184,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Keyboard Shortcuts
 
     private func registerKeyboardShortcuts() {
-        KeyboardShortcuts.onKeyUp(for: .toggleRecording) { [viewModel] in
-            Task { @MainActor in
-                await viewModel.toggleRecording()
-            }
-        }
-
-        KeyboardShortcuts.onKeyUp(for: .pauseRecording) { [viewModel] in
-            Task { @MainActor in
-                viewModel.togglePause()
+        let recording: [(KeyboardShortcuts.Name, @MainActor (RecorderViewModel) async -> Void)] = [
+            (.toggleRecording, { await $0.toggleRecording() }),
+            (.pauseRecording, { $0.togglePause() }),
+            (.restartRecording, { await $0.restartRecording() }),
+            (.cancelRecording, { await $0.cancelRecording() }),
+            (.selectContent, { $0.presentPicker() }),
+            (.selectArea, { await $0.presentAreaSelection() })
+        ]
+        for (name, action) in recording {
+            KeyboardShortcuts.onKeyUp(for: name) { [viewModel] in
+                Task { @MainActor in
+                    await action(viewModel)
+                }
             }
         }
 
@@ -140,20 +208,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        KeyboardShortcuts.onKeyUp(for: .selectContent) { [viewModel] in
-            Task { @MainActor in
-                viewModel.presentPicker()
-            }
-        }
-
-        KeyboardShortcuts.onKeyUp(for: .selectArea) { [viewModel] in
-            Task { @MainActor in
-                await viewModel.presentAreaSelection()
+        // Like the menu's rows, only while nothing is recording, counting down or capturing
+        for (name, records) in [(KeyboardShortcuts.Name.showScreenshotToolbar, false), (.showRecordingToolbar, true)] {
+            KeyboardShortcuts.onKeyUp(for: name) { [weak self, viewModel, screenshots] in
+                Task { @MainActor in
+                    guard screenshots.canCapture(alongside: viewModel) else { return }
+                    self?.showCaptureToolbar(records: records)
+                }
             }
         }
 
         let captures: [(KeyboardShortcuts.Name, @MainActor (ScreenshotController) async -> Void)] = [
             (.captureArea, { await $0.captureArea() }),
+            (.capturePreviousArea, { await $0.capturePreviousArea() }),
             (.captureWindow, { await $0.captureWindow() }),
             (.captureScreen, { await $0.captureScreen() })
         ]
@@ -211,7 +278,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - URL Scheme
 
-    private func handle(_ url: URL) {
+    private func handle(_ url: URL) { // swiftlint:disable:this cyclomatic_complexity
         logger.info("Handling URL: \(url.absoluteString)")
 
         switch url.host {
@@ -228,14 +295,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "pause":
             viewModel.togglePause()
         case "cancel":
-            Task {
-                await viewModel.cancelRecording()
-            }
+            Task { await viewModel.cancelRecording() }
         case "restart":
-            // Without the countdown, like reco://toggle
-            Task {
-                await viewModel.restartRecording(countdown: false)
-            }
+            Task { await viewModel.restartRecording(countdown: false) }
+        case "capture-area", "capture-previous-area", "capture-window", "capture-screen":
+            captureScreenshot(from: url)
         case "edit-last":
             editLastRecording()
         case "record-agent":
@@ -251,6 +315,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: settings.outputDirectory.path)
         default:
             logger.warning("Unhandled URL host: \(url.host ?? "nil")")
+        }
+    }
+
+    /// `reco://capture-area`, `capture-previous-area`, `capture-window` or `capture-screen`, with `?then=copy|save|pin` in place of the card.
+    /// Ignored, like the shortcuts, while recording, counting down or capturing.
+    private func captureScreenshot(from url: URL) {
+        let followUp = ScreenshotFollowUp(url: url)
+        if followUp == nil, url.query()?.contains("then=") == true {
+            logger.warning("Unknown then in \(url.absoluteString); opening the card")
+        }
+        Task {
+            guard screenshots.canCapture(alongside: viewModel) else {
+                logger.info("Ignored \(url.absoluteString): recording, counting down or capturing")
+                return
+            }
+            switch url.host {
+            case "capture-area": await screenshots.captureArea(then: followUp)
+            case "capture-previous-area": await screenshots.capturePreviousArea(then: followUp)
+            case "capture-window": await screenshots.captureWindow(then: followUp)
+            default: await screenshots.captureScreen(then: followUp)
+            }
         }
     }
 }

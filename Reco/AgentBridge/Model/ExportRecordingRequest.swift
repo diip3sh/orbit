@@ -22,7 +22,7 @@ nonisolated struct ExportRecordingRequest: Codable, Equatable, Sendable {
     }
 
     /// The names agents use for the formats.
-    static let formats: [String: ExportFormat] = ["hevc": .hevc, "h264": .h264, "prores422": .proRes422, "prores4444": .proRes4444, "gif": .gif]
+    static let formats: [String: ExportFormat] = ["hevc": .mp4, "prores422": .proRes, "prores4444": .proRes, "gif": .gif]
 
     /// The recording and the settings asked for. A size or frame rate the recording doesn't offer
     /// is dropped when the export starts.
@@ -33,6 +33,8 @@ nonisolated struct ExportRecordingRequest: Codable, Equatable, Sendable {
         guard let format = Self.formats[format ?? "hevc"] else {
             throw .invalidArgument("format must be one of \(Self.formats.keys.sorted().joined(separator: ", ")).")
         }
-        return (URL(filePath: movie), ExportSettings(format: format, resolution: resolution, frameRate: frameRate))
+        return (URL(filePath: movie), ExportSettings(
+            format: format, resolution: resolution, frameRate: frameRate, transparentCanvas: self.format == "prores4444"
+        ))
     }
 }

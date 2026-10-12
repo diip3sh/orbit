@@ -5,53 +5,60 @@
 
 import SwiftUI
 
-/// The editor's agent chat (spec 0008): the conversation that made the take, how a run is going, and
-/// a box to ask for changes, which has the agent record the take again.
+/// The Web Recording window's agent panel (spec 0008): the conversation with a coding agent about the
+/// window's page, what it did step by step, the render's progress and result, and the message box.
 struct AgentChatView: View {
-    @Bindable var chat: AgentChatViewModel
+    @Bindable var model: AgentRecordingViewModel
+
+    /// The window's page, which every message is about.
+    let page: URL?
+
+    /// Opens a movie in the editor.
+    let openMovie: (URL) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reducesMotion
 
     var body: some View {
-        let isEmpty = chat.conversation.isEmpty && chat.pendingMessage == nil
+        VStack(spacing: 0) {
+            AgentChatHeader(model: model)
 
-        ZStack {
-            if isEmpty {
-                AgentChatEmptyState { chat.draft = $0 }
-                    .transition(.materialize)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: EditorTheme.spacing) {
-                        ForEach(chat.conversation) { message in
-                            AgentChatMessageRow(role: message.role, text: message.text)
-                        }
-                        if let pending = chat.pendingMessage {
-                            AgentChatMessageRow(role: .user, text: pending)
-                                .transition(.materialize(offset: 12))
-                        }
-                        if let status = chat.status {
-                            AgentChatStatus(status: status)
-                                .transition(.materialize(offset: 8))
-                        }
-                        if let failure = chat.failure {
-                            AgentChatFailure(reason: failure, retry: chat.retry)
-                                .transition(.materialize(offset: 8))
+            Rectangle()
+                .fill(EditorTheme.hairline)
+                .frame(height: 1)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: EditorTheme.mediumSpacing) {
+                    if model.transcript.entries.isEmpty {
+                        AgentAssistantBubble(text: "Describe the video you want, and I'll explore this page and record it.")
+                    }
+                    ForEach(model.transcript.groups) { group in
+                        AgentChatRow(group: group)
+                    }
+                    if case .running(let agent) = model.phase {
+                        if let progress = model.progress {
+                            AgentChatProgress(progress: progress)
+                        } else {
+                            AgentTypingIndicator(agent: agent)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(EditorTheme.spacing)
+                    if case .failed(let reason) = model.phase {
+                        AgentRecordingFailure(reason: reason, retry: model.retry)
+                    }
+                    if let movie = model.lastMovie, !model.isRunning, !model.transcript.entries.isEmpty {
+                        AgentChatResult(movie: movie) { openMovie(movie) }
+                    }
                 }
-                .scrollIndicators(.never)
-                .defaultScrollAnchor(.bottom)
-                .defaultScrollAnchor(.bottom, for: .sizeChanges)
-                .transition(.opacity)
+                .padding(EditorTheme.spacing)
+                .animation(reducesMotion ? EditorTheme.fadeMotion : EditorTheme.motion, value: model.transcript)
+                .animation(reducesMotion ? EditorTheme.fadeMotion : EditorTheme.motion, value: model.phase)
+                .animation(reducesMotion ? EditorTheme.fadeMotion : EditorTheme.motion, value: model.lastMovie)
+                .animation(reducesMotion ? EditorTheme.fadeMotion : EditorTheme.motion, value: model.progress == nil)
             }
+            .defaultScrollAnchor(.bottom)
+            .scrollIndicators(.automatic)
+
+            AgentChatComposer(model: model, page: page)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .editorBar(edge: .bottom) {
-            AgentChatComposer(chat: chat)
-        }
-        .editorMotion(value: isEmpty)
-        .editorMotion(value: chat.pendingMessage)
-        .editorMotion(value: chat.status == nil)
-        .editorMotion(value: chat.failure)
+        .task { await model.refreshAgents() }
     }
 }

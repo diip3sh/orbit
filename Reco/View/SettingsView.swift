@@ -28,6 +28,10 @@ struct SettingsView: View {
                 VideoSettingsView(settings: settings)
             }
 
+            Tab("Screenshots", systemImage: "camera.viewfinder", value: "screenshots") {
+                ScreenshotSettingsView(settings: settings)
+            }
+
             Tab("Audio", systemImage: "waveform", value: "audio") {
                 AudioSettingsView(settings: settings)
             }
@@ -44,16 +48,32 @@ struct SettingsView: View {
     }
 }
 
+extension View {
+
+    /// A Settings tab's grouped form on the theme's ground instead of the system's window colour.
+    func settingsForm() -> some View {
+        formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .padding()
+            .editorWindowBackground()
+    }
+}
+
 // MARK: - Shortcuts Settings
 
 struct ShortcutsSettingsView: View {
     var body: some View {
         Form {
+            Section("Capture Toolbar") {
+                KeyboardShortcuts.Recorder("Screenshot", name: .showScreenshotToolbar)
+                KeyboardShortcuts.Recorder("Record", name: .showRecordingToolbar)
+            }
+
             Section("Recording") {
                 KeyboardShortcuts.Recorder("Toggle Recording", name: .toggleRecording)
                 KeyboardShortcuts.Recorder("Pause/Resume Recording", name: .pauseRecording)
-                KeyboardShortcuts.Recorder("Cancel Recording", name: .cancelRecording)
                 KeyboardShortcuts.Recorder("Restart Recording", name: .restartRecording)
+                KeyboardShortcuts.Recorder("Cancel Recording", name: .cancelRecording)
             }
 
             Section("Web Recording") {
@@ -67,18 +87,18 @@ struct ShortcutsSettingsView: View {
 
             Section("Screenshots") {
                 KeyboardShortcuts.Recorder("Capture Area", name: .captureArea)
+                KeyboardShortcuts.Recorder("Capture Previous Area", name: .capturePreviousArea)
                 KeyboardShortcuts.Recorder("Capture Window", name: .captureWindow)
                 KeyboardShortcuts.Recorder("Capture Screen", name: .captureScreen)
             }
 
             Section {
-                Text("Shortcuts work globally, even when Reco is not focused.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("Shortcuts work globally, even when Orbit is not focused.")
+                    .font(.theme(.caption))
+                    .foregroundStyle(EditorTheme.dim)
             }
         }
-        .formStyle(.grouped)
-        .padding()
+        .settingsForm()
     }
 }
 
@@ -135,7 +155,7 @@ struct VideoSettingsView: View {
                             Text(codec.rawValue).tag(codec)
                         } else {
                             Text("\(codec.rawValue) (not supported for \(settings.containerFormat.rawValue.uppercased()))")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(EditorTheme.dim)
                                 .tag(codec)
                         }
                     }
@@ -193,7 +213,8 @@ struct VideoSettingsView: View {
                 Toggle("Show Wallpaper", isOn: $settings.showWallpaper)
                 Toggle("Show Menu Bar", isOn: $settings.showMenuBar)
                 Toggle("Show Dock", isOn: $settings.showDock)
-                Toggle("Show Reco", isOn: $settings.showReco)
+                Toggle("Show Desktop Icons", isOn: $settings.showDesktopIcons)
+                Toggle("Show Orbit", isOn: $settings.showReco)
             }
 
             Section("Window Capture") {
@@ -201,8 +222,7 @@ struct VideoSettingsView: View {
                     .help("Include window shadows when capturing individual windows")
             }
         }
-        .formStyle(.grouped)
-        .padding()
+        .settingsForm()
     }
 }
 
@@ -229,7 +249,7 @@ struct AudioSettingsView: View {
                             Text(codec.rawValue).tag(codec)
                         } else {
                             Text("\(codec.rawValue) (not supported for \(settings.containerFormat.rawValue.uppercased()))")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(EditorTheme.dim)
                                 .tag(codec)
                         }
                     }
@@ -239,12 +259,11 @@ struct AudioSettingsView: View {
 
             Section {
                 Text("Audio tracks are recorded separately for post-processing flexibility.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.theme(.caption))
+                    .foregroundStyle(EditorTheme.dim)
             }
         }
-        .formStyle(.grouped)
-        .padding()
+        .settingsForm()
     }
 }
 
@@ -254,41 +273,23 @@ struct GeneralSettingsView: View {
     @Bindable var settings: SettingsStore
     @Bindable var updaterService: UpdaterService
 
-    /// Formats the output directory path for display
-    private var displayPath: String {
-        let path = settings.outputDirectory.path(percentEncoded: false)
-        // Replace home directory with ~ for cleaner display
-        let home = FileManager.default.homeDirectoryForCurrentUser.path(percentEncoded: false)
-        if path.hasPrefix(home) {
-            return "~" + path.dropFirst(home.count)
-        }
-        return path
-    }
-
     var body: some View {
         Form {
             Section("Output Location") {
-                LabeledContent {
-                    HStack {
-                        Button("Change...") {
-                            selectOutputDirectory()
-                        }
-
-                        if settings.hasCustomOutputDirectory {
-                            Button("Reset", role: .destructive) {
-                                settings.resetOutputDirectory()
-                            }
-                        }
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: "folder")
-                        Text(displayPath)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                }
+                FolderSettingRow(
+                    title: "Recordings",
+                    folder: settings.outputDirectory,
+                    isCustom: settings.hasCustomOutputDirectory,
+                    change: selectOutputDirectory,
+                    reset: settings.resetOutputDirectory
+                )
+                FolderSettingRow(
+                    title: "Screenshots",
+                    folder: settings.screenshotDirectory,
+                    isCustom: settings.hasCustomScreenshotDirectory,
+                    change: selectScreenshotDirectory,
+                    reset: settings.resetScreenshotDirectory
+                )
             }
 
             Section("Recording") {
@@ -300,10 +301,10 @@ struct GeneralSettingsView: View {
             }
 
             Section("Software Updates") {
-                Toggle("Automatically check for updates", isOn: $updaterService.automaticallyChecksForUpdates)
+                Toggle("Automatically Check for Updates", isOn: $updaterService.automaticallyChecksForUpdates)
 
                 LabeledContent("Updates") {
-                    Button("Check for Update") {
+                    Button("Check for Updates…") {
                         updaterService.checkForUpdates()
                     }
                     .disabled(!updaterService.canCheckForUpdates)
@@ -312,8 +313,7 @@ struct GeneralSettingsView: View {
 
             AboutSection()
         }
-        .formStyle(.grouped)
-        .padding()
+        .settingsForm()
     }
 
     /// Opens an NSOpenPanel to select a custom output directory
@@ -329,6 +329,67 @@ struct GeneralSettingsView: View {
 
         if panel.runModal() == .OK, let url = panel.url {
             settings.setCustomOutputDirectory(url)
+        }
+    }
+
+    private func selectScreenshotDirectory() {
+        let panel = NSOpenPanel()
+        panel.title = "Select Screenshot Folder"
+        panel.message = "Choose where screenshots will be saved"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = settings.screenshotDirectory
+
+        if panel.runModal() == .OK, let url = panel.url {
+            settings.screenshotDirectory = url
+        }
+    }
+}
+
+/// A save folder: its path, with Change… and, once changed, Reset
+private struct FolderSettingRow: View {
+
+    let title: String
+    let folder: URL
+    let isCustom: Bool
+    let change: () -> Void
+    let reset: () -> Void
+
+    /// The path with the home folder as ~
+    private var displayPath: String {
+        let path = folder.path(percentEncoded: false)
+        let home = FileManager.default.homeDirectoryForCurrentUser.path(percentEncoded: false)
+        if path.hasPrefix(home) {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
+    }
+
+    var body: some View {
+        LabeledContent {
+            HStack {
+                Button("Change…", action: change)
+
+                if isCustom {
+                    Button("Reset", role: .destructive, action: reset)
+                }
+            }
+        } label: {
+            VStack(alignment: .leading) {
+                Text(title)
+                Label {
+                    Text(displayPath)
+                        .font(.theme(.caption, .mono))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } icon: {
+                    Image(systemName: "folder")
+                }
+                .font(.theme(.caption))
+                .foregroundStyle(EditorTheme.dim)
+            }
         }
     }
 }

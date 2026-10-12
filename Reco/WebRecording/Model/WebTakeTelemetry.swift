@@ -64,6 +64,10 @@ nonisolated struct WebTakeTelemetry: Sendable {
         }
     }
 
+    mutating func navigated(to url: URL, at time: Double) {
+        telemetry.navigations.append(.init(time: time, url: url.absoluteString))
+    }
+
     /// The finished telemetry, with each kind's sprite from `sprite(kind, id)`.
     func finished(sprite: (CursorKind, Int) -> InputTelemetry.CursorSprite?) -> InputTelemetry {
         var telemetry = telemetry

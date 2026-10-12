@@ -38,9 +38,9 @@ final class AreaSelectionPanel: NSPanel {
     override var canBecomeKey: Bool { takesFocus }
     override var canBecomeMain: Bool { takesFocus }
 
-    /// Shows the selection over `background`, the screen as it was when the selection started, or over the live screen
-    func show(_ selection: AreaSelectionView, over background: CGImage?) {
-        guard let background else {
+    /// Shows the selection over its frozen screen, the screen as it was when the selection started, or over the live screen
+    func show(_ selection: AreaSelectionView) {
+        guard let background = selection.frozenScreen else {
             contentView = selection
             return
         }

@@ -14,10 +14,10 @@ struct AgentChatFailure: View {
         VStack(alignment: .leading, spacing: EditorTheme.mediumSpacing) {
             AgentChatMessageRow(role: .failure, text: reason)
             Button("Retry", systemImage: "arrow.clockwise", action: retry)
-                .buttonStyle(.editorGhost)
+                .buttonStyle(.editorSecondary)
         }
         .padding(EditorTheme.mediumSpacing)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(EditorTheme.tray, in: EditorTheme.trayShape)
+        .background(EditorTheme.control, in: .rect(cornerRadius: 10))
     }
 }

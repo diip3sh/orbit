@@ -33,7 +33,7 @@ extension RenderResources {
             arrow: source.telemetry?.capture.cursorInVideo == false ? StandardCursors.arrowSprite : nil
         )
         if let bookmark = project.canvas.imageBookmark {
-            resources.background = await BackgroundImageLoader.image(from: bookmark)
+            resources.background = await BackgroundImageLoader.image(from: bookmark)?.image
         }
         return resources
     }

@@ -103,12 +103,12 @@ struct SoundRenderingTests {
         let made = try SoundCache.read(sound).left
 
         let movie = bundle.appending(path: "click.mp4")
-        try await ExportService.export(composition, to: movie, as: .hevc) { _ in }
+        try await ExportService.export(composition, to: movie, as: ExportSettings(format: .mp4)) { _ in }
         let exported = try await audio(of: AVURLAsset(url: movie))
         #expect(abs(lag(of: exported, against: made, near: 1)) <= SoundSignal.count(0.001))
 
         let proRes = bundle.appending(path: "click.mov")
-        try await ExportService.export(composition, to: proRes, as: .proRes422) { _ in }
+        try await ExportService.export(composition, to: proRes, as: ExportSettings(format: .proRes)) { _ in }
         let track = try #require(try await AVURLAsset(url: proRes).loadTracks(withMediaType: .audio).first)
         let format = try #require(try await track.load(.formatDescriptions).first)
         #expect(CMFormatDescriptionGetMediaSubType(format) == kAudioFormatLinearPCM)

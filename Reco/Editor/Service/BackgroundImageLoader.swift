@@ -27,14 +27,17 @@ nonisolated enum BackgroundImageLoader {
         return try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
     }
 
-    /// The picture `bookmark` opens, upright and in sRGB like the overlays, or `nil` when it's gone
-    /// or unreadable.
-    @concurrent
-    static func image(from bookmark: Data) async -> CGImage? {
+    /// The file `bookmark` opens, or `nil` when it can't be resolved. Cheap: nothing is read.
+    static func url(from bookmark: Data) -> URL? {
         var isStale = false
-        guard let url = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale) else {
-            return nil
-        }
+        return try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
+    }
+
+    /// The picture `bookmark` opens, upright and in sRGB like the overlays, with the file it was read from
+    /// (symlinks resolved, so `/var` and `/private/var` compare equal), or `nil` when it's gone or unreadable.
+    @concurrent
+    static func image(from bookmark: Data) async -> (image: CGImage, url: URL)? {
+        guard let url = url(from: bookmark) else { return nil }
         let isAccessing = url.startAccessingSecurityScopedResource()
         defer {
             if isAccessing {
@@ -57,6 +60,6 @@ nonisolated enum BackgroundImageLoader {
         }
         // Frames are composited without color management, so the picture's colors are converted here
         context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        return context.makeImage()
+        return context.makeImage().map { ($0, url.resolvingSymlinksInPath()) }
     }
 }

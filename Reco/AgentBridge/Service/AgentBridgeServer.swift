@@ -122,7 +122,7 @@ final class AgentBridgeServer {
         let server = Server(
             name: AgentServerCommand.serverName,
             version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0",
-            title: "Reco",
+            title: "Orbit",
             instructions: AgentToolCatalog.instructions,
             capabilities: .init(tools: .init(listChanged: false))
         )
@@ -136,6 +136,7 @@ final class AgentBridgeServer {
             let reply = await tools.call(parameters.name, arguments: arguments)
             var content: [Tool.Content] = [.text(text: reply.text, annotations: nil, _meta: nil)]
             if let image = reply.image {
+                // What the page looks like now, for the agent to see
                 content.append(.image(data: image.base64EncodedString(), mimeType: "image/jpeg", annotations: nil, _meta: nil))
             }
             return CallTool.Result(content: content, isError: reply.isError)

@@ -136,7 +136,7 @@ void main() {
   (u_worldWidth == 0.) ? u_resolution.x : givenBoxSize.x,
   (u_worldHeight == 0.) ? u_resolution.y : givenBoxSize.y
   );
-  
+
   if (u_shape > 3.5) {
     vec2 objectBoxSize = vec2(0.);
     // fit = none

@@ -1,5 +1,5 @@
 """
-Update the appcast.xml file for Reco releases.
+Update the appcast.xml file for Orbit releases.
 
 This script adds a new entry to the Sparkle appcast with the release
 information, including GitHub release notes rendered as inline HTML.
@@ -87,9 +87,9 @@ if et is None:
         ' xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"'
         ' xmlns:dc="http://purl.org/dc/elements/1.1/">'
         "<channel>"
-        "<title>Reco Updates</title>"
+        "<title>Orbit Updates</title>"
         f"<link>{repo_url}/releases/latest/download/appcast.xml</link>"
-        "<description>Updates for Reco</description>"
+        "<description>Updates for Orbit</description>"
         "<language>en</language>"
         "</channel>"
         "</rss>"
@@ -188,12 +188,12 @@ def markdown_to_simple_html(md: str) -> str:
 if release_notes.strip():
     notes_html = markdown_to_simple_html(release_notes)
     description_html = f"""
-<h2>Reco v{version}</h2>
+<h2>Orbit v{version}</h2>
 {notes_html}
 """
 else:
     description_html = f"""
-<h2>Reco v{version}</h2>
+<h2>Orbit v{version}</h2>
 <p>This release was published on {now.strftime("%Y-%m-%d")}.</p>
 <p>
 View the full release notes on

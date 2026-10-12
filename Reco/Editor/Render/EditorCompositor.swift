@@ -53,15 +53,14 @@ nonisolated class EditorCompositor: NSObject, AVVideoCompositing, @unchecked Sen
 
         // Black where the video track has no frame, e.g. audio running past its end
         let source = request.sourceFrame(byTrackID: instruction.sourceTrackID)
-        let frame = source.map { CIImage(cvPixelBuffer: $0) } ?? CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: plan.videoSize))
+        let frame = source.map { CIImage(cvPixelBuffer: $0) } ?? CIImage(color: .black).cropped(to: plan.crop ?? CGRect(origin: .zero, size: plan.videoSize))
         if let source {
             // The output keeps the source's encoding, so it carries its color tags
             CVBufferPropagateAttachments(source, output)
         }
 
-        let time = plan.timeMap.sourceTime(atOutput: request.compositionTime.seconds)
         do {
-            try FrameRenderer.draw(frame, at: time, plan: plan, into: output, context: Self.context)
+            try FrameRenderer.draw(frame, at: request.compositionTime.seconds, plan: plan, into: output, context: Self.context)
             request.finish(withComposedVideoFrame: output)
         } catch {
             request.finish(with: error)

@@ -33,8 +33,8 @@ nonisolated struct PointerTrack: Sendable {
     }
 
     /// Where the cursor is at `time`, in viewport CSS pixels, given the frames of the elements the
-    /// targets' selectors matched now. `nil` when the Cursor lane is empty. Like a mouse on a
-    /// screen, it stays inside the viewport, even when its element is out of view.
+    /// targets' selectors matched now. `nil` when the Cursor lane is empty. Like a mouse on a screen,
+    /// it stays inside the viewport, even when its element is out of view.
     mutating func location(at time: Double, elementFrames: [String: CGRect]) -> CGPoint? {
         let viewport = CGRect(origin: .zero, size: script.viewport)
         let inView = { (point: CGPoint) in CGPoint(x: min(max(point.x, 0), viewport.maxX - 1), y: min(max(point.y, 0), viewport.maxY - 1)) }

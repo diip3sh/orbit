@@ -32,7 +32,7 @@ struct MotionSidePanel: View {
         // Each panel comes in from its side of the switch and leaves that way
         ZStack {
             if panel.wrappedValue == .agent {
-                AgentChatView(chat: chat)
+                EditorAgentChatView(chat: chat)
                     .transition(.materialize(sideways: 48))
             } else {
                 MotionInspector(viewModel: viewModel)
@@ -47,7 +47,7 @@ struct MotionSidePanel: View {
         .frame(width: Self.width)
         .frame(maxHeight: .infinity)
         .clipShape(shape)
-        .editorGlass(in: shape)
+        .editorSurface(in: shape, fill: EditorTheme.panel)
         .padding([.trailing, .bottom], EditorTheme.mediumSpacing)
         .task {
             await chat.load()

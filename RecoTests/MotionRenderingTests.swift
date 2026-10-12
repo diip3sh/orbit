@@ -103,7 +103,7 @@ struct MotionRenderingTests {
 
         #expect(try await composition.asset.load(.duration) == CMTime(value: 300, timescale: 60))
         for time in [0.5, 3.25] {
-            let previewed = try await ExportService.frame(of: composition, at: CMTime(seconds: time, preferredTimescale: 60))
+            let previewed = try await FrameGrabber.image(of: composition, at: time, timescale: 60)
             let difference = try Self.difference(Self.pixels(of: CIImage(cgImage: previewed)), Self.pixels(of: MotionFrameRenderer.image(at: time, plan: plan)))
             #expect(difference.mean < 0.5)
         }
@@ -113,7 +113,7 @@ struct MotionRenderingTests {
         let (url, document) = try MotionTestBundle.make()
         defer { try? FileManager.default.removeItem(at: url) }
 
-        let movie = try await MotionExporter.export(document, bundle: url, settings: ExportSettings(format: .hevc, resolution: 720)) { _ in }
+        let movie = try await MotionExporter.export(document, bundle: url, settings: ExportSettings(format: .mp4, resolution: 720)) { _ in }
         defer { try? FileManager.default.removeItem(at: movie) }
         let asset = AVURLAsset(url: movie)
         let track = try #require(try await asset.loadTracks(withMediaType: .video).first)

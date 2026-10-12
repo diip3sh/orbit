@@ -74,6 +74,9 @@ own spec before any code.
 
 N20 and N21 are small and can land any time.
 
+**Status (2026-10-08):** built: N1, N2, N3, N4, N7, N8, N9, N10, N11, N12, N13, N14, N15, N16, N17, N20, N21, N22, and
+style presets from Later (S19 in the roadmap). The rest is open.
+
 Every item follows spec 0003's standards: a pure core with tests, performance measured before a
 claim, docs updated, and the 8 ms frame budget kept.
 
@@ -81,6 +84,12 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N1 — Motion blur on camera and cursor
 
+- **Status (2026-10-08): shipped** as one **Motion Blur** slider in the Motion tab (0 to 1 of the frame; 0 is off and
+  the default), not separate cursor and zoom amounts. The cursor blurs with the camera's and its own moves. The
+  8-sample average costs more than the 1.6 ms measured above: at 4K on an M2 (Debug, load ~5.5) each sample is about
+  0.7–0.9 ms, so the peak of a zoom is 9.5–11 ms p50 / 12.4–14 p95 against 4.2–4.5 / 5.2–6.8 without blur, over the
+  budget. Samples scale with travel (one per 2 px, 2 to 8). The cursor's blur is cheap (+0.2 ms p50). Details in
+  CLAUDE.md, editor phase 4. Open: fuse the samples into one kernel, and separate zoom-in/pan amounts.
 - **What:** blur along the view's movement while it zooms or pans, and along the cursor's path.
   There is one amount each, in the Zoom and Cursor sections. Screen Studio has three sliders
   (cursor, zoom-in, pan); start with two.
@@ -102,6 +111,11 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N2 — Cursor: loop to start, stop before end, tilt
 
+- **Status (2026-10-08):** built. *Loop* ("Loop Position"), *stop before end* ("Stop Before End", 0–3 s of output,
+  `CursorStyle.stopDuration`, `RenderPlan.cursorStop`) and *tilt* ("Tilt While Moving", `CursorStyle.tilts`: up to 12°,
+  76% of it at 800 pt/s of horizontal speed, eased by the Smooth spring; not yet checked by eye). With Loop on as
+  well, the cursor holds still and then glides back in the last second. Related and shipped: cursor movement
+  **None** (the recorded positions, no spring or jitter filter).
 - **What:**
   - *Loop:* in the last second, the cursor glides back to where it was in the first frame, so a
     video or GIF loops.
@@ -115,6 +129,9 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N3 — Click sounds
 
+- **Status (2026-10-08): shipped** (spec 0003 phase 5: a synthesised click written once per window as Apple Lossless
+  CAF, with its volume in the Clicks section).
+
 - **What:** a soft click at every recorded press, with a volume control in the Clicks section.
 - **How:** mix the clicks offline, once per cut change, into a cached file. Use `AVAudioEngine`
   manual rendering, as N4 does, placing clicks through `TimeMap`, and add the file as one extra
@@ -124,6 +141,10 @@ claim, docs updated, and the 8 ms frame budget kept.
   times.
 
 ### N4 — Enhance voice
+
+- **Status (2026-10-08): built** (`VoiceEnhancer`, `OfflineAudioEffect`; CLAUDE.md phase 5 has the numbers). Found on the way:
+  `AUSoundIsolation` reports a latency of 0 but delays mono by 92.5 ms and stereo by 132.5 ms, compensated by measurement; and
+  `AVAudioPlayerNode` in manual rendering was one chunk late in a third of runs, so the engine is fed by an `AVAudioSourceNode`.
 
 - **What:** an Enhance Voice switch on the microphone track in the Audio section.
 - **How:** `AUSoundIsolation` (macOS 13; `kAUSoundIsolationSoundType_HighQualityVoice` on macOS 15),
@@ -183,6 +204,9 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N7 — Speed per part, and speeding up typing
 
+- **Status (2026-10-08): built**, see spec 0014. Open question 1 is settled: click rings, keystroke chips and
+  zoom transitions keep their on-screen length (timed on the output); the cursor moves with the content. Speed Up
+  Typing applies every stretch at once (one undo step) instead of listing them for review.
 - **What:**
   - Each kept part gets a speed from 1× to 8×.
   - Speed Up Typing proposes 2–4× for stretches of typing, with an "Apply all" button.
@@ -202,6 +226,10 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N8 — Masks: blur, pixelate, spotlight
 
+**Status (2026-10-08):** built. One mask shows at a time (the lane keeps them apart, like zooms). The spotlight darkens the
+rest with a color over it rather than `CIBlendWithMask`, and bands aren't special-cased: a 4K frame with any mask rendered in
+under 5 ms p95 (CLAUDE.md). Not yet checked in the running app.
+
 - **What:** a mask lane, like the zoom lane, holding rectangles that blur or pixelate what's under
   them, or dim everything else (spotlight). Pixelation adds noise so it can't be reversed, as
   CleanShot's does.
@@ -216,6 +244,10 @@ claim, docs updated, and the 8 ms frame budget kept.
   budget.
 
 ### N9 — Find sensitive info
+
+**Status (2026-10-08):** built as below, in the Mask section and on the screenshot card (Hide Sensitive Info pixelates the
+shot). Masks hold several rectangles for it. Frames are read at 1 Hz only (no change detection); boxes join across consecutive
+samples and are hidden from the sample before to the one after. Not yet checked in the running app.
 
 - **What:** Find Sensitive Info proposes masks over emails, phone numbers, card numbers and API
   keys. The same finder runs on the screenshot card.
@@ -237,6 +269,9 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N10 — GIF export, copy frame
 
+- **Status (2026-10-08):** built. GIF export shipped earlier (spec 0003). **Copy Frame** (transport, ⇧⌘C) copies the
+  frame at the playhead as a PNG at Original export size, in SDR: an export-target plan swapped into the composition and
+  one frame read by `AVAssetImageGenerator` with zero tolerance (`FrameGrabber`), so it is exactly the export's frame.
 - **What:**
   - GIF in the export sheet: looping, 480–960 px, 25 or 50 fps.
   - Copy Frame copies the current frame at output size.
@@ -258,6 +293,9 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N11 — Crop
 
+**Status (2026-10-08):** built as below; the Background tab's crop pad sets it. Zoom focus is in fractions of the crop, and
+automatic zooms are made again when a crop drag ends. Not yet checked in the running app.
+
 - **What:** crop the recording to a rectangle, for example to hide the menu bar or a sidebar.
 - **How:** a crop in the project, as fractions of the video.
   - `CanvasLayout` treats the crop as the video: output size, shadow and corners.
@@ -271,8 +309,16 @@ claim, docs updated, and the 8 ms frame budget kept.
 - **How:** `CameraPath` gets a base view, the largest rectangle of the canvas's shape that fits in
   the video. Between zooms it follows the cursor with the existing dead zone, and zooms scale from
   it. No renderer change: the view is already one transform.
+- **Status (2026-10-08): built**, as Fit / Fill in the Background tab for every shape but the recording's
+  (`CanvasStyle.fillsFrame`, `CanvasLayout.baseView`). The renderer did change a little: the base view is
+  stretched to the video's size and the video onto the frame, which together scale evenly, and a 1× video
+  moves by whole pixels so an Original export pans the recording's own pixels. Automatic zooms aren't
+  generated for the base view yet; one that doesn't fit is clamped into it. See CLAUDE.md, phase 6.
 
 ### N13 — Annotate screenshots (own spec)
+
+**Status (2026-10-08):** built as spec 0015: the card grows into the editor, with every tool below; marks stay editable
+until the card closes and are flattened into what Copy, Save, Pin and a drag give.
 
 - **What:** tools on the card:
   - arrow, line, rectangle, ellipse, text
@@ -286,6 +332,13 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N14 — Screenshot backgrounds
 
+**Status (2026-10-08):** built. The card's background button (top-right, first) puts the shot on the background set in
+**Settings → Screenshots → Background** (the editor's canvas controls: gradient presets, colour, wallpaper or picture with
+blur, clear; padding, corners, shadow, border; plus Auto Balance), always off until clicked, and takes it off again. The
+shot keeps its own pixels inside the padding (`CanvasLayout.nativeShorterSide`, like an Original export); Auto Balance trims
+rows and columns within 2 of the top-left pixel's colour per channel. Hide Sensitive Info works on the shot without the
+background and frames it again. The card refits to the new shape, keeping the corner it grew from. Not yet checked by eye.
+
 - **What:** put a screenshot on a gradient, colour or picture, with padding, corners and a shadow.
   Auto Balance centres the content with even margins.
 - **How:** reuse `CanvasStyle` and `CanvasLayout`'s backdrop on a still image. Auto Balance trims
@@ -293,11 +346,22 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N15 — Restore a closed card; history
 
+- **Status (2026-10-08):** the history half shipped (spec 0012: every capture kept in the app's support folder for a
+  chosen time), and so has Restore Last Screenshot in the menu: the last card that went away, from memory, in the
+  screen's corner. Not yet checked in the running app.
+
 - **S:** Restore Last Screenshot in the menu brings back the last closed card from memory.
 - **M, opt-in:** keep screenshots for 30 days in the app's Caches folder and list them. This
   conflicts with "nothing is written until Save" (see Open questions).
 
 ### N16 — Small capture wins
+
+**Status (2026-10-08):** shipped: screenshot URLs (a card showing stays; an area pins where it was taken); QR codes (a shot with a code
+copies its payload in place of the text); Capture Previous Area (the last area since launch, in memory: F7 isn't built); the
+self-timer (the capture toolbar's Self-Timer menu in screenshot mode, Off by default; the countdown's disc on the pointer's screen, Esc
+cancels); pins' opacity and click-through (a pin's context menu; the menu bar's Unlock Pins takes clicks again); HDR screenshots
+(opt-in on macOS 26+, screen and area only, saved as HEIC with a gain map; copies stay SDR PNGs). All of N16 is built; not yet
+checked in the running app.
 
 Each is S:
 - **Self-timer** (3, 5 or 10 s), reusing `RecordingCountdown`.
@@ -310,6 +374,10 @@ Each is S:
 - **Pins:** an opacity setting, and a click-through mode.
 
 ### N17 — Freeze screen and loupe while selecting
+
+**Status (2026-10-08): built.** Freezing shipped first (Capture Area shows a picture of every display taken as it starts
+and cuts the area from it); then the loupe (`LoupeView`, `LoupeGeometry`), which magnifies the frozen screen's pixels
+beside the pointer while an edge is aimed. A recording's selection stays live and has no loupe. See CLAUDE.md, C1.
 
 Capture the display once when area selection opens, show it under the overlay, and crop from that
 image, so hover states and open menus survive. A loupe next to the pointer shows pixels for exact
@@ -344,6 +412,10 @@ edges. Recording keeps the live selection.
 
 ### N20 — Cancel and restart a recording
 
+- **Status (2026-10-08): shipped.** Cancel and Restart buttons in the capture toolbar's live pill, global shortcuts
+  without defaults, `reco://cancel` and `reco://restart` (no countdown; the button and shortcut use it). Tested: a
+  cancelled writer leaves no file, paused or not. Not yet checked in the running app.
+
 - **What:** shortcuts plus `reco://cancel` and `reco://restart`.
   - Cancel throws away the movie and its telemetry.
   - Restart cancels, then starts again with the same selection.
@@ -351,12 +423,21 @@ edges. Recording keeps the live selection.
 
 ### N21 — Hide desktop icons in recordings (check first)
 
+- **Status (2026-10-08): shipped** as **Settings → Video → Display Elements → Show Desktop Icons** (on by default).
+  Checked on macOS 27.0.1 (M2): Finder draws every icon into one display-sized window at the desktop-icon level, which
+  `SCShareableContent` lists; captured alone it held the icon (13,669 opaque pixels at the top right), and a display
+  capture excluding it lost exactly those pixels. With macOS's own "Show Desktop Items" off, WindowManager adds an empty
+  window at the same level; only Finder's is excluded. Display and area recordings only: an application capture of
+  Finder is left as chosen, and screenshots keep what is on screen. Not checked on macOS 15 or 26.
+
 - **What:** leave Finder's desktop-icon windows (`kCGDesktopIconWindowLevel`) out of the display's
   `SCContentFilter`, so icons are missing from the video without touching the real desktop.
 - **Check:** this is unverified. Confirm the icons are separate windows that SCK can exclude on
   macOS 15 and 26.
 
 ### N22 — Scripted web recordings (own spec: `0005-web-recordings.md`)
+
+- **Status (2026-10-08): shipped**, see spec 0005 (New Web Recording…).
 
 - **Seen in** Tino Zabinskiy's programmatic recorder
   ([post](https://x.com/0x_tino/status/2104615778817577471), 28 Sep 2026, 39 s demo). You load a
@@ -424,7 +505,10 @@ edges. Recording keeps the live selection.
   video's single transform.
 - **Also:**
   - A cursor-only ProRes 4444 export for other editors, as Cap has.
-  - Style presets.
+  - Style presets. **Built (2026-10-08, S19):** the toolbar's Style menu saves the project's look (canvas, cursor, clicks,
+    keystrokes, zoom motion and motion blur; not cuts, zooms, masks, the crop or audio) under a name as a `.recostyle`
+    JSON file in Application Support, lists the saved ones with the project's ticked, applies one in one undo step, and
+    shares the file (Share…); a `.recostyle` opened from Finder or dropped on the editor is kept and applied.
   - Text cards.
   - Music from the user's own file.
 

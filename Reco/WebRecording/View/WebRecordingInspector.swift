@@ -12,37 +12,43 @@ struct WebRecordingInspector: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                if let clip = Binding($viewModel.selectedPointerClip) {
-                    InspectorSection(clip.wrappedValue.action == .click ? "Click" : "Hover") {
+                if let clip = Binding(unwrapping: $viewModel.selectedPointerClip) {
+                    InspectorSection(LocalizedStringKey(clip.wrappedValue.action.title)) {
                         InspectorField("Action") {
-                            Picker("Action", selection: clip.action) {
-                                Text("Hover").tag(PointerClip.Action.hover)
-                                Text("Click").tag(PointerClip.Action.click)
-                            }
-                            .pickerStyle(.segmented)
-                            .labelsHidden()
+                            SegmentedChoice(selection: clip.action, options: PointerClip.Action.allCases.map { ($0, $0.title) })
                         }
                         InspectorField("Target") {
                             TextField("Target", text: clip.target.selector.orEmpty, prompt: Text("CSS selector"))
-                                .monospaced()
+                                .font(.theme(.body, .mono))
                             Button(viewModel.isPicking ? "Stop Picking" : "Pick in Page", systemImage: "scope") {
                                 viewModel.togglePicking()
                             }
                             .frame(maxWidth: .infinity)
                         }
-                        if clip.wrappedValue.action == .click {
-                            InspectorField("Type") {
-                                TextField("Type", text: clip.text.orEmpty, prompt: Text("Text for the field, if any"))
+                        if clip.wrappedValue.action == .type {
+                            InspectorField("Text") {
+                                TextField("Text", text: clip.text.orEmpty, prompt: Text("What to type"), axis: .vertical)
+                                    .lineLimit(1...4)
                             }
+                        }
+                        InspectorField("Show") {
+                            TextField("Show", text: clip.show.orEmpty, prompt: Text("CSS selector to zoom on"))
+                                .font(.theme(.body, .mono))
+                        }
+                        InspectorField("Zoom") {
+                            SegmentedChoice(selection: clip.zoom, options: [(nil, "Off")] + WebCamera.scales.map { (Double?.some($0), "\($0.formatted())×") })
                         }
                         WebClipTiming(viewModel: viewModel)
                     } footer: {
                         Text("""
                             The cursor is on the target from the clip's start to its end, and travels there \
-                            before. A click presses at the start, then types its text.
+                            before. A click presses at the start; typing clicks the field, then types the text \
+                            through the clip. Show frames that element during the clip; once any clip shows one, \
+                            only those zoom. Otherwise Zoom moves the camera in on the target just before the clip \
+                            and out just after. Play shows both.
                             """)
                     }
-                } else if let clip = Binding($viewModel.selectedScrollClip) {
+                } else if let clip = Binding(unwrapping: $viewModel.selectedScrollClip) {
                     InspectorSection("Scroll") {
                         InspectorField("Scroll To") {
                             TextField("Scroll To", value: $viewModel.selectedScrollY, format: .number.precision(.fractionLength(0)), prompt: Text("Pixels from the top"))
@@ -83,12 +89,7 @@ struct WebRecordingInspector: View {
                         .labelsHidden()
                     }
                     InspectorField("Resolution") {
-                        Picker("Resolution", selection: $viewModel.scale) {
-                            Text("1×").tag(1)
-                            Text("2×").tag(2)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
+                        SegmentedChoice(selection: $viewModel.scale, options: [(1, "1×"), (2, "2×")])
                     }
                     InspectorSlider("Length", value: $viewModel.duration, in: WebScript.minimumDuration...WebScript.maximumDuration) {
                         Text("\($0, format: .number.precision(.fractionLength(1))) s")

@@ -56,13 +56,14 @@ struct EditorTimelineView: View {
                     .clipped()
                 }
             }
-            // No least width: the tiles are sized from the width measured, so they'd keep a narrowing window wide
+            // minWidth 0: tiles sized from the last width would otherwise make it the window's minimum
+            // (`sizingOptions = .minSize`), so showing the inspector grew the window on every toggle
             .frame(minWidth: 0, maxWidth: .infinity, minHeight: Self.filmstripHeight, maxHeight: Self.filmstripHeight, alignment: .leading)
             .background(EditorTheme.softHairline)
             .clipShape(.rect(cornerRadius: 6))
             .overlay {
                 RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(EditorTheme.softHairline)
+                    .strokeBorder(EditorTheme.hairline)
             }
 
             if let markers = viewModel.markers {
@@ -81,13 +82,19 @@ struct EditorTimelineView: View {
                 .help("Clicks (top) and keystrokes (bottom)")
             } else if viewModel.source?.telemetryError != nil {
                 Text("No clicks or keystrokes: recorded without input telemetry")
-                    .font(.caption)
+                    .font(.theme(.caption))
                     .foregroundStyle(EditorTheme.dim)
                     .frame(height: Self.lanesHeight)
             }
 
             ZoomLane(viewModel: viewModel, width: width)
+
+            if !viewModel.project.masks.isEmpty {
+                MaskLane(viewModel: viewModel, width: width)
+                    .transition(.opacity)
+            }
         }
+        .editorMotion(value: viewModel.project.masks.isEmpty)
         .editorMotion(.smooth, value: viewModel.thumbnails.count { $0 != nil })
         .overlay {
             // Cuts dimmed and hatched, and splits across the filmstrip (handles cover the kept parts' starts)
@@ -98,8 +105,9 @@ struct EditorTimelineView: View {
                 }
                 for cut in timeMap.cuts {
                     let area = span(cut, Self.filmstripTop, size.height - Self.filmstripTop)
-                    context.fill(Path(area), with: .color(.black.opacity(0.6)))
-                    context.fill(Self.hatching(in: area), with: .color(.white.opacity(0.07)))
+                    // Faded towards the timeline's ground, so cuts recede in light as well as dark
+                    context.fill(Path(area), with: .color(EditorTheme.panel.opacity(0.6)))
+                    context.fill(Self.hatching(in: area), with: .color(EditorTheme.ink.opacity(0.07)))
                 }
                 for segment in viewModel.segments {
                     let line = span(segment, Self.filmstripTop, Self.filmstripHeight).divided(atDistance: 1, from: .minXEdge).slice
@@ -122,6 +130,27 @@ struct EditorTimelineView: View {
             }
         }
         .editorMotion(value: viewModel.selection)
+        .overlay(alignment: .topLeading) {
+            // Each part that isn't at 1× says its speed in its top-left corner
+            if duration > 0 {
+                ForEach(viewModel.segments, id: \.lowerBound) { segment in
+                    let rate = timeMap.rate(atSource: (segment.lowerBound + segment.upperBound) / 2)
+                    if rate != 1 {
+                        Text(SpeedRange.label(for: rate))
+                            .font(.theme(.caption2, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, EditorTheme.tightSpacing)
+                            .background(.black.opacity(0.6), in: .capsule)
+                            .padding(EditorTheme.tightSpacing)
+                            .frame(width: (segment.upperBound - segment.lowerBound) / duration * width, alignment: .leading)
+                            .clipped()
+                            .offset(x: segment.lowerBound / duration * width, y: Self.filmstripTop)
+                            .allowsHitTesting(false)
+                    }
+                }
+            }
+        }
         .overlay(alignment: .topLeading) {
             if duration > 0 {
                 ZStack(alignment: .leading) {
