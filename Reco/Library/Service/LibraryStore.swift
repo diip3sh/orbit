@@ -9,7 +9,7 @@ import ImageIO
 import UniformTypeIdentifiers
 
 /// The Library's files (spec 0010): what's in the recordings and screenshot folders, their pictures,
-/// and moving them to the Trash.
+/// saving a screenshot out of the history, and moving them to the Trash.
 nonisolated enum LibraryStore {
 
     /// Everything Reco made in the folders, newest first. A folder that doesn't exist yet has none.
@@ -42,6 +42,15 @@ nonisolated enum LibraryStore {
         for companion in item.companions where FileManager.default.fileExists(atPath: companion.path(percentEncoded: false)) {
             try? remove(companion)
         }
+    }
+
+    /// Moves `url` into `folder` under its own name, making the folder if needed, and returns where it is now.
+    @concurrent
+    static func move(_ url: URL, into folder: URL) async throws -> URL {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let destination = folder.appending(path: url.lastPathComponent)
+        try FileManager.default.moveItem(at: url, to: destination)
+        return destination
     }
 
     /// A picture of `item` at most `maximumSize` pixels: a movie's first frame, a screenshot shrunk.

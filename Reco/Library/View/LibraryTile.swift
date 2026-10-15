@@ -6,7 +6,7 @@
 import SwiftUI
 
 /// One item in the Library's grid: its picture at its own shape, a play mark on a movie, and its name while
-/// pointed at. Clicking opens a movie in the editor and a picture in Quick Look; the context menu and the •••
+/// pointed at. Clicking opens a movie in the editor and a picture over the grid; the context menu and the •••
 /// button on hover open, reveal, copy or trash it.
 struct LibraryTile: View {
     let item: LibraryItem
@@ -15,22 +15,42 @@ struct LibraryTile: View {
     let aspectRatio: Double?
     let viewModel: LibraryViewModel
 
+    /// The picture open over the grid, if any, which pushes this tile away or stands in for it.
+    let scatter: LibraryScatter?
+
+    /// Opens this picture over the grid, from the tile's centre.
+    let openPicture: (CGPoint) -> Void
+
     /// Loaded the first time the tile scrolls into view.
     @State private var thumbnail: CGImage?
     @State private var isHovered = false
 
-    init(item: LibraryItem, aspectRatio: Double?, viewModel: LibraryViewModel) {
+    /// The tile's centre in the grid's content, which only a new layout changes.
+    @State private var centre = CGPoint.zero
+
+    @Environment(\.accessibilityReduceMotion) private var reducesMotion
+
+    init(item: LibraryItem, aspectRatio: Double?, viewModel: LibraryViewModel, scatter: LibraryScatter?, openPicture: @escaping (CGPoint) -> Void) {
         self.item = item
         self.aspectRatio = aspectRatio
         self.viewModel = viewModel
+        self.scatter = scatter
+        self.openPicture = openPicture
         _thumbnail = State(initialValue: viewModel.loadedThumbnail(for: item))
     }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: EditorTheme.radius, style: .continuous)
+        let isOpened = scatter?.item == item
+        // The opened tile too, so it stays hidden when the arrows move the picture on
+        let isScattered = scatter?.isOpen == true
 
         Button {
-            viewModel.preview(item)
+            if item.isMovie {
+                viewModel.open(item)
+            } else {
+                openPicture(centre)
+            }
         } label: {
             EditorTheme.control
                 .aspectRatio(aspectRatio ?? 16 / 10, contentMode: .fit)
@@ -114,6 +134,27 @@ struct LibraryTile: View {
         .accessibilityLabel(item.name)
         .accessibilityValue(Text(item.date, format: .dateTime.month(.abbreviated).day().hour().minute()))
         .accessibilityAddTraits(.isButton)
+        .anchorPreference(key: LibraryOpenedTile.self, value: .bounds) { isOpened ? $0 : nil }
+        .offset(reducesMotion ? .zero : scatter?.offset(ofTileAt: centre) ?? .zero)
+        // The innermost animation wins, so the offset springs while the opacity below fades
+        .animation(scatter?.isOpen == true ? LibraryPicturePreview.scatterMotion : LibraryPicturePreview.motion, value: scatter)
+        .opacity(isScattered ? 0 : 1)
+        .animation(isScattered ? LibraryPicturePreview.fadeOut : LibraryPicturePreview.fadeIn, value: isScattered)
+        // At once, outside both: the picture over the grid stands in for the tile from its first frame to its last
+        .opacity(isOpened ? 0 : 1)
+        // Outside the offset, so the push doesn't move the point it's pushed from
+        .onGeometryChange(for: CGPoint.self) { proxy in
+            let frame = proxy.frame(in: .named(LibraryGrid.gridSpace))
+            return CGPoint(x: frame.midX, y: frame.midY)
+        } action: { centre in
+            self.centre = centre
+        }
+        // Opened by the arrows, or moved by a deletion while open: the others are pushed from here now
+        .onChange(of: isOpened ? centre : nil) { _, centre in
+            if let centre, scatter?.isOpen == true, centre != scatter?.origin {
+                openPicture(centre)
+            }
+        }
     }
 }
 

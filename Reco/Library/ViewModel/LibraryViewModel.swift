@@ -7,7 +7,7 @@ import AppKit
 import OSLog
 
 /// The Library window's state and intents (spec 0010): what Reco made, by section and search, with
-/// opening, revealing, copying and trashing, and the ways to make something new.
+/// opening, revealing, copying, saving and trashing, and the ways to make something new.
 @MainActor
 @Observable
 final class LibraryViewModel {
@@ -35,9 +35,6 @@ final class LibraryViewModel {
     /// The items' pictures, loaded as their tiles appear. Not observed: each tile holds its own, so a picture
     /// arriving redraws its tile, not every tile that reads this.
     @ObservationIgnored private var thumbnails: [URL: CGImage] = [:]
-
-    /// The picture Quick Look shows, `nil` while it's closed.
-    var previewed: URL?
 
     /// Each item's width over height, read once when it is first listed, for the masonry grid and the shape
     /// filter. By item, not URL: an export written again under its name may have another shape.
@@ -141,13 +138,9 @@ final class LibraryViewModel {
         return thumbnail
     }
 
-    /// A click: a recording opens in the editor, a picture in Quick Look, as Finder's space bar shows it.
-    func preview(_ item: LibraryItem) {
-        if item.isMovie {
-            openMovie(item.url)
-        } else {
-            previewed = item.url
-        }
+    /// A picture opened over the grid, at most `maximumSize` pixels. Not kept: it is as large as the view.
+    func picture(of item: LibraryItem, maximumSize: CGSize) async -> CGImage? {
+        await LibraryStore.thumbnail(of: item, maximumSize: maximumSize)
     }
 
     /// A recording opens in the editor, a screenshot in the system's viewer.
@@ -173,18 +166,44 @@ final class LibraryViewModel {
         }
     }
 
+    /// Whether it stays: anything but a screenshot in the history, which goes once it's older than the retention.
+    func isSaved(_ item: LibraryItem) -> Bool {
+        item.url.deletingLastPathComponent().standardizedFileURL != folders().history.standardizedFileURL
+    }
+
+    /// Moves a screenshot from the history into the screenshot folder, where the card's Save writes it, and lists it
+    /// from there at once.
+    /// - Returns: The item as it is listed now, or `nil` when it couldn't be moved.
+    func save(_ item: LibraryItem) async -> LibraryItem? {
+        let moved: URL
+        do {
+            moved = try await LibraryStore.move(item.url, into: folders().screenshots).standardizedFileURL
+        } catch {
+            logger.error("Couldn't save \(item.url.lastPathComponent): \(error.localizedDescription)")
+            self.error = error.localizedDescription
+            return nil
+        }
+        // Read back rather than made up, so it is the item the folder watcher's reload lists: a listing spells the
+        // path as the file system does (/private/var for /var)
+        await reload()
+        guard let saved = items?.first(where: { $0.url.standardizedFileURL == moved }) else { return nil }
+        thumbnails[saved.url] = thumbnails.removeValue(forKey: item.url)
+        return saved
+    }
+
     /// Moves it to the Trash with its companions, and drops it from the list at once.
-    func trash(_ item: LibraryItem) async {
+    /// - Returns: Whether it was moved.
+    @discardableResult
+    func trash(_ item: LibraryItem) async -> Bool {
         do {
             try await trashItem(item)
             items?.removeAll { $0.id == item.id }
             thumbnails[item.url] = nil
-            if previewed == item.url {
-                previewed = nil
-            }
+            return true
         } catch {
             logger.error("Couldn't move \(item.url.lastPathComponent) to the Trash: \(error.localizedDescription)")
             self.error = error.localizedDescription
+            return false
         }
     }
 }

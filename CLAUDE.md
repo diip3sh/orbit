@@ -1345,7 +1345,38 @@ First, Name; its icon fills while a shape is chosen) and **New** (Capture Area/W
 Area…, Record Window or Display…, New Web Recording…). With one of them open, a click on another toolbar item opens
 it (`ToolbarMenuSwitcher`): AppKit's menu tracking keeps the press that closes a menu, so it took a second click; when
 a menu closes with the button down over another of the window's toolbar items, the press is posted again. A click opens a movie in the
-editor and a picture in Quick Look (`quickLookPreview`; the arrow keys go through the pictures shown); the context menu
+editor and a picture over the grid, moving as kosmica.app's gallery does (2026-10-15, read from its `script.js`; it replaced
+Quick Look): the picture springs out of its tile into the grid's view,
+fitted 50 pt inside it, its size changing rather than its scale so the tile's crop opens out to the whole picture, and its
+corners go from 12 to 16 pt; every other tile is pushed straight away from the opened tile's centre by
+`765 · e^(−distance / 961)` pt (`LibraryScatter`) as it fades out over 0.13 s, and the date headers and rail fade with them. A
+click anywhere over the grid, or Esc, sends it back into its tile while the others come home and fade in over 0.25 s; the grid
+doesn't scroll meanwhile. The picture and the way home use `spring(response: 0.25, dampingFraction: 0.85)` and the push
+`spring(response: 0.28, dampingFraction: 0.85)`: stiffness 631.7 / damping 42.7 and 503.6 / 38.1 at mass 1 (0.6% overshoot,
+about `.snappy`'s bounce), made snappier on 2026-10-15 than kosmica's 0.30 / 0.9 and 0.35 / 0.9 (438.6 / 37.7 and 322.3 / 32.3,
+0.15% overshoot); the fade home went from 0.3 to 0.25 s with them, so it ends before the picture settles. Each spring starts from where it is, so a click on the tile while its picture is on the way home turns it round. The
+tile's thumbnail shows until the picture is decoded at the fitted size (`LibraryViewModel.picture(of:maximumSize:)`). With
+Reduce Motion the picture fades in and out where it fits and nothing is pushed; so does a picture whose tile isn't laid out.
+12 pt under the open picture are the card's **Copy ⌘C**, **Save ⌘S** and a **Delete ⌘⌫** (`QuickAccessGlassButtonStyle`,
+`ShortcutLabel`; the row was over the picture's bottom edge until 2026-10-15), fading in as it opens and out over 0.13 s as it
+closes; the picture is fitted above the row's 12 + 29 pt (measured on macOS 27, 288 pt wide), so the two are centred together.
+Delete has the destructive role, which the glass style hands to `QuickAccessDestructiveButtonStyle`, macOS 27's Bordered -
+Destructive (the Figma community kit, 2026-10-15): `EditorTheme.danger` as the label and a 20% fill of it (28% pressed, 10%
+with the label at 40% disabled; the kit's red is the system's #FF383C) drawn on the stage, not on glass, at the glass large
+capsule's size (14 pt a side, 29 pt high, so Delete is 95 pt like a glass one). On the glass it was unreadable: the active
+glass is 119 of 255 grey under the dark stage, and the label over it and the fill measured 1.5:1; on the stage it is 4.6:1 in
+dark and 4.0:1 in light. `.glass(.regular.tint(.red))` came out the plain grey. A shortcut sits 8 pt from its title with 1.5 pt tracking (at 4 pt and none, ⌘⌫ ran together), on the card too,
+where Copy and Save went only from 184 to 185 pt: ✓ Copied and ✓ Saved set their widths. Copy is the context menu's, with ✓ Copied for 1.5 s.
+Save moves a history screenshot into the screenshot folder (`LibraryViewModel.save`, `LibraryStore.move`) and then lists the
+folders again, so the item is the listing's: a listing spells the temporary folder `/private/var/…` where the setting has `/var/…`,
+so an item made from the moved URL didn't match the next reload's (found by a test, 2026-10-15) and the picture closed. Save shows
+only for a history screenshot: anything already saved (`isSaved`: not in the history) has no Save, and a saved one loses it
+(a disabled ✓ Saved stood there until 2026-10-15). Delete moves it to the Trash and the next picture takes its
+place, or the one before at the end; with neither, the picture fades out. **←** and **→** go to the picture before or after along
+the grid's order, movies skipped (`LibraryScatter.picture(_:from:in:)`): the frame springs to the new shape while the new picture
+fades in over the last, the grid scrolls its tile into view behind it at once (`scrollTo`), and that tile reports its centre, so
+the others are pushed from there and the picture closes into it. Each click is its own opening (`LibraryScatter.id`), which the
+arrows keep. Not yet checked by eye in the app; the context menu
 opens it in Preview, shows in Finder, copies (a screenshot as PNG, an HDR one's `.heic` converted, a movie
 as its file) or moves to the Trash with a recording's `.telemetry.json` and `.edit.json`. The grid is under date
 headers, newest first (or oldest first; sorted by name it is one grid without headers): Today, Yesterday, Earlier This Week, Last Week, then a month each; Screenshots (and All) also
@@ -1374,10 +1405,11 @@ while hovered. The first scroll through decodes every thumbnail (a 3420×2224 PN
 | `Library/Model/LibraryItem.swift` | Pure: kinds by name and type (`Reco_Web_` web, `-edited` export, `Reco_Screenshot_` PNG), companions, `LibrarySection` |
 | `Library/Model/LibraryDateGroup.swift` | Pure: `groups(of:now:calendar:)`, the date headers, and `active(in:headerTops:topLine:)`, which date the rail marks |
 | `Library/Model/LibraryOrientation.swift`, `LibrarySort.swift`, `MasonryPlacement.swift`, `Library/View/MasonryLayout.swift` | Pure: the Filter's shapes and orders, the grid's columns and slots; the SwiftUI `Layout` on them |
-| `Library/Service/LibraryStore.swift` | Lists the recordings, screenshot and history folders (a folder read once when two are the same; a history name also saved is listed from the screenshot folder), thumbnails (movie frame or `CGImageSource`), trash |
+| `Library/Service/LibraryStore.swift` | Lists the recordings, screenshot and history folders (a folder read once when two are the same; a history name also saved is listed from the screenshot folder), thumbnails (movie frame or `CGImageSource`), moving a history screenshot into the screenshot folder, trash |
 | `Library/Service/FolderWatcher.swift` | `DispatchSource` vnode writes on all three folders, 0.3 s settle, so new saves show at once (a folder that doesn't exist yet isn't watched until the window is reopened; the history folder is made at launch) |
 | `Library/ViewModel/LibraryViewModel.swift`, `Library/View/` | Sections, search, intents; `Actions` wired in `AppDelegate`; window in `EditorWindowManager.showLibrary()` |
 | `Library/View/LibraryDateRail.swift` | The dates down the right edge: a line per date, the current one marked, its title on hover, a click that scrolls to it |
+| `Library/Model/LibraryScatter.swift`, `Library/View/LibraryPicturePreview.swift` | Pure: the open picture, each tile's push and the fitted frame; the picture over the grid, which leaves from and lands back in its tile through an anchor preference (`LibraryOpenedTile`), so it follows the tile wherever the grid has scrolled. Each tile measures its centre in the grid's content (outside its own offset, so the push doesn't feed back) and springs and fades itself with `animation(_:value:)`: the innermost one wins, so the offset springs while the opacity fades, and the opened tile hides at once, outside both. The opened tile fades with the others too, so it stays hidden when the arrows move the picture on |
 
 - The screenshot folder is the Desktop by default, so only `Reco_Screenshot_*.png` there are listed; reading
   it is what asks for Desktop access the first time.

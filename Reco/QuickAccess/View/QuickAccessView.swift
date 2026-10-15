@@ -191,12 +191,15 @@ private struct QuickAccessActions: View {
     }
 }
 
-/// Copy and Save over the shot: on macOS 26 untinted glass, as Safari's toolbar over a page, so the shot shows
-/// through and the system picks the label's colour for what is behind it. The accent's prominent glass read as a
-/// solid pill over the shot. Before macOS 26, the solid accent capsule.
-private struct QuickAccessGlassButtonStyle: PrimitiveButtonStyle {
+/// Copy and Save over the shot, and the Library's open picture: on macOS 26 untinted glass, as Safari's toolbar over a
+/// page, so the shot shows through and the system picks the label's colour for what is behind it. The accent's
+/// prominent glass read as a solid pill over the shot. Before macOS 26, the solid accent capsule. A destructive button
+/// is ``QuickAccessDestructiveButtonStyle`` on any system.
+struct QuickAccessGlassButtonStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        if #available(macOS 26, *) {
+        if configuration.role == .destructive {
+            Button(configuration).buttonStyle(QuickAccessDestructiveButtonStyle())
+        } else if #available(macOS 26, *) {
             Button(role: configuration.role, action: configuration.trigger) {
                 configuration.label
                     .font(.theme(weight: .medium))
@@ -210,34 +213,65 @@ private struct QuickAccessGlassButtonStyle: PrimitiveButtonStyle {
     }
 }
 
+/// macOS 27's Bordered - Destructive (the Figma community kit): the theme's danger as the label and as a fill of 20%,
+/// 28% pressed, 10% disabled with the label at 40%, on what is behind it. Not on glass: the active glass is a light grey
+/// (119 of 255 under the Library's dark stage), and the danger label over it and the fill measured 1.5:1; on the stage,
+/// 4.6:1 in dark and 4.0:1 in light. A tinted glass (`.glass(.regular.tint(.red))`) came out the plain grey. Sized as
+/// the glass large capsule beside it: 14 pt each side of the label and 29 pt high (measured on macOS 27).
+struct QuickAccessDestructiveButtonStyle: ButtonStyle {
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.theme(weight: .medium))
+            .foregroundStyle(EditorTheme.danger)
+            .opacity(isEnabled ? 1 : 0.4)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 29)
+            .background {
+                Capsule().fill(EditorTheme.danger.opacity(isEnabled ? (configuration.isPressed ? 0.28 : 0.2) : 0.1))
+            }
+            .contentShape(.capsule)
+    }
+}
+
 /// A button's title with its shortcut beside it, dimmer, or a tick and `confirmation` once done. Both are
 /// always laid out, so the button is as wide as the wider one and never wraps or jumps when it confirms.
 /// VoiceOver reads the shortcut from the button.
-private struct ShortcutLabel: View {
+struct ShortcutLabel: View {
 
     let title: String
     let keys: String
-    let confirmation: String
-    let isConfirmed: Bool
+
+    /// `nil` for a button that has nothing to confirm.
+    var confirmation: String?
+    var isConfirmed = false
 
     var body: some View {
         ZStack {
-            HStack(spacing: EditorTheme.tightSpacing) {
+            // The keys apart from the title and from each other: at 4 pt and no tracking, ⌘⌫ ran together. It costs
+            // the card nothing it had: the confirmations set its buttons' widths, and Copy and Save went from 184 to
+            // 185 pt (measured 2026-10-15)
+            HStack(spacing: EditorTheme.smallSpacing) {
                 Text(title)
                 Text(keys)
                     .font(.theme(weight: .medium, .mono))
+                    .tracking(1.5)
                     .opacity(0.5)
                     .accessibilityHidden(true)
             }
             .opacity(isConfirmed ? 0 : 1)
             .accessibilityHidden(isConfirmed)
-            HStack(spacing: EditorTheme.tightSpacing) {
-                LineIcon(.hugeiconsCheckmarkCircle)
-                    .accessibilityHidden(true)
-                Text(confirmation)
+            if let confirmation {
+                HStack(spacing: EditorTheme.tightSpacing) {
+                    LineIcon(.hugeiconsCheckmarkCircle)
+                        .accessibilityHidden(true)
+                    Text(confirmation)
+                }
+                .opacity(isConfirmed ? 1 : 0)
+                .accessibilityHidden(!isConfirmed)
             }
-            .opacity(isConfirmed ? 1 : 0)
-            .accessibilityHidden(!isConfirmed)
         }
         .lineLimit(1)
         .fixedSize()

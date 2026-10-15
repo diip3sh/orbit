@@ -3,7 +3,6 @@
 //  Reco
 //
 
-import QuickLook
 import SwiftUI
 
 /// Reco's main window (spec 0010): a sidebar of sections, everything Reco made as a grid of pictures,
@@ -40,11 +39,11 @@ struct LibraryView: View {
 }
 
 /// The section's items, or why there are none.
-private struct LibraryGrid: View {
-    @Bindable var viewModel: LibraryViewModel
+struct LibraryGrid: View {
+    let viewModel: LibraryViewModel
 
-    /// The grid's content, which the date headers measure themselves in, for the rail's active date. Nonisolated:
-    /// `onGeometryChange` reads it in a `Sendable` closure.
+    /// The grid's content, which the date headers measure themselves in, for the rail's active date, and the tiles,
+    /// for the open picture's push. Nonisolated: `onGeometryChange` reads it in a `Sendable` closure.
     nonisolated static let gridSpace = "libraryGrid"
 
     /// The content area's colour: the window's ground.
@@ -60,11 +59,17 @@ private struct LibraryGrid: View {
     /// The date the rail marks, written only when another one reaches the top.
     @State private var activeDate: String?
 
+    /// The picture open over the grid, until it is back in its tile.
+    @State private var scatter: LibraryScatter?
+
     var body: some View {
         let shown = viewModel.shown
         let groups = viewModel.shownGroups
         // Down the right edge while there are dates to go between
         let showsRail = viewModel.sort.groupsByDate && groups.count > 1
+        // The dates leave with the tiles, so the open picture is alone
+        let isScattered = scatter?.isOpen == true
+        let fade = isScattered ? LibraryPicturePreview.fadeOut : LibraryPicturePreview.fadeIn
 
         Group {
             if viewModel.items == nil, let error = viewModel.error {
@@ -109,11 +114,13 @@ private struct LibraryGrid: View {
                                             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.gridSpace)).minY } action: { top in
                                                 headerTops[group.id] = top
                                             }
-                                        LibraryMasonry(items: group.items, viewModel: viewModel)
+                                            .opacity(isScattered ? 0 : 1)
+                                            .animation(fade, value: isScattered)
+                                        LibraryMasonry(items: group.items, viewModel: viewModel, scatter: scatter, openPicture: open)
                                     }
                                 }
                             } else {
-                                LibraryMasonry(items: shown, viewModel: viewModel)
+                                LibraryMasonry(items: shown, viewModel: viewModel, scatter: scatter, openPicture: open)
                             }
                         }
                         .coordinateSpace(name: Self.gridSpace)
@@ -121,6 +128,8 @@ private struct LibraryGrid: View {
                         // The rail floats over the grid, so the last column keeps clear of it
                         .padding(.trailing, showsRail ? LibraryDateRail.width : 0)
                     }
+                    // The open picture leaves from its tile and lands back in it, so the grid holds still meanwhile
+                    .scrollDisabled(scatter != nil)
                     // A header is at the grid's top padding, where it counts as read, once the content has scrolled by its
                     // top: the content starts that padding down
                     .onScrollGeometryChange(for: String?.self) { geometry in
@@ -136,22 +145,60 @@ private struct LibraryGrid: View {
                                     proxy.scrollTo(date, anchor: .top)
                                 }
                             }
+                            .opacity(isScattered ? 0 : 1)
+                            .animation(fade, value: isScattered)
+                        }
+                    }
+                    .overlayPreferenceValue(LibraryOpenedTile.self) { tile in
+                        if let scatter {
+                            LibraryPicturePreview(scatter: scatter, tile: tile, viewModel: viewModel) { offset in
+                                // Along the grid as it reads: by date, a date's tiles in their order
+                                LibraryScatter.picture(offset, from: scatter.item, in: viewModel.sort.groupsByDate ? groups.flatMap(\.items) : shown)
+                            } show: { item in
+                                self.scatter?.item = item
+                                // At once, behind the picture: its tile is where it closes into
+                                proxy.scrollTo(item.id)
+                            } close: {
+                                self.scatter?.isOpen = false
+                            } didClose: {
+                                self.scatter = nil
+                            }
+                            // ponytail: opening another picture while one is on its way back drops that one into its tile at once
+                            .id(scatter.id)
+                            .transition(.opacity)
                         }
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // A picture whose item left the grid (another section, a search, deleted) has no tile to go back to
+        .onChange(of: scatter.map { shown.contains($0.item) } ?? false) { _, isShown in
+            if !isShown {
+                withAnimation(EditorTheme.fadeMotion) {
+                    scatter = nil
+                }
+            }
+        }
         .overlay(alignment: .bottom) {
             if viewModel.items != nil, let error = viewModel.error {
                 StatusBanner(message: error) { viewModel.error = nil }
                     .padding(EditorTheme.spacing)
             }
         }
-        // The pictures shown, in the grid's order, so the arrow keys go from one to the next
-        .quickLookPreview($viewModel.previewed, in: shown.filter { !$0.isMovie }.map(\.url))
         .navigationTitle(viewModel.section.heading)
         .navigationSubtitle(Text("^[\(shown.count) item](inflect: true)"))
+    }
+
+    /// Opens `item` over the grid from its tile at `centre`, turns back the one on its way home, or, for the picture
+    /// the arrows moved to, pushes the others from its tile.
+    private func open(_ item: LibraryItem, at centre: CGPoint) {
+        if scatter?.item == item {
+            scatter?.isOpen = true
+            scatter?.origin = centre
+        } else {
+            scatter = LibraryScatter(item: item, origin: centre)
+        }
     }
 }
 
@@ -160,12 +207,16 @@ private struct LibraryGrid: View {
 private struct LibraryMasonry: View {
     let items: [LibraryItem]
     let viewModel: LibraryViewModel
+    let scatter: LibraryScatter?
+    let openPicture: (LibraryItem, CGPoint) -> Void
 
     var body: some View {
         // Columns at least this wide, filling the row; tiles sit closer than date to date
         MasonryLayout(minimumColumnWidth: 200, spacing: EditorTheme.smallSpacing) {
             ForEach(items) { item in
-                LibraryTile(item: item, aspectRatio: viewModel.aspectRatios[item], viewModel: viewModel)
+                LibraryTile(item: item, aspectRatio: viewModel.aspectRatios[item], viewModel: viewModel, scatter: scatter) { centre in
+                    openPicture(item, centre)
+                }
             }
         }
     }
