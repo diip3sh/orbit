@@ -149,6 +149,19 @@ final class ScreenshotService {
         }
     }
 
+    /// Writes the history's copy: an HDR shot as `write(_:to:)` does, anything else as HEIC at quality 1.0.
+    /// Measured 2026-10-16 (macOS 27.0.1, M2) on the 251 PNGs of a real history: 54% of their bytes (67.6 to 36.7 MB),
+    /// larger only for 5 shots under 50 KB, 32 ms a shot against PNG's 21; on 42 of them every colour channel stayed
+    /// within 4 of 255 and alpha within 8. Any quality under 1.0 gave 30–39% of the bytes but moved colour at sharp
+    /// edges by up to 149 of 255. ImageIO lists AVIF but failed to write it.
+    @concurrent
+    nonisolated static func writeToHistory(_ screenshot: Screenshot, to url: URL) async throws {
+        guard screenshot.hdrImage == nil else { return try await write(screenshot, to: url) }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.heic.identifier as CFString, 1, nil)
+        try encode(screenshot.image, into: destination, options: [kCGImageDestinationLossyCompressionQuality: 1.0])
+    }
+
     /// Encodes off the main actor, for the clipboard
     @concurrent
     nonisolated static func pngData(of image: CGImage) async throws -> Data {

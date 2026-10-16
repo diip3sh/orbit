@@ -31,9 +31,15 @@ nonisolated struct Screenshot: Sendable {
     /// The kinds of file screenshots are written as: PNG, or HEIC with a gain map for HDR
     static let contentTypes: [UTType] = [.png, .heic]
 
-    /// `Reco_Screenshot_<yyyy-MM-dd-HH.mm.ss>.png` (`.heic` for HDR), for Save, drag-out and the history
+    /// `Reco_Screenshot_<yyyy-MM-dd-HH.mm.ss>.png` (`.heic` for HDR), for Save and drag-out
     var filename: String {
         SettingsStore.filename(prefix: "Reco_Screenshot", fileExtension: hdrImage == nil ? "png" : "heic", date: date)
+    }
+
+    /// The same name as `.heic`, HDR or not, for its copy in the history (`ScreenshotService.writeToHistory`). Only the
+    /// date decides it, so a background or redaction that drops the HDR picture still finds the copy.
+    var historyFilename: String {
+        SettingsStore.filename(prefix: "Reco_Screenshot", fileExtension: "heic", date: date)
     }
 
     /// The part of a display shot inside `sourceRect` (display points, top-left origin); nil if it's outside

@@ -30,7 +30,6 @@ struct ScreenshotSettingsView: View {
                         Text(retention.displayName).tag(retention)
                     }
                 }
-                Toggle("Save Copied Screenshots", isOn: $settings.savesCopiedScreenshots)
                 Toggle("Show Screenshots in the Notch", isOn: $settings.showsScreenshotsInNotch)
                 Button("Clear History…") {
                     confirmsClearingHistory = true
@@ -39,8 +38,8 @@ struct ScreenshotSettingsView: View {
                 Text("History")
             } footer: {
                 Text(
-                    "Every screenshot you take is kept for this long, then deleted, unless you save it. Screenshots you save stay in your folder "
-                        + "and the Library, and so do the ones you copy when Save Copied Screenshots is on."
+                    "Every screenshot you take, copied or not, is kept in the Library for this long, then deleted, unless you save it. "
+                        + "Only screenshots you save go into your folder."
                 )
             }
             .confirmationDialog("Clear screenshot history?", isPresented: $confirmsClearingHistory) {

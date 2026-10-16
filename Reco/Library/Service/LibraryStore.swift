@@ -13,7 +13,8 @@ import UniformTypeIdentifiers
 nonisolated enum LibraryStore {
 
     /// Everything Reco made in the folders, newest first. A folder that doesn't exist yet has none.
-    /// - Parameter history: Screenshots nobody saved (spec 0012); one that's also in `screenshots` is listed from there.
+    /// - Parameter history: Screenshots nobody saved (spec 0012); one that's also in `screenshots` is listed from there,
+    ///   matched by name without its extension, since the history keeps a PNG's copy as HEIC.
     @concurrent
     static func items(recordings: URL, screenshots: URL, history: URL) async throws -> [LibraryItem] {
         let recordingFiles = try contents(of: recordings)
@@ -25,10 +26,11 @@ nonisolated enum LibraryStore {
         let shots = screenshotFiles
             .filter { LibraryItem.isScreenshot($0.url, contentType: $0.type) }
             .map { LibraryItem(url: $0.url, kind: .screenshot, date: $0.date) }
-        let saved = Set(shots.map(\.url.lastPathComponent))
+        let saved = Set(shots.map(\.name))
         let kept = try contents(of: history)
-            .filter { LibraryItem.isScreenshot($0.url, contentType: $0.type) && !saved.contains($0.url.lastPathComponent) }
+            .filter { LibraryItem.isScreenshot($0.url, contentType: $0.type) }
             .map { LibraryItem(url: $0.url, kind: .screenshot, date: $0.date) }
+            .filter { !saved.contains($0.name) }
         return (movies + shots + kept).sorted { $0.date > $1.date }
     }
 

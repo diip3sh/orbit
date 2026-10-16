@@ -289,10 +289,8 @@ cancelled or fails. The capture toolbar is hidden the same way but **isn't** bro
 it was only the way in, so Esc on an area selection closes that state and leaves the screen as it was.
 
 - **Copy** (C14): PNG data only; the button turns to ✓ Copied as the card starts closing, so it confirms during the
-  fade. With **Settings → Screenshots → History → Save Copied Screenshots** on (`SettingsStore.savesCopiedScreenshots`,
-  off by default; 2026-10-09) the copy is also saved, like Save, so it stays in the folder and the Library instead of
-  expiring from the history: `ScreenshotController.didCopy(_:)`, which the card's Copy and `?then=copy` both call through
-  `QuickAccessController`'s `didCopy`. A failed save sends Screenshot Failed; the copy stands. **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed
+  fade. A copied shot stays in the history like any other and is never written to the screenshot folder (Save Copied
+  Screenshots, which saved it there, was removed 2026-10-16: it filled the user's Pictures folder with shots never saved). **Save**: writes to the screenshot folder, then the same with ✓ Saved; each button is as wide as its wider label; on failure the card stays and the Screenshot Failed
   notification is sent. **Recognize Text** (C7): the
   image's text to the clipboard, or, when it holds QR codes or barcodes, their payloads (N16: `TextRecognizer.codes`, Vision's
   `DetectBarcodesRequest` alongside the text request; Code Copied). **Hide Sensitive Info** (N9): pixelates emails, phone numbers,
@@ -960,7 +958,13 @@ another folder in **Settings → General → Output Location → Screenshots** (
 macOS asks once for Desktop access the first time a screenshot is saved there.
 
 **History** (spec 0012): every capture is also written, in the background (the card doesn't wait), to
-`URL.recoSupport/Screenshots/` under the same name. Save deletes that copy (after awaiting its write, if still
+`URL.recoSupport/Screenshots/` as `Screenshot.historyFilename`: the save name as `.heic`, HDR or not
+(`ScreenshotService.writeToHistory`: an HDR shot as Save writes it, anything else HEIC at quality 1.0). Measured
+2026-10-16 on a real history's 251 PNGs: 54% of their bytes (67.6 to 36.7 MB), channels within 4 of 255; under 1.0 the
+bytes fall to 30–39% but colour at sharp edges moves by up to 149, and the HEIC was larger only for 5 shots under 50 KB.
+Hashing to share identical shots was looked at and left out: the same 610 files (history and saved) had no two alike. The
+Library and the notch shelf match a saved shot to its history copy by name without the extension. A Library Save
+moves the `.heic` as it is. Save deletes that copy (after awaiting its write, if still
 running), so nothing is stored or listed twice; Copy, Pin, Recognize Text and Close leave it. **Settings → Screenshots →
 History** (in General until N14 gave screenshots their own tab): Keep Screenshots Off / 1 Week / 1 Month (default) / 3 Months, and Clear History…. Expired
 files (creation date older than the retention; Off expires all) are deleted with `removeItem`, not trashed, to free

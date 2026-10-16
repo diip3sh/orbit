@@ -10,11 +10,12 @@ and deleted after that so it doesn't fill the disk.
 
 ## What
 
-- Every successful capture (area, window, screen) is written as PNG to
-  `~/Library/Application Support/com.diip3sh.Reco/Screenshots/Reco_Screenshot_<capture time>.png`, in the
-  background: the card doesn't wait for it. A failed write is logged, never shown.
+- Every successful capture (area, window, screen) is written as HEIC (2026-10-16; PNG before) to
+  `~/Library/Application Support/com.diip3sh.Reco/Screenshots/Reco_Screenshot_<capture time>.heic`, in the
+  background: the card doesn't wait for it. A failed write is logged, never shown. An SDR shot is HEIC at quality
+  1.0, which looks the same as the PNG at 54% of its size; an HDR one keeps its gain map as Save writes it.
 - **Save** writes to the screenshot folder as before, then deletes the history copy. Copy, Pin,
-  Recognize Text and Close leave it.
+  Recognize Text and Close leave it: nothing reaches the screenshot folder without Save.
 - **Settings → Screenshots → History** (in General until 2026-10-08): Keep Screenshots (Off, 1 Week, 1 Month, 3 Months; default
   1 Month) and Clear History… (asks first).
 - The Library lists history screenshots with the saved ones, grouped under date headers.
@@ -25,11 +26,12 @@ and deleted after that so it doesn't fill the disk.
   files are deleted (`removeItem`), never trashed: the point is to free space. One function decides it,
   `ScreenshotHistory.isExpired(created:now:retention:)`.
 - Pruning runs when `ScreenshotController` is created and after each history write. It only touches
-  `Reco_Screenshot_*.png` in the history folder; Clear History empties that folder. Neither touches the
+  `Reco_Screenshot_*` PNGs and HEICs in the history folder; Clear History empties that folder. Neither touches the
   screenshot folder.
 - Save waits for a history write still in flight (kept by file name) before deleting, so the copy can't
   outlive the save.
-- A name in both folders (briefly, during Save) is listed once, from the screenshot folder.
+- A name in both folders (briefly, during Save) is listed once, from the screenshot folder. Names are
+  compared without the extension, since a saved PNG's history copy is a HEIC.
 - Date groups, newest first, empty ones left out: Today, Yesterday, Earlier This Week, Last Week, then a
   month each ("September 2026"). Weeks follow the calendar's first weekday.
 

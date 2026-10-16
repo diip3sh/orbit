@@ -153,20 +153,14 @@ final class ScreenshotController {
             let url = try await service.save(screenshot, in: settings.screenshotDirectory)
             logger.info("Screenshot saved: \(url.lastPathComponent)")
             // The history write may still be running: wait, or the copy would outlive the delete
-            await historyWrites[screenshot.filename]?.value
-            await ScreenshotHistory.remove(named: screenshot.filename)
+            await historyWrites[screenshot.historyFilename]?.value
+            await ScreenshotHistory.remove(named: screenshot.historyFilename)
             return true
         } catch {
             logger.error("Screenshot save failed: \(error.localizedDescription)")
             notificationService.sendScreenshotFailedNotification(error: error)
             return false
         }
-    }
-
-    /// After a screenshot was copied: saved too when Settings → Screenshots says so, so it stays in the Library
-    func didCopy(_ screenshot: Screenshot) async {
-        guard settings.savesCopiedScreenshots else { return }
-        _ = await save(screenshot)
     }
 
     /// Checks permission, then lets the user select and capture (nil = cancelled)
@@ -199,10 +193,10 @@ final class ScreenshotController {
     private func keepInHistory(_ screenshot: Screenshot) {
         let retention = settings.screenshotHistoryRetention
         guard retention != .off else { return }
-        let name = screenshot.filename
+        let name = screenshot.historyFilename
         historyWrites[name] = Task {
             do {
-                try await ScreenshotService.write(screenshot, to: ScreenshotHistory.directory.appending(path: name))
+                try await ScreenshotService.writeToHistory(screenshot, to: ScreenshotHistory.directory.appending(path: name))
                 await ScreenshotHistory.prune(retention: retention)
             } catch {
                 logger.error("Screenshot history write failed: \(error.localizedDescription)")
