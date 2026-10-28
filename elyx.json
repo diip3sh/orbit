@@ -1,0 +1,20 @@
+{
+  "git": {
+    "flow": "relaxed"
+  },
+  "files": {
+    "exclude": [
+      ".pnpm-store"
+    ]
+  },
+  "assets": {
+    "include": [
+      "resources/assets"
+    ]
+  },
+  "fonts": {
+    "include": [
+      "resources/fonts"
+    ]
+  }
+}
