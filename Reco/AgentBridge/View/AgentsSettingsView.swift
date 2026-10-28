@@ -19,8 +19,8 @@ struct AgentsSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            Section("Server") {
+        SettingsPage("Agents") {
+            SettingsSection("Server") {
                 LabeledContent("Status") {
                     Text(viewModel.serverStatus)
                         .foregroundStyle(viewModel.hasServerError ? EditorTheme.danger : EditorTheme.ink)
@@ -29,7 +29,10 @@ struct AgentsSettingsView: View {
                 LabeledContent("Latest render", value: viewModel.renderSummary)
             }
 
-            Section {
+            SettingsSection(
+                "Agents",
+                footer: "Restart an agent after connecting it. Orbit adds itself as an MCP server named orbit to the agent's own settings."
+            ) {
                 ForEach(viewModel.rows) { row in
                     LabeledContent(row.kind.displayName) {
                         HStack {
@@ -49,13 +52,8 @@ struct AgentsSettingsView: View {
                         }
                     }
                 }
-            } header: {
-                Text("Agents")
-            } footer: {
-                Text("Restart an agent after connecting it. Orbit adds itself as an MCP server named reco to the agent's own settings.")
             }
         }
-        .settingsForm()
         .task { viewModel.refresh() }
         .alert("Couldn't Update the Agent", isPresented: errorShown) {
             Button("OK") {}

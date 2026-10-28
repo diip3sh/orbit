@@ -79,7 +79,6 @@ private struct QuickAccessAnnotation: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .environment(\.colorScheme, .dark)
     }
 }
 

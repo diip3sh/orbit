@@ -27,7 +27,7 @@ struct SectionHeader: View {
     var body: some View {
         Text(title)
             .font(.callout.weight(.semibold))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(EditorTheme.dim)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
@@ -63,7 +63,7 @@ struct MenuBarToggle: View {
             HStack {
                 Text(name)
                     .font(.body.weight(.medium))
-                    .foregroundStyle(isDisabled || !isEnabled ? .secondary : .primary)
+                    .foregroundStyle(isDisabled || !isEnabled ? EditorTheme.dim : EditorTheme.ink)
                 Spacer()
                 Toggle("", isOn: $isOn)
                     .toggleStyle(.switch)
@@ -103,11 +103,11 @@ struct ExpandableHeader: View {
                 Spacer()
                 if let value {
                     Text(value)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(EditorTheme.dim)
                 }
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(EditorTheme.dim)
                     .rotationEffect(.degrees(isExpanded ? 90 : 0))
             }
             .padding(.horizontal, 12)
@@ -132,7 +132,7 @@ struct DeviceRow: View {
         Button(action: onSelect) {
             HStack(spacing: 12) {
                 Image(systemName: icon)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(EditorTheme.dim)
                     .frame(width: 20)
 
                 Text(name)
@@ -189,7 +189,7 @@ struct MicrophoneExpandablePicker: View {
                     }
                 }
                 .padding(.leading, 12)
-                .background(.quaternary.opacity(0.3))
+                .background(EditorTheme.ink.opacity(0.03))
             }
         }
     }
@@ -244,7 +244,7 @@ struct CameraExpandablePicker: View {
                     }
                 }
                 .padding(.leading, 12)
-                .background(.quaternary.opacity(0.3))
+                .background(EditorTheme.ink.opacity(0.03))
             }
         }
     }

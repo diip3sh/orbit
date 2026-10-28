@@ -13,34 +13,38 @@ struct ScreenshotSettingsView: View {
     @State private var confirmsClearingHistory = false
 
     var body: some View {
-        Form {
+        SettingsPage("Screenshots") {
             if #available(macOS 26.0, *) {
-                Section {
+                SettingsSection(
+                    "Capture",
+                    footer: "Screen and area screenshots keep HDR content's brightness and are saved as HEIC. Copied screenshots stay standard PNGs."
+                ) {
                     Toggle("Capture HDR Screenshots", isOn: $settings.capturesHDRScreenshots)
-                } header: {
-                    Text("Capture")
-                } footer: {
-                    Text("Screen and area screenshots keep HDR content's brightness and are saved as HEIC. Copied screenshots stay standard PNGs.")
                 }
             }
 
-            Section {
-                Picker("Keep Screenshots", selection: $settings.screenshotHistoryRetention) {
+            SettingsSection(
+                "History",
+                footer: """
+                    Every screenshot you take, copied or not, is kept in the Library for this long, then deleted, unless you save it. \
+                    Only screenshots you save go into your folder.
+                    """
+            ) {
+                SettingsPicker(
+                    "Keep Screenshots",
+                    selection: $settings.screenshotHistoryRetention,
+                    value: settings.screenshotHistoryRetention.displayName
+                ) {
                     ForEach(ScreenshotHistoryRetention.allCases) { retention in
                         Text(retention.displayName).tag(retention)
                     }
                 }
                 Toggle("Show Screenshots in the Notch", isOn: $settings.showsScreenshotsInNotch)
-                Button("Clear History…") {
-                    confirmsClearingHistory = true
+                LabeledContent("Unsaved Screenshots") {
+                    Button("Clear History…") {
+                        confirmsClearingHistory = true
+                    }
                 }
-            } header: {
-                Text("History")
-            } footer: {
-                Text(
-                    "Every screenshot you take, copied or not, is kept in the Library for this long, then deleted, unless you save it. "
-                        + "Only screenshots you save go into your folder."
-                )
             }
             .confirmationDialog("Clear screenshot history?", isPresented: $confirmsClearingHistory) {
                 Button("Clear History", role: .destructive) {
@@ -50,16 +54,13 @@ struct ScreenshotSettingsView: View {
                 Text("Screenshots you haven't saved are deleted for good.")
             }
 
-            Section {
+            SettingsSection(
+                "Background",
+                footer: "What a screenshot's card adds when you click its background button. Auto Balance trims borders of one colour first, so the padding is even."
+            ) {
                 ScreenshotBackgroundSettings(settings: settings)
-            } header: {
-                Text("Background")
-            } footer: {
-                Text("What a screenshot's card adds when you click its background button. Auto Balance trims borders of one colour first, so the padding is even.")
             }
         }
-        .formStyle(.grouped)
-        .padding()
     }
 }
 

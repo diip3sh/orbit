@@ -15,47 +15,48 @@ struct SettingsView: View {
     var updaterService: UpdaterService
     var agentBridge: AgentBridgeServer
 
-    /// The tab showing, which "Set Up Agents…" in the Record with AI Agent panel switches.
-    @AppStorage(AgentsSettingsView.tabStorageKey) private var tab = "general"
+    /// The pane showing, which "Set Up Agents…" in the Record with AI Agent panel switches.
+    @AppStorage(AgentsSettingsView.tabStorageKey) private var tab = SettingsTab.general
+
+    /// The title bar's height, which the window adds to the content's.
+    @State private var titlebarInset: CGFloat = 0
+
+    private static let windowSize = CGSize(width: 856, height: 700)
 
     var body: some View {
-        TabView(selection: $tab) {
-            Tab("General", systemImage: "gearshape", value: "general") {
-                GeneralSettingsView(settings: settings, updaterService: updaterService)
-            }
+        HStack(spacing: EditorTheme.smallSpacing) {
+            SettingsSidebar(selection: $tab)
+                .frame(width: 210)
 
-            Tab("Video", systemImage: "video", value: "video") {
-                VideoSettingsView(settings: settings)
+            Group {
+                switch tab {
+                case .general:
+                    GeneralSettingsView(settings: settings, updaterService: updaterService)
+                case .video:
+                    VideoSettingsView(settings: settings)
+                case .screenshots:
+                    ScreenshotSettingsView(settings: settings)
+                case .audio:
+                    AudioSettingsView(settings: settings)
+                case .shortcuts:
+                    ShortcutsSettingsView()
+                case .agents:
+                    AgentsSettingsView(server: agentBridge)
+                }
             }
-
-            Tab("Screenshots", systemImage: "camera.viewfinder", value: "screenshots") {
-                ScreenshotSettingsView(settings: settings)
-            }
-
-            Tab("Audio", systemImage: "waveform", value: "audio") {
-                AudioSettingsView(settings: settings)
-            }
-
-            Tab("Shortcuts", systemImage: "keyboard", value: "shortcuts") {
-                ShortcutsSettingsView()
-            }
-
-            Tab("Agents", systemImage: "terminal", value: AgentsSettingsView.tag) {
-                AgentsSettingsView(server: agentBridge)
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 500, height: 420)
-    }
-}
-
-extension View {
-
-    /// A Settings tab's grouped form on the theme's ground instead of the system's window colour.
-    func settingsForm() -> some View {
-        formStyle(.grouped)
-            .scrollContentBackground(.hidden)
-            .padding()
-            .editorWindowBackground()
+        .padding(EditorTheme.smallSpacing)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
+        // The window is sized from the safe area, so the title bar's height comes off the content's
+        .frame(width: Self.windowSize.width, height: Self.windowSize.height - titlebarInset)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { titlebarInset = $0 }
+        .editorWindowBackground()
+        // No title bar background or its line over the pane's scroll view: the pane's title is its own header
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .toolbar(removing: .title)
+        .background(SettingsWindowConfigurator())
     }
 }
 
@@ -63,42 +64,53 @@ extension View {
 
 struct ShortcutsSettingsView: View {
     var body: some View {
-        Form {
-            Section("Capture Toolbar") {
-                KeyboardShortcuts.Recorder("Screenshot", name: .showScreenshotToolbar)
-                KeyboardShortcuts.Recorder("Record", name: .showRecordingToolbar)
+        SettingsPage("Shortcuts") {
+            SettingsSection("Capture Toolbar") {
+                ShortcutRow("Screenshot", name: .showScreenshotToolbar)
+                ShortcutRow("Record", name: .showRecordingToolbar)
             }
 
-            Section("Recording") {
-                KeyboardShortcuts.Recorder("Toggle Recording", name: .toggleRecording)
-                KeyboardShortcuts.Recorder("Pause/Resume Recording", name: .pauseRecording)
-                KeyboardShortcuts.Recorder("Restart Recording", name: .restartRecording)
-                KeyboardShortcuts.Recorder("Cancel Recording", name: .cancelRecording)
+            SettingsSection("Recording") {
+                ShortcutRow("Toggle Recording", name: .toggleRecording)
+                ShortcutRow("Pause/Resume Recording", name: .pauseRecording)
+                ShortcutRow("Restart Recording", name: .restartRecording)
+                ShortcutRow("Cancel Recording", name: .cancelRecording)
             }
 
-            Section("Web Recording") {
-                KeyboardShortcuts.Recorder("Record with AI Agent", name: .recordWithAgent)
+            SettingsSection("Web Recording") {
+                ShortcutRow("Record with AI Agent", name: .recordWithAgent)
             }
 
-            Section("Content Selection") {
-                KeyboardShortcuts.Recorder("Select Content", name: .selectContent)
-                KeyboardShortcuts.Recorder("Select Area", name: .selectArea)
+            SettingsSection("Content Selection") {
+                ShortcutRow("Select Content", name: .selectContent)
+                ShortcutRow("Select Area", name: .selectArea)
             }
 
-            Section("Screenshots") {
-                KeyboardShortcuts.Recorder("Capture Area", name: .captureArea)
-                KeyboardShortcuts.Recorder("Capture Previous Area", name: .capturePreviousArea)
-                KeyboardShortcuts.Recorder("Capture Window", name: .captureWindow)
-                KeyboardShortcuts.Recorder("Capture Screen", name: .captureScreen)
-            }
-
-            Section {
-                Text("Shortcuts work globally, even when Orbit is not focused.")
-                    .font(.theme(.caption))
-                    .foregroundStyle(EditorTheme.dim)
+            SettingsSection("Screenshots", footer: "Shortcuts work globally, even when Orbit is not focused.") {
+                ShortcutRow("Capture Area", name: .captureArea)
+                ShortcutRow("Capture Previous Area", name: .capturePreviousArea)
+                ShortcutRow("Capture Window", name: .captureWindow)
+                ShortcutRow("Capture Screen", name: .captureScreen)
             }
         }
-        .settingsForm()
+    }
+}
+
+/// A shortcut's name with its recorder on the right edge.
+private struct ShortcutRow: View {
+    let title: LocalizedStringKey
+    let name: KeyboardShortcuts.Name
+
+    init(_ title: LocalizedStringKey, name: KeyboardShortcuts.Name) {
+        self.title = title
+        self.name = name
+    }
+
+    var body: some View {
+        LabeledContent(title) {
+            KeyboardShortcuts.Recorder(for: name)
+                .fixedSize()
+        }
     }
 }
 
@@ -140,15 +152,15 @@ struct VideoSettingsView: View {
         """
 
     var body: some View {
-        Form {
-            Section("Recording") {
-                Picker("Frame Rate", selection: $settings.frameRate) {
+        SettingsPage("Video") {
+            SettingsSection("Recording") {
+                SettingsPicker("Frame Rate", selection: $settings.frameRate, value: settings.frameRate.displayName) {
                     ForEach(FrameRate.allCases) { rate in
                         Text(rate.displayName).tag(rate)
                     }
                 }
 
-                Picker("Codec", selection: $settings.videoCodec) {
+                SettingsPicker("Codec", selection: $settings.videoCodec, value: settings.videoCodec.rawValue) {
                     ForEach(VideoCodec.allCases) { codec in
                         let isSupported = settings.containerFormat.supportedVideoCodecs.contains(codec)
                         if isSupported {
@@ -161,13 +173,13 @@ struct VideoSettingsView: View {
                     }
                 }
 
-                Picker("Container", selection: $settings.containerFormat) {
+                SettingsPicker("Container", selection: $settings.containerFormat, value: ".\(settings.containerFormat.rawValue)") {
                     ForEach(ContainerFormat.allCases) { format in
                         Text(".\(format.rawValue)").tag(format)
                     }
                 }
 
-                Picker("Quality", selection: $settings.videoQuality) {
+                SettingsPicker("Quality", selection: $settings.videoQuality, value: settings.videoQuality.rawValue) {
                     ForEach(VideoQuality.allCases) { quality in
                         Text(quality.rawValue).tag(quality)
                     }
@@ -176,7 +188,7 @@ struct VideoSettingsView: View {
                 .help(qualityHelpText)
             }
 
-            Section("Advanced") {
+            SettingsSection("Advanced") {
                 Toggle("Capture Alpha Channel", isOn: $settings.captureAlphaChannel)
                     .disabled(!settings.videoCodec.canToggleAlpha || !settings.containerFormat.supportsAlphaChannel)
                     .help(alphaChannelHelpText)
@@ -189,8 +201,13 @@ struct VideoSettingsView: View {
                     .help(captureNativeResHelpText)
 
                 Toggle(isOn: $settings.recordInputTelemetry) {
-                    Text("Record Input Telemetry")
-                    Text("Saves cursor, clicks, scrolls and keystrokes next to each recording. All but the cursor need Input Monitoring permission (relaunch after granting).")
+                    SettingsLabel(
+                        "Record Input Telemetry",
+                        detail: """
+                            Saves cursor, clicks, scrolls and keystrokes next to each recording. \
+                            All but the cursor need Input Monitoring permission (relaunch after granting).
+                            """
+                    )
                 }
                 .onChange(of: settings.recordInputTelemetry) { _, isEnabled in
                     // Ask up front; without Input Monitoring clicks, scrolls and keystrokes are simply skipped
@@ -200,13 +217,15 @@ struct VideoSettingsView: View {
                 }
 
                 Toggle(isOn: $settings.keepSystemCursorInVideo) {
-                    Text("Keep System Cursor in Video")
-                    Text("When off, the cursor is left out of the video so the editor can redraw it smoothly. Recordings have no cursor until edited.")
+                    SettingsLabel(
+                        "Keep System Cursor in Video",
+                        detail: "When off, the cursor is left out of the video so the editor can redraw it smoothly. Recordings have no cursor until edited."
+                    )
                 }
                 .disabled(!settings.recordInputTelemetry)
             }
 
-            Section("Display Elements") {
+            SettingsSection("Display Elements") {
                 Toggle("Show Cursor", isOn: $settings.showCursor)
                     .disabled(settings.leavesCursorToEditor)
                     .help(settings.leavesCursorToEditor ? "The cursor is left for the editor while Record Input Telemetry is on" : "")
@@ -217,12 +236,11 @@ struct VideoSettingsView: View {
                 Toggle("Show Orbit", isOn: $settings.showReco)
             }
 
-            Section("Window Capture") {
+            SettingsSection("Window Capture") {
                 Toggle("Show Window Shadows", isOn: $settings.showWindowShadows)
                     .help("Include window shadows when capturing individual windows")
             }
         }
-        .settingsForm()
     }
 }
 
@@ -232,8 +250,8 @@ struct AudioSettingsView: View {
     @Bindable var settings: SettingsStore
 
     var body: some View {
-        Form {
-            Section("Sources") {
+        SettingsPage("Audio") {
+            SettingsSection("Sources") {
                 Toggle("Capture System Audio", isOn: $settings.captureSystemAudio)
                     .help("Record audio from applications and system sounds")
 
@@ -241,8 +259,8 @@ struct AudioSettingsView: View {
                     .help("Record audio from the default microphone input")
             }
 
-            Section("Format") {
-                Picker("Codec", selection: $settings.audioCodec) {
+            SettingsSection("Format", footer: "Audio tracks are recorded separately for post-processing flexibility.") {
+                SettingsPicker("Codec", selection: $settings.audioCodec, value: settings.audioCodec.rawValue) {
                     ForEach(AudioCodec.allCases) { codec in
                         let isSupported = settings.containerFormat.supportedAudioCodecs.contains(codec)
                         if isSupported {
@@ -256,14 +274,7 @@ struct AudioSettingsView: View {
                 }
                 .help("AAC is compressed, PCM is uncompressed lossless (MOV only)")
             }
-
-            Section {
-                Text("Audio tracks are recorded separately for post-processing flexibility.")
-                    .font(.theme(.caption))
-                    .foregroundStyle(EditorTheme.dim)
-            }
         }
-        .settingsForm()
     }
 }
 
@@ -274,8 +285,8 @@ struct GeneralSettingsView: View {
     @Bindable var updaterService: UpdaterService
 
     var body: some View {
-        Form {
-            Section("Output Location") {
+        SettingsPage("General") {
+            SettingsSection("Output Location") {
                 FolderSettingRow(
                     title: "Recordings",
                     folder: settings.outputDirectory,
@@ -292,15 +303,15 @@ struct GeneralSettingsView: View {
                 )
             }
 
-            Section("Recording") {
-                Picker("Countdown", selection: $settings.countdownDuration) {
+            SettingsSection("Recording") {
+                SettingsPicker("Countdown", selection: $settings.countdownDuration, value: settings.countdownDuration.displayName) {
                     ForEach(CountdownDuration.allCases) { duration in
                         Text(duration.displayName).tag(duration)
                     }
                 }
             }
 
-            Section("Software Updates") {
+            SettingsSection("Software Updates") {
                 Toggle("Automatically Check for Updates", isOn: $updaterService.automaticallyChecksForUpdates)
 
                 LabeledContent("Updates") {
@@ -313,7 +324,6 @@ struct GeneralSettingsView: View {
 
             AboutSection()
         }
-        .settingsForm()
     }
 
     /// Opens an NSOpenPanel to select a custom output directory
@@ -377,17 +387,16 @@ private struct FolderSettingRow: View {
                 }
             }
         } label: {
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                Label {
+                HStack(spacing: 5) {
+                    Image(systemName: "folder")
                     Text(displayPath)
-                        .font(.theme(.caption, .mono))
+                        .font(.theme(.subheadline, .mono))
                         .lineLimit(1)
                         .truncationMode(.middle)
-                } icon: {
-                    Image(systemName: "folder")
                 }
-                .font(.theme(.caption))
+                .font(.theme(.subheadline))
                 .foregroundStyle(EditorTheme.dim)
             }
         }
@@ -406,22 +415,48 @@ struct AboutSection: View {
     }
 
     var body: some View {
-        Section("About") {
-            LabeledContent("Version", value: "v\(appVersion) (\(gitSHA))")
+        SettingsSection("About") {
+            LabeledContent("Version") {
+                Text(verbatim: "v\(appVersion) (\(gitSHA))")
+                    .font(.theme(.callout, .mono))
+                    .textSelection(.enabled)
+            }
 
             LabeledContent("Source Code") {
-                Link("github.com/diip3sh/reco", destination: URL(string: "https://github.com/diip3sh/reco")!)
+                AboutLink("github.com/diip3sh/reco", destination: URL(string: "https://github.com/diip3sh/reco")!)
             }
 
             LabeledContent("Based On") {
-                Link("BetterCapture by Joshua Sattler", destination: URL(string: "https://github.com/jsattler/BetterCapture")!)
+                AboutLink("BetterCapture by Joshua Sattler", destination: URL(string: "https://github.com/jsattler/BetterCapture")!)
             }
 
             // Paper Shaders' NOTICE (Apache-2.0): the motion editor's backgrounds are ported from them
             LabeledContent("Motion Backgrounds") {
-                Link("Powered by Paper Shaders, © 2026 Paper", destination: URL(string: "https://shaders.paper.design")!)
+                AboutLink("Powered by Paper Shaders, © 2026 Paper", destination: URL(string: "https://shaders.paper.design")!)
             }
         }
+    }
+}
+
+/// A link in the About card, as text in the accent.
+private struct AboutLink: View {
+    let title: String
+    let destination: URL
+
+    init(_ title: String, destination: URL) {
+        self.title = title
+        self.destination = destination
+    }
+
+    var body: some View {
+        Link(destination: destination) {
+            Text(verbatim: title)
+                .font(.theme(.body, weight: .medium))
+                // The fill's colour set: `accent` follows the system and greys out with the window
+                .foregroundStyle(EditorTheme.accentFill)
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
     }
 }
 

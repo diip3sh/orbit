@@ -52,7 +52,7 @@ struct MenuBarView: View {
                             .controlSize(.small)
                             .frame(width: 20)
                         Text("Saving Recording…")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(EditorTheme.dim)
                         Spacer()
                     }
                     .padding(.horizontal, EditorTheme.mediumSpacing)
@@ -137,7 +137,12 @@ struct MenuBarView: View {
             .padding(.bottom, 8)
         }
         .frame(width: 288)
-        .background(.ultraThinMaterial)
+        // Solid, as every panel: the menu bar window's own background is see-through, so in light mode over a dark
+        // wallpaper the labels sat on grey, with a material or without (2026-10-13, macOS 27). Text takes the theme's
+        // colours, never `.secondary`/`.tertiary`: this window draws those as vibrant greys, measured at 3:1 and 1.6:1
+        // on white, where `dim` is 4:1 in the same capture
+        .foregroundStyle(EditorTheme.ink)
+        .background(EditorTheme.surface)
     }
 }
 
@@ -161,7 +166,7 @@ struct MenuBarErrorRow: View {
             Button("Dismiss", systemImage: "xmark", action: dismiss)
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(EditorTheme.dim)
         }
         .padding(.horizontal, EditorTheme.mediumSpacing)
         .padding(.vertical, EditorTheme.smallSpacing)
@@ -241,7 +246,7 @@ struct PermissionRow: View {
                 if !isGranted {
                     Text("Open Settings")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(EditorTheme.dim)
                 }
             }
             .padding(.horizontal, 12)
