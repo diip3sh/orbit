@@ -95,16 +95,3 @@ func withMotion<Result>(
 ) rethrows -> Result {
     try withAnimation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : animation, body)
 }
-
-extension ToolbarContent {
-
-    /// Without the glass macOS 26 puts behind toolbar items, for a button that draws its own.
-    @ToolbarContentBuilder
-    func hidingSharedBackground() -> some ToolbarContent {
-        if #available(macOS 26, *) {
-            sharedBackgroundVisibility(.hidden)
-        } else {
-            self
-        }
-    }
-}

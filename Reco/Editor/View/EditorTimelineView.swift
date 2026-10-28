@@ -8,8 +8,8 @@
 import SwiftUI
 
 /// The timeline's tracks: the video row, the clicks & keys row, the audio row, then the zoom and
-/// mask lanes, over a faint grid, with cut parts ghosted, trim handles on the kept parts' edges and
-/// the playhead's line. The window on the recording is the view model's viewport: dragging scrubs,
+/// mask lanes, each named on its own lane with a faint grid, with cut parts ghosted, trim handles
+/// on the kept parts' edges and the playhead's line. The window on the recording is the view model's viewport: dragging scrubs,
 /// clicking selects a part, scrolling pans and ⌘-scrolling zooms.
 struct EditorTimelineView: View {
     let viewModel: EditorViewModel
@@ -26,7 +26,14 @@ struct EditorTimelineView: View {
     @State private var indicatorGrab: (x: CGFloat, start: Double)?
 
     private static let spacing: CGFloat = 6
+    private static let trackSpacing: CGFloat = 8
     private static let indicatorHeight: CGFloat = 4
+
+    /// The margin left of the tracks that holds their names: the ruler and the tracks start after it.
+    static let trackLabelWidth: CGFloat = 88
+
+    /// The video row's room on its lane, above and below.
+    private static let videoInset: CGFloat = 12
 
     /// How far the pointer may move for a press to still count as a click.
     private static let clickTolerance: CGFloat = 3
@@ -63,37 +70,50 @@ struct EditorTimelineView: View {
 
     /// The track rows stacked, with the grid, the cut ghosts, the handles and the playhead.
     private var rows: some View {
-        VStack(spacing: Self.spacing) {
-            VideoTrack(
-                viewModel: viewModel,
-                videoSize: videoSize,
-                width: width,
-                showsTelemetry: $showsTelemetry,
-                hoveredSegment: $hoveredSegment
-            )
+        let viewport = viewModel.viewport
+        return VStack(spacing: Self.trackSpacing) {
+            TimelineTrack(title: "Video", viewport: viewport, inset: Self.videoInset) {
+                VideoTrack(
+                    viewModel: viewModel,
+                    videoSize: videoSize,
+                    width: width,
+                    showsTelemetry: $showsTelemetry,
+                    hoveredSegment: $hoveredSegment
+                )
+            }
 
             if showsTelemetry, viewModel.markers != nil {
-                TelemetryLane(viewModel: viewModel, width: width)
+                TimelineTrack(title: "Input", viewport: viewport, inset: 5) {
+                    TelemetryLane(viewModel: viewModel, width: width)
+                }
             } else if viewModel.source?.telemetryError != nil {
-                Text("No clicks or keystrokes: recorded without input telemetry")
-                    .font(.theme(.caption))
-                    .foregroundStyle(EditorTheme.dim)
-                    .frame(height: TelemetryLane.height)
+                TimelineTrack(title: "Input", viewport: viewport, inset: 5) {
+                    Text("No clicks or keystrokes: recorded without input telemetry")
+                        .font(.theme(.caption))
+                        .foregroundStyle(EditorTheme.dim)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: TelemetryLane.height)
+                }
             }
 
             if viewModel.source.map({ !$0.audioTrackIDs.isEmpty }) == true {
-                AudioLane(viewModel: viewModel, width: width)
+                TimelineTrack(title: "Audio", viewport: viewport, inset: 2) {
+                    AudioLane(viewModel: viewModel, width: width)
+                }
             }
 
-            ZoomLane(viewModel: viewModel, width: width)
+            TimelineTrack(title: "Zoom", viewport: viewport, inset: 3) {
+                ZoomLane(viewModel: viewModel, width: width)
+            }
 
             if !viewModel.project.masks.isEmpty {
-                MaskLane(viewModel: viewModel, width: width)
-                    .transition(.opacity)
+                TimelineTrack(title: "Masks", viewport: viewport, inset: 3) {
+                    MaskLane(viewModel: viewModel, width: width)
+                }
+                .transition(.opacity)
             }
         }
         .editorMotion(value: viewModel.project.masks.isEmpty)
-        .background(grid)
         .background(
             ScrollWheelRegion { event, point in
                 handleScroll(event, at: point)
@@ -121,21 +141,6 @@ struct EditorTimelineView: View {
                 }
         )
         .coordinateSpace(.named(TrimHandle.coordinateSpace))
-    }
-
-    /// A hairline at each of the ruler's labelled times, running down the tracks.
-    private var grid: some View {
-        Canvas { context, size in
-            let viewport = viewModel.viewport
-            guard viewport.visible > 0 else { return }
-            var lines = Path()
-            for time in TimelineRuler.majors(in: viewport, width: size.width) {
-                let gridX = viewport.x(at: time, width: size.width)
-                lines.addRect(CGRect(x: gridX, y: 0, width: 1, height: size.height))
-            }
-            context.fill(lines, with: .color(EditorTheme.ink.opacity(0.04)))
-        }
-        .allowsHitTesting(false)
     }
 
     /// Cut parts as dashed, hatched ghosts naming what was cut.
@@ -194,6 +199,8 @@ struct EditorTimelineView: View {
             }
         }
         .frame(width: width, height: VideoTrack.height, alignment: .leading)
+        // On the video row, inside its lane
+        .offset(y: Self.videoInset)
     }
 
     /// The playhead's line, from the top of the video row to the bottom of the lanes.

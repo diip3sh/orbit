@@ -22,7 +22,10 @@ struct EditorView: View {
     /// The inspector's tab, kept here so it survives a visit to export.
     @State private var inspectorTab = InspectorTab.background
 
-    /// Whether the title bar's name is being edited, which Esc must end before it leaves export.
+    /// The inspector's width, which its leading edge drags between the old column's limits.
+    @AppStorage("editorInspectorWidth") private var inspectorWidth = EditorInspector.idealWidth
+
+    /// Whether the header's name is being edited, which Esc must end before it leaves export.
     @State private var isRenaming = false
 
     /// The export's visit, while it shows.
@@ -39,38 +42,55 @@ struct EditorView: View {
     var body: some View {
         Group {
             if let source = viewModel.source {
-                VStack(spacing: 0) {
-                    EditorStage(viewModel: viewModel)
-                    if export == nil {
-                        timeline(for: source)
-                            .transition(reducesMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
-                // The timeline leaves below the window's edge, not over it
-                .clipped()
-                // Solid under the stage and timeline only: the inspector shows the desktop
-                .editorWindowBackground()
-                // A `.recostyle` file dropped on the editor is kept with the saved styles and applied
-                .dropDestination(for: URL.self) { urls, _ in
-                    guard let url = urls.first(where: { $0.pathExtension == StylePreset.fileExtension }) else { return false }
-                    viewModel.importStyle(from: url)
-                    return true
-                }
-                // One inspector for both modes, so the column stays put and only its content changes: the
-                // editor's sections, or the export's options, which always show
-                .inspector(isPresented: export == nil ? $showsInspector : .constant(true)) {
-                    Group {
-                        if let export {
-                            ExportOptions(viewModel: viewModel, session: export)
-                        } else {
-                            EditorSidePanel(viewModel: viewModel, chat: chat, tab: $inspectorTab, picked: $pickedPanel)
+                HStack(spacing: EditorTheme.smallSpacing) {
+                    VStack(spacing: 0) {
+                        EditorHeader(
+                            viewModel: viewModel,
+                            export: export,
+                            isRenaming: $isRenaming,
+                            showsInspector: $showsInspector,
+                            openExport: openExport,
+                            closeExport: closeExport
+                        )
+                        EditorStage(viewModel: viewModel)
+                        if export == nil {
+                            timeline(for: source)
+                                .transition(reducesMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                         }
                     }
-                    .transition(.opacity)
-                    .translucentColumn()
-                    .inspectorColumnWidth(min: 300, ideal: EditorInspector.idealWidth, max: 460)
+                    // The timeline leaves below the panel's edge, not over it
+                    .editorPanel()
+                    // A `.recostyle` file dropped on the editor is kept with the saved styles and applied
+                    .dropDestination(for: URL.self) { urls, _ in
+                        guard let url = urls.first(where: { $0.pathExtension == StylePreset.fileExtension }) else { return false }
+                        viewModel.importStyle(from: url)
+                        return true
+                    }
+
+                    // One panel for both modes, so it stays put and only its content changes: the editor's
+                    // sections, or the export's options, which always show
+                    if export != nil || showsInspector {
+                        Group {
+                            if let export {
+                                ExportOptions(viewModel: viewModel, session: export)
+                            } else {
+                                EditorSidePanel(viewModel: viewModel, chat: chat, tab: $inspectorTab, picked: $pickedPanel)
+                            }
+                        }
+                        .transition(.opacity)
+                        .frame(width: CGFloat(inspectorWidth))
+                        .frame(maxHeight: .infinity)
+                        .editorPanel()
+                        .overlay(alignment: .leading) {
+                            InspectorResizeHandle(width: $inspectorWidth)
+                        }
+                        .transition(reducesMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
+                    }
                 }
-                .toolbar { toolbar }
+                .padding(EditorTheme.smallSpacing)
+                .ignoresSafeArea()
+                .editorMotion(value: showsInspector)
+                .editorWindowBackground()
                 .transition(.opacity)
             } else if let error = viewModel.error {
                 ContentUnavailableView {
@@ -103,6 +123,8 @@ struct EditorView: View {
             }
         }
         .editorMotion(.smooth, value: viewModel.source == nil)
+        // The traffic lights in the main panel's header row, also while it opens
+        .background(SettingsWindowConfigurator(rowHeight: EditorHeader.height))
         .task(id: viewModel.videoURL) {
             await viewModel.load()
         }
@@ -113,85 +135,19 @@ struct EditorView: View {
 
     private func timeline(for source: EditorSource) -> some View {
         VStack(spacing: 0) {
-            TimelineToolbar(viewModel: viewModel)
-                .padding(.horizontal, EditorTheme.spacing)
-                .padding(.top, EditorTheme.mediumSpacing)
-            EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
-                .padding(.horizontal, EditorTheme.spacing * 2)
-                .padding(.top, EditorTheme.mediumSpacing)
-                .padding(.bottom, EditorTheme.smallSpacing)
+            EditorTheme.ink.opacity(0.06)
+                .frame(height: 1)
+            VStack(spacing: 0) {
+                TimelineToolbar(viewModel: viewModel)
+                    .padding(.top, EditorTheme.mediumSpacing)
+                EditorTimelineView(viewModel: viewModel, videoSize: source.naturalSize)
+                    // The tracks' names sit in this margin, beside their rows
+                    .padding(.leading, EditorTimelineView.trackLabelWidth)
+                    .padding(.top, EditorTheme.tightSpacing)
+                    .padding(.bottom, EditorTheme.spacing)
+            }
+            .padding(.horizontal, 20)
         }
-        .background(EditorTheme.stage)
-    }
-
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        if let export {
-            // In front of the name, as a browser's back and forward
-            ToolbarItem(placement: .navigation) {
-                exportNavigation(export)
-            }
-        }
-        ToolbarItem(placement: .navigation) {
-            RecordingNameField(name: RecordingRename.displayName(of: viewModel.videoURL), isRenaming: $isRenaming) { name in
-                Task { await viewModel.rename(to: name) }
-            }
-            .disabled(export?.isExporting == true)
-        }
-        .hidingSharedBackground()
-        // With the window's title hidden nothing pushes the buttons to the trailing edge: this does
-        if #available(macOS 26, *) {
-            ToolbarSpacer(.flexible, placement: .primaryAction)
-        } else {
-            ToolbarItem(placement: .primaryAction) { Spacer() }
-        }
-        if export == nil {
-            ToolbarItem(placement: .primaryAction) {
-                // A circle like the inspector's button: the only glass in the editor is the primary button's
-                StyleMenu(viewModel: viewModel)
-                    .menuStyle(.button)
-                    .menuIndicator(.hidden)
-                    .buttonStyle(.editorIcon)
-            }
-            .hidingSharedBackground()
-            if #available(macOS 26, *) {
-                ToolbarSpacer(.fixed, placement: .primaryAction)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: openExport) {
-                    Label("Export…", image: "button-export")
-                }
-                .buttonStyle(.editorPrimary)
-                .keyboardShortcut("e")
-                .help("Export the edited video")
-            }
-            .hidingSharedBackground()
-            if #available(macOS 26, *) {
-                ToolbarSpacer(.fixed, placement: .primaryAction)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button("Inspector", systemImage: "sidebar.trailing") {
-                    showsInspector.toggle()
-                }
-                .buttonStyle(.editorIcon)
-                .help(showsInspector ? "Hide the inspector" : "Show the inspector")
-            }
-            .hidingSharedBackground()
-        }
-    }
-
-    /// Back to the editor; forward has nowhere to go from export, so it is there only to read as the pair.
-    private func exportNavigation(_ export: ExportSession) -> some View {
-        ControlGroup {
-            Button("Editor", systemImage: "chevron.left", action: closeExport)
-                // Esc ends a rename first
-                .keyboardShortcut(isRenaming ? nil : .cancelAction)
-                .disabled(export.isExporting)
-                .help("Back to the editor (Esc)")
-            Button("Export", systemImage: "chevron.right") {}
-                .disabled(true)
-        }
-        .controlGroupStyle(.navigation)
     }
 
     /// Export opens and closes on a paused frame: it is for looking, not editing.
@@ -208,5 +164,16 @@ struct EditorView: View {
         withAnimation(reducesMotion ? EditorTheme.fadeMotion : Self.exportMotion) {
             export = nil
         }
+    }
+}
+
+private extension View {
+
+    /// One of the window's two panels: solid, rounded, with a faint edge, on the window's darker ground.
+    func editorPanel() -> some View {
+        let shape = RoundedRectangle(cornerRadius: EditorTheme.largeRadius)
+        return background(EditorTheme.panel, in: shape)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(EditorTheme.ink.opacity(0.05)))
     }
 }

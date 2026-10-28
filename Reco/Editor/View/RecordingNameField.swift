@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// The recording's name in the title bar. A click turns it into a field: Return or leaving it renames, Esc
+/// The recording's name in the editor's header. A click turns it into a field: Return or leaving it renames, Esc
 /// keeps the name.
 struct RecordingNameField: View {
     let name: String
@@ -22,7 +22,7 @@ struct RecordingNameField: View {
         if isRenaming {
             // Sized by the text, between the limits, with the field laid over it
             Text(draft.isEmpty ? " " : draft)
-                .font(.theme(.headline))
+                .font(.theme(.title3, weight: .semibold))
                 .lineLimit(1)
                 .padding(.trailing, Self.padding)
                 .hidden()
@@ -40,7 +40,7 @@ struct RecordingNameField: View {
                 isRenaming = true
             } label: {
                 Text(name)
-                    .font(.theme(.headline))
+                    .font(.theme(.title3, weight: .semibold))
                     .foregroundStyle(EditorTheme.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -86,7 +86,7 @@ private struct NameEditor: NSViewRepresentable {
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
-        field.font = .theme(.headline)
+        field.font = .theme(.title3, weight: .semibold)
         field.textColor = NSColor(resource: .ink)
         field.cell?.isScrollable = true
         field.delegate = context.coordinator

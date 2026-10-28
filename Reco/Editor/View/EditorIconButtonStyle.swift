@@ -15,8 +15,11 @@ struct EditorIconButtonStyle: ButtonStyle {
     /// The circle's size, when not the usual 30 pt (38 prominent).
     var diameter: CGFloat?
 
+    /// Ink on a faint fill, as a chosen tool.
+    var isSelected = false
+
     func makeBody(configuration: Configuration) -> some View {
-        EditorIconButton(configuration: configuration, isProminent: isProminent, diameter: diameter)
+        EditorIconButton(configuration: configuration, isProminent: isProminent, diameter: diameter, isSelected: isSelected)
     }
 }
 
@@ -29,6 +32,7 @@ private struct EditorIconButton: View {
     let configuration: ButtonStyleConfiguration
     let isProminent: Bool
     let diameter: CGFloat?
+    let isSelected: Bool
 
     @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
@@ -39,7 +43,7 @@ private struct EditorIconButton: View {
         configuration.label
             .labelStyle(.iconOnly)
             .imageScale(isProminent && diameter == nil ? .large : .medium)
-            .foregroundStyle(isProminent ? EditorTheme.primaryInk : isLit ? EditorTheme.ink : EditorTheme.dim)
+            .foregroundStyle(isProminent ? EditorTheme.primaryInk : isLit || isSelected ? EditorTheme.ink : EditorTheme.dim)
             .frame(width: size, height: size)
             .background(fill, in: .circle)
             .contentShape(.circle)
@@ -60,6 +64,6 @@ private struct EditorIconButton: View {
         if isProminent {
             return isLit ? EditorTheme.primaryHover : EditorTheme.primary
         }
-        return EditorTheme.ink.opacity(isEnabled && configuration.isPressed ? 0.12 : isLit ? 0.06 : 0)
+        return EditorTheme.ink.opacity(isEnabled && configuration.isPressed ? 0.12 : isSelected ? 0.1 : isLit ? 0.06 : 0)
     }
 }

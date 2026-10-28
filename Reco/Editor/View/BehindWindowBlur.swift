@@ -21,19 +21,3 @@ struct BehindWindowBlur: NSViewRepresentable {
 
     func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
-
-extension View {
-
-    /// A column beside the content (an inspector, the Library's sidebar) on the blurred desktop, tinted with the
-    /// panel colour so text keeps to the theme over a bright wallpaper.
-    func translucentColumn() -> some View {
-        background {
-            ZStack {
-                BehindWindowBlur()
-                // Not yet checked by eye: lower shows more desktop, higher reads more solid
-                EditorTheme.panel.opacity(0.45)
-            }
-            .ignoresSafeArea()
-        }
-    }
-}

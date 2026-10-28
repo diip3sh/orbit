@@ -6,10 +6,12 @@
 import SwiftUI
 
 /// The editor's switch, drawn only: a track that fills with ink when on and a knob that springs
-/// across it, stretching towards where it will go while pressed.
+/// across it, stretching towards where it will go while pressed. With a `tint` the track fills with it
+/// instead and the knob stays white, as in Settings.
 struct EditorSwitch: View {
     let isOn: Bool
     let isPressed: Bool
+    var tint: Color?
 
     private static let size = CGSize(width: 34, height: 20)
     private static let inset: CGFloat = 2
@@ -24,7 +26,7 @@ struct EditorSwitch: View {
             Capsule()
                 .fill(.primary.opacity(0.16))
             Capsule()
-                .fill(EditorTheme.ink)
+                .fill(tint ?? EditorTheme.ink)
                 .opacity(isOn ? 1 : 0)
             // White on the empty track, the ground's color on the ink one
             Capsule()
@@ -32,7 +34,7 @@ struct EditorSwitch: View {
                 .overlay {
                     Capsule()
                         .fill(EditorTheme.primaryInk)
-                        .opacity(isOn ? 1 : 0)
+                        .opacity(isOn && tint == nil ? 1 : 0)
                 }
                 .shadow(color: .black.opacity(0.3), radius: 1.5, y: 1)
                 .frame(width: knobWidth, height: Self.knobSize)

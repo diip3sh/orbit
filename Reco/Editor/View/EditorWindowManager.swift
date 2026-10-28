@@ -22,6 +22,7 @@ final class EditorWindowManager: NSObject {
 
         /// Whether the output folder's security scope was started for this window.
         let accessesOutputDirectory: Bool
+        let menuSwitcher: HeaderMenuSwitcher
     }
 
     private struct Library {
@@ -29,12 +30,13 @@ final class EditorWindowManager: NSObject {
         let viewModel: LibraryViewModel
         let watcher: FolderWatcher
         let accessesOutputDirectory: Bool
-        let menuSwitcher: ToolbarMenuSwitcher
+        let menuSwitcher: HeaderMenuSwitcher
     }
 
     private struct WebRecording {
         let window: NSWindow
         let viewModel: WebRecordingViewModel
+        let menuSwitcher: HeaderMenuSwitcher
     }
 
     private struct MotionEditor {
@@ -111,14 +113,13 @@ final class EditorWindowManager: NSObject {
         let hostingController = editorController(viewModel, chat)
         // Only the minimum size, so the window doesn't resize itself to fit the loading placeholder
         hostingController.sizingOptions = .minSize
-        // The name field, export and inspector buttons are SwiftUI toolbar items. The title isn't bridged: the
-        // window keeps it for the Window menu, hidden, since SwiftUI draws a bridged title whatever titleVisibility
-        // says, and removing it from its toolbar also took the space that holds the buttons at the trailing edge
-        hostingController.sceneBridgingOptions = [.toolbars]
         let window = makeWindow(hostingController, title: videoURL.deletingPathExtension().lastPathComponent, size: NSSize(width: 1533, height: 943))
         window.representedURL = videoURL
+        // Kept for the Window menu; the main panel's header shows the name. Hidden, it no longer takes the clicks
+        // meant for the header's controls
         window.titleVisibility = .hidden
-        editors[videoURL] = Editor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory)
+        editors[videoURL] = Editor(window: window, viewModel: viewModel, accessesOutputDirectory: accessesOutputDirectory,
+                                   menuSwitcher: HeaderMenuSwitcher(window: window))
         // A renamed recording is found, and reopened, under its new name
         viewModel.onRename = { [weak self] old, new in
             guard let self, let editor = editors.removeValue(forKey: old.standardizedFileURL) else { return }
@@ -162,7 +163,8 @@ final class EditorWindowManager: NSObject {
             editor.window.title = movie.deletingPathExtension().lastPathComponent
             editor.window.representedURL = movie
             editors[replaced] = nil
-            editors[movie] = Editor(window: editor.window, viewModel: viewModel, accessesOutputDirectory: editor.accessesOutputDirectory)
+            editors[movie] = Editor(window: editor.window, viewModel: viewModel, accessesOutputDirectory: editor.accessesOutputDirectory,
+                                    menuSwitcher: editor.menuSwitcher)
             await editor.viewModel.close()
             activate(editor.window)
         }
@@ -199,11 +201,12 @@ final class EditorWindowManager: NSObject {
         )
         let hostingController = NSHostingController(rootView: LibraryView(viewModel: viewModel).themed())
         hostingController.sizingOptions = .minSize
-        // The section's title and its count, which macOS 26 shows large in the toolbar
-        hostingController.sceneBridgingOptions = [.toolbars, .title]
-        let window = makeWindow(hostingController, title: "Reco", size: NSSize(width: 1100, height: 720))
+        let window = makeWindow(hostingController, title: "Reco", size: NSSize(width: 1533, height: 943))
+        // The content panel's header holds the section's title and the controls; hidden, the title no longer
+        // takes the clicks meant for them
+        window.titleVisibility = .hidden
         library = Library(window: window, viewModel: viewModel, watcher: FolderWatcher(), accessesOutputDirectory: accessesOutputDirectory,
-                          menuSwitcher: ToolbarMenuSwitcher(window: window))
+                          menuSwitcher: HeaderMenuSwitcher(window: window))
 
         NSApp.setActivationPolicy(.regular)
         activate(window)
@@ -250,9 +253,13 @@ final class EditorWindowManager: NSObject {
         }
         let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel, agent: agentRecording).themed())
         hostingController.sizingOptions = .minSize
-        hostingController.sceneBridgingOptions = [.toolbars]
         let window = makeWindow(hostingController, title: "Web Recording", size: NSSize(width: 1533, height: 943))
-        let webRecording = WebRecording(window: window, viewModel: viewModel)
+        // An empty toolbar only to place the window's buttons 19 pt in, inside the agent panel's corner (9 pt without
+        // one, on its edge); the panels' headers hold the controls. Hidden, the title no longer takes the clicks
+        // meant for them (measured on macOS 27)
+        window.toolbar = NSToolbar(identifier: "WebRecording")
+        window.titleVisibility = .hidden
+        let webRecording = WebRecording(window: window, viewModel: viewModel, menuSwitcher: HeaderMenuSwitcher(window: window))
         self.webRecording = webRecording
         NSApp.setActivationPolicy(.regular)
         return webRecording
@@ -298,8 +305,6 @@ final class EditorWindowManager: NSObject {
         let hostingController = NSHostingController(rootView: EditorView(viewModel: viewModel, chat: chat))
         // No sizes from the content: the window holds the minimum itself (`open`)
         hostingController.sizingOptions = []
-        // The export and inspector buttons are SwiftUI toolbar items
-        hostingController.sceneBridgingOptions = [.toolbars]
         return hostingController
     }
 
@@ -329,7 +334,7 @@ final class EditorWindowManager: NSObject {
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
         window.toolbarStyle = .unified
-        // See-through, so the inspectors and the Library's sidebar can show the desktop (`translucentColumn`); the
+        // See-through, so a panel can show the desktop (`BehindWindowBlur`); the
         // content paints its own solid ground
         window.isOpaque = false
         window.backgroundColor = .clear

@@ -29,6 +29,12 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
     /// The selected clip, whose trim handles show
     var selection: UUID?
 
+    var height: CGFloat = 24
+
+    /// The trim handles' pill, and how far outside its clip's edge each sits (Web Recording's lanes leave the
+    /// clip's text clear of them).
+    var handle = TrimHandle.Pill()
+
     /// A clip's block, told whether it's being dragged.
     @ViewBuilder let block: (Clip, Bool) -> Block
 
@@ -37,8 +43,6 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
 
     /// The clip under the pointer, whose trim handles show.
     @State private var hovered: UUID?
-
-    static var height: CGFloat { 24 }
 
     /// How far the pointer may move for a press to still count as a click.
     private static var clickTolerance: CGFloat { 3 }
@@ -91,17 +95,17 @@ struct TimelineLane<Clip: TimelineClip, Block: View>: View {
                                 }
                         )
 
-                    TrimHandle(edge: .leading, position: start, width: width, isShown: showsHandles) { position in
+                    TrimHandle(edge: .leading, position: start, width: width, isShown: showsHandles, pill: handle) { position in
                         onMoveStart(clip.id, viewport.time(atX: position, width: width))
                     }
-                    TrimHandle(edge: .trailing, position: end, width: width, isShown: showsHandles) { position in
+                    TrimHandle(edge: .trailing, position: end, width: width, isShown: showsHandles, pill: handle) { position in
                         onMoveEnd(clip.id, viewport.time(atX: position, width: width))
                     }
                 }
             }
         }
         // minWidth 0: blocks are laid out in points of the last width, which mustn't become the window's minimum
-        .frame(minWidth: 0, maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height, alignment: .leading)
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .leading)
         .clipped()
     }
 }

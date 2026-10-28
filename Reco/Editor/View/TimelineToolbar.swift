@@ -7,9 +7,9 @@
 
 import SwiftUI
 
-/// The timeline's toolbar card: cutting and adding tools on the left, the time and transport in the
+/// The timeline's toolbar: cutting and adding tools on the left, the time and transport in the
 /// middle, Copy Frame and the timeline's zoom on the right, and the ruler — with the playhead's
-/// knob — under a hairline. Space plays and pauses, ← and → step a frame, S splits at the playhead,
+/// knob — under it, lined up with the tracks. Space plays and pauses, ← and → step a frame, S splits at the playhead,
 /// Z adds a zoom there, M a mask, ⌫ removes the selection, ⇧⌘C copies the frame and ⌘-/⌘= zoom
 /// the timeline.
 struct TimelineToolbar: View {
@@ -21,14 +21,16 @@ struct TimelineToolbar: View {
     /// The ruler's width, which the playhead's knob is placed with.
     @State private var rulerWidth: CGFloat = 0
 
-    /// The card's width, which the bar's compact tiers follow. Measured from the proposal, not the
+    /// The bar's width, which its compact tiers follow. Measured from the proposal, not the
     /// content: the bar's own minimum width would pin the preview column, and a narrow window would
     /// clip the inspector (measured 2026-10-12: the full bar needs ~690 pt, the window is 900+).
     @State private var cardWidth: CGFloat = .infinity
 
-    private static let barHeight: CGFloat = 44
+    private static let barHeight: CGFloat = 40
     private static let rulerHeight: CGFloat = 28
-    private static let cardHeight: CGFloat = barHeight + 1 + rulerHeight
+    private static let rulerSpacing: CGFloat = 2
+    private static let cardHeight: CGFloat = barHeight + rulerSpacing + rulerHeight
+    private static let buttonDiameter: CGFloat = 32
 
     /// The tiers a narrowing card drops through: the zoom slider, the duration, the speed menu's name.
     private static let fullWidth: CGFloat = 690
@@ -41,10 +43,10 @@ struct TimelineToolbar: View {
     }
 
     var body: some View {
-        // The card takes the width it is offered, so the timeline never asks the window for room
+        // The bar takes the width it is offered, so the timeline never asks the window for room
         GeometryReader { proxy in
-            VStack(spacing: 0) {
-                HStack(spacing: EditorTheme.smallSpacing) {
+            VStack(spacing: Self.rulerSpacing) {
+                HStack(spacing: EditorTheme.spacing) {
                     tools
                         .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -54,10 +56,7 @@ struct TimelineToolbar: View {
                     trail
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                .padding(.horizontal, EditorTheme.smallSpacing)
                 .frame(height: Self.barHeight)
-
-                EditorTheme.hairline.frame(height: 1)
 
                 TimelineRuler(viewport: viewModel.viewport)
                     .frame(height: Self.rulerHeight)
@@ -72,17 +71,11 @@ struct TimelineToolbar: View {
                     .overlay(alignment: .topLeading) {
                         knob
                     }
-                    .padding(.horizontal, EditorTheme.spacing)
+                    // Over the tracks, past their names
+                    .padding(.leading, EditorTimelineView.trackLabelWidth)
             }
             .frame(width: proxy.size.width, height: Self.cardHeight)
-            .background(EditorTheme.panel, in: .rect(cornerRadius: 14))
-            .clipShape(.rect(cornerRadius: 14))
-            .overlay {
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(EditorTheme.hairline)
-            }
-            .shadow(color: .black.opacity(0.3), radius: 8, y: 2)
-            .buttonStyle(.editorIcon)
+            .buttonStyle(EditorIconButtonStyle(diameter: Self.buttonDiameter))
             .editorMotion(EditorTheme.quickMotion, value: tier)
             .onAppear { cardWidth = proxy.size.width }
             .onChange(of: proxy.size.width) { _, width in cardWidth = width }
@@ -139,24 +132,27 @@ struct TimelineToolbar: View {
             }
             .pickerStyle(.inline)
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 Image(systemName: "gauge.with.dots.needle.67percent")
+                    .font(.theme(.title3))
                 if tier < 3 {
                     Text(viewModel.canChangeSpeed ? SpeedRange.label(for: viewModel.selectedSpeed) : "Speed")
+                        .font(.theme(.callout, weight: .medium))
                         .transition(.opacity)
                 }
                 Image(systemName: "chevron.down")
-                    .font(.theme(.caption2))
+                    .font(.theme(.caption, weight: .semibold))
+                    .imageScale(.small)
             }
-            .font(.theme(.caption, weight: .medium))
-            .foregroundStyle(EditorTheme.dim)
-            .padding(.horizontal, EditorTheme.smallSpacing)
-            .frame(height: 30)
-            .background(EditorTheme.control, in: .rect(cornerRadius: 8))
+            .foregroundStyle(viewModel.canChangeSpeed ? EditorTheme.ink : EditorTheme.dim)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(EditorTheme.ink.opacity(0.06), in: .capsule)
             .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(EditorTheme.hairline)
+                Capsule()
+                    .strokeBorder(EditorTheme.ink.opacity(0.12))
             }
+            .headerMenuAnchor()
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -168,38 +164,43 @@ struct TimelineToolbar: View {
     /// The playhead's time over the whole, then previous frame, play/pause, next frame. A narrow bar
     /// leaves the duration out.
     private var transport: some View {
-        HStack(spacing: EditorTheme.tightSpacing) {
+        HStack(spacing: 20) {
             TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !viewModel.playback.isPlaying)) { _ in
-                HStack(spacing: EditorTheme.tightSpacing) {
-                    Text(Self.format(viewModel.playback.currentTime))
-                        .foregroundStyle(EditorTheme.ink)
+                let current = Self.format(viewModel.playback.currentTime)
+                // The minutes dim, so the seconds read first
+                let minutes = current.firstIndex(of: ":").map { current[...$0] } ?? ""
+                HStack(alignment: .firstTextBaseline, spacing: EditorTheme.smallSpacing) {
+                    Text("\(Text(minutes).foregroundStyle(EditorTheme.dim))\(Text(current.dropFirst(minutes.count)).foregroundStyle(EditorTheme.ink))")
+                        .font(.theme(.title3, weight: .medium, .mono))
                     if tier < 2 {
                         Text("/ \(Self.format(viewModel.timeMap.outputDuration))")
+                            .font(.theme(.callout, .mono))
                             .foregroundStyle(EditorTheme.dim)
                             .transition(.opacity)
                     }
                 }
-                .font(.theme(.callout).monospacedDigit())
                 .lineLimit(1)
                 .fixedSize()
             }
-            .padding(.trailing, EditorTheme.tightSpacing)
 
-            Button("Previous Frame", systemImage: "backward.frame.fill") {
-                viewModel.playback.step(by: -1)
-            }
-            .keyboardShortcut(.leftArrow, modifiers: [])
+            HStack(spacing: 10) {
+                Button("Previous Frame", systemImage: "backward.frame.fill") {
+                    viewModel.playback.step(by: -1)
+                }
+                .keyboardShortcut(.leftArrow, modifiers: [])
 
-            Button(viewModel.playback.isPlaying ? "Pause" : "Play", systemImage: viewModel.playback.isPlaying ? "pause.fill" : "play.fill") {
-                viewModel.playback.togglePlay()
-            }
-            .keyboardShortcut(.space, modifiers: [])
-            .contentTransition(.symbolEffect(.replace))
+                Button(viewModel.playback.isPlaying ? "Pause" : "Play", systemImage: viewModel.playback.isPlaying ? "pause.fill" : "play.fill") {
+                    viewModel.playback.togglePlay()
+                }
+                .buttonStyle(PlayButtonStyle(isPlaying: viewModel.playback.isPlaying))
+                .keyboardShortcut(.space, modifiers: [])
+                .contentTransition(.symbolEffect(.replace))
 
-            Button("Next Frame", systemImage: "forward.frame.fill") {
-                viewModel.playback.step(by: 1)
+                Button("Next Frame", systemImage: "forward.frame.fill") {
+                    viewModel.playback.step(by: 1)
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [])
             }
-            .keyboardShortcut(.rightArrow, modifiers: [])
         }
     }
 
@@ -230,7 +231,7 @@ struct TimelineToolbar: View {
             // The slider goes first when the bar is narrow; the buttons and ⌘-/⌘= still zoom
             if tier == 0 {
                 EditorSlider(value: zoomLevel, range: 0...log2(TimelineViewport.maximumZoom))
-                    .frame(width: 76)
+                    .frame(width: 96)
                     .transition(.opacity)
             }
 
@@ -269,7 +270,7 @@ struct TimelineToolbar: View {
 
     private var divider: some View {
         EditorTheme.ink.opacity(0.1)
-            .frame(width: 1, height: 16)
+            .frame(width: 1, height: 20)
     }
 
     /// What ⌫ deletes when it isn't a part of the recording.
@@ -283,5 +284,22 @@ struct TimelineToolbar: View {
 
     private static func format(_ seconds: Double) -> String {
         Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond(padMinuteToLength: 2, fractionalSecondsLength: 2)))
+    }
+}
+
+/// The transport's play button: a solid ink circle, the symbol in the window's ground colour, nudged right
+/// while it's the play triangle so it looks centred.
+private struct PlayButtonStyle: ButtonStyle {
+    let isPlaying: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .labelStyle(.iconOnly)
+            .font(.theme(.title3))
+            .foregroundStyle(EditorTheme.stage)
+            .padding(.leading, isPlaying ? 0 : 3)
+            .frame(width: 40, height: 40)
+            .background(EditorTheme.ink.opacity(configuration.isPressed ? 0.8 : 1), in: .circle)
+            .contentShape(.circle)
     }
 }

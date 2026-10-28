@@ -149,7 +149,7 @@ private struct VideoPart: View {
                             .foregroundStyle(EditorTheme.ink)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
-                            .background(.black.opacity(0.35), in: .rect(cornerRadius: 3))
+                            .background(EditorTheme.stage.opacity(0.6), in: .rect(cornerRadius: 3))
                     }
                 }
                 .font(.theme(.caption2, weight: .semibold))

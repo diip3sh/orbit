@@ -6,7 +6,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The toolbar's Style menu (spec 0004, S19): the saved styles, the one the project looks like ticked, and saving,
+/// The header's Style menu (spec 0004, S19): the saved styles, the one the project looks like ticked, and saving,
 /// importing, sharing and deleting them. A style is a `.recostyle` file, so sharing is the file itself.
 struct StyleMenu: View {
     let viewModel: EditorViewModel
@@ -19,8 +19,13 @@ struct StyleMenu: View {
         Menu {
             content
         } label: {
-            Label("Style", systemImage: "paintpalette")
+            HeaderMenuLabel(title: "Style", symbol: "paintpalette")
+                .foregroundStyle(EditorTheme.ink)
+                .padding(.horizontal, 14)
+                .headerCapsule()
+                .headerMenuAnchor()
         }
+        .headerMenuStyle()
         .help("Save this look as a style, or apply a saved one")
         .alert("Save Style", isPresented: $isNamingStyle) {
             TextField("Name", text: $styleName)
