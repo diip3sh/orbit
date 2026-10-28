@@ -102,7 +102,7 @@ extension AgentTools {
         key: String, activity: String, _ work: @escaping @MainActor () async throws -> (MotionToolStatus, Data?)
     ) async -> Reply {
         if let job = motionJob, job.key != key, !job.isDone {
-            return Reply(text: "Reco is still busy with another capture_ui or preview_motion: call that one again until it's done.", isError: true)
+            return Reply(text: "Orbit is still busy with another capture_ui or preview_motion: call that one again until it's done.", isError: true)
         }
         let task: Task<Reply, Never>
         if let job = motionJob, job.key == key {

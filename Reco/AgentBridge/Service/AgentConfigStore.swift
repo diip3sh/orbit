@@ -7,7 +7,7 @@ import Darwin
 import Foundation
 
 /// Reads and edits the agents' own settings files to add Reco as an MCP server, and remove it again
-/// (spec 0006). Only the `reco` entry is touched, and only for an agent that's installed. File
+/// (spec 0006). Only the `orbit` entry (and a legacy `reco` one) is touched, and only for an agent that's installed. File
 /// contents are never logged: they hold other servers' secrets.
 @MainActor
 struct AgentConfigStore {

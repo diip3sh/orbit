@@ -8,7 +8,7 @@ nonisolated extension AgentToolCatalog {
 
     static let editMotionDescription = """
         Creates or changes a motion video: a launch video built from the product's real UI, in shots, moves and seams that \
-        Reco lays out, times and eases. You write no animation: name what happens, set only what you mean, and the grammar's \
+        Orbit lays out, times and eases. You write no animation: name what happens, set only what you mean, and the grammar's \
         defaults do the rest. Without bundle it starts a new video in the user's output folder (give it a name); with \
         bundle it edits that one; with bundle and no operations it only describes it. Operations apply in order, all or none, \
         and the result is checked. The reply describes the \

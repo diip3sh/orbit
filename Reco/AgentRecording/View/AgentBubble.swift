@@ -5,8 +5,8 @@
 
 import SwiftUI
 
-/// A chat bubble's shape and fill: the agent's a surface with a hairline edge, the user's the control fill, an
-/// activity card quieter than both.
+/// A chat row's look: the user's message in a bubble on the faint ink fill with its corner by the edge tucked in,
+/// the agent's words and its activity as plain text on the panel.
 struct AgentBubble: ViewModifier {
     enum Role {
         case assistant, user, activity
@@ -15,28 +15,32 @@ struct AgentBubble: ViewModifier {
     let role: Role
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: EditorTheme.largeRadius, style: .continuous)
-        content
-            .padding(.horizontal, EditorTheme.mediumSpacing)
-            .padding(.vertical, EditorTheme.smallSpacing)
-            .background(fill, in: shape)
-            .overlay {
-                if role == .assistant {
-                    shape.strokeBorder(EditorTheme.hairline)
-                }
-            }
-    }
-
-    private var fill: Color {
         switch role {
-        case .assistant: EditorTheme.surface
-        case .user: EditorTheme.control
-        case .activity: EditorTheme.softHairline
+        case .user:
+            content
+                .padding(.horizontal, EditorTheme.spacing)
+                .padding(.vertical, EditorTheme.mediumSpacing)
+                .background(
+                    AgentChatCard.fill,
+                    in: UnevenRoundedRectangle(
+                        topLeadingRadius: EditorTheme.largeRadius, bottomLeadingRadius: EditorTheme.largeRadius,
+                        bottomTrailingRadius: EditorTheme.smallRadius, topTrailingRadius: EditorTheme.largeRadius,
+                        style: .continuous
+                    )
+                )
+        case .assistant, .activity:
+            content
         }
     }
 }
 
-/// How a bubble comes in: a spring from its own bottom corner, or just a fade with Reduce Motion.
+/// The fill and shape the chat's cards share (the message box, results, failures, the user's bubble).
+enum AgentChatCard {
+    static let fill = EditorTheme.ink.opacity(0.07)
+    static let shape = RoundedRectangle(cornerRadius: EditorTheme.largeRadius, style: .continuous)
+}
+
+/// How a row comes in: a spring from its own bottom corner, or just a fade with Reduce Motion.
 struct AgentEntrance: ViewModifier {
     let anchor: UnitPoint
 
@@ -56,16 +60,16 @@ struct AgentEntrance: ViewModifier {
 
 extension View {
 
-    /// A chat bubble in `role`'s look.
+    /// A chat row in `role`'s look.
     func agentBubble(_ role: AgentBubble.Role) -> some View {
         modifier(AgentBubble(role: role))
     }
 
-    /// Sits on the agent's side (left) or the user's, leaving room on the other, and enters from there.
+    /// Sits on the agent's side (left, the panel's width) or the user's, leaving room before it, and enters from there.
     func agentSide(_ alignment: HorizontalAlignment) -> some View {
         let isUser = alignment == .trailing
         return frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-            .padding(isUser ? .leading : .trailing, EditorTheme.largeSpacing + EditorTheme.spacing)
+            .padding(.leading, isUser ? EditorTheme.largeSpacing + EditorTheme.spacing : 0)
             .modifier(AgentEntrance(anchor: isUser ? .bottomTrailing : .bottomLeading))
     }
 }

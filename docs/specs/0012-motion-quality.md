@@ -857,7 +857,7 @@ Built and checked one at a time against the films' frames, side by side, with a 
   used: it hid the user's personal skills, but it would also drop their settings. The five skills below
   wait for a second look to direct.
 - **Skills.** Shipped in the app (`Reco/AgentRecording/Skills/`) and copied into
-  `AgentRun/.claude/skills/` before each run, like `reco-mcp.json`. The run gets
+  `AgentRun/.claude/skills/` before each run, like `orbit-mcp.json`. The run gets
   `--tools WebSearch,WebFetch,Skill,Read`, `--allowedTools … Skill "Read(./.claude/skills/**)"`
   and `--setting-sources project`.
 

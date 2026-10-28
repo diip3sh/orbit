@@ -14,24 +14,28 @@ struct AgentChatResult: View {
         Button(action: open) {
             HStack(spacing: EditorTheme.mediumSpacing) {
                 Image(systemName: "film")
-                    .font(.title3)
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(EditorTheme.accent)
-                    .frame(width: 36, height: 36)
-                    .background(EditorTheme.control, in: .rect(cornerRadius: EditorTheme.smallRadius, style: .continuous))
+                    .frame(width: 40, height: 40)
+                    .background(EditorTheme.ink.opacity(0.08), in: .rect(cornerRadius: 10, style: .continuous))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(movie.lastPathComponent)
-                        .font(.theme(.callout, weight: .medium))
+                        .font(.theme(.body, weight: .semibold))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Text(Self.subtitle(for: movie, created: Self.creationDate(of: movie), now: .now))
-                        .font(.theme(.caption))
+                        .font(.theme(.subheadline))
                         .foregroundStyle(EditorTheme.dim)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(EditorTheme.dim)
+                    .accessibilityHidden(true)
             }
-            .padding(EditorTheme.smallSpacing + EditorTheme.tightSpacing)
+            .padding(EditorTheme.mediumSpacing)
         }
         .buttonStyle(.agentCard)
         .agentSide(.leading)

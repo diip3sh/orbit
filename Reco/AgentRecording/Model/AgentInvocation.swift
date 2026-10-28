@@ -40,13 +40,13 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
         kind == .claudeCode || kind == .cursor
     }
 
-    private static let serversFile = "reco-mcp.json"
-    private static let policyFile = "reco-policy.toml"
-    private static let claudeServersFile = "reco-mcp.json"
+    private static let serverName = AgentServerCommand.serverName
+    private static let policyFile = "\(serverName)-policy.toml"
+    private static let claudeServersFile = "\(serverName)-mcp.json"
     private static let cursorFile = ".cursor/cli.json"
     private static let cursorServersFile = ".cursor/mcp.json"
 
-    /// Denies every tool but the reco server's. Gemini reads a higher priority first.
+    /// Denies every tool but the orbit server's. Gemini reads a higher priority first.
     private static let geminiPolicy = """
         [[rule]]
         toolName = "*"
@@ -54,7 +54,7 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
         priority = 100
 
         [[rule]]
-        mcpName = "reco"
+        mcpName = "\(serverName)"
         decision = "allow"
         priority = 200
 
@@ -63,13 +63,13 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
     /// The workspace permissions Cursor reads: the three Reco tools, no shell, writes or fetches.
     /// Built from the catalog, so a new tool is allowed where the others are.
     private static var cursorPermissions: String {
-        let allowed = AgentToolCatalog.names.map { "\"Mcp(reco:\($0))\"" }.joined(separator: ",")
+        let allowed = AgentToolCatalog.names.map { "\"Mcp(\(serverName):\($0))\"" }.joined(separator: ",")
         return #"{"permissions":{"allow":["# + allowed + #"],"deny":["Shell(*)","Write(**)","WebFetch(*)"]}}"#
     }
 
     /// OpenCode's permissions, merged over the user's: the last matching rule wins, and an MCP
     /// tool is `<server>_<tool>`.
-    private static let openCodePermissions = #"{"permission":{"*":"deny","reco_*":"allow"}}"#
+    private static let openCodePermissions = #"{"permission":{"*":"deny","\#(serverName)_*":"allow"}}"#
 
     /// An `mcpServers` file with Reco's server in `entry`'s format. Cursor's CLI drops its whole
     /// `~/.cursor/mcp.json` when one entry has a type it doesn't know (e.g. `"streamableHttp"`, which the
@@ -110,23 +110,23 @@ nonisolated struct AgentInvocation: Equatable, Sendable {
             // after -p and each list ends at the next flag
             // stream-json (which needs --verbose) feeds the chat; the session is kept for a follow-up. Web search
             // and fetch, read-only, are the one other thing allowed: for learning what the product is
-            arguments = ["-p", prompt, "--tools", "WebSearch,WebFetch", "--allowedTools", "mcp__reco__*", "WebSearch", "WebFetch",
+            arguments = ["-p", prompt, "--tools", "WebSearch,WebFetch", "--allowedTools", "mcp__\(serverName)__*", "WebSearch", "WebFetch",
                          "--permission-mode", "dontAsk",
                          "--mcp-config", directory.appending(path: claudeServersFile).path(percentEncoded: false),
                          "--strict-mcp-config"] + resume + option("--model") + ["--output-format", "stream-json", "--verbose"]
         case .codex:
             arguments = ["exec", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only",
-                         "-c", #"mcp_servers.reco.default_tools_approval_mode="approve""#] + option("-m") + [prompt]
+                         "-c", #"mcp_servers.\#(serverName).default_tools_approval_mode="approve""#] + option("-m") + [prompt]
         case .openCode:
             environment["OPENCODE_CONFIG_CONTENT"] = openCodePermissions
             arguments = ["run"] + option("-m") + [prompt]
         case .gemini:
             files[policyFile] = geminiPolicy
-            arguments = ["--skip-trust", "--allowed-mcp-server-names", "reco",
+            arguments = ["--skip-trust", "--allowed-mcp-server-names", serverName,
                          "--policy", directory.appending(path: policyFile).path(percentEncoded: false),
                          "-o", "text"] + option("-m") + ["-p", prompt]
         case .grok:
-            arguments = ["-p", prompt, "--permission-mode", "dontAsk", "--allow", "MCPTool(reco__*)", "--disable-web-search",
+            arguments = ["-p", prompt, "--permission-mode", "dontAsk", "--allow", "MCPTool(\(serverName)__*)", "--disable-web-search",
                          "--no-subagents", "--output-format", "plain"] + option("-m")
         case .cursor:
             files[cursorFile] = cursorPermissions

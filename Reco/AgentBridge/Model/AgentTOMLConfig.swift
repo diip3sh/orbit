@@ -5,26 +5,27 @@
 
 import Foundation
 
-/// Adds Reco's `[mcp_servers.reco]` table to an agent's TOML settings (Codex, Grok Build), and takes
-/// it out again, leaving every other line as it is.
+/// Adds Reco's `[mcp_servers.orbit]` table to an agent's TOML settings (Codex, Grok Build), and takes
+/// it out again, leaving every other line as it is. A legacy `[mcp_servers.reco]` table counts as ours:
+/// connecting replaces it, disconnecting removes it.
 ///
 /// ponytail: line-based editing. It is safe for our own table, which Reco writes in one shape, and
-/// it refuses other ways of spelling a `reco` server (dotted keys, inline tables) rather than guess.
+/// it refuses other ways of spelling an `orbit` server (dotted keys, inline tables) rather than guess.
 /// A header-like line inside a multi-line array can fool it. A real TOML parser is the upgrade path.
 nonisolated enum AgentTOMLConfig {
 
     nonisolated enum EditError: Error, Equatable {
 
-        /// `reco` is written in a form this editor doesn't rewrite, e.g. `mcp_servers.reco.command = "…"`.
+        /// `orbit` is written in a form this editor doesn't rewrite, e.g. `mcp_servers.orbit.command = "…"`.
         case unrecognisedEntry
     }
 
-    private static let tablePrefix = "[mcp_servers.reco"
+    private static let names = [AgentServerCommand.serverName, AgentServerCommand.legacyServerName]
 
     /// The table that starts Reco, without a trailing newline.
     static func table(for command: AgentServerCommand) -> String {
         """
-        [mcp_servers.reco]
+        [mcp_servers.\(AgentServerCommand.serverName)]
         command = \(quoted(command.executable))
         args = [\(quoted(AgentBridgeClient.argument))]
         env = { \(AgentServerCommand.tokenVariable) = \(quoted(command.token)) }
@@ -108,7 +109,7 @@ nonisolated enum AgentTOMLConfig {
         for substring in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let line = String(substring)
             if let header = header(of: line) {
-                if header == "[mcp_servers.reco]" || header.hasPrefix(tablePrefix + ".") {
+                if names.contains(where: { header == "[mcp_servers.\($0)]" || header.hasPrefix("[mcp_servers.\($0).") }) {
                     if inBlock {
                         scan.removed += trailing
                         trailing = []
@@ -161,8 +162,10 @@ nonisolated enum AgentTOMLConfig {
         line.allSatisfy(\.isWhitespace)
     }
 
-    /// Throws when `lines` still declare a `reco` server in a way the scan doesn't remove.
+    /// Throws when `lines` still declare an `orbit` server in a way the scan doesn't remove. A legacy
+    /// `reco` one in another form is left alone: it doesn't clash with the table written.
     private static func refuseOtherForms(in lines: [String]) throws {
+        let name = AgentServerCommand.serverName
         var table: String?
         for line in lines {
             if let header = header(of: line) {
@@ -170,9 +173,9 @@ nonisolated enum AgentTOMLConfig {
                 continue
             }
             let key = stripped(line)
-            let dotted = key.hasPrefix("mcp_servers.reco") && ".=".contains(key.dropFirst("mcp_servers.reco".count).first ?? " ")
-            let inline = key.hasPrefix("mcp_servers=") && key.contains("reco=")
-            let inTable = table == "[mcp_servers]" && (key.hasPrefix("reco=") || key.hasPrefix("reco."))
+            let dotted = key.hasPrefix("mcp_servers.\(name)") && ".=".contains(key.dropFirst("mcp_servers.\(name)".count).first ?? " ")
+            let inline = key.hasPrefix("mcp_servers=") && key.contains("\(name)=")
+            let inTable = table == "[mcp_servers]" && (key.hasPrefix("\(name)=") || key.hasPrefix("\(name)."))
             if dotted || inline || inTable {
                 throw EditError.unrecognisedEntry
             }

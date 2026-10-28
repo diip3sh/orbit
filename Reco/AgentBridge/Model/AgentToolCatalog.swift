@@ -48,7 +48,7 @@ nonisolated enum AgentToolCatalog {
         Definition(
             name: inspectPage,
             description: """
-                Loads a web page in Reco and lists what it shows: size, title, meta description and its visible links (with \
+                Loads a web page in Orbit and lists what it shows: size, title, meta description and its visible links (with \
                 href), buttons, inputs and headings, each with a CSS selector, role, text and box in page pixels at scroll 0. \
                 It scrolls down the page and back first, so sections that load on the way are listed. Call it on the page and \
                 the pages its product navigation links to before record_page, to learn what each shows and get selectors to \
@@ -64,16 +64,16 @@ nonisolated enum AgentToolCatalog {
         Definition(
             name: recordPage,
             description: """
-                Records a web page as a video with a smooth cursor: Reco plays the steps (hover, click, type, scroll) on the live \
+                Records a web page as a video with a smooth cursor: Orbit plays the steps (hover, click, type, scroll) on the live \
                 page frame by frame into a movie with input telemetry, and opens it in its editor for styling. The camera zooms \
                 only on what a step's show names, framed where the step starts: once any step has show, steps without it don't \
                 zoom (a take without any is auto-zoomed where the cursor rests). There's no zoom on an element that is nearly the \
                 whole view, on a click that opens a page, or when the page scrolls within 0.5 s. Before each hover, click or type \
-                Reco scrolls its selector's element into view (not the shown one). A page a click opens shows from its top. type \
+                Orbit scrolls its selector's element into view (not the shown one). A page a click opens shows from its top. type \
                 clicks an input and types its text into it letter by letter; its duration comes from the text. The result's \
                 warnings say which steps missed their element and when. Rendering can take longer than a minute: this returns when \
                 the movie is done or after 45 s with status rendering and a render_id; then call render_status until it is done. \
-                From Reco's chat it returns status planned instead: the steps are on the user's timeline and Reco renders them \
+                From Orbit's chat it returns status planned instead: the steps are on the user's timeline and Orbit renders them \
                 when you're done, so there is nothing to wait for. One render at a time. Steps are spaced automatically (0.8 s \
                 apart, the first at 1 s) unless they give a start.
                 """,
@@ -106,7 +106,7 @@ nonisolated enum AgentToolCatalog {
         Definition(
             name: exportRecording,
             description: """
-                Exports a recording as a finished video with Reco's edit: the zooms, the drawn cursor, click highlights and the \
+                Exports a recording as a finished video with Orbit's edit: the zooms, the drawn cursor, click highlights and the \
                 background, as its editor shows it; or a motion video (a .motion bundle from edit_motion) as it plays. Saved next to \
                 the movie or bundle as <name>-edited. Use gif for READMEs, pull requests \
                 and chats (silent, loops, 540 px at 25 fps for motion videos), hevc for a small MP4. Returns when the file is \
@@ -159,7 +159,7 @@ nonisolated enum AgentToolCatalog {
         Definition(
             name: openPage,
             description: """
-                Opens a page in Reco's live browser (the user watches it in the Web Recording window) and returns a \
+                Opens a page in Orbit's live browser (the user watches it in the Web Recording window) and returns a \
                 screenshot plus the page's size, title, meta description and its visible links (with href), buttons, inputs and \
                 headings, each with a CSS selector, role, text and box in page pixels. Start here, then look, read_page, hover and \
                 click to learn the site.

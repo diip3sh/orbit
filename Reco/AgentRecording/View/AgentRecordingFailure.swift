@@ -29,7 +29,10 @@ struct AgentRecordingFailure: View {
             .buttonStyle(.editorSecondary)
         }
         .padding(EditorTheme.mediumSpacing)
-        .editorSurface(in: .rect(cornerRadius: EditorTheme.radius, style: .continuous))
+        .background(AgentChatCard.fill, in: AgentChatCard.shape)
+        .overlay {
+            AgentChatCard.shape.strokeBorder(WebPanel.edge)
+        }
         .agentSide(.leading)
         .accessibilityElement(children: .contain)
     }

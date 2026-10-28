@@ -81,10 +81,11 @@ nonisolated enum AgentStreamEvent: Equatable, Sendable {
         (object["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
     }
 
-    /// `inspect_page` from `mcp__reco__inspect_page` (Claude) or `reco-inspect_page` (Cursor).
+    /// `inspect_page` from `mcp__orbit__inspect_page` (Claude) or `orbit-inspect_page` (Cursor).
     private static func toolName(_ name: String) -> String {
         let afterServer = name.components(separatedBy: "__").last ?? name
-        return afterServer.hasPrefix("reco-") ? String(afterServer.dropFirst(5)) : afterServer
+        let prefix = AgentServerCommand.serverName + "-"
+        return afterServer.hasPrefix(prefix) ? String(afterServer.dropFirst(prefix.count)) : afterServer
     }
 
     private static func json(_ value: Any?) -> Data {

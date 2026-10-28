@@ -20,35 +20,36 @@ nonisolated enum AgentJSONConfig {
 
     private static let writing: JSONSerialization.WritingOptions = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
 
-    /// The settings with `entry` as the `reco` server under `key`. `data` is `nil` or empty for no
-    /// settings yet.
+    /// The settings with `entry` as the `orbit` server under `key`, in place of a legacy `reco` one.
+    /// `data` is `nil` or empty for no settings yet.
     static func connecting(_ data: Data?, key: String, entry: [String: Any]) throws -> Data {
         var root = try object(in: data) ?? [:]
         var servers = try servers(in: root, key: key) ?? [:]
+        servers[AgentServerCommand.legacyServerName] = nil
         servers[AgentServerCommand.serverName] = entry
         root[key] = servers
         return try JSONSerialization.data(withJSONObject: root, options: writing)
     }
 
-    /// The settings without the `reco` server, or `nil` when it wasn't there.
+    /// The settings without the `orbit` and legacy `reco` servers, or `nil` when neither was there.
     static func disconnecting(_ data: Data, key: String) throws -> Data? {
         var root = try object(in: data) ?? [:]
-        guard var servers = try servers(in: root, key: key), servers.removeValue(forKey: AgentServerCommand.serverName) != nil else {
-            return nil
-        }
+        guard var servers = try servers(in: root, key: key) else { return nil }
+        let removed = [AgentServerCommand.serverName, AgentServerCommand.legacyServerName].compactMap { servers.removeValue(forKey: $0) }
+        guard !removed.isEmpty else { return nil }
         root[key] = servers
         return try JSONSerialization.data(withJSONObject: root, options: writing)
     }
 
-    /// The `reco` server's entry, or `nil` when there is none or the settings aren't plain JSON.
-    static func entry(in data: Data, key: String) -> [String: Any]? {
-        guard let root = try? object(in: data), let servers = try? servers(in: root, key: key) else { return nil }
-        return servers[AgentServerCommand.serverName] as? [String: Any]
-    }
-
+    /// Connected only with the expected `orbit` entry and no legacy `reco` one, which connecting removes.
     static func state(of data: Data, key: String, expected: [String: Any]) -> AgentConnectionState {
-        guard let entry = entry(in: data, key: key) else { return .notConnected }
-        return NSDictionary(dictionary: entry).isEqual(to: expected) ? .connected : .outdated
+        guard let root = try? object(in: data), let servers = try? servers(in: root, key: key) else { return .notConnected }
+        let entry = servers[AgentServerCommand.serverName] as? [String: Any]
+        let hasLegacy = servers[AgentServerCommand.legacyServerName] != nil
+        if let entry, !hasLegacy, NSDictionary(dictionary: entry).isEqual(to: expected) {
+            return .connected
+        }
+        return entry == nil && !hasLegacy ? .notConnected : .outdated
     }
 
     private static func object(in data: Data?) throws -> [String: Any]? {

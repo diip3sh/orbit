@@ -79,7 +79,7 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         1. Research. Learn what the product does and which three features matter most. Call inspect_page on the page, then on \
         the two to four pages its product or features navigation links to (use their href): their descriptions and headings \
         say what each page shows. If you have web search or fetch, read the product's features or docs page too, and what a \
-        review names as its best features. The user may be signed in to the product in Reco: inspect its app too (/app, \
+        review names as its best features. The user may be signed in to the product in Orbit: inspect its app too (/app, \
         /dashboard, or where Log in and Get started lead) and record that when it shows the product, before falling back to \
         the marketing pages. Don't record anything until you can say in one sentence what the product is for.
         2. Plan. Write a shot list of four to six beats that tell one story: what the product is (the hero), its two or three \
@@ -118,9 +118,9 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
 
     /// Which of Reco's skills to load: the director, which plans the film and names the technique skills it takes (spec 0018).
     static let skillChoice = """
-        Before anything else, load Reco's director skill, \(AgentSkill.directorName), with the Skill tool and follow it: it plans an \
+        Before anything else, load Orbit's director skill, \(AgentSkill.directorName), with the Skill tool and follow it: it plans an \
         original film in the product's own taste (its website's fonts, colours, shapes and motion personality) from what the user \
-        said, and names which of Reco's technique skills to load for its moves (\(AgentSkill.editorialFilmName), \
+        said, and names which of Orbit's technique skills to load for its moves (\(AgentSkill.editorialFilmName), \
         \(AgentSkill.flowFilmName), \(AgentSkill.storyFilmName), \(AgentSkill.motionDesignName), \(AgentSkill.launchFilmName)). Only \
         when the user names a style (ElevenLabs, Raycast, Lovable, motion design, a light flowing film) lead with that skill's look \
         and motion, never its reference film's story or words.
@@ -159,7 +159,7 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
                 """
         }
         let wanted = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
-        var parts = ["Record a video of this web page with Reco: \(url.absoluteString)"]
+        var parts = ["Record a video of this web page with Orbit: \(url.absoluteString)"]
         if let take {
             parts.append("The current video was recorded with these record_page arguments:\n\(Self.json(take.steps))")
         }
@@ -169,8 +169,8 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
         parts.append((take == nil ? "What the video should show:\n" : "What the user asks now:\n") + (wanted.isEmpty ? Self.defaultInstructions : wanted))
         parts.append(take == nil ? Self.playbook : Self.changePlaybook)
         parts.append("""
-            Record only with the reco MCP tools (web search and fetch are for research); render_status with the render_id until the status is done or failed. Don't ask questions; \
-            decide yourself. If the result has warnings, fix those steps and record once more, but only once: then stop and report, \
+            Record only with the orbit MCP tools (web search and fetch are for research); render_status with the render_id until the status is done or failed. \
+            Don't ask questions; decide yourself. If the result has warnings, fix those steps and record once more, but only once: then stop and report, \
             whatever the second result says. When it's done, reply in one or two short sentences saying what the video \
             shows\(take == nil ? "" : " and what changed"), without paths or selectors. If it fails, reply with the error.
             """)
@@ -180,11 +180,11 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
     private var launchPrompt: String {
         let wanted = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
         return [
-            "Make a launch video of this product with Reco: \(url.absoluteString)",
+            "Make a launch video of this product with Orbit: \(url.absoluteString)",
             "What the user said:\n" + (wanted.isEmpty ? Self.defaultLaunchInstructions : wanted),
             launchMethod,
             """
-            Use only the reco MCP tools (web search and fetch are for research). Don't ask questions; decide yourself. When it's \
+            Use only the orbit MCP tools (web search and fetch are for research). Don't ask questions; decide yourself. When it's \
             exported, reply in one or two short sentences with the pitch and what the video shows, without paths or selectors. \
             If it fails, reply with the error.
             """
@@ -193,7 +193,7 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
 
     private func motionPrompt(_ motion: MotionVideo) -> String {
         let wanted = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
-        var parts = ["Change this motion video with Reco's edit_motion tool: \(motion.bundle.path(percentEncoded: false))"]
+        var parts = ["Change this motion video with Orbit's edit_motion tool: \(motion.bundle.path(percentEncoded: false))"]
         if let scene = motion.scene {
             let layer = motion.layer.map { ", layer \"\($0)\"" } ?? ""
             parts.append("The user has scene \"\(scene)\"\(layer) selected: \"this\" or \"it\" means that.")
@@ -208,9 +208,9 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
                 + "\(AgentSkill.storyFilmName) if a person's words are typed big in it (voice moves), \(AgentSkill.editorialFilmName) if it is over "
                 + "paper, ink or lens grounds, \(AgentSkill.flowFilmName) if over haze, \(AgentSkill.motionDesignName) if its scenes are shapes and type "
                 + "that morph, else \(AgentSkill.launchFilmName)."
-            : "For anything beyond a small tweak, this is how Reco makes a launch film:\n\n" + AgentSkill.launchFilmMethod)
+            : "For anything beyond a small tweak, this is how Orbit makes a launch film:\n\n" + AgentSkill.launchFilmMethod)
         parts.append("""
-            Use only the reco MCP tools. Don't ask questions; decide yourself. When it's done, reply in one or two short sentences \
+            Use only the orbit MCP tools. Don't ask questions; decide yourself. When it's done, reply in one or two short sentences \
             saying what changed, without paths. If it fails, reply with the error.
             """)
         return parts.joined(separator: "\n\n")

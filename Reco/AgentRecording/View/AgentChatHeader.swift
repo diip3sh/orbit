@@ -6,38 +6,31 @@
 import AppKit
 import SwiftUI
 
-/// The agent chat's title with the agent and model that run it, or why none can.
+/// The agent panel's header beside the window's buttons: New take and the button that closes the panel, and why
+/// no agent can run when none can. Its empty parts drag the window.
 struct AgentChatHeader: View {
-    @Bindable var model: AgentRecordingViewModel
+    let model: AgentRecordingViewModel
+
+    /// Closes the panel.
+    let hide: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: EditorTheme.smallSpacing) {
-            HStack(spacing: EditorTheme.tightSpacing) {
-                Text("Agent")
-                    .font(.theme(.headline))
-                Spacer(minLength: EditorTheme.smallSpacing)
-                if !model.available.isEmpty {
-                    Picker("Agent", selection: $model.agent) {
-                        ForEach(model.available) { kind in
-                            Text(kind.displayName).tag(AgentKind?.some(kind))
-                        }
-                    }
-                    Picker("Model", selection: $model.model) {
-                        Text("Default").tag(String?.none)
-                        ForEach(model.models, id: \.self) { name in
-                            Text(name).tag(String?.some(name))
-                        }
-                    }
-                }
+            HStack(spacing: EditorTheme.smallSpacing) {
+                Spacer(minLength: WebPanel.windowButtonsWidth)
+                Button("New take", action: model.startNewChat)
+                    .buttonStyle(.webPill)
+                    .help("Start a new conversation")
+                    .disabled(model.isRunning || model.transcript.entries.isEmpty)
+                Button("Hide Agent", systemImage: "sidebar.leading", action: hide)
+                    .buttonStyle(EditorIconButtonStyle(diameter: 28))
+                    .help("Hide the agent")
             }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .fixedSize(horizontal: false, vertical: true)
-            .disabled(model.isRunning)
+            .frame(height: WebPanel.headerHeight)
 
             if model.available.isEmpty, let reason = model.unavailableReason ?? (model.isLookingForAgents ? "Looking for agents…" : nil) {
                 Text(reason)
-                    .font(.theme(.caption))
+                    .font(.theme(.callout))
                     .foregroundStyle(EditorTheme.dim)
                     .fixedSize(horizontal: false, vertical: true)
                 if model.unavailableReason != nil {
@@ -48,8 +41,9 @@ struct AgentChatHeader: View {
                 }
             }
         }
-        .padding(.horizontal, EditorTheme.spacing)
-        .padding(.vertical, EditorTheme.smallSpacing)
+        .padding(.leading, 20)
+        .padding(.trailing, EditorTheme.spacing)
+        .dragsWindow()
     }
 
     /// Opens Settings on its Agents tab.

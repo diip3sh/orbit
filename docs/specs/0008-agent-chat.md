@@ -17,8 +17,8 @@ side panel. The Agent tab is a chat with a coding agent about the window's page:
   jumped (it runs slower than real time and unevenly, and moved the live page on every tick).
 - When it's done the clips stay: the user changes them and presses Render (takeover), or sends a
   follow-up ("slower scroll"), which continues the same agent conversation and records again.
-- **AI Agent** in the toolbar opens the tab. The menu bar's floating bar still works, and its runs show in
-  the chat too.
+- The **Agent** pill at the stage header's leading edge opens the chat panel (2026-10-15; the toolbar's
+  **AI Agent** button before). The menu bar's floating bar still works, and its runs show in the chat too.
 
 ## How
 
@@ -31,7 +31,7 @@ side panel. The Agent tab is a chat with a coding agent about the window's page:
 | Follow-up prompt | `AgentRecordingRequest.resuming`, `prompt` ("Change the recording of …") |
 | Chat intents | `AgentRecordingViewModel+Chat.swift`: `send(_:about:)`, `streamingTranscript`; `startNewChat()` |
 | What the window shows | `AgentTools.onInspected` / `onPlanned` (wired in `AppDelegate`), `WebRecordingViewModel` `// MARK: - Agent` and `// MARK: - Playback`, `WebStage`'s `WebAgentHighlights` |
-| Views | `AgentChatView`, `AgentChatRow`, `AgentChatComposer`; the tab in `WebRecordingView` |
+| Views | `AgentChatView`, `AgentChatHeader`, `AgentChatRow`, `AgentChatComposer`; the panel in `WebRecordingView` |
 
 The live canvas comes from Reco's own tools, not the agent's text, so it is exact for every agent. The
 transcript comes from the agent's stream, so only agents that stream (Claude Code, Cursor) show steps;

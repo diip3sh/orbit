@@ -15,7 +15,8 @@ MCP over stdio, so one local MCP server covers all of them.
 - **Settings → Agents** lists the agents found on the Mac, each with Connect, Disconnect or
   Reconnect, and shows whether the server is listening, how many agents are connected and the latest
   render.
-- Connecting adds a server named `reco` to the agent's own settings; nothing else in them changes.
+- Connecting adds a server named `orbit` (`reco` before the rebrand, 2026-10-17) to the agent's own settings; nothing else
+  in them changes.
 - Three MCP tools:
   - `inspect_page`: loads a page and lists its visible links, buttons, inputs and headings with
     selectors and boxes;
@@ -86,14 +87,14 @@ variables and `OPENCODE_CONFIG` could now be followed, but aren't.
 
 ### Editing agents' settings
 
-- Only the `reco` entry is touched, only for an installed agent (file or folder exists), and nothing is
+- Only the `orbit` entry and a legacy `reco` one are touched, only for an installed agent (file or folder exists), and nothing is
   created for an uninstalled one. Contents are never logged.
 - JSON: `JSONSerialization`, then written sorted and pretty, so key order changes. Files with comments
   don't parse and are refused (`notPlainJSON`) rather than rewritten. A non-object top level or servers
   value is refused. Foundation reads trailing commas as plain JSON (measured on macOS 27), so those
   are normalised away.
-- TOML (Codex, Grok): line-based. Our `[mcp_servers.reco]` table and sub-tables are replaced where they
-  are, or appended after a blank line. Dotted keys, inline tables and `reco` keys under `[mcp_servers]`
+- TOML (Codex, Grok): line-based. Our `[mcp_servers.orbit]` table and sub-tables (and a legacy `[mcp_servers.reco]`)
+  are replaced where they are, or appended after a blank line. Dotted keys, inline tables and `orbit` keys under `[mcp_servers]`
   are refused. Everything else stays byte for byte.
 - Writes go to a temporary file next to the target (`.<name>.reco-<UUID>`, so on the same volume), then
   `rename(2)` over the target, keeping its permissions (0600 for a new file, since it holds the

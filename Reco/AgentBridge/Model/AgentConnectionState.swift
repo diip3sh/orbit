@@ -9,6 +9,7 @@ nonisolated enum AgentConnectionState: Equatable, Sendable {
     case notConnected
     case connected
 
-    /// Reco's entry is there but differs from what Reco would write now, e.g. the app moved.
+    /// Reco's entry is there but differs from what Reco would write now, e.g. the app moved or the
+    /// entry still has its name from before the rebrand (`reco`).
     case outdated
 }
