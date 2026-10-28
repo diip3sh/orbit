@@ -11,30 +11,26 @@ import SwiftUI
 struct LibraryView: View {
     @Bindable var viewModel: LibraryViewModel
 
+    private static var shape: RoundedRectangle { .rect(cornerRadius: EditorTheme.largeRadius) }
+
     var body: some View {
-        NavigationSplitView {
-            List(LibrarySection.allCases, id: \.self, selection: Binding($viewModel.section)) { section in
-                Label(section.title, systemImage: section.symbol)
-                    .badge(viewModel.count(in: section))
+        HStack(spacing: EditorTheme.smallSpacing) {
+            LibrarySidebar(viewModel: viewModel)
+                .frame(width: 232)
+
+            VStack(spacing: 0) {
+                LibraryHeader(viewModel: viewModel)
+                LibraryGrid(viewModel: viewModel)
             }
-            .scrollContentBackground(.hidden)
-            .translucentColumn()
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
-        } detail: {
-            LibraryGrid(viewModel: viewModel)
-                // Solid, so it reads apart from the sidebar's blurred desktop
-                .background(LibraryGrid.background)
+            .background(LibraryGrid.background, in: Self.shape)
+            .clipShape(Self.shape)
+            .overlay(Self.shape.strokeBorder(EditorTheme.ink.opacity(0.05)))
         }
-        .searchable(text: $viewModel.search, placement: .toolbar, prompt: "Search by name")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                LibraryFilterMenu(orientation: $viewModel.orientation, sort: $viewModel.sort)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                LibraryNewMenu(actions: viewModel.actions)
-            }
-        }
+        .padding(EditorTheme.smallSpacing)
+        .ignoresSafeArea()
         .frame(minWidth: 760, minHeight: 480)
+        .editorWindowBackground()
+        .background(SettingsWindowConfigurator())
     }
 }
 
@@ -46,8 +42,8 @@ struct LibraryGrid: View {
     /// for the open picture's push. Nonisolated: `onGeometryChange` reads it in a `Sendable` closure.
     nonisolated static let gridSpace = "libraryGrid"
 
-    /// The content area's colour: the window's ground.
-    static let background = EditorTheme.stage
+    /// The content panel's colour, a step up from the window's ground.
+    static let background = EditorTheme.panel
 
     /// Each date header's distance below the top of the grid's content, by ``LibraryDateGroup/id``. Only the
     /// headers a lazy grid has built have one, and one below the fold is treated as not reached yet. In the
@@ -124,7 +120,9 @@ struct LibraryGrid: View {
                             }
                         }
                         .coordinateSpace(name: Self.gridSpace)
-                        .padding(EditorTheme.largeSpacing)
+                        .padding(.horizontal, EditorTheme.largeSpacing)
+                        .padding(.top, EditorTheme.smallSpacing)
+                        .padding(.bottom, EditorTheme.largeSpacing)
                         // The rail floats over the grid, so the last column keeps clear of it
                         .padding(.trailing, showsRail ? LibraryDateRail.width : 0)
                     }
@@ -137,7 +135,7 @@ struct LibraryGrid: View {
                     } action: { _, date in
                         activeDate = date
                     }
-                    .softTopEdge()
+                    .hidingTopScrollEdgeEffect()
                     .overlay(alignment: .trailing) {
                         if showsRail {
                             LibraryDateRail(groups: groups, active: activeDate ?? groups.first?.id) { date in
@@ -186,8 +184,6 @@ struct LibraryGrid: View {
                     .padding(EditorTheme.spacing)
             }
         }
-        .navigationTitle(viewModel.section.heading)
-        .navigationSubtitle(Text("^[\(shown.count) item](inflect: true)"))
     }
 
     /// Opens `item` over the grid from its tile at `centre`, turns back the one on its way home, or, for the picture
@@ -222,70 +218,15 @@ private struct LibraryMasonry: View {
     }
 }
 
-/// Filter: the pictures' shape, and the grid's order.
-private struct LibraryFilterMenu: View {
-    @Binding var orientation: LibraryOrientation?
-    @Binding var sort: LibrarySort
-
-    var body: some View {
-        Menu {
-            Picker("Shape", selection: $orientation) {
-                Text("Any Shape").tag(LibraryOrientation?.none)
-                ForEach(LibraryOrientation.allCases, id: \.self) { orientation in
-                    Label(orientation.title, systemImage: orientation.symbol).tag(Optional(orientation))
-                }
-            }
-            .pickerStyle(.inline)
-            Picker("Sort By", selection: $sort) {
-                ForEach(LibrarySort.allCases, id: \.self) { sort in
-                    Text(sort.title).tag(sort)
-                }
-            }
-            .pickerStyle(.inline)
-        } label: {
-            // Filled while a shape narrows the grid, so a short grid says why
-            Label("Filter", systemImage: orientation == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
-        }
-        .menuIndicator(.hidden)
-        .help("Show one shape, and choose the order")
-    }
-}
-
 private extension View {
 
-    /// The grid fades out under the toolbar's glass as it scrolls up, as Finder's does.
+    /// Without the edge macOS 26 draws where the scrolling grid meets the title bar: the header is its own bar.
     @ViewBuilder
-    func softTopEdge() -> some View {
+    func hidingTopScrollEdgeEffect() -> some View {
         if #available(macOS 26, *) {
-            scrollEdgeEffectStyle(.soft, for: .top)
+            scrollEdgeEffectHidden(true, for: .top)
         } else {
             self
         }
-    }
-}
-
-/// New: a screenshot, a screen recording or a web recording.
-private struct LibraryNewMenu: View {
-    let actions: LibraryViewModel.Actions
-
-    var body: some View {
-        Menu {
-            Section("Screenshot") {
-                Button("Capture Area", systemImage: "rectangle.dashed", action: actions.captureArea)
-                Button("Capture Window", systemImage: "macwindow", action: actions.captureWindow)
-                Button("Capture Screen", systemImage: "display", action: actions.captureScreen)
-            }
-            Section("Recording") {
-                Button("Record Area…", systemImage: "rectangle.dashed.badge.record", action: actions.recordArea)
-                Button("Record Window or Display…", systemImage: "macwindow", action: actions.recordWindowOrDisplay)
-            }
-            Section("Web") {
-                Button("New Web Recording…", systemImage: "globe", action: actions.newWebRecording)
-            }
-        } label: {
-            Label("New", systemImage: "plus")
-        }
-        .menuIndicator(.hidden)
-        .help("Take a screenshot or start a recording")
     }
 }
