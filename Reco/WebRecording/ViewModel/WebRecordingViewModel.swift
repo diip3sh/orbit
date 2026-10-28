@@ -541,6 +541,16 @@ extension WebRecordingViewModel {
 
 extension WebRecordingViewModel {
 
+    /// Whether ← and → step the playhead: a script to move in, and no render using the preview's time.
+    var canStep: Bool {
+        script.duration > 0 && isEditable
+    }
+
+    /// Moves the playhead by whole frames at the render's rate, like the editor's frame stepping.
+    func step(byFrames frames: Int) {
+        seek(to: playhead + Double(frames) / Double(WebScript.frameRate))
+    }
+
     /// Plays the script from the playhead (from the start when it's at the end), or pauses it.
     func togglePlayback() {
         if isPlaying {
