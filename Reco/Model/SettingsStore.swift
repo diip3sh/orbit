@@ -251,6 +251,12 @@ final class SettingsStore { // swiftlint:disable:this type_body_length
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        // Settled on first launch: someone with the camera on from before there were modes asked for Presenter
+        // Overlay and keeps it, and turning the camera on later must not read as that
+        if defaults.object(forKey: "cameraMode") == nil {
+            let mode: CameraMode = defaults.bool(forKey: "presenterOverlayEnabled") ? .presenterOverlay : .track
+            defaults.set(mode.rawValue, forKey: "cameraMode")
+        }
     }
 
     // MARK: - Video Settings
@@ -465,21 +471,36 @@ final class SettingsStore { // swiftlint:disable:this type_body_length
         }
     }
 
-    // MARK: - Presenter Overlay Settings
+    // MARK: - Camera Settings
 
-    var presenterOverlayEnabled: Bool {
+    /// Whether a recording uses the camera, as ``cameraMode`` says. Stored under the name it had when Presenter
+    /// Overlay was the only use, so the choice carries over.
+    var cameraEnabled: Bool {
         get {
-            access(keyPath: \.presenterOverlayEnabled)
+            access(keyPath: \.cameraEnabled)
             return defaults.bool(forKey: "presenterOverlayEnabled")
         }
         set {
-            withMutation(keyPath: \.presenterOverlayEnabled) {
+            withMutation(keyPath: \.cameraEnabled) {
                 defaults.set(newValue, forKey: "presenterOverlayEnabled")
             }
         }
     }
 
-    /// The selected camera device ID for Presenter Overlay, or `nil` for the system default.
+    /// What the camera records into; one capture session can't do both.
+    var cameraMode: CameraMode {
+        get {
+            access(keyPath: \.cameraMode)
+            return defaults.string(forKey: "cameraMode").flatMap(CameraMode.init(rawValue:)) ?? .track
+        }
+        set {
+            withMutation(keyPath: \.cameraMode) {
+                defaults.set(newValue.rawValue, forKey: "cameraMode")
+            }
+        }
+    }
+
+    /// The selected camera device ID, or `nil` for the system default.
     var selectedCameraID: String? {
         get {
             access(keyPath: \.selectedCameraID)

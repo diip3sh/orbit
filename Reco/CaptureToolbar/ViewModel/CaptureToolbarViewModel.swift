@@ -146,8 +146,8 @@ final class CaptureToolbarViewModel {
     }
 
     func toggleCamera() {
-        settings.presenterOverlayEnabled.toggle()
-        guard settings.presenterOverlayEnabled else { return }
+        settings.cameraEnabled.toggle()
+        guard settings.cameraEnabled else { return }
         Task { await recorder.permissionService.requestCameraPermission() }
     }
 

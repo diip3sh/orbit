@@ -61,7 +61,7 @@ struct EditorInspector: View {
                                 CaptionInspectorSection(viewModel: viewModel)
                             }
                         case .camera:
-                            EmptyView()
+                            CameraInspectorSection(viewModel: viewModel)
                         }
                     }
                     .padding(EditorTheme.spacing)

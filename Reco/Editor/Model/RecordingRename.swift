@@ -38,6 +38,9 @@ nonisolated enum RecordingRename {
         if name.hasSuffix(ExportFormat.nameSuffix) {
             return "Names ending in \(ExportFormat.nameSuffix) are kept for exports."
         }
+        if name.hasSuffix(CameraFootage.nameSuffix) {
+            return "Names ending in \(CameraFootage.nameSuffix) are kept for camera footage."
+        }
         return nil
     }
 
@@ -51,7 +54,9 @@ nonisolated enum RecordingRename {
         return [
             (videoURL, newVideo),
             (InputTelemetry.sidecarURL(for: videoURL), InputTelemetry.sidecarURL(for: newVideo)),
-            (EditorProject.fileURL(for: videoURL), EditorProject.fileURL(for: newVideo))
+            (EditorProject.fileURL(for: videoURL), EditorProject.fileURL(for: newVideo)),
+            (CameraFootage.movieURL(for: videoURL), CameraFootage.movieURL(for: newVideo)),
+            (CameraFootage.sidecarURL(for: videoURL), CameraFootage.sidecarURL(for: newVideo))
         ]
     }
 }

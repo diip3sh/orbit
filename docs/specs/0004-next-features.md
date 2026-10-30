@@ -402,6 +402,10 @@ edges. Recording keeps the live selection.
 
 ### N19 — Camera as its own track (own spec; spec 0003 open question 3)
 
+- **Status (2026-10-31): the bubble shipped** (spec 0023, section 2): `CameraRecorder`, the Camera tab and dragging on the
+  stage. Layouts per part and background removal aren't built. Recording uses `AVCaptureVideoDataOutput` and
+  `AVAssetWriter`, not the `AVCaptureMovieFileOutput` below: only sample timestamps give an exact offset, and pauses then
+  cut at the screen's instants. Recording from a real camera hasn't been checked by a person yet.
 - **Recording:**
   - Record the camera to `<name>.camera.mov` with `AVCaptureMovieFileOutput`, which can pause and
     resume with the screen.

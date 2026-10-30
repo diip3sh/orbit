@@ -17,7 +17,7 @@ struct CaptureToolbarLiveControls: View {
         HStack(spacing: 2) {
             indicator("System Audio", short: "Audio", icon: .toolbarSystemAudio, isOn: settings.captureSystemAudio)
             indicator("Microphone", short: "Mic", icon: .toolbarMic, isOn: settings.captureMicrophone)
-            indicator("Camera", short: "Camera", icon: .toolbarCamera, isOn: settings.presenterOverlayEnabled)
+            indicator("Camera", short: "Camera", icon: .toolbarCamera, isOn: settings.cameraEnabled)
         }
         .captureToolbarPill()
 

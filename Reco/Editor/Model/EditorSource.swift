@@ -35,6 +35,9 @@ nonisolated struct EditorSource: Sendable {
     /// Why ``telemetry`` is `nil`.
     let telemetryError: EditorError?
 
+    /// The camera's own footage, `nil` without any or when it can't be read.
+    var camera: CameraFootage?
+
     /// The video's length in seconds.
     var duration: Double {
         timeRange.duration.seconds

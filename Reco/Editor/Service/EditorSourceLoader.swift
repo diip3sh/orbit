@@ -7,7 +7,7 @@
 
 import AVFoundation
 
-/// Loads a recording for the editor, off the main actor: its video's properties and its telemetry.
+/// Loads a recording for the editor, off the main actor: its video's properties, its telemetry and its camera footage.
 nonisolated enum EditorSourceLoader {
 
     /// Throws ``EditorError`` when the video can't be opened. Missing or unreadable telemetry
@@ -34,7 +34,8 @@ nonisolated enum EditorSourceLoader {
                 timescale: timescale,
                 dynamicRange: DynamicRange(of: formats.first),
                 telemetry: telemetry,
-                telemetryError: telemetryError
+                telemetryError: telemetryError,
+                camera: await CameraFootageStore.load(for: videoURL)
             )
         } catch let error as EditorError {
             throw error

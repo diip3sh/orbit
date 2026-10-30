@@ -29,6 +29,26 @@ nonisolated enum OverlayImages {
         }
     }
 
+    /// How far a bubble's shadow reaches past it, as a share of its side.
+    static let bubbleShadowReach = 0.12
+
+    /// The soft shadow of a `side` pixel square rounded by `radius`, at `opacity`. Its extent starts at the origin, with
+    /// ``bubbleShadowReach`` of `side` around the square.
+    static func bubbleShadow(side: CGFloat, radius: CGFloat, opacity: Double) -> CIImage {
+        let reach = (side * bubbleShadowReach).rounded()
+        return draw(size: CGSize(width: side + 2 * reach, height: side + 2 * reach)) { context in
+            context.setAlpha(opacity)
+            context.setShadow(offset: CGSize(width: 0, height: -reach / 4), blur: reach / 2, color: CGColor(gray: 0, alpha: 1))
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            context.addPath(CGPath(
+                roundedRect: CGRect(x: reach, y: reach, width: side, height: side), cornerWidth: radius, cornerHeight: radius, transform: nil
+            ))
+            context.setFillColor(CGColor(gray: 0, alpha: 1))
+            context.fillPath()
+            context.endTransparencyLayer()
+        }
+    }
+
     /// Pixels per point of the cursor images below, as sharp as the largest recorded arrow (10×) needs when zoomed.
     private static let cursorScale: CGFloat = 8
 

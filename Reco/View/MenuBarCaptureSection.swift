@@ -52,15 +52,25 @@ struct CaptureSettingsSection: View {
             CaptureGroupRow(
                 title: "Camera",
                 systemImage: "video",
-                value: settings.presenterOverlayEnabled ? "On" : "Off",
+                value: settings.cameraEnabled ? "On" : "Off",
                 isExpanded: $isCameraExpanded
             )
 
             if isCameraExpanded {
                 VStack(spacing: 0) {
-                    MenuBarToggle(name: "Presenter Overlay", isOn: $settings.presenterOverlayEnabled)
+                    MenuBarToggle(name: "Camera", isOn: $settings.cameraEnabled)
 
-                    if settings.presenterOverlayEnabled {
+                    if settings.cameraEnabled {
+                        // Off records the camera as its own track, which the editor can place and restyle
+                        MenuBarToggle(
+                            name: "Presenter Overlay",
+                            isOn: Binding {
+                                settings.cameraMode == .presenterOverlay
+                            } set: {
+                                settings.cameraMode = $0 ? .presenterOverlay : .track
+                            }
+                        )
+
                         CameraExpandablePicker(
                             selectedID: $settings.selectedCameraID,
                             devices: cameraDeviceService.availableDevices
@@ -70,7 +80,7 @@ struct CaptureSettingsSection: View {
                 .padding(.leading, 12)
             }
         }
-        .onChange(of: settings.presenterOverlayEnabled) { _, isEnabled in
+        .onChange(of: settings.cameraEnabled) { _, isEnabled in
             // Ask up front rather than letting the first recording fail on a denied camera
             guard isEnabled else { return }
 

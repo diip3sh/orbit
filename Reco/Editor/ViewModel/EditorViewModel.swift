@@ -377,7 +377,7 @@ final class EditorViewModel {
             let plan = await RenderPlan.build(project: project, source: source, resources: resources)
             let extra = await extraAudio(for: self.project.audio, source: source, timeMap: plan.timeMap)
             guard !Task.isCancelled, let playing = self.plan, var composition else { return }
-            guard plan.timeMap != playing.timeMap || extra != composition.extraAudio else {
+            guard !plan.playsInComposition(of: playing) || extra != composition.extraAudio else {
                 composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan)
                 composition.audioMix = CompositionBuilder.audioMix(for: source, timeMap: plan.timeMap, settings: self.project.audio, extra: extra)
                 self.plan = plan

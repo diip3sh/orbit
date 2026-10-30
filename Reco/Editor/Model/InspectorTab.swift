@@ -46,23 +46,20 @@ nonisolated enum InspectorTab: CaseIterable, Hashable, Sendable {
         }
     }
 
-    /// Whether the tab has anything to edit. Camera needs the camera as its own track, which isn't recorded yet
-    /// (spec 0004, N19), and captions macOS 26's transcriber (N5). Audio is always there: a silent recording can
-    /// still get music.
+    /// Whether the tab has anything to edit. Captions need macOS 26's transcriber (N5). Audio and Camera are always
+    /// there: a silent recording can still get music, and one without a camera track footage from a file.
     var isAvailable: Bool {
         switch self {
-        case .camera: false
         case .caption: Self.canTranscribe
-        case .background, .audio, .cursor, .keyboard, .motion: true
+        case .background, .camera, .audio, .cursor, .keyboard, .motion: true
         }
     }
 
     /// Why ``isAvailable`` is false, for the tab's tooltip.
     var unavailableReason: String {
         switch self {
-        case .camera: "Camera: recorded into the video, so it can't be edited"
         case .caption: "Captions: need macOS 26 or later"
-        case .background, .audio, .cursor, .keyboard, .motion: title
+        case .background, .camera, .audio, .cursor, .keyboard, .motion: title
         }
     }
 

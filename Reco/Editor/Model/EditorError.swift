@@ -22,6 +22,7 @@ nonisolated enum EditorError: LocalizedError {
     case renameFailed(any Error)
     case styleNotSaved(any Error)
     case unreadableStyle(any Error)
+    case cameraFootageNotAdded(any Error)
 
     var errorDescription: String? {
         switch self {
@@ -57,6 +58,8 @@ nonisolated enum EditorError: LocalizedError {
             "The style couldn't be saved. \(error.localizedDescription)"
         case .unreadableStyle(let error):
             "The style couldn't be read. \(error.localizedDescription)"
+        case .cameraFootageNotAdded(let error):
+            "The camera footage couldn't be added. \(error.localizedDescription)"
         }
     }
 }

@@ -21,12 +21,16 @@ nonisolated final class EditorInstruction: NSObject, AVVideoCompositionInstructi
     let passthroughTrackID = kCMPersistentTrackID_Invalid
 
     let sourceTrackID: CMPersistentTrackID
+
+    /// The camera footage's track, when the plan draws it.
+    let cameraTrackID: CMPersistentTrackID?
     let plan: RenderPlan
 
-    init(timeRange: CMTimeRange, sourceTrackID: CMPersistentTrackID, plan: RenderPlan) {
+    init(timeRange: CMTimeRange, sourceTrackID: CMPersistentTrackID, cameraTrackID: CMPersistentTrackID? = nil, plan: RenderPlan) {
         self.timeRange = timeRange
         self.sourceTrackID = sourceTrackID
+        self.cameraTrackID = cameraTrackID
         self.plan = plan
-        requiredSourceTrackIDs = [NSNumber(value: sourceTrackID)]
+        requiredSourceTrackIDs = ([sourceTrackID] + (cameraTrackID.map { [$0] } ?? [])).map { NSNumber(value: $0) }
     }
 }

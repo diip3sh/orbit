@@ -202,6 +202,14 @@ extension CanvasLayout {
         return baseView(for: videoSize, shape: filledFrame(for: videoSize, in: size, padding: style.padding).size)
     }
 
+    /// The canvas's size and where the video sits on it for a `videoSize` video in `style` at the preview's size, without
+    /// laying out the rest.
+    nonisolated static func frames(for videoSize: CGSize, style: CanvasStyle) -> (canvas: CGSize, video: CGRect) {
+        let size = size(for: videoSize, aspect: style.aspect, padding: style.padding, shorterSide: nil)
+        let video = style.fills ? filledFrame(for: videoSize, in: size, padding: style.padding) : videoFrame(for: videoSize, in: size, padding: style.padding)
+        return (size, video)
+    }
+
     /// How far, in pixels, the space inside the padding may be from the part of the video shown in it for a filling
     /// video to take that part's own size instead: the native size's 2 px to spare and the even sides leave up to 10.
     nonisolated private static let ownPixelsSlack = 12.0

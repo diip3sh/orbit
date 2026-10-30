@@ -27,8 +27,8 @@ struct CaptureToolbarOptions: View {
             action: viewModel.toggleMicrophone
         )
         CaptureToolbarSwitch(
-            title: "Camera", icon: .toolbarCamera, isOn: settings.presenterOverlayEnabled,
-            tooltip: settings.presenterOverlayEnabled ? "Hide Camera" : "Show Camera", shortcut: .camera,
+            title: "Camera", icon: .toolbarCamera, isOn: settings.cameraEnabled,
+            tooltip: settings.cameraEnabled ? "Hide Camera" : "Show Camera", shortcut: .camera,
             action: viewModel.toggleCamera
         )
     }

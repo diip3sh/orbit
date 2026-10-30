@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Renames a recording on disk: the movie and the telemetry and project beside it. The recording's folder
+/// Renames a recording on disk: the movie and the telemetry, project and camera files beside it. The recording's folder
 /// must be accessible, i.e. the output folder's security scope held.
 nonisolated enum RecordingRenamer {
 

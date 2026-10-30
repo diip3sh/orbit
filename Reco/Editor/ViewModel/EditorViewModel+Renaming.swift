@@ -9,7 +9,7 @@ import Foundation
 
 extension EditorViewModel {
 
-    /// Renames the recording's files to `name` (the video's, the telemetry's and the project's), saving pending
+    /// Renames the recording's files to `name` (the video's, the telemetry's, the project's and the camera's), saving pending
     /// edits first, and reopens it where it was. A refused name or a failed move shows its reason and changes nothing.
     func rename(to name: String) async {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)

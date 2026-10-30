@@ -75,6 +75,9 @@ nonisolated struct RenderPlan: Sendable {
 
     /// The captions, drawn over the video and not zoomed.
     var captions = PlannedCaptions.none
+
+    /// The camera bubble, or `nil` when it's hidden or there's no footage.
+    var bubble: PlannedBubble?
 }
 
 // MARK: - Building
@@ -136,16 +139,22 @@ extension RenderPlan {
                 OverlayImages.ring(diameter: ringDiameter, color: project.clickHighlights.color.cgColor, filled: project.clickHighlights.effect == .circle),
                 in: dynamicRange
             ),
-            clickEffect: project.clickHighlights.effect,
-            keystrokes: keystrokes,
+            clickEffect: project.clickHighlights.effect, keystrokes: keystrokes,
             chipImages: labels.map { OverlayImages.encoded(OverlayImages.chip(label: $0, height: chipHeight), in: dynamicRange) },
             canvas: canvas, dynamicRange: dynamicRange,
             downsamplesSmoothly: target.shorterSide != nil,
             shutter: project.motionBlur / (target.frameRate ?? source.frameRate), maximumBlurSamples: target.shorterSide == nil ? 2 : 8,
             crop: videoSize == source.naturalSize ? nil : VideoCrop.coreImageRect(cropPixels, videoHeight: source.naturalSize.height),
             masks: PlannedMask.planned(project.masks, videoSize: videoSize),
-            captions: await .planned(project.captions, timeMap: timeMap, videoFrame: canvas.videoFrame, hasChips: !keystrokes.isEmpty, dynamicRange: dynamicRange)
+            captions: await .planned(project.captions, timeMap: timeMap, videoFrame: canvas.videoFrame, hasChips: !keystrokes.isEmpty, dynamicRange: dynamicRange),
+            bubble: PlannedBubble.planned(project.camera, footage: source.camera, timeMap: timeMap, videoFrame: canvas.videoFrame, dynamicRange: dynamicRange)
         )
+    }
+
+    /// Whether `other`'s composition plays this plan too: the footage is laid out by the cuts, speeds and its offset,
+    /// and everything else is the compositor's.
+    nonisolated func playsInComposition(of other: RenderPlan) -> Bool {
+        timeMap == other.timeMap && bubble?.offset == other.bubble?.offset
     }
 
     /// The presses to highlight at their output times, none when highlights are off: rings last their duration on

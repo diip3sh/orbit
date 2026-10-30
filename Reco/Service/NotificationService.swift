@@ -212,6 +212,15 @@ final class NotificationService: NSObject {
         )
     }
 
+    /// Sends a notification when the camera couldn't be recorded; the screen recording is unaffected
+    func sendCameraFailedNotification(error: Error) {
+        send(
+            title: "Camera Not Recorded",
+            body: "The screen recording is kept without the camera: \(error.localizedDescription)",
+            category: NotificationIdentifier.categoryRecordingFailed
+        )
+    }
+
     /// Sends a notification when recording stopped unexpectedly
     /// - Parameter error: Optional error that caused the stop
     func sendRecordingStoppedNotification(error: Error?) {

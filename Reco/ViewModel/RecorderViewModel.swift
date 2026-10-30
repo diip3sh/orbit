@@ -8,6 +8,7 @@
 import Foundation
 @preconcurrency import ScreenCaptureKit
 import AppKit
+import CoreMedia
 import OSLog
 
 /// The main view model managing recording state and coordination between services
@@ -88,6 +89,7 @@ final class RecorderViewModel {
     private let captureEngine: CaptureEngine
     private let assetWriter: AssetWriter
     private let cameraSession = CameraSession()
+    private let cameraRecorder = CameraRecorder()
     private let inputTelemetry = InputTelemetryRecorder()
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "RecorderViewModel")
@@ -124,6 +126,9 @@ final class RecorderViewModel {
         captureEngine.delegate = self
         captureEngine.sampleBufferDelegate = assetWriter
         previewService.delegate = self
+        cameraRecorder.onFailure = { [weak self] error in
+            self?.reportCameraFailure(error)
+        }
     }
 
     // MARK: - Permission Methods
@@ -133,7 +138,7 @@ final class RecorderViewModel {
     func requestPermissionsOnLaunch() async {
         await permissionService.requestPermissions(
             includeMicrophone: settings.captureMicrophone,
-            includeCamera: settings.presenterOverlayEnabled
+            includeCamera: settings.cameraEnabled
         )
     }
 
@@ -272,16 +277,7 @@ final class RecorderViewModel {
             try assetWriter.startWriting()
             logger.info("AssetWriter ready")
 
-            // Start camera for Presenter Overlay before capture so the system detects it.
-            // The camera has to be running before the SCStream starts, which is earlier than
-            // the engine's own permission checks, so camera access is verified here instead.
-            if settings.presenterOverlayEnabled {
-                guard await permissionService.requestCameraPermission() else {
-                    throw CaptureError.cameraPermissionDenied
-                }
-
-                await cameraSession.start(deviceID: settings.selectedCameraID)
-            }
+            try await startCameraIfNeeded(for: outputURL)
 
             // Start capture with the calculated video size
             logger.info("Starting capture engine...")
@@ -304,6 +300,7 @@ final class RecorderViewModel {
             state = .idle
             lastError = error
             cameraSession.stop()
+            await cameraRecorder.cancel()
             selectionBorderFrame.dismiss()
 
             // The writer may already be set up and holding an empty output file. Cancel it
@@ -342,6 +339,7 @@ final class RecorderViewModel {
         guard isRecording else { return }
 
         state = .stopping
+        var cameraTake: CameraTake?
 
         do {
             try await endCapture()
@@ -349,6 +347,8 @@ final class RecorderViewModel {
             // Finalize file. The session start and pauses are read first because finishing resets them.
             let sessionStart = assetWriter.sessionStartTime
             let pauses = assetWriter.pauseIntervals
+            // Finished before the screen's, which counts as saved as soon as it's in the folder
+            cameraTake = await cameraRecorder.finish()
             let (outputURL, videoFrameCount) = try await assetWriter.finishWriting()
 
             state = .idle
@@ -360,6 +360,9 @@ final class RecorderViewModel {
             var cursorLeftToEditor = false
             if videoFrameCount > 0 {
                 cursorLeftToEditor = await inputTelemetry.writeSidecar(for: outputURL, sessionStart: sessionStart, pauses: pauses, geometry: captureEngine.frameGeometry.track)
+                saveCamera(cameraTake, for: outputURL, sessionStart: sessionStart)
+            } else {
+                cameraTake?.discard()
             }
 
             // Brief delay to ensure screen sharing mode has fully stopped before sending notification
@@ -377,6 +380,8 @@ final class RecorderViewModel {
             state = .idle
             lastError = error
             assetWriter.cancel()
+            cameraTake?.discard()
+            await cameraRecorder.cancel()
             settings.stopAccessingOutputDirectory()
             notificationService.sendRecordingFailedNotification(error: error)
             logger.error("Failed to stop recording: \(error.localizedDescription)")
@@ -433,6 +438,49 @@ final class RecorderViewModel {
     }
 }
 
+// MARK: - Camera
+
+extension RecorderViewModel {
+
+    /// Starts the camera before capture, as ``cameraMode`` says: Presenter Overlay needs it running before the SCStream
+    /// starts, so it's checked here rather than with the engine's permissions, and a track then covers the first frame.
+    /// A track that can't start warns and leaves the recording to go on without it.
+    private func startCameraIfNeeded(for outputURL: URL) async throws {
+        guard settings.cameraEnabled else { return }
+        let hasPermission = await permissionService.requestCameraPermission()
+        switch settings.cameraMode {
+        case .presenterOverlay:
+            guard hasPermission else { throw CaptureError.cameraPermissionDenied }
+            await cameraSession.start(deviceID: settings.selectedCameraID)
+        case .track:
+            guard hasPermission else {
+                reportCameraFailure(CaptureError.cameraPermissionDenied)
+                return
+            }
+            do {
+                try await cameraRecorder.start(deviceID: settings.selectedCameraID, movie: CameraFootage.movieURL(for: outputURL))
+            } catch {
+                reportCameraFailure(error)
+            }
+        }
+    }
+
+    /// Writes the take's offset beside the movie. The movie stays without it: the editor starts it with the recording.
+    private func saveCamera(_ take: CameraTake?, for outputURL: URL, sessionStart: CMTime) {
+        guard let take else { return }
+        do {
+            try CameraFootageStore.writeOffset(take.offset(screenStart: sessionStart), for: outputURL)
+        } catch {
+            logger.error("Failed to write the camera's offset: \(error.localizedDescription)")
+        }
+    }
+
+    private func reportCameraFailure(_ error: any Error) {
+        logger.error("Camera not recorded: \(error.localizedDescription)")
+        notificationService.sendCameraFailedNotification(error: error)
+    }
+}
+
 // MARK: - Saved Recordings
 
 extension RecorderViewModel {
@@ -465,12 +513,16 @@ extension RecorderViewModel {
     func togglePause() {
         guard isRecording, let recordingStartTime else { return }
 
+        // One instant for both, so the camera loses exactly what the screen does
+        let now = CMClockGetTime(CMClockGetHostTimeClock())
         if isPaused {
-            assetWriter.resume()
+            assetWriter.resume(at: now)
+            cameraRecorder.resume(at: now)
             // Carry the timer on from where it was frozen
             self.recordingStartTime = Date().addingTimeInterval(-recordingDuration)
         } else {
-            assetWriter.pause()
+            assetWriter.pause(at: now)
+            cameraRecorder.pause(at: now)
             recordingDuration = Date().timeIntervalSince(recordingStartTime)
         }
 
@@ -496,6 +548,7 @@ extension RecorderViewModel {
         }
         inputTelemetry.discard()
         assetWriter.cancel()
+        await cameraRecorder.cancel()
         settings.stopAccessingOutputDirectory()
         state = .idle
         recordingDuration = 0
