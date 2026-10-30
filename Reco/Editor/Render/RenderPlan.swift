@@ -78,6 +78,9 @@ nonisolated struct RenderPlan: Sendable {
 
     /// The camera bubble, or `nil` when it's hidden or there's no footage.
     var bubble: PlannedBubble?
+
+    /// The overlays, one sorted list per used lane, lowest lane first.
+    var overlays: [[PlannedOverlay]] = []
 }
 
 // MARK: - Building
@@ -128,8 +131,7 @@ extension RenderPlan {
         let ringDiameter = clicks.map(\.diameter).max() ?? 0
         let chipHeight = min(canvas.videoFrame.width, canvas.videoFrame.height) * chipHeightFraction
         return RenderPlan(
-            timeMap: timeMap,
-            videoSize: videoSize,
+            timeMap: timeMap, videoSize: videoSize,
             camera: await camera,
             cursor: await cursor?.path,
             cursorShapes: await cursor?.shapes.encoded(in: dynamicRange) ?? .none,
@@ -147,7 +149,8 @@ extension RenderPlan {
             crop: videoSize == source.naturalSize ? nil : VideoCrop.coreImageRect(cropPixels, videoHeight: source.naturalSize.height),
             masks: PlannedMask.planned(project.masks, videoSize: videoSize),
             captions: await .planned(project.captions, timeMap: timeMap, videoFrame: canvas.videoFrame, hasChips: !keystrokes.isEmpty, dynamicRange: dynamicRange),
-            bubble: PlannedBubble.planned(project.camera, footage: source.camera, timeMap: timeMap, videoFrame: canvas.videoFrame, dynamicRange: dynamicRange)
+            bubble: PlannedBubble.planned(project.camera, footage: source.camera, timeMap: timeMap, videoFrame: canvas.videoFrame, dynamicRange: dynamicRange),
+            overlays: await PlannedOverlay.planned(project.overlays, timeMap: timeMap, videoFrame: canvas.videoFrame, dynamicRange: dynamicRange)
         )
     }
 

@@ -8,7 +8,7 @@
 import SwiftUI
 
 /// The timeline's tracks: the video row, the clicks & keys row, the audio row, then the zoom, mask
-/// and caption lanes, each named on its own lane with a faint grid, with cut parts ghosted, trim handles
+/// and caption lanes and one per used overlay lane, each named on its own lane with a faint grid, with cut parts ghosted, trim handles
 /// on the kept parts' edges and the playhead's line. The window on the recording is the view model's viewport: dragging scrubs,
 /// clicking selects a part, scrolling pans and ⌘-scrolling zooms.
 struct EditorTimelineView: View {
@@ -119,7 +119,15 @@ struct EditorTimelineView: View {
                 }
                 .transition(.opacity)
             }
+
+            ForEach(viewModel.project.overlays.usedLanes, id: \.self) { lane in
+                TimelineTrack(title: "Overlays", viewport: viewport, inset: 3) {
+                    OverlayLane(viewModel: viewModel, lane: lane, width: width)
+                }
+                .transition(.opacity)
+            }
         }
+        .editorMotion(value: viewModel.project.overlays.usedLanes)
         .editorMotion(value: viewModel.project.masks.isEmpty)
         .editorMotion(value: viewModel.project.captions.cues.isEmpty)
         .background(

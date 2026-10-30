@@ -22,6 +22,7 @@ struct EditorStage: View {
             .clipShape(shape)
             .overlay {
                 CameraBubbleHandle(viewModel: viewModel)
+                OverlayHandle(viewModel: viewModel)
             }
             .background {
                 if viewModel.canvas.background == .transparent {

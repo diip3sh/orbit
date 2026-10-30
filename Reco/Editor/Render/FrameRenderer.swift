@@ -49,7 +49,7 @@ nonisolated enum FrameRenderer {
     /// take 5.5 and 12.5 ms, 4 still 2 and 5.6. Only frames in which the camera moves pay it.
     static let blurSampleSpacing = 4.0
 
-    /// The frame with everything on it - clicks, zoom, cursor, camera bubble, keystroke chip and caption - placed on the
+    /// The frame with everything on it - clicks, zoom, cursor, camera bubble, overlays, keystroke chip and caption - placed on the
     /// canvas and clipped to the video's frame, square-cornered.
     private static func video(_ frame: CIImage, camera: CIImage?, at time: Double, plan: RenderPlan) -> CIImage {
         // The crop moved to the origin (whole pixels, so nothing is resampled) is the video for everything after
@@ -73,6 +73,8 @@ nonisolated enum FrameRenderer {
         }
         // After the zoom, so it stays put, and under the chip and caption, which it would otherwise cover
         image = bubbled(image, camera: camera, at: time, plan: plan)
+        // Placed there on purpose, so over the bubble, but they don't get to hide what's being typed or said
+        image = overlaid(image, at: time, plan: plan)
         if let (chip, opacity) = KeystrokeChip.visible(in: plan.keystrokes, at: time) {
             image = keystroke(chip, opacity: opacity, plan: plan).composited(over: image)
         }

@@ -23,6 +23,9 @@ nonisolated enum EditorError: LocalizedError {
     case styleNotSaved(any Error)
     case unreadableStyle(any Error)
     case cameraFootageNotAdded(any Error)
+    case noFreeOverlayLane
+    case noRoomForOverlay
+    case unreadableOverlayImage
 
     var errorDescription: String? {
         switch self {
@@ -60,6 +63,12 @@ nonisolated enum EditorError: LocalizedError {
             "The style couldn't be read. \(error.localizedDescription)"
         case .cameraFootageNotAdded(let error):
             "The camera footage couldn't be added. \(error.localizedDescription)"
+        case .noFreeOverlayLane:
+            "All three overlay lanes are taken at the playhead, so there's no room for another. Move the playhead, or move or delete an overlay."
+        case .noRoomForOverlay:
+            "The playhead is too close to the recording's end for an overlay. Move it back."
+        case .unreadableOverlayImage:
+            "The picture couldn't be read, so it wasn't added."
         }
     }
 }

@@ -18,4 +18,6 @@ nonisolated enum EditorSelection: Equatable, Sendable {
     case mask(MaskSegment.ID)
 
     case caption(CaptionCue.ID)
+
+    case overlay(VideoOverlay.ID)
 }

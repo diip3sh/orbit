@@ -337,8 +337,8 @@ final class EditorViewModel {
     }
 
     private func projectChanged(from previous: EditorProject) {
-        // A zoom or a caption stays selected while it's being changed
-        if selectedZoom == nil, selectedCaption == nil {
+        // A zoom, a caption or an overlay stays selected while it's being changed
+        if selectedZoom == nil, selectedCaption == nil, selectedOverlay == nil {
             selection = nil
         }
         updateTimeline()
@@ -451,7 +451,7 @@ extension EditorViewModel {
     var canDeleteSelection: Bool {
         switch selection {
         case .segment: segments.count > 1
-        case .zoom, .mask, .caption: true
+        case .zoom, .mask, .caption, .overlay: true
         case nil: false
         }
     }
@@ -473,7 +473,7 @@ extension EditorViewModel {
         edit("Split") { $0.splits = splits }
     }
 
-    /// Cuts the selected segment or deletes the selected zoom, mask or caption.
+    /// Cuts the selected segment or deletes the selected zoom, mask, caption or overlay.
     func deleteSelection() {
         guard let selection, canDeleteSelection else { return }
         switch selection {
@@ -483,8 +483,8 @@ extension EditorViewModel {
             edit("Delete Zoom") { $0.zooms = $0.zooms.removing(id) }
         case .mask(let id):
             edit("Delete Mask") { $0.masks = $0.masks.removing(id) }
-        case .caption(let id):
-            deleteCaption(id)
+        case .caption(let id): deleteCaption(id)
+        case .overlay(let id): deleteOverlay(id)
         }
     }
 

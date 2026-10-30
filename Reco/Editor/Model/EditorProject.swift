@@ -50,6 +50,9 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     var captions = CaptionTrack()
     var camera = CameraOverlayStyle()
 
+    /// Text, pictures and arrows over the video, in any order (see ``VideoOverlay``).
+    var overlays: [VideoOverlay] = []
+
     /// The project file for a recording: same folder and base name, `.edit.json` extension.
     static func fileURL(for videoURL: URL) -> URL {
         videoURL.deletingPathExtension().appendingPathExtension("edit").appendingPathExtension("json")
@@ -72,7 +75,7 @@ extension EditorProject {
 
     /// This project with `other`'s look: canvas, motion blur, cursor, click highlights, keystrokes, the captions'
     /// style and the camera bubble's, which a new take of the same page keeps (spec 0008). Cuts, splits, zooms, audio,
-    /// what the captions say and how the camera lines up belong to one recording.
+    /// what the captions say, how the camera lines up and the overlays belong to one recording.
     nonisolated func styled(like other: EditorProject) -> EditorProject {
         var project = self
         project.canvas = other.canvas
@@ -114,5 +117,6 @@ extension EditorProject {
         audio = try container.decodeIfPresent(AudioMixSettings.self, forKey: .audio) ?? AudioMixSettings()
         captions = try container.decodeIfPresent(CaptionTrack.self, forKey: .captions) ?? CaptionTrack()
         camera = try container.decodeIfPresent(CameraOverlayStyle.self, forKey: .camera) ?? CameraOverlayStyle()
+        overlays = try container.decodeIfPresent([VideoOverlay].self, forKey: .overlays) ?? []
     }
 }

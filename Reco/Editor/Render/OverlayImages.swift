@@ -165,7 +165,7 @@ nonisolated enum OverlayImages {
 
     /// Draws into a transparent sRGB bitmap of `size`, rounded up to whole pixels, with a
     /// bottom-left origin like Core Image's.
-    private static func draw(size: CGSize, _ draw: (CGContext) -> Void) -> CIImage {
+    static func draw(size: CGSize, _ draw: (CGContext) -> Void) -> CIImage {
         guard let sRGB = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(
                   data: nil, width: Int(size.width.rounded(.up)), height: Int(size.height.rounded(.up)), bitsPerComponent: 8,

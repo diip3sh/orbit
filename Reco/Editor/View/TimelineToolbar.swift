@@ -10,7 +10,7 @@ import SwiftUI
 /// The timeline's toolbar: cutting and adding tools on the left, the time and transport in the
 /// middle, Copy Frame and the timeline's zoom on the right, and the ruler — with the playhead's
 /// knob — under it, lined up with the tracks. Space plays and pauses, ← and → step a frame, S splits at the playhead,
-/// Z adds a zoom there, M a mask, ⌫ removes the selection, ⇧⌘C copies the frame and ⌘-/⌘= zoom
+/// Z adds a zoom there, M a mask, T a text overlay, ⌫ removes the selection, ⇧⌘C copies the frame and ⌘-/⌘= zoom
 /// the timeline.
 struct TimelineToolbar: View {
     @Bindable var viewModel: EditorViewModel
@@ -115,6 +115,8 @@ struct TimelineToolbar: View {
             .keyboardShortcut("m", modifiers: [])
             .help("Hide part of the frame from the playhead (M)")
             .disabled(!viewModel.canAddMask)
+
+            AddOverlayMenu(viewModel: viewModel, diameter: Self.buttonDiameter)
 
             divider
 
@@ -279,6 +281,7 @@ struct TimelineToolbar: View {
         case .zoom: "Zoom"
         case .mask: "Mask"
         case .caption: "Caption"
+        case .overlay: "Overlay"
         case .segment, nil: nil
         }
     }
