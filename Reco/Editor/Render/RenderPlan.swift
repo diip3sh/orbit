@@ -72,6 +72,9 @@ nonisolated struct RenderPlan: Sendable {
 
     /// The masks, sorted and apart.
     var masks: [PlannedMask] = []
+
+    /// The captions, drawn over the video and not zoomed.
+    var captions = PlannedCaptions.none
 }
 
 // MARK: - Building
@@ -136,12 +139,12 @@ extension RenderPlan {
             clickEffect: project.clickHighlights.effect,
             keystrokes: keystrokes,
             chipImages: labels.map { OverlayImages.encoded(OverlayImages.chip(label: $0, height: chipHeight), in: dynamicRange) },
-            canvas: canvas,
-            dynamicRange: dynamicRange,
+            canvas: canvas, dynamicRange: dynamicRange,
             downsamplesSmoothly: target.shorterSide != nil,
             shutter: project.motionBlur / (target.frameRate ?? source.frameRate), maximumBlurSamples: target.shorterSide == nil ? 2 : 8,
             crop: videoSize == source.naturalSize ? nil : VideoCrop.coreImageRect(cropPixels, videoHeight: source.naturalSize.height),
-            masks: PlannedMask.planned(project.masks, videoSize: videoSize)
+            masks: PlannedMask.planned(project.masks, videoSize: videoSize),
+            captions: await .planned(project.captions, timeMap: timeMap, videoFrame: canvas.videoFrame, hasChips: !keystrokes.isEmpty, dynamicRange: dynamicRange)
         )
     }
 

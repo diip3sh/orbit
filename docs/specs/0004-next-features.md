@@ -163,6 +163,12 @@ claim, docs updated, and the 8 ms frame budget kept.
 
 ### N5 — Transcript and captions (macOS 26)
 
+- **Status (2026-10-31): shipped** as the Captions tab, the Captions lane and Write Subtitle Files on the export page
+  (spec 0023, section 1). Measured on macOS 27.2: 10 minutes of `say` speech transcribed in 7.8 s, about 77× real time.
+  The 100 ms goal holds where a sentence starts (0 to 79 ms off). It doesn't hold inside one: the last word's end was up
+  to 298 ms off the sound, and against `AVSpeechSynthesizer`'s word markers on 40 words of continuous speech, word starts
+  were a median 112 ms off, 210 ms at p90 and 322 ms at most, usually early. That comes straight from the transcriber.
+  Cancelling while a model installs returns at once, but the system still finishes the download.
 - **What:**
   - Transcribe speech on-device and show captions burned into the video: a line at the bottom, with
     the current word optionally highlighted.

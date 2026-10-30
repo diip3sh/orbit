@@ -278,6 +278,7 @@ struct TimelineToolbar: View {
         switch viewModel.selection {
         case .zoom: "Zoom"
         case .mask: "Mask"
+        case .caption: "Caption"
         case .segment, nil: nil
         }
     }

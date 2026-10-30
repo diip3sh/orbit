@@ -100,6 +100,31 @@ nonisolated enum OverlayImages {
         }
     }
 
+    /// One pixel of `color`, to be made endless and cut to a shape.
+    static func solid(_ color: CGColor) -> CIImage {
+        draw(size: CGSize(width: 1, height: 1)) { context in
+            context.setFillColor(color)
+            context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+    }
+
+    /// `layout`'s text as coverage: white on black in a single channel, with no color space, since it isn't a color
+    /// and blends the same in every dynamic range. Its extent is the caption's box, from the origin.
+    static func captionMask(of layout: CaptionLayout) -> CIImage {
+        let (width, height) = (Int(layout.size.width.rounded(.up)), Int(layout.size.height.rounded(.up)))
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else {
+            return .empty()
+        }
+        for line in layout.lines {
+            context.textPosition = line.origin
+            CTLineDraw(line.line, context)
+        }
+        return context.makeImage().map { CIImage(cgImage: $0, options: [.colorSpace: NSNull()]) } ?? .empty()
+    }
+
     /// Color managed, unlike the compositor's: it converts each HDR overlay once, so frames don't have to.
     private static let colorManagedContext = CIContext(options: [.cacheIntermediates: false])
 

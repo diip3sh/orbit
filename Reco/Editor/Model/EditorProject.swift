@@ -47,6 +47,7 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     var crop = VideoCrop.full
     var canvas = CanvasStyle()
     var audio = AudioMixSettings()
+    var captions = CaptionTrack()
 
     /// The project file for a recording: same folder and base name, `.edit.json` extension.
     static func fileURL(for videoURL: URL) -> URL {
@@ -68,9 +69,9 @@ extension EditorProject {
 
 extension EditorProject {
 
-    /// This project with `other`'s look: canvas, motion blur, cursor, click highlights and keystrokes, which a
-    /// new take of the same page keeps (spec 0008). Cuts, splits, zooms and audio belong to one
-    /// recording.
+    /// This project with `other`'s look: canvas, motion blur, cursor, click highlights, keystrokes and the captions'
+    /// style, which a new take of the same page keeps (spec 0008). Cuts, splits, zooms, audio and what the captions say
+    /// belong to one recording.
     nonisolated func styled(like other: EditorProject) -> EditorProject {
         var project = self
         project.canvas = other.canvas
@@ -78,6 +79,7 @@ extension EditorProject {
         project.cursor = other.cursor
         project.clickHighlights = other.clickHighlights
         project.keystrokes = other.keystrokes
+        project.captions.style = other.captions.style
         return project
     }
 }
@@ -107,5 +109,6 @@ extension EditorProject {
         crop = try container.decodeIfPresent(CGRect.self, forKey: .crop) ?? VideoCrop.full
         canvas = try container.decodeIfPresent(CanvasStyle.self, forKey: .canvas) ?? CanvasStyle()
         audio = try container.decodeIfPresent(AudioMixSettings.self, forKey: .audio) ?? AudioMixSettings()
+        captions = try container.decodeIfPresent(CaptionTrack.self, forKey: .captions) ?? CaptionTrack()
     }
 }

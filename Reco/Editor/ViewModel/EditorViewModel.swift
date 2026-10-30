@@ -52,6 +52,10 @@ final class EditorViewModel {
     var sensitiveInfoFound: Int?
     @ObservationIgnored var sensitiveInfoSearch: Task<Void, Never>?
 
+    /// Generating captions, and the task doing it.
+    var captionGeneration = CaptionGeneration()
+    @ObservationIgnored var captionTask: Task<Void, Never>?
+
     /// The project as last read from or written to disk.
     @ObservationIgnored private var savedProject = EditorProject()
     @ObservationIgnored private(set) var autosave: Task<Void, Never>?
@@ -276,6 +280,7 @@ final class EditorViewModel {
             try await ExportService.export(composition, to: url, as: settings) { [weak self] in
                 self?.exportProgress = $0
             }
+            try writeSubtitles(for: settings, to: destination, beside: url, timeMap: plan.timeMap)
         } catch {
             guard !Task.isCancelled else { throw CancellationError() }
             logger.error("Export of \(self.videoURL.lastPathComponent) failed: \(error.localizedDescription)")
@@ -309,6 +314,7 @@ final class EditorViewModel {
     func close() async {
         rebuild?.cancel()
         sensitiveInfoSearch?.cancel()
+        captionTask?.cancel()
         playback.release()
         thumbnails = []
         await releaseAudioFiles()
@@ -331,8 +337,8 @@ final class EditorViewModel {
     }
 
     private func projectChanged(from previous: EditorProject) {
-        // A zoom stays selected while it's being changed
-        if selectedZoom == nil {
+        // A zoom or a caption stays selected while it's being changed
+        if selectedZoom == nil, selectedCaption == nil {
             selection = nil
         }
         updateTimeline()
@@ -445,7 +451,7 @@ extension EditorViewModel {
     var canDeleteSelection: Bool {
         switch selection {
         case .segment: segments.count > 1
-        case .zoom, .mask: true
+        case .zoom, .mask, .caption: true
         case nil: false
         }
     }
@@ -467,7 +473,7 @@ extension EditorViewModel {
         edit("Split") { $0.splits = splits }
     }
 
-    /// Cuts the selected segment or deletes the selected zoom or mask.
+    /// Cuts the selected segment or deletes the selected zoom, mask or caption.
     func deleteSelection() {
         guard let selection, canDeleteSelection else { return }
         switch selection {
@@ -477,6 +483,8 @@ extension EditorViewModel {
             edit("Delete Zoom") { $0.zooms = $0.zooms.removing(id) }
         case .mask(let id):
             edit("Delete Mask") { $0.masks = $0.masks.removing(id) }
+        case .caption(let id):
+            deleteCaption(id)
         }
     }
 

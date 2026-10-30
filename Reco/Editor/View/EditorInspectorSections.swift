@@ -9,7 +9,7 @@ import SwiftUI
 
 /// The editor's right column: the tab bar, a notice when the telemetry is missing, then the chosen tab's
 /// sections, each a card under a small-caps title. Selecting a zoom on the timeline turns to Motion, a
-/// mask to Background, where their settings are.
+/// mask to Background and a caption to Captions, where their settings are.
 struct EditorInspector: View {
     @Bindable var viewModel: EditorViewModel
     @Binding var tab: InspectorTab
@@ -56,7 +56,11 @@ struct EditorInspector: View {
                             MotionInspectorSection(viewModel: viewModel)
                             ZoomInspectorSection(viewModel: viewModel)
                             SpeedInspectorSection(viewModel: viewModel)
-                        case .camera, .caption:
+                        case .caption:
+                            if #available(macOS 26, *) {
+                                CaptionInspectorSection(viewModel: viewModel)
+                            }
+                        case .camera:
                             EmptyView()
                         }
                     }
@@ -75,6 +79,7 @@ struct EditorInspector: View {
             switch selection {
             case .zoom: tab = .motion
             case .mask: tab = .background
+            case .caption: tab = .caption
             case .segment, nil: break
             }
         }

@@ -73,6 +73,15 @@ struct ExportOptions: View {
                             qualityRows
                         }
                     }
+
+                    if settings.format != .gif, !viewModel.project.captions.cues.isEmpty {
+                        InspectorSection("Subtitles") {
+                            Toggle("Write Subtitle Files", isOn: $session.settings.writesSubtitles)
+                                .toggleStyle(.inspector)
+                        } footer: {
+                            Text("Saves SRT and VTT beside the movie, timed to the edit.")
+                        }
+                    }
                 }
                 .controlSize(.small)
                 // Text in ink doesn't dim by itself when disabled

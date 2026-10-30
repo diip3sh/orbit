@@ -48,7 +48,7 @@ nonisolated enum FrameRenderer {
     /// take 5.5 and 12.5 ms, 4 still 2 and 5.6. Only frames in which the camera moves pay it.
     static let blurSampleSpacing = 4.0
 
-    /// The frame with everything on it - clicks, zoom, cursor and keystroke chip - placed on the
+    /// The frame with everything on it - clicks, zoom, cursor, keystroke chip and caption - placed on the
     /// canvas and clipped to the video's frame, square-cornered.
     private static func video(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CIImage {
         // The crop moved to the origin (whole pixels, so nothing is resampled) is the video for everything after
@@ -73,6 +73,7 @@ nonisolated enum FrameRenderer {
         if let (chip, opacity) = KeystrokeChip.visible(in: plan.keystrokes, at: time) {
             image = keystroke(chip, opacity: opacity, plan: plan).composited(over: image)
         }
+        image = captioned(image, atSource: plan.timeMap.sourceTime(atOutput: time), plan: plan)
         return image.cropped(to: plan.canvas.videoFrame)
     }
 
@@ -207,5 +208,17 @@ nonisolated enum FrameRenderer {
             translationX: (video.midX - image.extent.width / 2).rounded(), y: (video.minY + image.extent.height * 0.8).rounded()
         )
         return image.transformed(by: placement).fading(to: opacity)
+    }
+
+    /// `image` under the caption showing at source time `time`, if any. The caption's coverage takes the text color,
+    /// with the highlight color laid over the word being said, in one blend: a word needs no image of its own.
+    private static func captioned(_ image: CIImage, atSource time: Double, plan: RenderPlan) -> CIImage {
+        guard let caption = PlannedCaption.visible(in: plan.captions.captions, at: time) else { return image }
+        var color = plan.captions.textColor
+        if let highlight = plan.captions.highlightColor, let word = caption.word(at: time) {
+            color = highlight.cropped(to: word.rect).composited(over: color)
+        }
+        let text = color.cropped(to: caption.mask.extent).applyingFilter("CIBlendWithMask", parameters: [kCIInputMaskImageKey: caption.mask])
+        return text.composited(over: caption.box?.composited(over: image) ?? image)
     }
 }
