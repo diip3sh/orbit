@@ -47,6 +47,7 @@ struct EditorTimelineView: View {
 
     var body: some View {
         VStack(spacing: Self.spacing) {
+            ClipStrip(viewModel: viewModel)
             rows
             scrollIndicator
         }

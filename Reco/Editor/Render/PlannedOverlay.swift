@@ -14,8 +14,8 @@ nonisolated struct PlannedOverlay: Sendable {
     /// When it shows, in source seconds.
     let range: Range<Double>
 
-    /// Where that is in the output.
-    let output: Range<Double>
+    /// Where that is in the output, in order: more than one place when reordering pulled it apart.
+    let outputs: [Range<Double>]
 
     /// In the plan's encoding, on the canvas in Core Image pixels.
     let image: CIImage
@@ -32,14 +32,14 @@ nonisolated struct PlannedOverlay: Sendable {
         guard !overlays.isEmpty else { return [] }
         let lanes = await withTaskGroup(of: (lane: Int, overlay: PlannedOverlay)?.self) { group in
             for overlay in overlays {
-                let output = timeMap.outputTime(atSource: overlay.range.lowerBound)..<timeMap.outputTime(atSource: overlay.range.upperBound)
-                guard !output.isEmpty else { continue }
+                let outputs = timeMap.outputRanges(ofSource: overlay.range)
+                guard !outputs.isEmpty else { continue }
                 group.addTask {
                     guard let image = await image(of: overlay, videoFrame: videoFrame) else {
                         logger.error("Left out an overlay: its picture can't be read")
                         return nil
                     }
-                    return (overlay.lane, PlannedOverlay(range: overlay.range, output: output, image: OverlayImages.encoded(image, in: dynamicRange)))
+                    return (overlay.lane, PlannedOverlay(range: overlay.range, outputs: outputs, image: OverlayImages.encoded(image, in: dynamicRange)))
                 }
             }
             var lanes: [Int: [PlannedOverlay]] = [:]
@@ -96,6 +96,7 @@ nonisolated struct PlannedOverlay: Sendable {
     /// How opaque it is at output time `time`, for a frame lasting `frameDuration`. A frame shows until the next one, so
     /// the first counts as already that far in and an overlay never starts with an empty frame.
     func opacity(atOutput time: Double, frameDuration: Double) -> Double {
+        guard let output = outputs.last(where: { $0.lowerBound <= time + frameDuration }) ?? outputs.first else { return 0 }
         let fade = min(Self.fadeDuration, (output.upperBound - output.lowerBound) / 2)
         return max(min((time - output.lowerBound + frameDuration) / fade, (output.upperBound - time) / fade, 1), 0)
     }

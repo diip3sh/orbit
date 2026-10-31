@@ -134,7 +134,8 @@ extension EditorViewModel {
         guard let source else { return nil }
         let time = timeMap.snapped(playheadSourceTime)
         let end = timeMap.sourceTime(atOutput: timeMap.outputTime(atSource: time) + VideoOverlay.defaultDuration)
-        return project.overlays.placement(at: time, length: end - time, duration: source.duration)
+        // The next clip may be earlier in the source, when clips are reordered
+        return project.overlays.placement(at: time, length: end > time ? end - time : VideoOverlay.defaultDuration, duration: source.duration)
     }
 
     private func add(_ kind: VideoOverlay.Kind, frame: CGRect) {
@@ -148,8 +149,7 @@ extension EditorViewModel {
     /// Shows the frame where `overlay` has faded in, unless playing, since it would otherwise be nearly invisible.
     private func show(_ overlay: VideoOverlay) {
         guard !playback.isPlaying else { return }
-        let output = timeMap.outputTime(atSource: overlay.range.lowerBound)
-        let end = timeMap.outputTime(atSource: overlay.range.upperBound)
-        playback.seek(to: min(output + PlannedOverlay.fadeDuration, (output + end) / 2))
+        guard let output = timeMap.outputRanges(ofSource: overlay.range).first else { return }
+        playback.seek(to: min(output.lowerBound + PlannedOverlay.fadeDuration, (output.lowerBound + output.upperBound) / 2))
     }
 }

@@ -360,7 +360,7 @@ final class EditorViewModel {
 
     private func updateTimeline() {
         guard let source else { return }
-        timeMap = TimeMap(cuts: project.cuts, speeds: project.speeds, sourceDuration: source.duration, frameRate: source.frameRate)
+        timeMap = TimeMap(cuts: project.cuts, speeds: project.speeds, sequence: project.sequence, sourceDuration: source.duration, frameRate: source.frameRate)
         viewport.setDuration(source.duration)
     }
 

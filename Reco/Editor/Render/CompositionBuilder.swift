@@ -99,19 +99,19 @@ enum CompositionBuilder {
         return ranges
     }
 
-    /// Where audio fades, in output seconds: out at the end of each kept range a cut follows, and
-    /// back in at the start of each one a cut precedes. A short range fades over half its length.
+    /// Where audio fades, in output seconds: at every jump in the source, a cut or a reordered clip, and where the output
+    /// starts or ends anywhere but the recording's own ends. A short range fades over half its length.
     nonisolated static func audioFades(for timeMap: TimeMap) -> [(range: Range<Double>, fadesIn: Bool)] {
-        timeMap.keptRanges.flatMap { range in
-            let start = timeMap.outputTime(atSource: range.lowerBound)
-            let end = timeMap.outputTime(atSource: range.upperBound)
-            let fade = min(fadeDuration, (end - start) / 2)
+        let played = timeMap.playedRanges
+        return played.indices.flatMap { index -> [(range: Range<Double>, fadesIn: Bool)] in
+            guard let output = timeMap.outputRanges(ofSource: played[index]).first else { return [] }
+            let fade = min(fadeDuration, (output.upperBound - output.lowerBound) / 2)
             var fades: [(range: Range<Double>, fadesIn: Bool)] = []
-            if range.lowerBound > 0 {
-                fades.append((start..<start + fade, true))
+            if index > 0 || played[index].lowerBound > 0 {
+                fades.append((output.lowerBound..<output.lowerBound + fade, true))
             }
-            if range.upperBound < timeMap.sourceDuration {
-                fades.append((end - fade..<end, false))
+            if index < played.count - 1 || played[index].upperBound < timeMap.sourceDuration {
+                fades.append((output.upperBound - fade..<output.upperBound, false))
             }
             return fades
         }

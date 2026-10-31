@@ -135,7 +135,7 @@ struct VideoOverlayTimingTests {
     private let image = CIImage(color: .white).cropped(to: CGRect(x: 0, y: 0, width: 10, height: 10))
 
     private func planned(_ range: Range<Double>, output: Range<Double>? = nil) -> PlannedOverlay {
-        PlannedOverlay(range: range, output: output ?? range, image: image)
+        PlannedOverlay(range: range, outputs: [output ?? range], image: image)
     }
 
     @Test func itFadesOnTheOutputAtBothEnds() {
@@ -213,8 +213,9 @@ struct VideoOverlayRenderingTests {
         let plan = await RenderPlan.build(project: project, source: source, resources: .none)
         let middle = center(of: Self.textFrame, plan: plan)
         let overlay = try #require(plan.overlays.first?.first)
-        #expect(abs(overlay.output.lowerBound - 0.5) < 0.05)
-        #expect(abs(overlay.output.upperBound - 1) < 0.05)
+        let output = try #require(overlay.outputs.first)
+        #expect(abs(output.lowerBound - 0.5) < 0.05)
+        #expect(abs(output.upperBound - 1) < 0.05)
 
         #expect(try await pixels(of: source, project: project, at: 0.2).isScreen(at: middle))
         #expect(try await pixels(of: source, project: project, at: 0.75).isRed(at: middle))

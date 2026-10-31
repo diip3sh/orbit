@@ -50,6 +50,10 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     var captions = CaptionTrack()
     var camera = CameraOverlayStyle()
 
+    /// Source ranges in playing order, empty for source order. ``TimeMap`` reconciles it with the cuts, so it needs no
+    /// care when they change.
+    var sequence: [Range<Double>] = []
+
     /// Text, pictures and arrows over the video, in any order (see ``VideoOverlay``).
     var overlays: [VideoOverlay] = []
 
@@ -118,5 +122,6 @@ extension EditorProject {
         captions = try container.decodeIfPresent(CaptionTrack.self, forKey: .captions) ?? CaptionTrack()
         camera = try container.decodeIfPresent(CameraOverlayStyle.self, forKey: .camera) ?? CameraOverlayStyle()
         overlays = try container.decodeIfPresent([VideoOverlay].self, forKey: .overlays) ?? []
+        sequence = try container.decodeIfPresent([Range<Double>].self, forKey: .sequence) ?? []
     }
 }

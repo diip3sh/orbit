@@ -15,13 +15,16 @@ nonisolated enum SubtitleFile {
         var text: String
     }
 
-    /// `cues` on the output's timeline. A caption reaching into a cut ends or starts where the content does.
+    /// `cues` on the output's timeline, in its order. A caption reaching into a cut ends or starts where the content
+    /// does, and one that reordering pulled apart is an entry in each place.
     static func entries(for cues: [CaptionCue], timeMap: TimeMap) -> [Entry] {
-        cues.compactMap { cue in
-            let start = milliseconds(timeMap.outputTime(atSource: cue.range.lowerBound))
-            let end = milliseconds(timeMap.outputTime(atSource: cue.range.upperBound))
-            return start < end ? Entry(range: start..<end, text: cue.text) : nil
+        cues.flatMap { cue in
+            timeMap.outputRanges(ofSource: cue.range).compactMap { range in
+                let (start, end) = (milliseconds(range.lowerBound), milliseconds(range.upperBound))
+                return start < end ? Entry(range: start..<end, text: cue.text) : nil
+            }
         }
+        .sorted { $0.range.lowerBound < $1.range.lowerBound }
     }
 
     static func srt(for cues: [CaptionCue], timeMap: TimeMap) -> String {

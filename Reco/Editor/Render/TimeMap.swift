@@ -10,9 +10,10 @@ import Foundation
 /// Maps between output time (the edited video, after cuts and speed changes) and source time (the
 /// recording's), and edits cuts and speeds.
 ///
-/// The only type that knows about cuts and speeds: everything else in a project is timed on the source,
+/// The only type that knows about cuts, speeds and playing order: everything else in a project is timed on the source,
 /// so adding or moving a cut never invalidates an effect. Cuts and speeds are normalized here: clamped
-/// to the recording, snapped to frame boundaries, sorted, and cuts merged.
+/// to the recording, snapped to frame boundaries, sorted, and cuts merged. Output time doesn't rise with source time once
+/// clips are reordered, so a source range's place in the output comes from ``outputRanges(ofSource:)``.
 nonisolated struct TimeMap: Equatable, Sendable {
 
     /// Source ranges left out, normalized.
@@ -24,7 +25,11 @@ nonisolated struct TimeMap: Equatable, Sendable {
     /// Source ranges played at another speed, normalized: sorted, apart, none at 1×. Cut parts keep theirs.
     let speeds: [SpeedRange]
 
-    /// The kept ranges divided where a speed starts or ends, each with its rate, in order.
+    /// The kept ranges in playing order, each as far as the source runs on without a jump: the kept ranges themselves
+    /// unless clips were reordered.
+    let playedRanges: [Range<Double>]
+
+    /// The played ranges divided where a speed starts or ends, each with its rate, in playing order.
     let pieces: [SpeedRange]
 
     let outputDuration: Double
@@ -32,15 +37,20 @@ nonisolated struct TimeMap: Equatable, Sendable {
     /// The output time at which each piece starts.
     private let outputStarts: [Double]
 
+    /// The pieces' indices in source order, to look a source time up.
+    private let sourceOrder: [Int]
+
     /// Cuts are normalized as frame boundaries, so they're compared as integers.
     private let boundaries: FrameBoundaries
 
     /// - Parameters:
     ///   - cuts: Source ranges left out, in any order.
     ///   - speeds: Source ranges played at another speed, in any order; where two overlap, the earlier wins.
+    ///   - sequence: Source ranges in playing order, empty for source order. Only what's kept of them plays, and a kept
+    ///     part they don't cover plays beside its source neighbour, so trims, cuts and splits need no special cases.
     ///   - sourceDuration: The recording's length in seconds.
     ///   - frameRate: The recording's frame rate, whose frames cuts snap to.
-    init(cuts: [Range<Double>], speeds: [SpeedRange] = [], sourceDuration: Double, frameRate: Double) {
+    init(cuts: [Range<Double>], speeds: [SpeedRange] = [], sequence: [Range<Double>] = [], sourceDuration: Double, frameRate: Double) {
         let boundaries = FrameBoundaries(
             frameRate: frameRate, sourceDuration: sourceDuration, last: FrameGrid(frameRate: frameRate, duration: sourceDuration).frameCount
         )
@@ -81,7 +91,11 @@ nonisolated struct TimeMap: Equatable, Sendable {
         self.cuts = merged.map(time)
         keptRanges = kept.map(time)
         self.speeds = faster.map { SpeedRange(range: time($0.range), rate: $0.rate) }
-        pieces = Self.pieces(of: kept, at: faster).map { SpeedRange(range: time($0.range), rate: $0.rate) }
+        let played = Self.played(kept, in: sequence.map { boundaries.nearest($0.lowerBound)..<boundaries.nearest($0.upperBound) })
+        playedRanges = played.map(time)
+        let pieces = played.flatMap { Self.pieces(of: [$0], at: faster) }.map { SpeedRange(range: time($0.range), rate: $0.rate) }
+        self.pieces = pieces
+        sourceOrder = pieces.indices.sorted { pieces[$0].range.lowerBound < pieces[$1].range.lowerBound }
         var outputStarts: [Double] = []
         var output = 0.0
         for piece in pieces {
@@ -90,6 +104,59 @@ nonisolated struct TimeMap: Equatable, Sendable {
         }
         self.outputStarts = outputStarts
         outputDuration = output
+    }
+
+    /// `kept` in the order of `sequence`, with the parts it doesn't cover beside their source neighbours, joined where the
+    /// source runs on.
+    private static func played(_ kept: [Range<Int>], in sequence: [Range<Int>]) -> [Range<Int>] {
+        guard !sequence.isEmpty else { return kept }
+        var parts: [Range<Int>] = []
+        for range in sequence where !range.isEmpty {
+            for keptRange in kept where keptRange.overlaps(range) {
+                parts += subtracting(parts, from: keptRange.clamped(to: range))
+            }
+        }
+        for uncovered in kept.flatMap({ subtracting(parts, from: $0) }) {
+            parts.insert(uncovered, at: place(of: uncovered, among: parts))
+        }
+        var joined: [Range<Int>] = []
+        for part in parts {
+            if let last = joined.last, last.upperBound == part.lowerBound {
+                joined[joined.count - 1] = last.lowerBound..<part.upperBound
+            } else {
+                joined.append(part)
+            }
+        }
+        return joined
+    }
+
+    /// What's left of `range` without `removed`, in order.
+    private static func subtracting(_ removed: [Range<Int>], from range: Range<Int>) -> [Range<Int>] {
+        var left: [Range<Int>] = []
+        var start = range.lowerBound
+        for part in removed.sorted(by: { $0.lowerBound < $1.lowerBound }) where part.overlaps(range) {
+            if part.lowerBound > start {
+                left.append(start..<part.lowerBound)
+            }
+            start = max(start, part.upperBound)
+        }
+        if start < range.upperBound {
+            left.append(start..<range.upperBound)
+        }
+        return left
+    }
+
+    /// Where `part` goes among `parts`: after what it continues, before what continues it, or else after what comes
+    /// before it in the source.
+    private static func place(of part: Range<Int>, among parts: [Range<Int>]) -> Int {
+        if let index = parts.firstIndex(where: { $0.upperBound == part.lowerBound }) {
+            return index + 1
+        }
+        if let index = parts.firstIndex(where: { $0.lowerBound == part.upperBound }) {
+            return index
+        }
+        let earlier = parts.indices.filter { parts[$0].upperBound <= part.lowerBound }.max { parts[$0].upperBound < parts[$1].upperBound }
+        return earlier.map { $0 + 1 } ?? 0
     }
 
     /// `kept` divided where a speed in `faster` starts or ends, each part with its rate. Both are sorted and apart.
@@ -128,9 +195,35 @@ nonisolated struct TimeMap: Equatable, Sendable {
     /// The output time showing source time `time`. Inside a cut, it's where the content after the
     /// cut starts, or the end of the output.
     func outputTime(atSource time: Double) -> Double {
-        let index = pieces.partitioningIndex { $0.range.upperBound > time }
-        guard index < pieces.count else { return outputDuration }
+        let next = sourceOrder.partitioningIndex { pieces[$0].range.upperBound > time }
+        guard next < sourceOrder.count else { return outputDuration }
+        let index = sourceOrder[next]
         return outputStarts[index] + max(time - pieces[index].range.lowerBound, 0) / pieces[index].rate
+    }
+
+    /// Where source range `range` shows in the output, in playing order: one range unless reordering pulled it apart,
+    /// since a cut inside it doesn't leave a gap in the output. None when it's entirely cut.
+    func outputRanges(ofSource range: Range<Double>) -> [Range<Double>] {
+        var ranges: [Range<Double>] = []
+        for (index, piece) in pieces.enumerated() where piece.range.overlaps(range) {
+            let shown = piece.range.clamped(to: range)
+            let start = outputStarts[index] + (shown.lowerBound - piece.range.lowerBound) / piece.rate
+            let end = outputStarts[index] + (shown.upperBound - piece.range.lowerBound) / piece.rate
+            if let last = ranges.last, abs(last.upperBound - start) < 1e-9 {
+                ranges[ranges.count - 1] = last.lowerBound..<end
+            } else if start < end {
+                ranges.append(start..<end)
+            }
+        }
+        return ranges
+    }
+
+    /// The source ranges that play from output time `time` on, in playing order.
+    func sourceRanges(fromOutput time: Double) -> [Range<Double>] {
+        pieces.indices.compactMap { index in
+            let lower = pieces[index].range.lowerBound + max(time - outputStarts[index], 0) * pieces[index].rate
+            return lower < pieces[index].range.upperBound ? lower..<pieces[index].range.upperBound : nil
+        }
     }
 
     /// The output time showing source time `time`, or `nil` inside a cut.
@@ -200,8 +293,24 @@ nonisolated extension TimeMap {
     /// The kept ranges divided at `splits`, source times that are snapped to frames. Splits inside
     /// a cut or on a kept range's edge divide nothing.
     func segments(splitAt splits: [Double]) -> [Range<Double>] {
+        divided(keptRanges, at: splits)
+    }
+
+    /// The played ranges divided at `splits`: the clips, in playing order.
+    func clips(splitAt splits: [Double]) -> [Range<Double>] {
+        divided(playedRanges, at: splits)
+    }
+
+    /// The sequence with clip `index` of those `splits` make moved to place `target`, empty when that's source order.
+    func sequence(movingClip index: Int, to target: Int, splitAt splits: [Double]) -> [Range<Double>] {
+        var clips = clips(splitAt: splits)
+        clips.insert(clips.remove(at: index), at: target)
+        return zip(clips, clips.dropFirst()).allSatisfy { $0.lowerBound < $1.lowerBound } ? [] : clips
+    }
+
+    private func divided(_ ranges: [Range<Double>], at splits: [Double]) -> [Range<Double>] {
         let splits = Set(splits.map(boundaries.nearest)).sorted()
-        return keptRanges.flatMap { range in
+        return ranges.flatMap { range in
             let lower = boundaries.nearest(range.lowerBound)
             let upper = boundaries.nearest(range.upperBound)
             let inside = splits.filter { $0 > lower && $0 < upper }

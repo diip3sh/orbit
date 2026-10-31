@@ -62,11 +62,7 @@ nonisolated struct PlannedBubble: Sendable {
 
     /// Where `footage`, on the source timeline, shows in the output.
     static func visibleRanges(of footage: Range<Double>, timeMap: TimeMap) -> [Range<Double>] {
-        timeMap.keptRanges.compactMap { kept in
-            guard kept.overlaps(footage) else { return nil }
-            let shown = kept.clamped(to: footage)
-            return timeMap.outputTime(atSource: shown.lowerBound)..<timeMap.outputTime(atSource: shown.upperBound)
-        }
+        timeMap.outputRanges(ofSource: footage)
     }
 
     /// A camera frame as the plan draws it. AVFoundation converts an SDR track to the composition's color space for an

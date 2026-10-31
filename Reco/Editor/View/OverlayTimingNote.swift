@@ -11,10 +11,9 @@ struct OverlayTimingNote: View {
     let overlay: VideoOverlay
 
     var body: some View {
-        let start = timeMap.outputTime(atSource: overlay.range.lowerBound)
-        let end = timeMap.outputTime(atSource: overlay.range.upperBound)
-        if start < end {
-            let seconds = (end - start).formatted(.number.precision(.fractionLength(2)))
+        let outputs = timeMap.outputRanges(ofSource: overlay.range)
+        if let start = outputs.first?.lowerBound, let end = outputs.last?.upperBound {
+            let seconds = outputs.reduce(0) { $0 + $1.upperBound - $1.lowerBound }.formatted(.number.precision(.fractionLength(2)))
             InspectorNote("Shows from \(Self.format(start)) to \(Self.format(end)), for \(seconds) s. Lane \(overlay.lane + 1) of \(VideoOverlay.laneCount).")
         } else {
             InspectorNote("It's entirely cut, so it doesn't show.")
