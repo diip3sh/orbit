@@ -52,6 +52,7 @@ nonisolated enum FrameRenderer {
     /// The frame with everything on it - clicks, zoom, cursor, camera bubble, overlays, keystroke chip and caption - placed on the
     /// canvas and clipped to the video's frame, square-cornered.
     private static func video(_ frame: CIImage, camera: CIImage?, at time: Double, plan: RenderPlan) -> CIImage {
+        let frame = plan.orientation == .up ? frame : frame.oriented(plan.orientation)
         // The crop moved to the origin (whole pixels, so nothing is resampled) is the video for everything after
         var image = plan.crop.map { frame.cropped(to: $0).transformed(by: CGAffineTransform(translationX: -$0.minX, y: -$0.minY)) } ?? frame
         // On the content, before the zoom, so a mask stays on what it hides

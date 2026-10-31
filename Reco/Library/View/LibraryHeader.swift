@@ -3,7 +3,9 @@
 //  Reco
 //
 
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The top of the Library's content panel, in the title bar's row: the section's heading and count, search,
 /// Filter and New.
@@ -27,9 +29,14 @@ struct LibraryHeader: View {
 
             Spacer(minLength: 0)
 
+            if viewModel.importsRunning > 0 {
+                ProgressView()
+                    .controlSize(.small)
+                    .help("Copying a video into the recordings folder")
+            }
             LibrarySearchField(text: $viewModel.search, isFocused: $isSearching)
             LibraryFilterMenu(orientation: $viewModel.orientation, sort: $viewModel.sort)
-            LibraryNewMenu(actions: viewModel.actions)
+            LibraryNewMenu(actions: viewModel.actions, openVideo: chooseVideos)
         }
         .padding(.leading, EditorTheme.largeSpacing)
         .padding(.trailing, 14)
@@ -40,6 +47,16 @@ struct LibraryHeader: View {
                 .opacity(0)
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
+        }
+    }
+
+    private func chooseVideos() {
+        let panel = NSOpenPanel()
+        panel.title = "Open Videos"
+        panel.allowedContentTypes = [.movie]
+        panel.allowsMultipleSelection = true
+        if panel.runModal() == .OK {
+            Task { await viewModel.importMovies(panel.urls) }
         }
     }
 }
@@ -114,6 +131,7 @@ private struct LibraryFilterMenu: View {
 /// New: a screenshot, a screen recording or a web recording.
 private struct LibraryNewMenu: View {
     let actions: LibraryViewModel.Actions
+    let openVideo: () -> Void
 
     var body: some View {
         Menu {
@@ -129,6 +147,9 @@ private struct LibraryNewMenu: View {
             Section("Web") {
                 Button("New Web Recording…", systemImage: "globe", action: actions.newWebRecording)
             }
+            Section("Video") {
+                Button("Open Video…", systemImage: "film", action: openVideo)
+            }
         } label: {
             HeaderMenuLabel(title: "New", symbol: "plus", isProminent: true)
                 .foregroundStyle(EditorTheme.onAccent)
@@ -137,6 +158,6 @@ private struct LibraryNewMenu: View {
                 .headerMenuAnchor()
         }
         .headerMenuStyle()
-        .help("Take a screenshot or start a recording")
+        .help("Take a screenshot, start a recording or open a video")
     }
 }

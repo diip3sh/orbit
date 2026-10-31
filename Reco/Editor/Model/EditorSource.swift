@@ -19,8 +19,11 @@ nonisolated struct EditorSource: Sendable {
     /// The recorder writes system audio before the microphone.
     let audioTrackIDs: [CMPersistentTrackID]
 
-    /// The video's dimensions in pixels.
+    /// The video's dimensions in pixels as it shows, turned by ``orientation``.
     let naturalSize: CGSize
+
+    /// The turn its frames need: a phone's video is stored sideways, a recording never is.
+    var orientation = CGImagePropertyOrientation.up
 
     let frameRate: Double
 

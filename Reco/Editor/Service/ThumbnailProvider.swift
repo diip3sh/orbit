@@ -16,6 +16,7 @@ nonisolated enum ThumbnailProvider {
     static func thumbnail(of url: URL, maximumSize: CGSize) async -> CGImage? {
         let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
         generator.maximumSize = maximumSize
+        generator.appliesPreferredTrackTransform = true
         return try? await generator.image(at: .zero).image
     }
 
@@ -25,6 +26,7 @@ nonisolated enum ThumbnailProvider {
     static func thumbnails(of source: EditorSource, at times: [Double], maximumSize: CGSize) async -> [CGImage?] {
         let generator = AVAssetImageGenerator(asset: source.asset)
         generator.maximumSize = maximumSize
+        generator.appliesPreferredTrackTransform = true
 
         // A frame within half the spacing is as good as the exact one and decodes far faster
         let spacing = times.count > 1 ? times[1] - times[0] : source.duration

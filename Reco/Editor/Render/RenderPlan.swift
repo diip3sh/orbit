@@ -81,6 +81,9 @@ nonisolated struct RenderPlan: Sendable {
 
     /// The overlays, one sorted list per used lane, lowest lane first.
     var overlays: [[PlannedOverlay]] = []
+
+    /// The turn the recording's frames need, before everything else, which is all of the frame as it shows.
+    var orientation = CGImagePropertyOrientation.up
 }
 
 // MARK: - Building
@@ -132,8 +135,7 @@ extension RenderPlan {
         let chipHeight = min(canvas.videoFrame.width, canvas.videoFrame.height) * chipHeightFraction
         return RenderPlan(
             timeMap: timeMap, videoSize: videoSize,
-            camera: await camera,
-            cursor: await cursor?.path,
+            camera: await camera, cursor: await cursor?.path,
             cursorShapes: await cursor?.shapes.encoded(in: dynamicRange) ?? .none,
             clicks: clicks,
             clickDuration: project.clickHighlights.duration,
@@ -150,7 +152,8 @@ extension RenderPlan {
             masks: PlannedMask.planned(project.masks, videoSize: videoSize),
             captions: await .planned(project.captions, timeMap: timeMap, videoFrame: canvas.videoFrame, hasChips: !keystrokes.isEmpty, dynamicRange: dynamicRange),
             bubble: PlannedBubble.planned(project.camera, footage: source.camera, timeMap: timeMap, videoFrame: canvas.videoFrame, dynamicRange: dynamicRange),
-            overlays: await PlannedOverlay.planned(project.overlays, timeMap: timeMap, videoFrame: canvas.videoFrame, dynamicRange: dynamicRange)
+            overlays: await PlannedOverlay.planned(project.overlays, timeMap: timeMap, videoFrame: canvas.videoFrame, dynamicRange: dynamicRange),
+            orientation: source.orientation
         )
     }
 

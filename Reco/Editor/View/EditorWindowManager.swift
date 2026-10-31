@@ -181,6 +181,13 @@ final class EditorWindowManager: NSObject {
         }
     }
 
+    /// Copies videos from elsewhere into the recordings folder and opens them, from the Library, which says so if one can't be.
+    func importMovies(_ urls: [URL]) {
+        showLibrary()
+        guard let library else { return }
+        Task { await library.viewModel.importMovies(urls) }
+    }
+
     /// Shows the Library, Reco's main window, or brings it forward (spec 0010).
     func showLibrary() {
         if let library {

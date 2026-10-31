@@ -40,8 +40,11 @@ final class LibraryViewModel {
     /// filter. By item, not URL: an export written again under its name may have another shape.
     private(set) var aspectRatios: [LibraryItem: Double] = [:]
 
-    /// Why the folders couldn't be read, or an item couldn't be trashed.
+    /// Why the folders couldn't be read, an item couldn't be trashed or a video couldn't be opened.
     var error: String?
+
+    /// How many videos are being copied in: a large one from another disk takes a while.
+    private(set) var importsRunning = 0
 
     let actions: Actions
 
@@ -121,6 +124,27 @@ final class LibraryViewModel {
         } catch {
             logger.error("Couldn't list the library: \(error.localizedDescription)")
             self.error = error.localizedDescription
+        }
+    }
+
+    /// Copies `urls` into the recordings folder and opens each in the editor (spec 0023, section 4). One that can't be read
+    /// doesn't stop the rest, and says why.
+    func importMovies(_ urls: [URL]) async {
+        importsRunning += 1
+        defer { importsRunning -= 1 }
+        var failure: String?
+        for url in urls {
+            do {
+                let movie = try await RecordingImporter.importMovie(at: url, into: folders().recordings)
+                openMovie(movie)
+            } catch {
+                logger.error("Couldn't open \(url.lastPathComponent): \(error.localizedDescription)")
+                failure = error.localizedDescription
+            }
+        }
+        await reload()
+        if let failure {
+            error = failure
         }
     }
 

@@ -46,6 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         token: AgentBridgeServer.token()
     )
 
+    /// Videos the system asked to open while launching, before the editor's windows can be, then `nil`.
+    private var moviesOpenedAtLaunch: [URL]? = []
+
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Reco", category: "AppDelegate")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -107,6 +110,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         hideNotchShelfWhileRecording()
+        openMoviesFromLaunch()
+    }
+
+    private func openMoviesFromLaunch() {
+        if let movies = moviesOpenedAtLaunch, !movies.isEmpty {
+            editorWindows.importMovies(movies)
+        }
+        moviesOpenedAtLaunch = nil
     }
 
     /// The shelf's black shape sits over the notch, where a display recording would show it as a bar, even
@@ -171,12 +182,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        var movies: [URL] = []
         for url in urls {
             if url.scheme == "reco" {
                 handle(url)
             } else if url.pathExtension == StylePreset.fileExtension {
                 editorWindows.importStyle(from: url)
+            } else if RecordingImporter.isMovie(url) {
+                movies.append(url)
             }
+        }
+        if moviesOpenedAtLaunch != nil {
+            moviesOpenedAtLaunch?.append(contentsOf: movies)
+        } else if !movies.isEmpty {
+            editorWindows.importMovies(movies)
         }
     }
 
