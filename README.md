@@ -52,7 +52,9 @@ Updates arrive automatically through the app's built-in updater
 - **Video editor:** trim, split and cut, and set volume per audio track. Automatic zooms on
   clicks, typing and where the cursor rests, plus manual zooms on their own lane. The recorded
   cursor is redrawn smoothed, sharp when zoomed, and can hide when idle. Click highlights and a
-  keystroke overlay. Undo and redo throughout.
+  keystroke overlay. Drag clips into a new order, add text, picture and arrow overlays, generate
+  captions (macOS 26) and export them as SRT or VTT, and place the camera as its own bubble. Open
+  videos from anywhere. Undo and redo throughout.
 - **Canvas and export:** 16:9, 9:16, 1:1 and 4:3 canvases, gradient, colour, picture or
   transparent backgrounds, padding, rounded corners and shadow. Export HEVC, H.264, ProRes 422
   or ProRes 4444 (keeps transparency) at the size and frame rate you pick, then share.
@@ -68,10 +70,8 @@ Updates arrive automatically through the app's built-in updater
 - Audio: switching microphones mid-recording, input gain and level meters.
 - Remembering the last selected window or area between recordings.
 - Web recordings: spotlight, captions, narration, browser frame, speed changes and 9:16 output.
-- Editor: motion blur, click sounds, voice enhancement, transcripts and captions (SRT/VTT),
-  removing silences, speed per part, blur and pixelate masks, crop, GIF export.
+- Editor: motion blur, click sounds, voice enhancement, removing silences, speed per part, blur and pixelate masks, crop, GIF export.
 - Screenshots: annotation, backgrounds, scrolling capture.
-- Camera as its own editable track.
 
 ## Keyboard shortcuts
 
