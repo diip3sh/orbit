@@ -169,7 +169,7 @@ final class AgentRecordingViewModel {
             return "Recording… \(progress.formatted(.percent.precision(.fractionLength(0))))"
         }
         if let page = tools.inspecting {
-            return "Looking at \(page.host(percentEncoded: false) ?? page.absoluteString)…"
+            return String(localized: "Looking at \(page.host(percentEncoded: false) ?? page.absoluteString)…")
         }
         return tools.motionActivity
     }
@@ -211,10 +211,10 @@ final class AgentRecordingViewModel {
             return setAvailable(ready, reason: nil)
         }
         guard let first = installed.first else {
-            return setAvailable([], reason: "Install a coding agent's command line first: Claude Code, Codex, OpenCode, Gemini CLI, Grok Build or Cursor.")
+            return setAvailable([], reason: String(localized: "Install a coding agent's command line first: Claude Code, Codex, OpenCode, Gemini CLI, Grok Build or Cursor."))
         }
-        let verb = store.state(of: first) == .outdated ? "Reconnect" : "Connect"
-        setAvailable([], reason: "\(verb) \(first.displayName) in Settings → Agents.")
+        let verb = store.state(of: first) == .outdated ? String(localized: "Reconnect") : String(localized: "Connect")
+        setAvailable([], reason: String(localized: "\(verb) \(first.displayName) in Settings → Agents."))
     }
 
     private func setAvailable(_ kinds: [AgentKind], reason: String?) {
@@ -351,7 +351,7 @@ final class AgentRecordingViewModel {
         }
         guard let invocation = AgentInvocation.make(for: request, in: directory, server: store.command),
               let executable = executable(for: request.agent, in: environment) else {
-            return (.failed(reason: "Orbit couldn't find \(request.agent.displayName)'s command in your login shell."), "")
+            return (.failed(reason: String(localized: "Orbit couldn't find \(request.agent.displayName)'s command in your login shell.")), "")
         }
         // The command runs in it, so it must exist even when the agent needs no files there
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

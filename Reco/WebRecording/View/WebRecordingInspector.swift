@@ -134,7 +134,7 @@ private struct WebClipCard: View {
             return clip.target.name
         }
         if let clip = viewModel.selectedScrollClip {
-            return "To \(Int(clip.offset.y)) px"
+            return String(localized: "To \(Int(clip.offset.y)) px")
         }
         return String(localized: "No clip selected")
     }

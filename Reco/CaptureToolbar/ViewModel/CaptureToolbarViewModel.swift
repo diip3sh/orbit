@@ -47,7 +47,7 @@ final class CaptureToolbarViewModel {
 
     /// What the action says: what it does, or while the area is still to be drawn, what to do first
     var actionTitle: String {
-        mode.records && areaSelection.isPresented && !areaSelection.canConfirm ? "Select an Area" : mode.actionTitle
+        mode.records && areaSelection.isPresented && !areaSelection.canConfirm ? String(localized: "Select an Area") : mode.actionTitle
     }
 
     /// The recording area selection, which Record confirms while it is up (the controller raises the bar

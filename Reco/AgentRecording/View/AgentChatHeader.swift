@@ -28,7 +28,7 @@ struct AgentChatHeader: View {
             }
             .frame(height: WebPanel.headerHeight)
 
-            if model.available.isEmpty, let reason = model.unavailableReason ?? (model.isLookingForAgents ? "Looking for agents…" : nil) {
+            if model.available.isEmpty, let reason = model.unavailableReason ?? (model.isLookingForAgents ? String(localized: "Looking for agents…") : nil) {
                 Text(reason)
                     .font(.theme(.callout))
                     .foregroundStyle(EditorTheme.dim)

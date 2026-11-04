@@ -153,6 +153,8 @@ Contributions are welcome:
   opening a pull request.
 - **Pull requests:** branch from `main`, follow [AGENTS.md](AGENTS.md), add tests for new logic,
   and keep SwiftLint clean.
+- **Translations:** Orbit ships English and Simplified Chinese (`zh-Hans`), following the system
+  language. See [docs/LOCALIZATION.md](docs/LOCALIZATION.md) to fix a translation or add a language.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for details and [CLAUDE.md](CLAUDE.md) for the
 architecture and build notes.

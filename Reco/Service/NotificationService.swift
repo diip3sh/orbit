@@ -70,14 +70,14 @@ final class NotificationService: NSObject {
         // Action to show recording in Finder
         let showInFinderAction = UNNotificationAction(
             identifier: NotificationIdentifier.actionShowInFinder,
-            title: "Show in Finder",
+            title: String(localized: "Show in Finder"),
             options: [.foreground]
         )
 
         // Action to open the recording in the editor
         let editAction = UNNotificationAction(
             identifier: NotificationIdentifier.actionEdit,
-            title: "Edit",
+            title: String(localized: "Edit"),
             options: [.foreground]
         )
 
@@ -105,7 +105,7 @@ final class NotificationService: NSObject {
         // Category for a failed agent recording, which can run again
         let agentRecordingFailedCategory = UNNotificationCategory(
             identifier: NotificationIdentifier.categoryAgentRecordingFailed,
-            actions: [UNNotificationAction(identifier: NotificationIdentifier.actionRetryAgent, title: "Retry", options: [])],
+            actions: [UNNotificationAction(identifier: NotificationIdentifier.actionRetryAgent, title: String(localized: "Retry"), options: [])],
             intentIdentifiers: []
         )
 
@@ -141,8 +141,8 @@ final class NotificationService: NSObject {
     ///   - opensEditor: Whether clicking the notification opens the editor instead of the folder
     func sendRecordingSavedNotification(fileURL: URL, opensEditor: Bool) {
         send(
-            title: "Recording Saved",
-            body: "Your recording has been saved to \(fileURL.lastPathComponent)",
+            title: String(localized: "Recording Saved"),
+            body: String(localized: "Your recording has been saved to \(fileURL.lastPathComponent)"),
             category: NotificationIdentifier.categoryRecordingEditable,
             folderURL: fileURL.deletingLastPathComponent(),
             fileURL: fileURL,
@@ -155,8 +155,8 @@ final class NotificationService: NSObject {
     /// - Parameter fileURL: The rendered movie
     func sendRecordingReadyNotification(fileURL: URL) {
         send(
-            title: "Recording Ready",
-            body: "\(fileURL.deletingPathExtension().lastPathComponent) is ready to edit.",
+            title: String(localized: "Recording Ready"),
+            body: String(localized: "\(fileURL.deletingPathExtension().lastPathComponent) is ready to edit."),
             category: NotificationIdentifier.categoryRecordingEditable,
             folderURL: fileURL.deletingLastPathComponent(),
             fileURL: fileURL,
@@ -168,8 +168,8 @@ final class NotificationService: NSObject {
     /// - Parameter fileURL: The URL of the saved recording file
     func sendRecordingMissingVideoNotification(fileURL: URL) {
         send(
-            title: "Recording Saved Without Video",
-            body: "No video was captured. Only audio was saved to \(fileURL.lastPathComponent)",
+            title: String(localized: "Recording Saved Without Video"),
+            body: String(localized: "No video was captured. Only audio was saved to \(fileURL.lastPathComponent)"),
             category: NotificationIdentifier.categoryRecordingSaved,
             folderURL: fileURL.deletingLastPathComponent()
         )
@@ -182,7 +182,7 @@ final class NotificationService: NSObject {
     /// - Parameter error: The error that prevented the recording from starting
     func sendRecordingStartFailedNotification(error: Error) {
         send(
-            title: "Can't Start Recording",
+            title: String(localized: "Can't Start Recording"),
             body: error.localizedDescription,
             category: NotificationIdentifier.categoryRecordingFailed
         )
@@ -192,8 +192,8 @@ final class NotificationService: NSObject {
     /// - Parameter error: The error that caused the recording to fail
     func sendRecordingFailedNotification(error: Error) {
         send(
-            title: "Recording Failed",
-            body: "Your recording could not be saved: \(error.localizedDescription)",
+            title: String(localized: "Recording Failed"),
+            body: String(localized: "Your recording could not be saved: \(error.localizedDescription)"),
             category: NotificationIdentifier.categoryRecordingFailed
         )
     }
@@ -206,8 +206,8 @@ final class NotificationService: NSObject {
         let reason = error.map { ": \($0.localizedDescription)" } ?? ""
 
         send(
-            title: "System Audio Not Recorded",
-            body: "Recording continues without system audio\(reason)",
+            title: String(localized: "System Audio Not Recorded"),
+            body: String(localized: "Recording continues without system audio\(reason)"),
             category: NotificationIdentifier.categoryRecordingFailed
         )
     }
@@ -215,8 +215,8 @@ final class NotificationService: NSObject {
     /// Sends a notification when the camera couldn't be recorded; the screen recording is unaffected
     func sendCameraFailedNotification(error: Error) {
         send(
-            title: "Camera Not Recorded",
-            body: "The screen recording is kept without the camera: \(error.localizedDescription)",
+            title: String(localized: "Camera Not Recorded"),
+            body: String(localized: "The screen recording is kept without the camera: \(error.localizedDescription)"),
             category: NotificationIdentifier.categoryRecordingFailed
         )
     }
@@ -227,8 +227,8 @@ final class NotificationService: NSObject {
         let reason = error.map { ": \($0.localizedDescription)" } ?? ""
 
         send(
-            title: "Recording Stopped",
-            body: "Recording stopped unexpectedly\(reason)",
+            title: String(localized: "Recording Stopped"),
+            body: String(localized: "Recording stopped unexpectedly\(reason)"),
             category: NotificationIdentifier.categoryRecordingFailed
         )
     }
@@ -237,7 +237,7 @@ final class NotificationService: NSObject {
     /// - Parameter error: The error that stopped the screenshot
     func sendScreenshotFailedNotification(error: Error) {
         send(
-            title: "Screenshot Failed",
+            title: String(localized: "Screenshot Failed"),
             body: error.localizedDescription,
             category: NotificationIdentifier.categoryRecordingFailed
         )
@@ -247,7 +247,7 @@ final class NotificationService: NSObject {
     /// - Parameter reason: Why it failed, with secrets already removed
     func sendAgentRecordingFailedNotification(reason: String) {
         send(
-            title: "Agent Recording Failed",
+            title: String(localized: "Agent Recording Failed"),
             body: reason,
             category: NotificationIdentifier.categoryAgentRecordingFailed
         )

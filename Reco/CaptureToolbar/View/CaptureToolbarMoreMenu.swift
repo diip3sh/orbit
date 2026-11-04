@@ -3,6 +3,7 @@
 //  Reco
 //
 
+import Foundation
 import SwiftUI
 
 /// Less used settings behind a gear: the cursor, and Settings.
@@ -24,7 +25,7 @@ struct CaptureToolbarMoreMenu: View {
         .menuIndicator(.hidden)
         .buttonStyle(.captureToolbar)
         .fixedSize()
-        .captureToolbarTooltip("Settings", shortcut: CaptureToolbarShortcut.settings.symbol)
+        .captureToolbarTooltip(String(localized: "Settings"), shortcut: CaptureToolbarShortcut.settings.symbol)
         // A menu can't carry a key equivalent of its own, so ⌘, is a button behind it
         .background {
             Button("Settings…", action: Self.openSettings)

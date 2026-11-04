@@ -473,19 +473,22 @@ enum CaptureError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .noContentFilterSelected:
-            return "No content has been selected for capture. Please use the picker to select a window or display."
+            return String(localized: "No content has been selected for capture. Please use the picker to select a window or display.")
         case .failedToCreateStream:
-            return "Failed to create the capture stream."
+            return String(localized: "Failed to create the capture stream.")
         case .captureAlreadyRunning:
-            return "A capture session is already in progress."
+            return String(localized: "A capture session is already in progress.")
         case .screenRecordingPermissionDenied:
-            return "Screen recording permission is required. Please grant permission in System Settings → Privacy & Security → Screen Recording."
+            return String(localized: "Screen recording permission is required. Please grant permission in System Settings → Privacy & Security → Screen Recording.")
         case .microphonePermissionDenied:
-            return "Microphone permission is required. Please grant permission in System Settings → Privacy & Security → Microphone."
+            return String(localized: "Microphone permission is required. Please grant permission in System Settings → Privacy & Security → Microphone.")
         case .cameraPermissionDenied:
-            return "Camera permission is required for Presenter Overlay. Please grant permission in System Settings → Privacy & Security → Camera, or turn off Presenter Overlay."
+            return String(localized: """
+                Camera permission is required for Presenter Overlay. \
+                Please grant permission in System Settings → Privacy & Security → Camera, or turn off Presenter Overlay.
+                """)
         case .selectedDisplayDisconnected:
-            return "The selected display is no longer connected. Please select the content to capture again."
+            return String(localized: "The selected display is no longer connected. Please select the content to capture again.")
         }
     }
 }

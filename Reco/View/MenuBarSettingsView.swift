@@ -5,6 +5,7 @@
 //  Created by Joshua Sattler on 02.02.26.
 //
 
+import Foundation
 import SwiftUI
 
 // MARK: - Section Divider
@@ -22,7 +23,7 @@ struct SectionDivider: View {
 
 /// A styled section header for menu bar (bold, not uppercase)
 struct SectionHeader: View {
-    let title: String
+    let title: LocalizedStringKey
 
     var body: some View {
         Text(title)
@@ -50,7 +51,7 @@ struct MenuBarDivider: View {
 /// A menu bar style toggle with a switch on the right side. The whole row flips it, like Control Center's; it has
 /// no hover highlight, and the switch's own motion answers the click.
 struct MenuBarToggle: View {
-    let name: String
+    let name: LocalizedStringKey
     @Binding var isOn: Bool
     var isDisabled: Bool = false
     /// Off while the popover's settings are locked, from the countdown until the file is saved
@@ -89,7 +90,7 @@ struct MenuBarToggle: View {
 /// The header row of an expandable section: its title, the current value if there is one, and a
 /// chevron that turns when it's open. Toggles with the app's one motion.
 struct ExpandableHeader: View {
-    let title: String
+    let title: LocalizedStringKey
     var value: String?
     @Binding var isExpanded: Bool
 
@@ -168,7 +169,7 @@ struct MicrophoneExpandablePicker: View {
                 VStack(spacing: 0) {
                     // System Default option
                     DeviceRow(
-                        name: "System Default",
+                        name: String(localized: "System Default"),
                         icon: "mic",
                         isSelected: selectedID == nil
                     ) {
@@ -198,7 +199,7 @@ struct MicrophoneExpandablePicker: View {
         if let id = selectedID, let device = devices.first(where: { $0.id == id }) {
             return device.name
         }
-        return "System Default"
+        return String(localized: "System Default")
     }
 }
 
@@ -223,7 +224,7 @@ struct CameraExpandablePicker: View {
                 VStack(spacing: 0) {
                     // System Default option
                     DeviceRow(
-                        name: "System Default",
+                        name: String(localized: "System Default"),
                         icon: "camera",
                         isSelected: selectedID == nil
                     ) {
@@ -253,7 +254,7 @@ struct CameraExpandablePicker: View {
         if let id = selectedID, let device = devices.first(where: { $0.id == id }) {
             return device.name
         }
-        return "System Default"
+        return String(localized: "System Default")
     }
 }
 

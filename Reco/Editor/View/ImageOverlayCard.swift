@@ -45,7 +45,7 @@ struct ImageOverlayCard: View {
 
     private func choosePicture() {
         let panel = NSOpenPanel()
-        panel.title = "Choose a Picture"
+        panel.title = String(localized: "Choose a Picture")
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {

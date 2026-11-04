@@ -67,6 +67,7 @@ struct AgentChatView: View {
 
     private var greeting: String {
         let host = page.flatMap { $0.host(percentEncoded: false) }.map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 }
-        return "Tell me what the video should show. I'll explore \(host ?? "the page") and plan the beats."
+        guard let host else { return String(localized: "Tell me what the video should show. I'll explore the page and plan the beats.") }
+        return String(localized: "Tell me what the video should show. I'll explore \(host) and plan the beats.")
     }
 }

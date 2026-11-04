@@ -51,11 +51,11 @@ nonisolated enum AgentRunOutcome: Equatable, Sendable {
         }
         switch end {
         case .timedOut:
-            return .failed(reason: "The agent didn't finish within \(limit.components.seconds / 60) minutes.")
+            return .failed(reason: String(localized: "The agent didn't finish within \(limit.components.seconds / 60) minutes."))
         case .launchFailed(let message):
             return .failed(reason: message)
         case .exited(let status) where status != 0:
-            return .failed(reason: "\(agent.displayName) exited with status \(status)\(reason)")
+            return .failed(reason: String(localized: "\(agent.displayName) exited with status \(status)\(reason)"))
         case .exited, .cancelled:
             if let editedMotion {
                 return .edited(bundle: editedMotion.path(percentEncoded: false))
@@ -63,7 +63,8 @@ nonisolated enum AgentRunOutcome: Equatable, Sendable {
             if let error = render?.error, render?.status == .failed {
                 return .failed(reason: error)
             }
-            return .failed(reason: "The agent finished without recording.\(outputReason.isEmpty ? "" : " \(outputReason)")")
+            let finished = String(localized: "The agent finished without recording.")
+            return .failed(reason: outputReason.isEmpty ? finished : "\(finished) \(outputReason)")
         }
     }
 }

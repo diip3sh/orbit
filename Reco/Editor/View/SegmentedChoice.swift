@@ -10,7 +10,7 @@ import SwiftUI
 /// the inspectors (the accent is kept for the playhead and the timeline's selection).
 struct SegmentedChoice<Value: Hashable>: View {
     @Binding var selection: Value
-    let options: [(value: Value, title: String)]
+    let options: [(value: Value, title: LocalizedStringResource)]
 
     /// Whether an option can be chosen; one that can't is dimmed.
     var isEnabled: (Value) -> Bool = { _ in true }

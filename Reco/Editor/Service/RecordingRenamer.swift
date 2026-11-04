@@ -48,7 +48,7 @@ nonisolated enum RecordingRenamer {
         var errorDescription: String? {
             switch self {
             case .invalidName(let reason): reason
-            case .nameTaken(let name): "A recording named \(name) already exists."
+            case .nameTaken(let name): String(localized: "A recording named \(name) already exists.")
             }
         }
     }

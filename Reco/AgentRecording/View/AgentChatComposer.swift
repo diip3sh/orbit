@@ -18,15 +18,15 @@ struct AgentChatComposer: View {
     private typealias Suggestion = (title: String, message: String)
 
     private static let firstSuggestions: [Suggestion] = [
-        ("Whole page", "Tour the whole page"),
-        ("Main menu", "Hover the main menu"),
-        ("Main button", "Click the main button")
+        (String(localized: "Whole page"), String(localized: "Tour the whole page")),
+        (String(localized: "Main menu"), String(localized: "Hover the main menu")),
+        (String(localized: "Main button"), String(localized: "Click the main button"))
     ]
 
     private static let changeSuggestions: [Suggestion] = [
-        ("Slower", "Make it slower"),
-        ("Add a zoom", "Add a zoom on the main button"),
-        ("Whole page", "Show the whole page")
+        (String(localized: "Slower"), String(localized: "Make it slower")),
+        (String(localized: "Add a zoom"), String(localized: "Add a zoom on the main button")),
+        (String(localized: "Whole page"), String(localized: "Show the whole page"))
     ]
 
     var body: some View {
@@ -101,7 +101,7 @@ struct AgentChatComposer: View {
 
     /// A first message describes the video; later ones change it.
     private var placeholder: String {
-        model.transcript.entries.isEmpty ? "Describe the video…" : "Describe the change…"
+        model.transcript.entries.isEmpty ? String(localized: "Describe the video…") : String(localized: "Describe the change…")
     }
 
     private var suggestions: [Suggestion] {

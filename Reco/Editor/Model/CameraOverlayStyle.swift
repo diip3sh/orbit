@@ -4,6 +4,7 @@
 //
 
 import CoreGraphics
+import Foundation
 
 /// How the camera bubble looks and lines up. A bubble is always square; shares are of the video on the canvas, so it's
 /// the same at every export size.
@@ -15,10 +16,10 @@ nonisolated struct CameraOverlayStyle: Codable, Equatable, Sendable {
 
         var title: String {
             switch self {
-            case .topLeft: "Top Left"
-            case .topRight: "Top Right"
-            case .bottomLeft: "Bottom Left"
-            case .bottomRight: "Bottom Right"
+            case .topLeft: String(localized: "Top Left")
+            case .topRight: String(localized: "Top Right")
+            case .bottomLeft: String(localized: "Bottom Left")
+            case .bottomRight: String(localized: "Bottom Right")
             }
         }
 

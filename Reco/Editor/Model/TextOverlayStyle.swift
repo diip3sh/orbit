@@ -13,7 +13,7 @@ nonisolated struct TextOverlayStyle: Codable, Equatable, Sendable {
     nonisolated enum Alignment: String, CaseIterable, Codable, Sendable {
         case left, center, right
 
-        var title: String {
+        var title: LocalizedStringResource {
             switch self {
             case .left: "Left"
             case .center: "Center"

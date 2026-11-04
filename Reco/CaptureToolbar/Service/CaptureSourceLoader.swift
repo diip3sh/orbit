@@ -63,7 +63,7 @@ enum CaptureSourceLoader {
     private static func displays(in content: SCShareableContent) -> [Entry] {
         let reco = content.applications.filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
         return content.displays.enumerated().map { index, display in
-            let name = NSScreen.screens.first { $0.displayID == display.displayID }?.localizedName ?? "Display \(index + 1)"
+            let name = NSScreen.screens.first { $0.displayID == display.displayID }?.localizedName ?? String(localized: "Display \(index + 1)")
             return Entry(
                 source: CaptureSource(id: display.displayID, title: name, subtitle: "\(display.width) × \(display.height)", processID: nil),
                 filter: SCContentFilter(display: display, excludingWindows: []),

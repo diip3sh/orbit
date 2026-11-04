@@ -156,9 +156,9 @@ enum FrameRate: Int, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .native:
-            return "Native"
+            return String(localized: "Native")
         default:
-            return "\(rawValue) fps"
+            return String(localized: "\(rawValue) fps")
         }
     }
 
@@ -190,6 +190,14 @@ enum VideoQuality: String, CaseIterable, Identifiable {
     case high = "High"
 
     var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .low: String(localized: "Low")
+        case .medium: String(localized: "Medium")
+        case .high: String(localized: "High")
+        }
+    }
 
     /// Bits-per-pixel multiplier for H.264
     var h264BitsPerPixel: Double {

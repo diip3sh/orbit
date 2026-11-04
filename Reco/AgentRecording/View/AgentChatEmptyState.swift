@@ -10,7 +10,7 @@ import SwiftUI
 struct AgentChatEmptyState: View {
     let pick: (String) -> Void
 
-    private static let suggestions = ["Slower, with longer pauses", "Also hover the pricing table", "End on the footer"]
+    private static let suggestions = [String(localized: "Slower, with longer pauses"), String(localized: "Also hover the pricing table"), String(localized: "End on the footer")]
 
     var body: some View {
         VStack(spacing: EditorTheme.spacing) {

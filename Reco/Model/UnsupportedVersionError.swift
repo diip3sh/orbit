@@ -13,6 +13,6 @@ nonisolated struct UnsupportedVersionError: LocalizedError, Equatable {
     var version: Int
 
     var errorDescription: String? {
-        "File version \(version) isn't supported by this version of Orbit."
+        String(localized: "File version \(version) isn't supported by this version of Orbit.")
     }
 }

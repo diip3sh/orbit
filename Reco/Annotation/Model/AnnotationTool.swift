@@ -4,6 +4,7 @@
 //
 
 import CoreGraphics
+import Foundation
 
 /// The tool strip's tools, and what a drag or click with each one makes.
 nonisolated enum AnnotationTool: String, CaseIterable, Sendable {
@@ -11,18 +12,18 @@ nonisolated enum AnnotationTool: String, CaseIterable, Sendable {
 
     var title: String {
         switch self {
-        case .select: "Select"
-        case .arrow: "Arrow"
-        case .line: "Line"
-        case .rectangle: "Rectangle"
-        case .ellipse: "Ellipse"
-        case .text: "Text"
-        case .highlighter: "Highlighter"
-        case .step: "Step"
-        case .blur: "Blur"
-        case .pixelate: "Pixelate"
-        case .spotlight: "Spotlight"
-        case .crop: "Crop"
+        case .select: String(localized: "Select")
+        case .arrow: String(localized: "Arrow")
+        case .line: String(localized: "Line")
+        case .rectangle: String(localized: "Rectangle")
+        case .ellipse: String(localized: "Ellipse")
+        case .text: String(localized: "Text")
+        case .highlighter: String(localized: "Highlighter")
+        case .step: String(localized: "Step")
+        case .blur: String(localized: "Blur")
+        case .pixelate: String(localized: "Pixelate")
+        case .spotlight: String(localized: "Spotlight")
+        case .crop: String(localized: "Crop")
         }
     }
 

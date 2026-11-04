@@ -139,7 +139,7 @@ final class WebRecordingViewModel {
     ///
     /// With `coalescing`, an edit with the same name within a second of the previous one joins its
     /// undo step, so dragging a slider is undone at once.
-    func edit(_ actionName: String, coalescing: Bool = false, _ change: (inout WebScript) -> Void) {
+    func edit(_ actionName: LocalizedStringResource, coalescing: Bool = false, _ change: (inout WebScript) -> Void) {
         // Every change comes through here, so this is where a render's script is kept as it is
         guard isEditable else { return }
         stopPlaying()
@@ -147,13 +147,13 @@ final class WebRecordingViewModel {
         change(&edited)
         guard edited != script else { return }
 
-        if coalescedEdits.joinsPrevious(actionName, coalescing: coalescing) {
+        if coalescedEdits.joinsPrevious(String(localized: actionName), coalescing: coalescing) {
             // The undo step the first of these edits registered restores the script from before all of them
             let previous = script
             script = edited
             scriptChanged(from: previous)
         } else {
-            setScript(edited, actionName: actionName)
+            setScript(edited, actionName: String(localized: actionName))
         }
     }
 
@@ -317,7 +317,7 @@ final class WebRecordingViewModel {
         let target = script.pointer.last { $0.range.lowerBound <= playhead }?.target
             ?? WebTarget(point: CGPoint(x: script.viewport.width / 2, y: script.viewport.height / 2))
         let clip = PointerClip(range: range, action: action, target: target, text: action == .type ? Self.placeholderText : nil)
-        edit("Add \(action.rawValue.capitalized)") { $0.pointer = $0.pointer.inserting(clip) }
+        edit("Add \(action.title)") { $0.pointer = $0.pointer.inserting(clip) }
         selection = clip.id
         setPicking(true)
     }

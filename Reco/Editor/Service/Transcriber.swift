@@ -4,6 +4,7 @@
 //
 
 import AVFoundation
+import Foundation
 import Speech
 
 /// Turns a recording's voice into timed words, on the device (spec 0004, N5).
@@ -21,9 +22,9 @@ nonisolated enum Transcriber {
 
         var errorDescription: String? {
             switch self {
-            case .unavailable: "Speech transcription isn't available on this Mac."
-            case .unsupportedLanguage: "This Mac can't transcribe that language."
-            case .unreadableAudio: "The recording's audio couldn't be read."
+            case .unavailable: String(localized: "Speech transcription isn't available on this Mac.")
+            case .unsupportedLanguage: String(localized: "This Mac can't transcribe that language.")
+            case .unreadableAudio: String(localized: "The recording's audio couldn't be read.")
             }
         }
     }

@@ -4,6 +4,7 @@
 //
 
 import AVFoundation
+import Foundation
 import UniformTypeIdentifiers
 
 /// Brings a video from elsewhere into the recordings folder (spec 0023, section 4), so its project has a writable home
@@ -16,7 +17,7 @@ nonisolated enum RecordingImporter {
 
         var errorDescription: String? {
             switch self {
-            case .noVideo(let name): "\(name) has no video Orbit can play."
+            case .noVideo(let name): String(localized: "\(name) has no video Orbit can play.")
             }
         }
     }

@@ -3,6 +3,7 @@
 //  Reco
 //
 
+import Foundation
 import SwiftUI
 
 /// What each take captures, as one section of two rows that open in place: Audio (system audio,
@@ -52,7 +53,7 @@ struct CaptureSettingsSection: View {
             CaptureGroupRow(
                 title: "Camera",
                 systemImage: "video",
-                value: settings.cameraEnabled ? "On" : "Off",
+                value: settings.cameraEnabled ? String(localized: "On") : String(localized: "Off"),
                 isExpanded: $isCameraExpanded
             )
 
@@ -93,10 +94,10 @@ struct CaptureSettingsSection: View {
     /// What the two audio switches add up to, with the group closed.
     private var audioSummary: String {
         switch (settings.captureSystemAudio, settings.captureMicrophone) {
-        case (true, true): "System + Microphone"
-        case (true, false): "System"
-        case (false, true): "Microphone"
-        case (false, false): "Off"
+        case (true, true): String(localized: "System + Microphone")
+        case (true, false): String(localized: "System")
+        case (false, true): String(localized: "Microphone")
+        case (false, false): String(localized: "Off")
         }
     }
 }
@@ -106,7 +107,7 @@ struct CaptureSettingsSection: View {
 /// A row of the Capture section: its symbol in the fixed column, its name, what it is set to, and a
 /// chevron that turns as the group opens under it.
 struct CaptureGroupRow: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let value: String
     @Binding var isExpanded: Bool

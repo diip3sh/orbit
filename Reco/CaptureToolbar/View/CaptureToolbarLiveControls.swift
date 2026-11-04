@@ -3,6 +3,7 @@
 //  Reco
 //
 
+import Foundation
 import KeyboardShortcuts
 import SwiftUI
 
@@ -38,7 +39,7 @@ struct CaptureToolbarLiveControls: View {
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.captureToolbar)
-            .captureToolbarTooltip("Cancel", shortcut: Self.shortcut(for: .cancelRecording))
+            .captureToolbarTooltip(String(localized: "Cancel"), shortcut: Self.shortcut(for: .cancelRecording))
 
             Button {
                 Task { await recorder.restartRecording() }
@@ -47,7 +48,7 @@ struct CaptureToolbarLiveControls: View {
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.captureToolbar)
-            .captureToolbarTooltip("Restart", shortcut: Self.shortcut(for: .restartRecording))
+            .captureToolbarTooltip(String(localized: "Restart"), shortcut: Self.shortcut(for: .restartRecording))
 
             Button {
                 recorder.togglePause()
@@ -65,7 +66,7 @@ struct CaptureToolbarLiveControls: View {
             }
             .buttonStyle(.captureToolbar)
             // The bar doesn't take key during a take, so the keys shown are the global shortcuts
-            .captureToolbarTooltip(recorder.isPaused ? "Resume" : "Pause", shortcut: Self.shortcut(for: .pauseRecording))
+            .captureToolbarTooltip(recorder.isPaused ? String(localized: "Resume") : String(localized: "Pause"), shortcut: Self.shortcut(for: .pauseRecording))
 
             Button {
                 Task { await recorder.stopRecording() }
@@ -74,7 +75,7 @@ struct CaptureToolbarLiveControls: View {
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(CaptureToolbarStopButtonStyle())
-            .captureToolbarTooltip("Stop", shortcut: Self.shortcut(for: .toggleRecording))
+            .captureToolbarTooltip(String(localized: "Stop"), shortcut: Self.shortcut(for: .toggleRecording))
         }
         .captureToolbarPill(tint: CaptureToolbarView.recording.mix(with: CaptureToolbarView.ground, by: recorder.isPaused ? 0.9 : 0.7))
     }
@@ -84,8 +85,8 @@ struct CaptureToolbarLiveControls: View {
             .foregroundStyle(isOn ? EditorTheme.accent : EditorTheme.dim)
             .opacity(isOn ? 1 : 0.5)
             .frame(width: 36, height: 36)
-            .accessibilityLabel("\(title): \(isOn ? "On" : "Off")")
-            .captureToolbarTooltip("\(short) \(isOn ? "On" : "Off")")
+            .accessibilityLabel(isOn ? String(localized: "\(title): On") : String(localized: "\(title): Off"))
+            .captureToolbarTooltip(isOn ? String(localized: "\(short) On") : String(localized: "\(short) Off"))
     }
 
     private static func shortcut(for name: KeyboardShortcuts.Name) -> String? {

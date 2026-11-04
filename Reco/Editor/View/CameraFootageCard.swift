@@ -47,7 +47,7 @@ struct CameraFootageCard: View {
 
     private func chooseFootage() {
         let panel = NSOpenPanel()
-        panel.title = "Choose Camera Footage"
+        panel.title = String(localized: "Choose Camera Footage")
         panel.allowedContentTypes = [.movie]
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {

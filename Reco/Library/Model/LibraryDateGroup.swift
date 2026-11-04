@@ -27,10 +27,10 @@ nonisolated struct LibraryDateGroup: Identifiable, Equatable, Sendable {
 
         func groupTitle(of date: Date) -> String {
             switch date {
-            case today...: "Today"
-            case yesterday...: "Yesterday"
-            case thisWeek...: "Earlier This Week"
-            case lastWeek...: "Last Week"
+            case today...: String(localized: "Today")
+            case yesterday...: String(localized: "Yesterday")
+            case thisWeek...: String(localized: "Earlier This Week")
+            case lastWeek...: String(localized: "Last Week")
             default: date.formatted(monthStyle)
             }
         }

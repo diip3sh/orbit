@@ -58,7 +58,7 @@ extension EditorViewModel {
         editCaptions("Edit Caption") { $0.replacing(edited) }
     }
 
-    private func editCaptions(_ actionName: String, _ change: ([CaptionCue]) -> [CaptionCue]) {
+    private func editCaptions(_ actionName: LocalizedStringResource, _ change: ([CaptionCue]) -> [CaptionCue]) {
         let cues = change(project.captions.cues)
         guard cues != project.captions.cues else { return }
         edit(actionName) {
@@ -88,7 +88,7 @@ extension EditorViewModel {
         guard #available(macOS 26, *), let source, let language = captionGeneration.language, captionTask == nil else { return }
         captionGeneration.notice = nil
         guard !source.audioTrackIDs.isEmpty else {
-            captionGeneration.notice = "This recording has no audio to transcribe."
+            captionGeneration.notice = String(localized: "This recording has no audio to transcribe.")
             return
         }
         let track = source.audioTrackIDs[source.voiceTrackIndex ?? 0]
@@ -105,7 +105,7 @@ extension EditorViewModel {
                 guard !Task.isCancelled else { return }
                 let cues = CaptionSegmenter.cues(from: words)
                 guard !cues.isEmpty else {
-                    captionGeneration.notice = "No speech came back. Check the language, and that the recording's voice isn't muted or silent."
+                    captionGeneration.notice = String(localized: "No speech came back. Check the language, and that the recording's voice isn't muted or silent.")
                     return
                 }
                 edit("Generate Captions") {

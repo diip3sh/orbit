@@ -190,18 +190,18 @@ final class EditorViewModel {
     ///
     /// With `coalescing`, an edit with the same name within a second of the previous one joins its
     /// undo step, so dragging a slider or a color is undone at once.
-    func edit(_ actionName: String, coalescing: Bool = false, _ change: (inout EditorProject) -> Void) {
+    func edit(_ actionName: LocalizedStringResource, coalescing: Bool = false, _ change: (inout EditorProject) -> Void) {
         var edited = project
         change(&edited)
         guard edited != project else { return }
 
-        if coalescedEdits.joinsPrevious(actionName, coalescing: coalescing) {
+        if coalescedEdits.joinsPrevious(String(localized: actionName), coalescing: coalescing) {
             // The undo step the first of these edits registered restores the project from before all of them
             let previous = project
             project = edited
             projectChanged(from: previous)
         } else {
-            setProject(edited, actionName: actionName)
+            setProject(edited, actionName: String(localized: actionName))
         }
     }
 

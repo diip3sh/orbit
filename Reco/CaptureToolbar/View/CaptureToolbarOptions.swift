@@ -3,6 +3,7 @@
 //  Reco
 //
 
+import Foundation
 import SwiftUI
 
 /// The countdown as a chip with its value, and what the take records as switches: system audio,
@@ -18,17 +19,17 @@ struct CaptureToolbarOptions: View {
         // Each tooltip says what a click does now
         CaptureToolbarSwitch(
             title: "System Audio", icon: .toolbarSystemAudio, isOn: settings.captureSystemAudio,
-            tooltip: settings.captureSystemAudio ? "Mute Audio" : "Record Audio", shortcut: .systemAudio,
+            tooltip: settings.captureSystemAudio ? String(localized: "Mute Audio") : String(localized: "Record Audio"), shortcut: .systemAudio,
             action: viewModel.toggleSystemAudio
         )
         CaptureToolbarSwitch(
             title: "Microphone", icon: .toolbarMic, isOn: settings.captureMicrophone,
-            tooltip: settings.captureMicrophone ? "Mute Mic" : "Record Mic", shortcut: .microphone,
+            tooltip: settings.captureMicrophone ? String(localized: "Mute Mic") : String(localized: "Record Mic"), shortcut: .microphone,
             action: viewModel.toggleMicrophone
         )
         CaptureToolbarSwitch(
             title: "Camera", icon: .toolbarCamera, isOn: settings.cameraEnabled,
-            tooltip: settings.cameraEnabled ? "Hide Camera" : "Show Camera", shortcut: .camera,
+            tooltip: settings.cameraEnabled ? String(localized: "Hide Camera") : String(localized: "Show Camera"), shortcut: .camera,
             action: viewModel.toggleCamera
         )
     }
@@ -36,7 +37,7 @@ struct CaptureToolbarOptions: View {
 
 /// A countdown as a chip with its value, choosing from a menu: the take's, or a screenshot's self-timer
 struct CaptureToolbarCountdownMenu: View {
-    let title: String
+    let title: LocalizedStringResource
     @Binding var duration: CountdownDuration
 
     var body: some View {
@@ -61,13 +62,13 @@ struct CaptureToolbarCountdownMenu: View {
         .menuIndicator(.hidden)
         .buttonStyle(.captureToolbar)
         .fixedSize()
-        .captureToolbarTooltip(title)
+        .captureToolbarTooltip(String(localized: title))
     }
 }
 
 /// One of what the take records, as a switch with its key
 private struct CaptureToolbarSwitch: View {
-    let title: String
+    let title: LocalizedStringKey
     let icon: ImageResource
     let isOn: Bool
     let tooltip: String
@@ -81,6 +82,6 @@ private struct CaptureToolbarSwitch: View {
         }
         .buttonStyle(.captureToolbar(isOn: isOn))
         .captureToolbarTooltip(tooltip, shortcut: shortcut)
-        .accessibilityValue(isOn ? "On" : "Off")
+        .accessibilityValue(isOn ? Text("On") : Text("Off"))
     }
 }

@@ -240,11 +240,11 @@ struct QuickAccessDestructiveButtonStyle: ButtonStyle {
 /// VoiceOver reads the shortcut from the button.
 struct ShortcutLabel: View {
 
-    let title: String
+    let title: LocalizedStringKey
     let keys: String
 
     /// `nil` for a button that has nothing to confirm.
-    var confirmation: String?
+    var confirmation: LocalizedStringKey?
     var isConfirmed = false
 
     var body: some View {

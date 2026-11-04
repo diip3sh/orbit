@@ -17,6 +17,6 @@ enum CountdownDuration: Int, CaseIterable, Identifiable {
     var id: Int { rawValue }
 
     var displayName: String {
-        self == .off ? "Off" : "\(rawValue) seconds"
+        self == .off ? String(localized: "Off") : String(localized: "\(rawValue) seconds")
     }
 }

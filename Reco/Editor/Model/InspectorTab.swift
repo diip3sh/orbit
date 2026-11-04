@@ -13,13 +13,13 @@ nonisolated enum InspectorTab: CaseIterable, Hashable, Sendable {
 
     var title: String {
         switch self {
-        case .background: "Background"
-        case .camera: "Camera"
-        case .audio: "Audio"
-        case .cursor: "Cursor"
-        case .keyboard: "Keyboard"
-        case .caption: "Captions"
-        case .motion: "Motion"
+        case .background: String(localized: "Background")
+        case .camera: String(localized: "Camera")
+        case .audio: String(localized: "Audio")
+        case .cursor: String(localized: "Cursor")
+        case .keyboard: String(localized: "Keyboard")
+        case .caption: String(localized: "Captions")
+        case .motion: String(localized: "Motion")
         }
     }
 
@@ -58,7 +58,7 @@ nonisolated enum InspectorTab: CaseIterable, Hashable, Sendable {
     /// Why ``isAvailable`` is false, for the tab's tooltip.
     var unavailableReason: String {
         switch self {
-        case .caption: "Captions: need macOS 26 or later"
+        case .caption: String(localized: "Captions: need macOS 26 or later")
         case .background, .camera, .audio, .cursor, .keyboard, .motion: title
         }
     }

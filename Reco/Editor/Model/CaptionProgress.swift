@@ -22,8 +22,8 @@ nonisolated enum CaptionProgress: Equatable, Sendable {
 
     var title: String {
         switch self {
-        case .installing: "Downloading the speech model…"
-        case .transcribing: "Transcribing…"
+        case .installing: String(localized: "Downloading the speech model…")
+        case .transcribing: String(localized: "Transcribing…")
         }
     }
 }

@@ -4,6 +4,7 @@
 //
 
 import AVFoundation
+import Foundation
 import OSLog
 
 /// Records the camera to its own movie alongside the screen. Capture work runs off the main actor; a failure is
@@ -20,11 +21,11 @@ final class CameraRecorder {
 
         var errorDescription: String? {
             switch self {
-            case .noCamera: "No camera is available."
-            case .cannotConfigure: "The camera couldn't be set up."
-            case .notRunning: "The camera didn't start."
-            case .noFrames: "The camera delivered no video."
-            case .disconnected: "The camera was disconnected."
+            case .noCamera: String(localized: "No camera is available.")
+            case .cannotConfigure: String(localized: "The camera couldn't be set up.")
+            case .notRunning: String(localized: "The camera didn't start.")
+            case .noFrames: String(localized: "The camera delivered no video.")
+            case .disconnected: String(localized: "The camera was disconnected.")
             }
         }
     }

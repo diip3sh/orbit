@@ -10,17 +10,17 @@ extension LibrarySection {
 
     var title: String {
         switch self {
-        case .all: "All"
-        case .recordings: "Recordings"
-        case .webRecordings: "Web Recordings"
-        case .exports: "Exports"
-        case .screenshots: "Screenshots"
+        case .all: String(localized: "All")
+        case .recordings: String(localized: "Recordings")
+        case .webRecordings: String(localized: "Web Recordings")
+        case .exports: String(localized: "Exports")
+        case .screenshots: String(localized: "Screenshots")
         }
     }
 
     /// The window's title: the app's own name for everything, else the section's.
     var heading: String {
-        self == .all ? "Library" : title
+        self == .all ? String(localized: "Library") : title
     }
 
     var symbol: String {
@@ -36,11 +36,11 @@ extension LibrarySection {
     /// What the section shows when it's empty, and how to fill it.
     var emptyMessage: String {
         switch self {
-        case .all: "Recordings and screenshots you make appear here. Use New to start."
-        case .recordings: "Screen recordings appear here when you stop them."
-        case .webRecordings: "Web recordings appear here once they're rendered."
-        case .exports: "Videos you export from the editor appear here."
-        case .screenshots: "Screenshots appear here once you save them from their card."
+        case .all: String(localized: "Recordings and screenshots you make appear here. Use New to start.")
+        case .recordings: String(localized: "Screen recordings appear here when you stop them.")
+        case .webRecordings: String(localized: "Web recordings appear here once they're rendered.")
+        case .exports: String(localized: "Videos you export from the editor appear here.")
+        case .screenshots: String(localized: "Screenshots appear here once you save them from their card.")
         }
     }
 }
@@ -62,9 +62,9 @@ extension LibraryOrientation {
 
     var title: String {
         switch self {
-        case .landscape: "Landscape"
-        case .portrait: "Portrait"
-        case .square: "Square"
+        case .landscape: String(localized: "Landscape")
+        case .portrait: String(localized: "Portrait")
+        case .square: String(localized: "Square")
         }
     }
 
@@ -81,9 +81,9 @@ extension LibrarySort {
 
     var title: String {
         switch self {
-        case .newestFirst: "Newest First"
-        case .oldestFirst: "Oldest First"
-        case .name: "Name"
+        case .newestFirst: String(localized: "Newest First")
+        case .oldestFirst: String(localized: "Oldest First")
+        case .name: String(localized: "Name")
         }
     }
 }

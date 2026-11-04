@@ -49,9 +49,9 @@ nonisolated struct EditorSource: Sendable {
     /// Names for the audio tracks, in order. With a single track, which one was recorded isn't known.
     var audioTrackNames: [String] {
         switch audioTrackIDs.count {
-        case 1: ["Audio"]
-        case 2: ["System Audio", "Microphone"]
-        default: audioTrackIDs.indices.map { "Audio \($0 + 1)" }
+        case 1: [String(localized: "Audio")]
+        case 2: [String(localized: "System Audio"), String(localized: "Microphone")]
+        default: audioTrackIDs.indices.map { String(localized: "Audio \($0 + 1)") }
         }
     }
 

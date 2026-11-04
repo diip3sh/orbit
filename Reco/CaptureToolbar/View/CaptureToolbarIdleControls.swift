@@ -3,6 +3,7 @@
 //  Reco
 //
 
+import Foundation
 import SwiftUI
 
 /// Before a screenshot or a take, in groups: close and settings; the three screenshot modes or the three
@@ -24,7 +25,7 @@ struct CaptureToolbarIdleControls: View {
             .buttonStyle(.captureToolbar)
             // Esc steps back one thing at a time (the picker, a half-drawn area, then the bar), where
             // clicking takes everything away at once
-            .captureToolbarTooltip("Close", shortcut: CaptureToolbarShortcut.close.symbol)
+            .captureToolbarTooltip(String(localized: "Close"), shortcut: CaptureToolbarShortcut.close.symbol)
             .background {
                 Button("Cancel") { Task { await viewModel.cancel() } }
                     .keyboardShortcut(CaptureToolbarShortcut.close.key, modifiers: [])

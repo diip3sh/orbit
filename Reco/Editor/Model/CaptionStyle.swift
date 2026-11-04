@@ -12,7 +12,7 @@ nonisolated struct CaptionStyle: Codable, Equatable, Sendable {
     nonisolated enum Position: String, CaseIterable, Codable, Sendable {
         case top, middle, bottom
 
-        var title: String {
+        var title: LocalizedStringResource {
             switch self {
             case .top: "Top"
             case .middle: "Middle"

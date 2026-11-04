@@ -16,7 +16,7 @@ extension WebPageRenderer {
             let result = try await webView.callAsyncJavaScript(
                 WebInspectScript.source, arguments: ["selectors": selectors], contentWorld: .defaultClient
             )
-            guard let json = result as? String else { throw WebRenderError.loadFailed("The page couldn't be read.") }
+            guard let json = result as? String else { throw WebRenderError.loadFailed(String(localized: "The page couldn't be read.")) }
             var inspection = try JSONDecoder().decode(PageInspection.self, from: Data(json.utf8))
             inspection.renderCost = try await renderCost()
             return inspection

@@ -81,33 +81,41 @@ nonisolated struct AgentTranscript: Equatable, Sendable {
         switch tool {
         case AgentToolCatalog.inspectPage:
             let host = (arguments["url"] as? String).flatMap { URL(string: $0)?.host() }
-            return host.map { "Looking at \($0)" } ?? "Looking at the page"
+            return host.map { String(localized: "Looking at \($0)") } ?? String(localized: "Looking at the page")
         case AgentToolCatalog.recordPage:
             let steps = (arguments["steps"] as? [Any])?.count ?? 0
-            return steps == 1 ? "Planning 1 step" : "Planning \(steps) steps"
+            return steps == 1 ? String(localized: "Planning 1 step") : String(localized: "Planning \(steps) steps")
         case AgentToolCatalog.renderStatus:
-            return "Rendering the video"
+            return String(localized: "Rendering the video")
         case AgentToolCatalog.openPage:
             let host = (arguments["url"] as? String).flatMap { URL(string: $0)?.host() ?? URL(string: "https://\($0)")?.host() }
-            return host.map { "Opening \($0)" } ?? "Opening the page"
+            return host.map { String(localized: "Opening \($0)") } ?? String(localized: "Opening the page")
         case AgentToolCatalog.look:
-            return (arguments["y"] as? Double).map { $0 > 0 ? "Looking further down" : "Looking at the top" } ?? "Looking at the page"
+            return Self.lookDescription(scrolledTo: arguments["y"] as? Double)
         case AgentToolCatalog.readPage:
-            return "Reading the page"
+            return String(localized: "Reading the page")
         case AgentToolCatalog.hover:
-            return "Hovering over \(Self.elementName(arguments["selector"]))"
+            let element = Self.elementName(arguments["selector"])
+            return String(localized: "Hovering over \(element)")
         case AgentToolCatalog.click:
-            return "Clicking \(Self.elementName(arguments["selector"]))"
+            let element = Self.elementName(arguments["selector"])
+            return String(localized: "Clicking \(element)")
         case AgentToolCatalog.type:
-            return "Typing “\(arguments["text"] as? String ?? "")”"
+            let typed = arguments["text"] as? String ?? ""
+            return String(localized: "Typing “\(typed)”")
         default:
             return tool
         }
     }
 
+    private static func lookDescription(scrolledTo offset: Double?) -> String {
+        guard let offset else { return String(localized: "Looking at the page") }
+        return offset > 0 ? String(localized: "Looking further down") : String(localized: "Looking at the top")
+    }
+
     /// A selector's last step, e.g. `a.pricing` from `nav > a.pricing`, as the timeline names targets.
     private static func elementName(_ selector: Any?) -> String {
-        guard let selector = selector as? String, let last = selector.split(separator: " > ").last else { return "an element" }
+        guard let selector = selector as? String, let last = selector.split(separator: " > ").last else { return String(localized: "an element") }
         return String(last)
     }
 

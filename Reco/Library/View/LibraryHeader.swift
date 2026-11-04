@@ -52,7 +52,7 @@ struct LibraryHeader: View {
 
     private func chooseVideos() {
         let panel = NSOpenPanel()
-        panel.title = "Open Videos"
+        panel.title = String(localized: "Open Videos")
         panel.allowedContentTypes = [.movie]
         panel.allowsMultipleSelection = true
         if panel.runModal() == .OK {

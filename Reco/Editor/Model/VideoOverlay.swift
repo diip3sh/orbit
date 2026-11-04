@@ -74,8 +74,8 @@ nonisolated struct VideoOverlay: Codable, Equatable, Identifiable, Sendable {
     var title: String {
         switch kind {
         case .text(let style): style.text
-        case .image: "Image"
-        case .arrow: "Arrow"
+        case .image: String(localized: "Image")
+        case .arrow: String(localized: "Arrow")
         }
     }
 

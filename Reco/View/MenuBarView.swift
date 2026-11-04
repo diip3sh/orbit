@@ -227,7 +227,7 @@ struct PermissionStatusBanner: View {
 
 /// A single permission row with status and action button
 struct PermissionRow: View {
-    let title: String
+    let title: LocalizedStringKey
     let isGranted: Bool
     let action: () -> Void
 

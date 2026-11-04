@@ -29,7 +29,7 @@ nonisolated struct AgentRecordingRequest: Equatable, Sendable {
 
     var summary: String {
         let wanted = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
-        return wanted.isEmpty ? "Record \(url.host() ?? url.absoluteString)" : wanted
+        return wanted.isEmpty ? String(localized: "Record \(url.host() ?? url.absoluteString)") : wanted
     }
 
     /// The take the chat asks to change, or `nil` for a new one.

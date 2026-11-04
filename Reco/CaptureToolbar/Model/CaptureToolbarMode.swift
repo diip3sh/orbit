@@ -31,21 +31,21 @@ nonisolated enum CaptureToolbarMode: String, CaseIterable, Identifiable, Sendabl
 
     var title: String {
         switch self {
-        case .captureScreen: "Capture Entire Screen"
-        case .captureWindow: "Capture Selected Window"
-        case .captureArea: "Capture Selected Portion"
-        case .recordScreen: "Record Entire Screen"
-        case .recordWindow: "Record Selected Window"
-        case .recordArea: "Record Selected Portion"
+        case .captureScreen: String(localized: "Capture Entire Screen")
+        case .captureWindow: String(localized: "Capture Selected Window")
+        case .captureArea: String(localized: "Capture Selected Portion")
+        case .recordScreen: String(localized: "Record Entire Screen")
+        case .recordWindow: String(localized: "Record Selected Window")
+        case .recordArea: String(localized: "Record Selected Portion")
         }
     }
 
     /// The tooltip's name for it: two words at most, the toolbar already says capture or record
     var shortTitle: String {
         switch self {
-        case .captureScreen, .recordScreen: "Entire Screen"
-        case .captureWindow, .recordWindow: "Window"
-        case .captureArea, .recordArea: "Selected Area"
+        case .captureScreen, .recordScreen: String(localized: "Entire Screen")
+        case .captureWindow, .recordWindow: String(localized: "Window")
+        case .captureArea, .recordArea: String(localized: "Selected Area")
         }
     }
 
@@ -59,7 +59,7 @@ nonisolated enum CaptureToolbarMode: String, CaseIterable, Identifiable, Sendabl
     }
 
     var actionTitle: String {
-        records ? "Record" : "Capture"
+        records ? String(localized: "Record") : String(localized: "Capture")
     }
 
     /// The recording mode that matches a selection made elsewhere (a shortcut, the Library), so the
