@@ -47,6 +47,15 @@ nonisolated struct EditorProject: Codable, Equatable, Sendable {
     var crop = VideoCrop.full
     var canvas = CanvasStyle()
     var audio = AudioMixSettings()
+    var captions = CaptionTrack()
+    var camera = CameraOverlayStyle()
+
+    /// Source ranges in playing order, empty for source order. ``TimeMap`` reconciles it with the cuts, so it needs no
+    /// care when they change.
+    var sequence: [Range<Double>] = []
+
+    /// Text, pictures and arrows over the video, in any order (see ``VideoOverlay``).
+    var overlays: [VideoOverlay] = []
 
     /// The project file for a recording: same folder and base name, `.edit.json` extension.
     static func fileURL(for videoURL: URL) -> URL {
@@ -68,9 +77,9 @@ extension EditorProject {
 
 extension EditorProject {
 
-    /// This project with `other`'s look: canvas, motion blur, cursor, click highlights and keystrokes, which a
-    /// new take of the same page keeps (spec 0008). Cuts, splits, zooms and audio belong to one
-    /// recording.
+    /// This project with `other`'s look: canvas, motion blur, cursor, click highlights, keystrokes, the captions'
+    /// style and the camera bubble's, which a new take of the same page keeps (spec 0008). Cuts, splits, zooms, audio,
+    /// what the captions say, how the camera lines up and the overlays belong to one recording.
     nonisolated func styled(like other: EditorProject) -> EditorProject {
         var project = self
         project.canvas = other.canvas
@@ -78,6 +87,9 @@ extension EditorProject {
         project.cursor = other.cursor
         project.clickHighlights = other.clickHighlights
         project.keystrokes = other.keystrokes
+        project.captions.style = other.captions.style
+        project.camera = other.camera
+        project.camera.timeOffset = camera.timeOffset
         return project
     }
 }
@@ -107,5 +119,9 @@ extension EditorProject {
         crop = try container.decodeIfPresent(CGRect.self, forKey: .crop) ?? VideoCrop.full
         canvas = try container.decodeIfPresent(CanvasStyle.self, forKey: .canvas) ?? CanvasStyle()
         audio = try container.decodeIfPresent(AudioMixSettings.self, forKey: .audio) ?? AudioMixSettings()
+        captions = try container.decodeIfPresent(CaptionTrack.self, forKey: .captions) ?? CaptionTrack()
+        camera = try container.decodeIfPresent(CameraOverlayStyle.self, forKey: .camera) ?? CameraOverlayStyle()
+        overlays = try container.decodeIfPresent([VideoOverlay].self, forKey: .overlays) ?? []
+        sequence = try container.decodeIfPresent([Range<Double>].self, forKey: .sequence) ?? []
     }
 }

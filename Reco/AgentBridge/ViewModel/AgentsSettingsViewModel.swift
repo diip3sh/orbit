@@ -19,10 +19,10 @@ final class AgentsSettingsViewModel {
 
         var statusText: String {
             switch state {
-            case .notInstalled: "Not found"
-            case .notConnected: "Not connected"
-            case .connected: "Connected"
-            case .outdated: "Out of date"
+            case .notInstalled: String(localized: "Not found")
+            case .notConnected: String(localized: "Not connected")
+            case .connected: String(localized: "Connected")
+            case .outdated: String(localized: "Out of date")
             }
         }
 
@@ -30,9 +30,9 @@ final class AgentsSettingsViewModel {
         var actionTitle: String? {
             switch state {
             case .notInstalled: nil
-            case .notConnected: "Connect"
-            case .connected: "Disconnect"
-            case .outdated: "Reconnect"
+            case .notConnected: String(localized: "Connect")
+            case .connected: String(localized: "Disconnect")
+            case .outdated: String(localized: "Reconnect")
             }
         }
     }
@@ -52,7 +52,7 @@ final class AgentsSettingsViewModel {
     }
 
     var serverStatus: String {
-        server.listenError ?? (server.isListening ? "Listening" : "Starting")
+        server.listenError ?? (server.isListening ? String(localized: "Listening") : String(localized: "Starting"))
     }
 
     var hasServerError: Bool {
@@ -61,12 +61,12 @@ final class AgentsSettingsViewModel {
 
     /// The latest render an agent started, in a few words.
     var renderSummary: String {
-        guard let job = server.tools.job else { return "None yet" }
+        guard let job = server.tools.job else { return String(localized: "None yet") }
         switch job.status {
-        case .rendering: return "Rendering \(job.progress.formatted(.percent.precision(.fractionLength(0))))"
-        case .planned: return "On the timeline"
-        case .done: return job.movie.map { URL(filePath: $0).lastPathComponent } ?? "Done"
-        case .failed: return "Failed"
+        case .rendering: return String(localized: "Rendering \(job.progress.formatted(.percent.precision(.fractionLength(0))))")
+        case .planned: return String(localized: "On the timeline")
+        case .done: return job.movie.map { URL(filePath: $0).lastPathComponent } ?? String(localized: "Done")
+        case .failed: return String(localized: "Failed")
         }
     }
 

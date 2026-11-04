@@ -18,6 +18,10 @@ If you've found a bug, please [open an issue](https://github.com/diip3sh/reco/is
 - Your macOS version and hardware details.
 - Any relevant logs or screenshots.
 
+## Translations
+
+Translation fixes and new languages are welcome without a prior discussion. See [docs/LOCALIZATION.md](docs/LOCALIZATION.md).
+
 ## Pull Requests
 
 1. **Bug Fixes**: Feel free to submit pull requests for bug fixes directly.

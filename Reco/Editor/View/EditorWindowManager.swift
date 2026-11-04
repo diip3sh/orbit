@@ -181,6 +181,13 @@ final class EditorWindowManager: NSObject {
         }
     }
 
+    /// Copies videos from elsewhere into the recordings folder and opens them, from the Library, which says so if one can't be.
+    func importMovies(_ urls: [URL]) {
+        showLibrary()
+        guard let library else { return }
+        Task { await library.viewModel.importMovies(urls) }
+    }
+
     /// Shows the Library, Reco's main window, or brings it forward (spec 0010).
     func showLibrary() {
         if let library {
@@ -253,7 +260,7 @@ final class EditorWindowManager: NSObject {
         }
         let hostingController = NSHostingController(rootView: WebRecordingView(viewModel: viewModel, agent: agentRecording).themed())
         hostingController.sizingOptions = .minSize
-        let window = makeWindow(hostingController, title: "Web Recording", size: NSSize(width: 1533, height: 943))
+        let window = makeWindow(hostingController, title: String(localized: "Web Recording"), size: NSSize(width: 1533, height: 943))
         // An empty toolbar only to place the window's buttons 19 pt in, inside the agent panel's corner (9 pt without
         // one, on its edge); the panels' headers hold the controls. Hidden, the title no longer takes the clicks
         // meant for them (measured on macOS 27)
@@ -388,10 +395,10 @@ extension EditorWindowManager: NSWindowDelegate {
     func windowShouldClose(_ window: NSWindow) -> Bool {
         guard let webRecording, window === webRecording.window, !webRecording.viewModel.isEditable else { return true }
         let alert = NSAlert()
-        alert.messageText = "Stop Rendering?"
-        alert.informativeText = "Closing the window stops the render. Nothing is saved."
-        alert.addButton(withTitle: "Keep Rendering")
-        alert.addButton(withTitle: "Stop and Close").hasDestructiveAction = true
+        alert.messageText = String(localized: "Stop Rendering?")
+        alert.informativeText = String(localized: "Closing the window stops the render. Nothing is saved.")
+        alert.addButton(withTitle: String(localized: "Keep Rendering"))
+        alert.addButton(withTitle: String(localized: "Stop and Close")).hasDestructiveAction = true
         return alert.runModal() == .alertSecondButtonReturn
     }
 

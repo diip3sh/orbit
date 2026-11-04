@@ -21,6 +21,9 @@ nonisolated struct ExportSettings: Equatable, Sendable {
     /// Whether the canvas has a transparent background, which only ProRes 4444 keeps.
     var transparentCanvas = false
 
+    /// Whether the captions are also written beside a movie, as SRT and VTT. Not for a GIF, which can't show them.
+    var writesSubtitles = false
+
     /// What the export page starts with: MP4, or ProRes for a transparent canvas, the only format that keeps it.
     static func initial(transparentCanvas: Bool) -> Self {
         ExportSettings(format: transparentCanvas ? .proRes : .mp4, transparentCanvas: transparentCanvas)

@@ -52,6 +52,10 @@ final class EditorViewModel {
     var sensitiveInfoFound: Int?
     @ObservationIgnored var sensitiveInfoSearch: Task<Void, Never>?
 
+    /// Generating captions, and the task doing it.
+    var captionGeneration = CaptionGeneration()
+    @ObservationIgnored var captionTask: Task<Void, Never>?
+
     /// The project as last read from or written to disk.
     @ObservationIgnored private var savedProject = EditorProject()
     @ObservationIgnored private(set) var autosave: Task<Void, Never>?
@@ -186,18 +190,18 @@ final class EditorViewModel {
     ///
     /// With `coalescing`, an edit with the same name within a second of the previous one joins its
     /// undo step, so dragging a slider or a color is undone at once.
-    func edit(_ actionName: String, coalescing: Bool = false, _ change: (inout EditorProject) -> Void) {
+    func edit(_ actionName: LocalizedStringResource, coalescing: Bool = false, _ change: (inout EditorProject) -> Void) {
         var edited = project
         change(&edited)
         guard edited != project else { return }
 
-        if coalescedEdits.joinsPrevious(actionName, coalescing: coalescing) {
+        if coalescedEdits.joinsPrevious(String(localized: actionName), coalescing: coalescing) {
             // The undo step the first of these edits registered restores the project from before all of them
             let previous = project
             project = edited
             projectChanged(from: previous)
         } else {
-            setProject(edited, actionName: actionName)
+            setProject(edited, actionName: String(localized: actionName))
         }
     }
 
@@ -276,6 +280,7 @@ final class EditorViewModel {
             try await ExportService.export(composition, to: url, as: settings) { [weak self] in
                 self?.exportProgress = $0
             }
+            try writeSubtitles(for: settings, to: destination, beside: url, timeMap: plan.timeMap)
         } catch {
             guard !Task.isCancelled else { throw CancellationError() }
             logger.error("Export of \(self.videoURL.lastPathComponent) failed: \(error.localizedDescription)")
@@ -309,6 +314,7 @@ final class EditorViewModel {
     func close() async {
         rebuild?.cancel()
         sensitiveInfoSearch?.cancel()
+        captionTask?.cancel()
         playback.release()
         thumbnails = []
         await releaseAudioFiles()
@@ -331,8 +337,8 @@ final class EditorViewModel {
     }
 
     private func projectChanged(from previous: EditorProject) {
-        // A zoom stays selected while it's being changed
-        if selectedZoom == nil {
+        // A zoom, a caption or an overlay stays selected while it's being changed
+        if selectedZoom == nil, selectedCaption == nil, selectedOverlay == nil {
             selection = nil
         }
         updateTimeline()
@@ -354,7 +360,7 @@ final class EditorViewModel {
 
     private func updateTimeline() {
         guard let source else { return }
-        timeMap = TimeMap(cuts: project.cuts, speeds: project.speeds, sourceDuration: source.duration, frameRate: source.frameRate)
+        timeMap = TimeMap(cuts: project.cuts, speeds: project.speeds, sequence: project.sequence, sourceDuration: source.duration, frameRate: source.frameRate)
         viewport.setDuration(source.duration)
     }
 
@@ -371,7 +377,7 @@ final class EditorViewModel {
             let plan = await RenderPlan.build(project: project, source: source, resources: resources)
             let extra = await extraAudio(for: self.project.audio, source: source, timeMap: plan.timeMap)
             guard !Task.isCancelled, let playing = self.plan, var composition else { return }
-            guard plan.timeMap != playing.timeMap || extra != composition.extraAudio else {
+            guard !plan.playsInComposition(of: playing) || extra != composition.extraAudio else {
                 composition.videoComposition = CompositionBuilder.videoComposition(for: source, plan: plan)
                 composition.audioMix = CompositionBuilder.audioMix(for: source, timeMap: plan.timeMap, settings: self.project.audio, extra: extra)
                 self.plan = plan
@@ -445,7 +451,7 @@ extension EditorViewModel {
     var canDeleteSelection: Bool {
         switch selection {
         case .segment: segments.count > 1
-        case .zoom, .mask: true
+        case .zoom, .mask, .caption, .overlay: true
         case nil: false
         }
     }
@@ -467,7 +473,7 @@ extension EditorViewModel {
         edit("Split") { $0.splits = splits }
     }
 
-    /// Cuts the selected segment or deletes the selected zoom or mask.
+    /// Cuts the selected segment or deletes the selected zoom, mask, caption or overlay.
     func deleteSelection() {
         guard let selection, canDeleteSelection else { return }
         switch selection {
@@ -477,6 +483,8 @@ extension EditorViewModel {
             edit("Delete Zoom") { $0.zooms = $0.zooms.removing(id) }
         case .mask(let id):
             edit("Delete Mask") { $0.masks = $0.masks.removing(id) }
+        case .caption(let id): deleteCaption(id)
+        case .overlay(let id): deleteOverlay(id)
         }
     }
 

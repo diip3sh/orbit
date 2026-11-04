@@ -3,6 +3,7 @@
 //  Reco
 //
 
+import Foundation
 import SwiftUI
 
 /// The Web Recording inspector's choice of a few options on one track, the chosen one on a raised fill that
@@ -247,7 +248,7 @@ struct WebZoomRuler: View {
         .pointerStyle(.columnResize)
         .accessibilityElement()
         .accessibilityLabel("Zoom")
-        .accessibilityValue(zoom.map { "\($0.formatted())×" } ?? "Off")
+        .accessibilityValue(zoom.map { "\($0.formatted())×" } ?? String(localized: "Off"))
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment: set((zoom ?? 1) + Self.snap)

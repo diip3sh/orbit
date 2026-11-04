@@ -20,6 +20,10 @@ struct EditorStage: View {
         PlayerLayerView(player: viewModel.playback.player, cornerRadius: Self.cornerRadius)
             // The player layer's own corner radius doesn't clip its video: the frame showed square corners past the ring
             .clipShape(shape)
+            .overlay {
+                CameraBubbleHandle(viewModel: viewModel)
+                OverlayHandle(viewModel: viewModel)
+            }
             .background {
                 if viewModel.canvas.background == .transparent {
                     Checkerboard(square: 10)

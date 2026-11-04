@@ -62,10 +62,10 @@ struct CaptureSourcePickerView: View {
     @ViewBuilder
     private var content: some View {
         if picker.failed {
-            notice("Allow Orbit to record the screen in System Settings → Privacy & Security, then try again.")
+            notice(String(localized: "Allow Orbit to record the screen in System Settings → Privacy & Security, then try again."))
         } else if let sources = picker.sources {
             if sources.isEmpty {
-                notice(picker.kind == .display ? "No displays to record." : "No windows to record.")
+                notice(picker.kind == .display ? String(localized: "No displays to record.") : String(localized: "No windows to record."))
             } else {
                 row(sources)
             }

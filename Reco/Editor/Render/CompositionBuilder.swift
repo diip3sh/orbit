@@ -26,7 +26,7 @@ enum CompositionBuilder {
         for source: EditorSource, plan: RenderPlan, audio: AudioMixSettings, extra: ExtraAudio = ExtraAudio()
     ) async throws -> EditorComposition {
         EditorComposition(
-            asset: try await asset(for: source, timeMap: plan.timeMap, extra: extra),
+            asset: try await asset(for: source, plan: plan, extra: extra),
             videoComposition: videoComposition(for: source, plan: plan),
             audioMix: audioMix(for: source, timeMap: plan.timeMap, settings: audio, extra: extra),
             extraAudio: extra
@@ -46,7 +46,10 @@ enum CompositionBuilder {
         composition.renderSize = plan.canvas.size
         composition.frameDuration = CMTime(seconds: 1 / (frameRate ?? source.frameRate), preferredTimescale: source.timescale)
         composition.instructions = [
-            EditorInstruction(timeRange: CMTimeRange(start: .zero, duration: duration), sourceTrackID: source.videoTrackID, plan: plan)
+            EditorInstruction(
+                timeRange: CMTimeRange(start: .zero, duration: duration), sourceTrackID: source.videoTrackID,
+                cameraTrackID: plan.bubble.map { _ in cameraTrackID(for: source) }, plan: plan
+            )
         ]
         return composition
     }
@@ -96,19 +99,19 @@ enum CompositionBuilder {
         return ranges
     }
 
-    /// Where audio fades, in output seconds: out at the end of each kept range a cut follows, and
-    /// back in at the start of each one a cut precedes. A short range fades over half its length.
+    /// Where audio fades, in output seconds: at every jump in the source, a cut or a reordered clip, and where the output
+    /// starts or ends anywhere but the recording's own ends. A short range fades over half its length.
     nonisolated static func audioFades(for timeMap: TimeMap) -> [(range: Range<Double>, fadesIn: Bool)] {
-        timeMap.keptRanges.flatMap { range in
-            let start = timeMap.outputTime(atSource: range.lowerBound)
-            let end = timeMap.outputTime(atSource: range.upperBound)
-            let fade = min(fadeDuration, (end - start) / 2)
+        let played = timeMap.playedRanges
+        return played.indices.flatMap { index -> [(range: Range<Double>, fadesIn: Bool)] in
+            guard let output = timeMap.outputRanges(ofSource: played[index]).first else { return [] }
+            let fade = min(fadeDuration, (output.upperBound - output.lowerBound) / 2)
             var fades: [(range: Range<Double>, fadesIn: Bool)] = []
-            if range.lowerBound > 0 {
-                fades.append((start..<start + fade, true))
+            if index > 0 || played[index].lowerBound > 0 {
+                fades.append((output.lowerBound..<output.lowerBound + fade, true))
             }
-            if range.upperBound < timeMap.sourceDuration {
-                fades.append((end - fade..<end, false))
+            if index < played.count - 1 || played[index].upperBound < timeMap.sourceDuration {
+                fades.append((output.upperBound - fade..<output.upperBound, false))
             }
             return fades
         }
@@ -117,10 +120,11 @@ enum CompositionBuilder {
     // MARK: - Private
 
     /// The recording's video and audio tracks, with only the kept ranges at their speeds, under their own
-    /// track IDs so the video composition and the mix can name them, then the extra audio the same way.
-    private static func asset(for source: EditorSource, timeMap: TimeMap, extra: ExtraAudio) async throws -> AVComposition {
+    /// track IDs so the video composition and the mix can name them, then the camera footage and the extra audio the
+    /// same way.
+    private static func asset(for source: EditorSource, plan: RenderPlan, extra: ExtraAudio) async throws -> AVComposition {
         let composition = AVMutableComposition()
-        let pieces = pieces(of: timeMap, in: source)
+        let pieces = pieces(of: plan.timeMap, in: source)
         for track in try await source.asset.loadTracks(withMediaType: .video) {
             try insert(track, as: track.trackID, pieces: pieces, into: composition)
         }
@@ -134,6 +138,9 @@ enum CompositionBuilder {
             try withExtendedLifetime((enhanced, fast)) {
                 try insert(enhanced?.track ?? track, as: track.trackID, pieces: pieces, fastParts: fast, into: composition)
             }
+        }
+        if let footage = source.camera, let bubble = plan.bubble {
+            try await insertCamera(footage, offset: bubble.offset, as: cameraTrackID(for: source), pieces: pieces, into: composition)
         }
         // Optional, so a click file that went missing leaves the recording as it is; the mix names a track that isn't there
         if let clicks = extra.clicks {
@@ -203,6 +210,65 @@ enum CompositionBuilder {
         }
     }
 
+    /// What of the footage a piece shows.
+    nonisolated struct CameraSpan: Equatable, Sendable {
+        /// How long the piece runs in the output before the footage starts.
+        let lead: CMTime
+
+        /// The part of the piece with footage, on the source timeline.
+        let shown: CMTimeRange
+
+        /// How long ``shown`` lasts in the output.
+        let length: CMTime
+    }
+
+    /// The part of a piece (`source`, lasting `duration` in the output) that `footage`, on the source timeline, covers,
+    /// or `nil` when it covers none.
+    nonisolated static func cameraSpan(of source: CMTimeRange, duration: CMTime, footage: CMTimeRange) -> CameraSpan? {
+        let shown = source.intersection(footage)
+        guard shown.duration > .zero else { return nil }
+        // Unscaled at normal speed, so nothing is rounded there
+        func output(_ time: CMTime) -> CMTime {
+            duration == source.duration ? time : CMTimeMultiplyByFloat64(time, multiplier: duration.seconds / source.duration.seconds)
+        }
+        return CameraSpan(lead: output(shown.start - source.start), shown: shown, length: output(shown.duration))
+    }
+
+    /// The footage as a new track, through the same `pieces` as the recording so it stays in step with cuts and speeds.
+    /// Time with no footage is left empty, where the compositor gets no frame and the bubble hides. Left out when the
+    /// file can't be read any more.
+    private static func insertCamera(
+        _ footage: CameraFootage, offset: Double, as trackID: CMPersistentTrackID, pieces: [Piece], into composition: AVMutableComposition
+    ) async throws {
+        guard let track = try? await footage.asset.loadTrack(withTrackID: footage.trackID),
+              let compositionTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: trackID) else { return }
+        // Adds to a time in the file to get its time in the recording
+        let shift = CMTime(seconds: offset, preferredTimescale: CMTimeScale(NSEC_PER_SEC)) - footage.timeRange.start
+        let onSource = CMTimeRange(start: footage.timeRange.start + shift, duration: footage.timeRange.duration)
+        var cursor = CMTime.zero
+        // A track holds its asset weakly, as with the click sounds
+        try withExtendedLifetime(footage.asset) {
+            for piece in pieces {
+                let end = cursor + piece.duration
+                if let span = cameraSpan(of: piece.source, duration: piece.duration, footage: onSource) {
+                    if span.lead > .zero {
+                        compositionTrack.insertEmptyTimeRange(CMTimeRange(start: cursor, duration: span.lead))
+                    }
+                    let start = cursor + span.lead
+                    try compositionTrack.insertTimeRange(CMTimeRange(start: span.shown.start - shift, duration: span.shown.duration), of: track, at: start)
+                    if span.length != span.shown.duration {
+                        compositionTrack.scaleTimeRange(CMTimeRange(start: start, duration: span.shown.duration), toDuration: span.length)
+                    }
+                    cursor = start + span.length
+                }
+                if end > cursor {
+                    compositionTrack.insertEmptyTimeRange(CMTimeRange(start: cursor, end: end))
+                }
+                cursor = end
+            }
+        }
+    }
+
     /// A file's first audio track, with its asset, which the composition holds only weakly.
     private struct FileTrack {
         let asset: AVURLAsset
@@ -234,6 +300,11 @@ enum CompositionBuilder {
     /// The ID of extra track `number` (from 1), above the recording's own so the mix can name it without loading it.
     static func extraTrackID(_ number: Int, for source: EditorSource) -> CMPersistentTrackID {
         ((source.audioTrackIDs + [source.videoTrackID]).max() ?? source.videoTrackID) + CMPersistentTrackID(number)
+    }
+
+    /// The camera footage's track, after the extra audio's.
+    static func cameraTrackID(for source: EditorSource) -> CMPersistentTrackID {
+        extraTrackID(3, for: source)
     }
 
     /// `volume` from the start, ramped to nothing and back at each of `fades`.

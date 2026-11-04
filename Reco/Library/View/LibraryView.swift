@@ -31,6 +31,13 @@ struct LibraryView: View {
         .frame(minWidth: 760, minHeight: 480)
         .editorWindowBackground()
         .background(SettingsWindowConfigurator())
+        // Videos dropped from elsewhere
+        .dropDestination(for: URL.self) { urls, _ in
+            let movies = urls.filter(RecordingImporter.isMovie)
+            guard !movies.isEmpty else { return false }
+            Task { await viewModel.importMovies(movies) }
+            return true
+        }
     }
 }
 

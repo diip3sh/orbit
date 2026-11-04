@@ -26,10 +26,10 @@ nonisolated enum ScreenshotHistoryRetention: String, CaseIterable, Identifiable,
 
     var displayName: String {
         switch self {
-        case .off: "Off"
-        case .week: "1 Week"
-        case .month: "1 Month"
-        case .threeMonths: "3 Months"
+        case .off: String(localized: "Off")
+        case .week: String(localized: "1 Week")
+        case .month: String(localized: "1 Month")
+        case .threeMonths: String(localized: "3 Months")
         }
     }
 }

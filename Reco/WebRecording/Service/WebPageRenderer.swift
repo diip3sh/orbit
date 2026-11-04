@@ -169,7 +169,7 @@ final class WebPageRenderer: NSObject {
             guard !hasCrashed else { throw WebRenderError.pageCrashed }
             guard !frameStalled else { throw WebRenderError.stalled }
             reloads += 1
-            guard reloads <= Self.maximumReloads else { throw WebRenderError.loadFailed("The page kept reloading.") }
+            guard reloads <= Self.maximumReloads else { throw WebRenderError.loadFailed(String(localized: "The page kept reloading.")) }
             try await waitWhileLoading()
             try await Task.sleep(for: Self.settleTime)
         }

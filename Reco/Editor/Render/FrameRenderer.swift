@@ -22,9 +22,10 @@ nonisolated enum FrameRenderer {
     /// cursor is part of the content, so it's drawn at the source time shown.
     /// - Parameters:
     ///   - frame: The recording's frame shown at `time`.
+    ///   - camera: The camera footage's frame shown at `time`, already in the plan's encoding; `nil` hides the bubble.
     ///   - time: Output time, in seconds.
-    static func draw(_ frame: CIImage, at time: Double, plan: RenderPlan, into buffer: CVPixelBuffer, context: CIContext) throws {
-        let video = video(frame, at: time, plan: plan)
+    static func draw(_ frame: CIImage, camera: CIImage? = nil, at time: Double, plan: RenderPlan, into buffer: CVPixelBuffer, context: CIContext) throws {
+        let video = video(frame, camera: camera, at: time, plan: plan)
         let destination = CIRenderDestination(pixelBuffer: buffer)
         destination.colorSpace = nil
         let tasks = try plan.canvas.regions.map { region in
@@ -48,9 +49,10 @@ nonisolated enum FrameRenderer {
     /// take 5.5 and 12.5 ms, 4 still 2 and 5.6. Only frames in which the camera moves pay it.
     static let blurSampleSpacing = 4.0
 
-    /// The frame with everything on it - clicks, zoom, cursor and keystroke chip - placed on the
+    /// The frame with everything on it - clicks, zoom, cursor, camera bubble, overlays, keystroke chip and caption - placed on the
     /// canvas and clipped to the video's frame, square-cornered.
-    private static func video(_ frame: CIImage, at time: Double, plan: RenderPlan) -> CIImage {
+    private static func video(_ frame: CIImage, camera: CIImage?, at time: Double, plan: RenderPlan) -> CIImage {
+        let frame = plan.orientation == .up ? frame : frame.oriented(plan.orientation)
         // The crop moved to the origin (whole pixels, so nothing is resampled) is the video for everything after
         var image = plan.crop.map { frame.cropped(to: $0).transformed(by: CGAffineTransform(translationX: -$0.minX, y: -$0.minY)) } ?? frame
         // On the content, before the zoom, so a mask stays on what it hides
@@ -70,9 +72,14 @@ nonisolated enum FrameRenderer {
            let drawn = cursor(sprite, path: path, at: time, plan: plan) {
             image = drawn.composited(over: image)
         }
+        // After the zoom, so it stays put, and under the chip and caption, which it would otherwise cover
+        image = bubbled(image, camera: camera, at: time, plan: plan)
+        // Placed there on purpose, so over the bubble, but they don't get to hide what's being typed or said
+        image = overlaid(image, at: time, plan: plan)
         if let (chip, opacity) = KeystrokeChip.visible(in: plan.keystrokes, at: time) {
             image = keystroke(chip, opacity: opacity, plan: plan).composited(over: image)
         }
+        image = captioned(image, atSource: plan.timeMap.sourceTime(atOutput: time), plan: plan)
         return image.cropped(to: plan.canvas.videoFrame)
     }
 
@@ -207,5 +214,17 @@ nonisolated enum FrameRenderer {
             translationX: (video.midX - image.extent.width / 2).rounded(), y: (video.minY + image.extent.height * 0.8).rounded()
         )
         return image.transformed(by: placement).fading(to: opacity)
+    }
+
+    /// `image` under the caption showing at source time `time`, if any. The caption's coverage takes the text color,
+    /// with the highlight color laid over the word being said, in one blend: a word needs no image of its own.
+    private static func captioned(_ image: CIImage, atSource time: Double, plan: RenderPlan) -> CIImage {
+        guard let caption = PlannedCaption.visible(in: plan.captions.captions, at: time) else { return image }
+        var color = plan.captions.textColor
+        if let highlight = plan.captions.highlightColor, let word = caption.word(at: time) {
+            color = highlight.cropped(to: word.rect).composited(over: color)
+        }
+        let text = color.cropped(to: caption.mask.extent).applyingFilter("CIBlendWithMask", parameters: [kCIInputMaskImageKey: caption.mask])
+        return text.composited(over: caption.box?.composited(over: image) ?? image)
     }
 }

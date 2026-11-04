@@ -7,6 +7,7 @@
 
 import Accessibility
 import AppKit
+import Foundation
 import OSLog
 import UniformTypeIdentifiers
 
@@ -31,17 +32,18 @@ final class QuickAccessViewModel {
 
         var message: String {
             switch self {
-            case .copied: "Copied"
-            case .saved: "Saved"
-            case .textCopied: "Text Copied"
-            case .codeCopied: "Code Copied"
-            case .noTextFound: "No Text Found"
-            case .copyFailed: "Couldn't Copy"
-            case .textFailed: "Couldn't Read the Text"
-            case .hidden(let count): count == 1 ? "Hid 1 Item" : "Hid \(count) Items"
-            case .nothingToHide: "Nothing Sensitive Found"
-            case .backgroundFailed: "Couldn't Add the Background"
-            case .annotationFailed: "Couldn't Draw the Marks"
+            case .copied: String(localized: "Copied")
+            case .saved: String(localized: "Saved")
+            case .textCopied: String(localized: "Text Copied")
+            case .codeCopied: String(localized: "Code Copied")
+            case .noTextFound: String(localized: "No Text Found")
+            case .copyFailed: String(localized: "Couldn't Copy")
+            case .textFailed: String(localized: "Couldn't Read the Text")
+            case .hidden(let count):
+                if count == 1 { String(localized: "Hid 1 Item") } else { String(localized: "Hid \(count) Items") }
+            case .nothingToHide: String(localized: "Nothing Sensitive Found")
+            case .backgroundFailed: String(localized: "Couldn't Add the Background")
+            case .annotationFailed: String(localized: "Couldn't Draw the Marks")
             }
         }
 

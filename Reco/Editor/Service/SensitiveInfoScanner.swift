@@ -24,6 +24,7 @@ nonisolated enum SensitiveInfoScanner {
         of source: EditorSource, at times: [Double], crop: CGRect, onProgress: @MainActor @Sendable (Double) -> Void
     ) async -> [SensitiveMasks.Sample] {
         let generator = AVAssetImageGenerator(asset: source.asset)
+        generator.appliesPreferredTrackTransform = true
         // A frame within half the spacing is as good as the exact one and decodes far faster; each sample is placed
         // at the frame's own time
         let tolerance = CMTime(seconds: interval / 2, preferredTimescale: source.timescale)

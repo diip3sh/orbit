@@ -122,34 +122,36 @@ struct VideoSettingsView: View {
     private var alphaChannelHelpText: String {
         switch settings.videoCodec {
         case .proRes4444:
-            return "ProRes 4444 always includes alpha channel support"
+            return String(localized: "ProRes 4444 always includes alpha channel support")
         case .hevc:
-            return "Enable transparency support for HEVC"
+            return String(localized: "Enable transparency support for HEVC")
         case .h264, .proRes422:
-            return "Alpha channel not supported by this codec"
+            return String(localized: "Alpha channel not supported by this codec")
         }
     }
 
     private var hdrHelpText: String {
         if settings.videoCodec.supportsHDR {
-            return "Enable 10-bit HDR capture for high dynamic range content"
+            return String(localized: "Enable 10-bit HDR capture for high dynamic range content")
         } else {
-            return "HDR is only supported with ProRes 422 and ProRes 4444 codecs"
+            return String(localized: "HDR is only supported with ProRes 422 and ProRes 4444 codecs")
         }
     }
 
     private var qualityHelpText: String {
         if settings.videoCodec.supportsQualitySetting {
-            return "Controls the video bitrate. Higher quality produces sharper output with larger files"
+            return String(localized: "Controls the video bitrate. Higher quality produces sharper output with larger files")
         } else {
-            return "ProRes codecs use fixed-quality encoding"
+            return String(localized: "ProRes codecs use fixed-quality encoding")
         }
     }
 
-    private let captureNativeResHelpText = """
+    private var captureNativeResHelpText: String {
+        String(localized: """
         When enabled, captures at the display's native pixel resolution. \
         When disabled, captures at the logical (1x) resolution. Has no effect on non-Retina displays
-        """
+        """)
+    }
 
     var body: some View {
         SettingsPage("Video") {
@@ -179,9 +181,9 @@ struct VideoSettingsView: View {
                     }
                 }
 
-                SettingsPicker("Quality", selection: $settings.videoQuality, value: settings.videoQuality.rawValue) {
+                SettingsPicker("Quality", selection: $settings.videoQuality, value: settings.videoQuality.displayName) {
                     ForEach(VideoQuality.allCases) { quality in
-                        Text(quality.rawValue).tag(quality)
+                        Text(quality.displayName).tag(quality)
                     }
                 }
                 .disabled(!settings.videoCodec.supportsQualitySetting)
@@ -329,8 +331,8 @@ struct GeneralSettingsView: View {
     /// Opens an NSOpenPanel to select a custom output directory
     private func selectOutputDirectory() {
         let panel = NSOpenPanel()
-        panel.title = "Select Output Directory"
-        panel.message = "Choose where recordings will be saved"
+        panel.title = String(localized: "Select Output Directory")
+        panel.message = String(localized: "Choose where recordings will be saved")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
@@ -344,8 +346,8 @@ struct GeneralSettingsView: View {
 
     private func selectScreenshotDirectory() {
         let panel = NSOpenPanel()
-        panel.title = "Select Screenshot Folder"
-        panel.message = "Choose where screenshots will be saved"
+        panel.title = String(localized: "Select Screenshot Folder")
+        panel.message = String(localized: "Choose where screenshots will be saved")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
@@ -361,7 +363,7 @@ struct GeneralSettingsView: View {
 /// A save folder: its path, with Change… and, once changed, Reset
 private struct FolderSettingRow: View {
 
-    let title: String
+    let title: LocalizedStringKey
     let folder: URL
     let isCustom: Bool
     let change: () -> Void
@@ -440,17 +442,17 @@ struct AboutSection: View {
 
 /// A link in the About card, as text in the accent.
 private struct AboutLink: View {
-    let title: String
+    let title: LocalizedStringKey
     let destination: URL
 
-    init(_ title: String, destination: URL) {
+    init(_ title: LocalizedStringKey, destination: URL) {
         self.title = title
         self.destination = destination
     }
 
     var body: some View {
         Link(destination: destination) {
-            Text(verbatim: title)
+            Text(title)
                 .font(.theme(.body, weight: .medium))
                 // The fill's colour set: `accent` follows the system and greys out with the window
                 .foregroundStyle(EditorTheme.accentFill)

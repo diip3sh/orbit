@@ -4,6 +4,7 @@
 //
 
 import CoreGraphics
+import Foundation
 
 extension EditorViewModel {
 

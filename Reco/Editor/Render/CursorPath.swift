@@ -67,9 +67,18 @@ nonisolated struct CursorPath: Sendable {
     /// Where the path glides to, and when. Set last, since the target is the path without the glide.
     private var loop: (target: CGPoint, glide: Range<Double>)?
 
-    /// The source time from which the cursor holds still: its position, size and opacity stay as they are then.
-    /// Infinity when it never does.
-    private let stop: Double
+    /// Where the cursor holds still: its position, size and opacity stay as they are at `time` through all of `played`,
+    /// the source ranges that play from there on.
+    nonisolated struct Stop: Sendable {
+        let time: Double
+        let played: [Range<Double>]
+
+        func held(_ time: Double) -> Double {
+            played.contains { $0.contains(time) } ? self.time : time
+        }
+    }
+
+    private let stop: Stop?
 
     /// The most the cursor leans, in radians (12°), and the speed in screen points per second at which it leans
     /// 76% of that (tanh 1). Picked 2026-10-08, not yet checked by eye.
@@ -85,9 +94,9 @@ nonisolated struct CursorPath: Sendable {
     /// - Parameters:
     ///   - duration: The recording's length in seconds.
     ///   - videoHeight: The video's height in pixels, to flip positions into Core Image space.
-    ///   - stop: The source time from which the cursor holds still, if it does.
+    ///   - stop: Where the cursor holds still, if it does.
     /// - Returns: `nil` without cursor positions or capture geometry.
-    init?(telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, loop: Loop? = nil, stop: Double? = nil) {
+    init?(telemetry: InputTelemetry, style: CursorStyle, duration: Double, videoHeight: CGFloat, loop: Loop? = nil, stop: Stop? = nil) {
         // Without smoothing the cursor is where it was recorded, jitter included
         let moves = style.smoothing == .off ? telemetry.cursor : Self.withoutJitter(telemetry.cursor)
         guard !moves.isEmpty, !telemetry.geometry.isEmpty else { return nil }
@@ -111,7 +120,7 @@ nonisolated struct CursorPath: Sendable {
         hidden = Self.merged((style.hidesWhenIdle ? Self.idleSpans(moves: moves, clicks: telemetry.clicks) : [])
             + Self.typingSpans(keys: telemetry.keys, moves: moves, clicks: telemetry.clicks))
         scales = telemetry.geometry.map { ($0.time, $0.contentScale * $0.scaleFactor * style.size) }
-        self.stop = stop ?? .infinity
+        self.stop = stop
         if let loop {
             self.loop = (position(at: loop.start), loop.glide)
         }
@@ -125,7 +134,8 @@ nonisolated struct CursorPath: Sendable {
     /// recorded, held before the end and gliding home over the last second when the style says so.
     func position(at time: Double) -> CGPoint {
         var position = held(at: time)
-        if let loop, time >= loop.glide.lowerBound {
+        // Only there: with clips reordered, later source times can play before it
+        if let loop, time >= loop.glide.lowerBound, time <= loop.glide.upperBound {
             // At the glide's end, the last frame's position is the first frame's
             let weight = time >= loop.glide.upperBound ? 1 : Self.ease((time - loop.glide.lowerBound) / (loop.glide.upperBound - loop.glide.lowerBound))
             position.x = position.x * (1 - weight) + loop.target.x * weight
@@ -136,7 +146,7 @@ nonisolated struct CursorPath: Sendable {
 
     /// The position before the loop's glide: the smoothed path eased onto each click, still from ``stop``.
     private func held(at time: Double) -> CGPoint {
-        let time = min(time, stop)
+        let time = stop?.held(time) ?? time
         var position = Self.interpolated(samples, at: time)
         let next = clickOffsets.partitioningIndex { $0.time > time }
         if next < clickOffsets.count {
@@ -161,7 +171,7 @@ nonisolated struct CursorPath: Sendable {
     /// How many video pixels each of the cursor image's points covers at `time`: the capture's
     /// pixels per point times the style's size, less while a mouse button is held.
     func scale(at time: Double) -> Double {
-        let time = min(time, stop)
+        let time = stop?.held(time) ?? time
         return pixelsPerPoint(at: time) * (1 - (1 - Self.pressedScale) * Self.ease(pressDepth(at: time)))
     }
 
@@ -177,7 +187,7 @@ nonisolated struct CursorPath: Sendable {
 
     /// How visible the cursor is at `time`, from 0 to 1.
     func opacity(at time: Double) -> Double {
-        let time = min(time, stop)
+        let time = stop?.held(time) ?? time
         let index = hidden.partitioningIndex { $0.lowerBound > time } - 1
         guard index >= 0, hidden[index].contains(time) else { return 1 }
         let fadingOut = 1 - (time - hidden[index].lowerBound) / Self.fadeDuration

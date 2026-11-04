@@ -19,8 +19,11 @@ nonisolated struct EditorSource: Sendable {
     /// The recorder writes system audio before the microphone.
     let audioTrackIDs: [CMPersistentTrackID]
 
-    /// The video's dimensions in pixels.
+    /// The video's dimensions in pixels as it shows, turned by ``orientation``.
     let naturalSize: CGSize
+
+    /// The turn its frames need: a phone's video is stored sideways, a recording never is.
+    var orientation = CGImagePropertyOrientation.up
 
     let frameRate: Double
 
@@ -35,6 +38,9 @@ nonisolated struct EditorSource: Sendable {
     /// Why ``telemetry`` is `nil`.
     let telemetryError: EditorError?
 
+    /// The camera's own footage, `nil` without any or when it can't be read.
+    var camera: CameraFootage?
+
     /// The video's length in seconds.
     var duration: Double {
         timeRange.duration.seconds
@@ -43,9 +49,9 @@ nonisolated struct EditorSource: Sendable {
     /// Names for the audio tracks, in order. With a single track, which one was recorded isn't known.
     var audioTrackNames: [String] {
         switch audioTrackIDs.count {
-        case 1: ["Audio"]
-        case 2: ["System Audio", "Microphone"]
-        default: audioTrackIDs.indices.map { "Audio \($0 + 1)" }
+        case 1: [String(localized: "Audio")]
+        case 2: [String(localized: "System Audio"), String(localized: "Microphone")]
+        default: audioTrackIDs.indices.map { String(localized: "Audio \($0 + 1)") }
         }
     }
 

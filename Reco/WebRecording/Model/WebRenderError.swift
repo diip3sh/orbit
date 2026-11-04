@@ -17,13 +17,13 @@ nonisolated enum WebRenderError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .noURL: "Enter the address of the page to record."
-        case .loadFailed(let reason): "The page couldn't be loaded: \(reason)"
-        case .loadTimedOut: "The page took longer than a minute to load."
-        case .pageCrashed: "The page crashed."
-        case .stalled: "The page stopped drawing frames."
-        case .snapshotFailed: "The page couldn't be drawn."
-        case .writerFailed: "The movie couldn't be written."
+        case .noURL: String(localized: "Enter the address of the page to record.")
+        case .loadFailed(let reason): String(localized: "The page couldn't be loaded: \(reason)")
+        case .loadTimedOut: String(localized: "The page took longer than a minute to load.")
+        case .pageCrashed: String(localized: "The page crashed.")
+        case .stalled: String(localized: "The page stopped drawing frames.")
+        case .snapshotFailed: String(localized: "The page couldn't be drawn.")
+        case .writerFailed: String(localized: "The movie couldn't be written.")
         }
     }
 }

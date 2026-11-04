@@ -28,11 +28,11 @@ struct MenuBarView: View {
             if !isRecording,
                viewModel.permissionService.screenRecordingState != .granted ||
                 (viewModel.settings.captureMicrophone && viewModel.permissionService.microphoneState != .granted) ||
-                (viewModel.settings.presenterOverlayEnabled && viewModel.permissionService.cameraState != .granted) {
+                (viewModel.settings.cameraEnabled && viewModel.permissionService.cameraState != .granted) {
                 PermissionStatusBanner(
                     permissionService: viewModel.permissionService,
                     showMicrophonePermission: viewModel.settings.captureMicrophone,
-                    showCameraPermission: viewModel.settings.presenterOverlayEnabled
+                    showCameraPermission: viewModel.settings.cameraEnabled
                 )
                 MenuBarDivider()
             }
@@ -227,7 +227,7 @@ struct PermissionStatusBanner: View {
 
 /// A single permission row with status and action button
 struct PermissionRow: View {
-    let title: String
+    let title: LocalizedStringKey
     let isGranted: Bool
     let action: () -> Void
 

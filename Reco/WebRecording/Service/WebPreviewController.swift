@@ -4,6 +4,7 @@
 //
 
 import AppKit
+import Foundation
 import OSLog
 import WebKit
 
@@ -165,7 +166,7 @@ extension WebPreviewController: WKNavigationDelegate {
     private func failed(_ error: any Error) {
         guard (error as NSError).code != NSURLErrorCancelled else { return }
         logger.error("Preview couldn't load: \(error.localizedDescription)")
-        onLoadFailed?("The page couldn't be loaded: \(error.localizedDescription)")
+        onLoadFailed?(String(localized: "The page couldn't be loaded: \(error.localizedDescription)"))
         finishLoadWait(error)
     }
 }
@@ -182,8 +183,8 @@ extension WebPreviewController {
 
         var errorDescription: String? {
             switch self {
-            case .timedOut: "The page took more than 30 seconds to load."
-            case .noSnapshot: "The page couldn't be captured."
+            case .timedOut: String(localized: "The page took more than 30 seconds to load.")
+            case .noSnapshot: String(localized: "The page couldn't be captured.")
             }
         }
     }

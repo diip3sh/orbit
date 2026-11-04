@@ -29,6 +29,26 @@ nonisolated enum OverlayImages {
         }
     }
 
+    /// How far a bubble's shadow reaches past it, as a share of its side.
+    static let bubbleShadowReach = 0.12
+
+    /// The soft shadow of a `side` pixel square rounded by `radius`, at `opacity`. Its extent starts at the origin, with
+    /// ``bubbleShadowReach`` of `side` around the square.
+    static func bubbleShadow(side: CGFloat, radius: CGFloat, opacity: Double) -> CIImage {
+        let reach = (side * bubbleShadowReach).rounded()
+        return draw(size: CGSize(width: side + 2 * reach, height: side + 2 * reach)) { context in
+            context.setAlpha(opacity)
+            context.setShadow(offset: CGSize(width: 0, height: -reach / 4), blur: reach / 2, color: CGColor(gray: 0, alpha: 1))
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            context.addPath(CGPath(
+                roundedRect: CGRect(x: reach, y: reach, width: side, height: side), cornerWidth: radius, cornerHeight: radius, transform: nil
+            ))
+            context.setFillColor(CGColor(gray: 0, alpha: 1))
+            context.fillPath()
+            context.endTransparencyLayer()
+        }
+    }
+
     /// Pixels per point of the cursor images below, as sharp as the largest recorded arrow (10×) needs when zoomed.
     private static let cursorScale: CGFloat = 8
 
@@ -100,6 +120,31 @@ nonisolated enum OverlayImages {
         }
     }
 
+    /// One pixel of `color`, to be made endless and cut to a shape.
+    static func solid(_ color: CGColor) -> CIImage {
+        draw(size: CGSize(width: 1, height: 1)) { context in
+            context.setFillColor(color)
+            context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+    }
+
+    /// `layout`'s text as coverage: white on black in a single channel, with no color space, since it isn't a color
+    /// and blends the same in every dynamic range. Its extent is the caption's box, from the origin.
+    static func captionMask(of layout: CaptionLayout) -> CIImage {
+        let (width, height) = (Int(layout.size.width.rounded(.up)), Int(layout.size.height.rounded(.up)))
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else {
+            return .empty()
+        }
+        for line in layout.lines {
+            context.textPosition = line.origin
+            CTLineDraw(line.line, context)
+        }
+        return context.makeImage().map { CIImage(cgImage: $0, options: [.colorSpace: NSNull()]) } ?? .empty()
+    }
+
     /// Color managed, unlike the compositor's: it converts each HDR overlay once, so frames don't have to.
     private static let colorManagedContext = CIContext(options: [.cacheIntermediates: false])
 
@@ -120,7 +165,7 @@ nonisolated enum OverlayImages {
 
     /// Draws into a transparent sRGB bitmap of `size`, rounded up to whole pixels, with a
     /// bottom-left origin like Core Image's.
-    private static func draw(size: CGSize, _ draw: (CGContext) -> Void) -> CIImage {
+    static func draw(size: CGSize, _ draw: (CGContext) -> Void) -> CIImage {
         guard let sRGB = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(
                   data: nil, width: Int(size.width.rounded(.up)), height: Int(size.height.rounded(.up)), bitsPerComponent: 8,

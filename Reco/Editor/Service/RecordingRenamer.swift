@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Renames a recording on disk: the movie and the telemetry and project beside it. The recording's folder
+/// Renames a recording on disk: the movie and the telemetry, project and camera files beside it. The recording's folder
 /// must be accessible, i.e. the output folder's security scope held.
 nonisolated enum RecordingRenamer {
 
@@ -48,7 +48,7 @@ nonisolated enum RecordingRenamer {
         var errorDescription: String? {
             switch self {
             case .invalidName(let reason): reason
-            case .nameTaken(let name): "A recording named \(name) already exists."
+            case .nameTaken(let name): String(localized: "A recording named \(name) already exists.")
             }
         }
     }

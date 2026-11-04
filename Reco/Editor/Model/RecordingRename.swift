@@ -24,19 +24,22 @@ nonisolated enum RecordingRename {
     static func problem(with name: String) -> String? {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if name.isEmpty {
-            return "A name can't be empty."
+            return String(localized: "A name can't be empty.")
         }
-        if name.contains("/") || name.contains(":") {
-            return "A name can't contain / or :."
+        if name.contains(String(localized: "/")) || name.contains(String(localized: ":")) {
+            return String(localized: "A name can't contain / or :.")
         }
-        if name.hasPrefix(".") {
-            return "A name can't start with a dot."
+        if name.hasPrefix(String(localized: ".")) {
+            return String(localized: "A name can't start with a dot.")
         }
         if name.count > maximumLength {
-            return "A name can be at most \(maximumLength) characters."
+            return String(localized: "A name can be at most \(maximumLength) characters.")
         }
         if name.hasSuffix(ExportFormat.nameSuffix) {
-            return "Names ending in \(ExportFormat.nameSuffix) are kept for exports."
+            return String(localized: "Names ending in \(ExportFormat.nameSuffix) are kept for exports.")
+        }
+        if name.hasSuffix(CameraFootage.nameSuffix) {
+            return String(localized: "Names ending in \(CameraFootage.nameSuffix) are kept for camera footage.")
         }
         return nil
     }
@@ -51,7 +54,9 @@ nonisolated enum RecordingRename {
         return [
             (videoURL, newVideo),
             (InputTelemetry.sidecarURL(for: videoURL), InputTelemetry.sidecarURL(for: newVideo)),
-            (EditorProject.fileURL(for: videoURL), EditorProject.fileURL(for: newVideo))
+            (EditorProject.fileURL(for: videoURL), EditorProject.fileURL(for: newVideo)),
+            (CameraFootage.movieURL(for: videoURL), CameraFootage.movieURL(for: newVideo)),
+            (CameraFootage.sidecarURL(for: videoURL), CameraFootage.sidecarURL(for: newVideo))
         ]
     }
 }

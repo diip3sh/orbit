@@ -1,0 +1,24 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSCameraUsageDescription" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Orbit needs access to your camera to enable Presenter Overlay during screen recordings." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Orbit 需要访问你的摄像头，以便在屏幕录制期间启用演讲者叠加。" } }
+      }
+    },
+    "NSMicrophoneUsageDescription" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Orbit needs access to your microphone to record audio alongside screen captures." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Orbit 需要访问你的麦克风，以便在屏幕捕捉的同时录制音频。" } }
+      }
+    },
+    "NSScreenCaptureUsageDescription" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Orbit needs access to screen recording to capture your screen content." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Orbit 需要屏幕录制权限，以便捕捉你的屏幕内容。" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

@@ -28,7 +28,7 @@ struct ExportOptions: View {
                     InspectorSection("Export As") {
                         SegmentedChoice(
                             selection: $session.settings.format,
-                            options: ExportFormat.allCases.map { ($0, $0.title(transparentCanvas: settings.transparentCanvas)) }
+                            options: ExportFormat.allCases.map { ($0, LocalizedStringResource(stringLiteral: $0.title(transparentCanvas: settings.transparentCanvas))) }
                         )
                     } footer: {
                         if settings.transparentCanvas, !settings.keepsTransparency {
@@ -39,7 +39,7 @@ struct ExportOptions: View {
                     InspectorSection("Output Size") {
                         SegmentedChoice(
                             selection: $session.settings.resolution,
-                            options: [(nil, "Original")] + ExportSettings.resolutions.map { (Optional($0), Self.title(ofResolution: $0)) }
+                            options: [(nil, "Original")] + ExportSettings.resolutions.map { (Optional($0), LocalizedStringResource(stringLiteral: Self.title(ofResolution: $0))) }
                         ) { resolution in
                             resolution.map { ExportSettings.isAvailable(resolution: $0, below: min(canvasSize.width, canvasSize.height)) } ?? true
                         }
@@ -71,6 +71,15 @@ struct ExportOptions: View {
                     if settings.format != .gif {
                         InspectorSection("Quality") {
                             qualityRows
+                        }
+                    }
+
+                    if settings.format != .gif, !viewModel.project.captions.cues.isEmpty {
+                        InspectorSection("Subtitles") {
+                            Toggle("Write Subtitle Files", isOn: $session.settings.writesSubtitles)
+                                .toggleStyle(.inspector)
+                        } footer: {
+                            Text("Saves SRT and VTT beside the movie, timed to the edit.")
                         }
                     }
                 }

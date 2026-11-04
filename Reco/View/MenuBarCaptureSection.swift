@@ -3,6 +3,7 @@
 //  Reco
 //
 
+import Foundation
 import SwiftUI
 
 /// What each take captures, as one section of two rows that open in place: Audio (system audio,
@@ -52,15 +53,25 @@ struct CaptureSettingsSection: View {
             CaptureGroupRow(
                 title: "Camera",
                 systemImage: "video",
-                value: settings.presenterOverlayEnabled ? "On" : "Off",
+                value: settings.cameraEnabled ? String(localized: "On") : String(localized: "Off"),
                 isExpanded: $isCameraExpanded
             )
 
             if isCameraExpanded {
                 VStack(spacing: 0) {
-                    MenuBarToggle(name: "Presenter Overlay", isOn: $settings.presenterOverlayEnabled)
+                    MenuBarToggle(name: "Camera", isOn: $settings.cameraEnabled)
 
-                    if settings.presenterOverlayEnabled {
+                    if settings.cameraEnabled {
+                        // Off records the camera as its own track, which the editor can place and restyle
+                        MenuBarToggle(
+                            name: "Presenter Overlay",
+                            isOn: Binding {
+                                settings.cameraMode == .presenterOverlay
+                            } set: {
+                                settings.cameraMode = $0 ? .presenterOverlay : .track
+                            }
+                        )
+
                         CameraExpandablePicker(
                             selectedID: $settings.selectedCameraID,
                             devices: cameraDeviceService.availableDevices
@@ -70,7 +81,7 @@ struct CaptureSettingsSection: View {
                 .padding(.leading, 12)
             }
         }
-        .onChange(of: settings.presenterOverlayEnabled) { _, isEnabled in
+        .onChange(of: settings.cameraEnabled) { _, isEnabled in
             // Ask up front rather than letting the first recording fail on a denied camera
             guard isEnabled else { return }
 
@@ -83,10 +94,10 @@ struct CaptureSettingsSection: View {
     /// What the two audio switches add up to, with the group closed.
     private var audioSummary: String {
         switch (settings.captureSystemAudio, settings.captureMicrophone) {
-        case (true, true): "System + Microphone"
-        case (true, false): "System"
-        case (false, true): "Microphone"
-        case (false, false): "Off"
+        case (true, true): String(localized: "System + Microphone")
+        case (true, false): String(localized: "System")
+        case (false, true): String(localized: "Microphone")
+        case (false, false): String(localized: "Off")
         }
     }
 }
@@ -96,7 +107,7 @@ struct CaptureSettingsSection: View {
 /// A row of the Capture section: its symbol in the fixed column, its name, what it is set to, and a
 /// chevron that turns as the group opens under it.
 struct CaptureGroupRow: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let value: String
     @Binding var isExpanded: Bool

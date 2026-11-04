@@ -22,41 +22,53 @@ nonisolated enum EditorError: LocalizedError {
     case renameFailed(any Error)
     case styleNotSaved(any Error)
     case unreadableStyle(any Error)
+    case cameraFootageNotAdded(any Error)
+    case noFreeOverlayLane
+    case noRoomForOverlay
+    case unreadableOverlayImage
 
     var errorDescription: String? {
         switch self {
         case .unreadableVideo(let error):
-            "The recording couldn't be opened. \(error.localizedDescription)"
+            String(localized: "The recording couldn't be opened. \(error.localizedDescription)")
         case .noVideoTrack:
-            "The recording has no video."
+            String(localized: "The recording has no video.")
         case .noTelemetry:
-            """
+            String(localized: """
             Recorded without input telemetry, so there's no auto-zoom, smooth cursor, click highlights or keystrokes. \
             Turn on Record Input Telemetry in Settings → Video → Advanced, then record again.
-            """
+            """)
         case .unreadableTelemetry(let error):
-            """
+            String(localized: """
             The input telemetry couldn't be read, so there's no auto-zoom, smooth cursor, click highlights or \
             keystrokes. \(error.localizedDescription)
-            """
+            """)
         case .unreadableProject(let error):
-            "The recording's edits couldn't be read. \(error.localizedDescription)"
+            String(localized: "The recording's edits couldn't be read. \(error.localizedDescription)")
         case .projectNotSaved(let error):
-            "Edits couldn't be saved. \(error.localizedDescription)"
+            String(localized: "Edits couldn't be saved. \(error.localizedDescription)")
         case .exportFailed(let error):
-            "The video couldn't be exported. \(error.localizedDescription)"
+            String(localized: "The video couldn't be exported. \(error.localizedDescription)")
         case .frameNotCopied(let error):
-            "The frame couldn't be copied. \(error.localizedDescription)"
+            String(localized: "The frame couldn't be copied. \(error.localizedDescription)")
         case .unreadableBackground:
-            "The background image couldn't be opened, so its color is shown instead."
+            String(localized: "The background image couldn't be opened, so its color is shown instead.")
         case .unreadableBackgroundAudio:
-            "The background audio couldn't be opened, so it's left out."
+            String(localized: "The background audio couldn't be opened, so it's left out.")
         case .renameFailed(let error):
-            "The recording couldn't be renamed. \(error.localizedDescription)"
+            String(localized: "The recording couldn't be renamed. \(error.localizedDescription)")
         case .styleNotSaved(let error):
-            "The style couldn't be saved. \(error.localizedDescription)"
+            String(localized: "The style couldn't be saved. \(error.localizedDescription)")
         case .unreadableStyle(let error):
-            "The style couldn't be read. \(error.localizedDescription)"
+            String(localized: "The style couldn't be read. \(error.localizedDescription)")
+        case .cameraFootageNotAdded(let error):
+            String(localized: "The camera footage couldn't be added. \(error.localizedDescription)")
+        case .noFreeOverlayLane:
+            String(localized: "All three overlay lanes are taken at the playhead, so there's no room for another. Move the playhead, or move or delete an overlay.")
+        case .noRoomForOverlay:
+            String(localized: "The playhead is too close to the recording's end for an overlay. Move it back.")
+        case .unreadableOverlayImage:
+            String(localized: "The picture couldn't be read, so it wasn't added.")
         }
     }
 }

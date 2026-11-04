@@ -13,13 +13,13 @@ nonisolated enum InspectorTab: CaseIterable, Hashable, Sendable {
 
     var title: String {
         switch self {
-        case .background: "Background"
-        case .camera: "Camera"
-        case .audio: "Audio"
-        case .cursor: "Cursor"
-        case .keyboard: "Keyboard"
-        case .caption: "Captions"
-        case .motion: "Motion"
+        case .background: String(localized: "Background")
+        case .camera: String(localized: "Camera")
+        case .audio: String(localized: "Audio")
+        case .cursor: String(localized: "Cursor")
+        case .keyboard: String(localized: "Keyboard")
+        case .caption: String(localized: "Captions")
+        case .motion: String(localized: "Motion")
         }
     }
 
@@ -46,22 +46,27 @@ nonisolated enum InspectorTab: CaseIterable, Hashable, Sendable {
         }
     }
 
-    /// Whether the tab has anything to edit. Camera needs the camera as its own track and captions a
-    /// transcript; neither is recorded yet (spec 0004, N19 and N5). Audio is always there: a silent
-    /// recording can still get music.
+    /// Whether the tab has anything to edit. Captions need macOS 26's transcriber (N5). Audio and Camera are always
+    /// there: a silent recording can still get music, and one without a camera track footage from a file.
     var isAvailable: Bool {
         switch self {
-        case .camera, .caption: false
-        case .background, .audio, .cursor, .keyboard, .motion: true
+        case .caption: Self.canTranscribe
+        case .background, .camera, .audio, .cursor, .keyboard, .motion: true
         }
     }
 
     /// Why ``isAvailable`` is false, for the tab's tooltip.
     var unavailableReason: String {
         switch self {
-        case .camera: "Camera: recorded into the video, so it can't be edited"
-        case .caption: "Captions: coming soon"
-        case .background, .audio, .cursor, .keyboard, .motion: title
+        case .caption: String(localized: "Captions: need macOS 26 or later")
+        case .background, .camera, .audio, .cursor, .keyboard, .motion: title
         }
+    }
+
+    private static var canTranscribe: Bool {
+        if #available(macOS 26, *) {
+            return true
+        }
+        return false
     }
 }

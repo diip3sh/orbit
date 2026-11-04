@@ -35,8 +35,9 @@ nonisolated enum BackgroundImageLoader {
 
     /// The picture `bookmark` opens, upright and in sRGB like the overlays, with the file it was read from
     /// (symlinks resolved, so `/var` and `/private/var` compare equal), or `nil` when it's gone or unreadable.
+    /// - Parameter maximumSize: The most pixels it's read at on its longer side.
     @concurrent
-    static func image(from bookmark: Data) async -> (image: CGImage, url: URL)? {
+    static func image(from bookmark: Data, maximumSize: Int = maximumSize) async -> (image: CGImage, url: URL)? {
         guard let url = url(from: bookmark) else { return nil }
         let isAccessing = url.startAccessingSecurityScopedResource()
         defer {

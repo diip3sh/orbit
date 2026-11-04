@@ -10,7 +10,7 @@ import SwiftUI
 
 /// An action row of the menu bar window: its symbol in a fixed column, then its title
 struct MenuBarActionButton: View {
-    let title: String
+    let title: LocalizedStringKey
     var systemImage: String?
     var isDisabled: Bool = false
     /// Its global shortcut, shown dimmed on the right while one is set

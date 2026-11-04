@@ -59,8 +59,11 @@ nonisolated class EditorCompositor: NSObject, AVVideoCompositing, @unchecked Sen
             CVBufferPropagateAttachments(source, output)
         }
 
+        // `nil` where the footage has no frame, which hides the bubble
+        let camera = instruction.cameraTrackID.flatMap { request.sourceFrame(byTrackID: $0) }.map { PlannedBubble.image(of: $0, in: plan.dynamicRange) }
+
         do {
-            try FrameRenderer.draw(frame, at: request.compositionTime.seconds, plan: plan, into: output, context: Self.context)
+            try FrameRenderer.draw(frame, camera: camera, at: request.compositionTime.seconds, plan: plan, into: output, context: Self.context)
             request.finish(withComposedVideoFrame: output)
         } catch {
             request.finish(with: error)

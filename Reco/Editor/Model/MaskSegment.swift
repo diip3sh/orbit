@@ -21,7 +21,7 @@ nonisolated struct MaskSegment: Codable, Equatable, Identifiable, Sendable {
     nonisolated enum Kind: String, CaseIterable, Codable, Sendable {
         case blur, pixelate, spotlight
 
-        var title: String {
+        var title: LocalizedStringResource {
             switch self {
             case .blur: "Blur"
             case .pixelate: "Pixelate"

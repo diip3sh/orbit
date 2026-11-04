@@ -10,9 +10,9 @@ extension PointerClip.Action {
 
     var title: String {
         switch self {
-        case .hover: "Hover"
-        case .click: "Click"
-        case .type: "Type"
+        case .hover: String(localized: "Hover")
+        case .click: String(localized: "Click")
+        case .type: String(localized: "Type")
         }
     }
 

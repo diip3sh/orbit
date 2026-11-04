@@ -3,6 +3,7 @@
 //  Reco
 //
 
+import Foundation
 import SwiftUI
 
 /// The capture toolbar: every control for a screenshot or a take, on screen rather than in the menu bar
@@ -127,7 +128,7 @@ struct CaptureToolbarView: View {
                 recorder.cancelCountdown()
             }
             .buttonStyle(.captureToolbar)
-            .captureToolbarTooltip("Cancel", shortcut: .close)
+            .captureToolbarTooltip(String(localized: "Cancel"), shortcut: .close)
         }
         .captureToolbarPill()
     }

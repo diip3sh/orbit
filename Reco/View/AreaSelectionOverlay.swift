@@ -495,8 +495,8 @@ final class AreaSelectionView: NSView {
 
         let container = NSView()
 
-        let confirm = makeActionButton(title: "Confirm", keyEquivalent: "\r", isProminent: true, action: #selector(confirmButtonClicked))
-        let cancel = makeActionButton(title: "Cancel", keyEquivalent: "\u{1b}", action: #selector(cancelButtonClicked))
+        let confirm = makeActionButton(title: String(localized: "Confirm"), keyEquivalent: "\r", isProminent: true, action: #selector(confirmButtonClicked))
+        let cancel = makeActionButton(title: String(localized: "Cancel"), keyEquivalent: "\u{1b}", action: #selector(cancelButtonClicked))
 
         container.addSubview(confirm)
         container.addSubview(cancel)

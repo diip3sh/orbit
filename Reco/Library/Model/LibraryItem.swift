@@ -34,17 +34,22 @@ nonisolated struct LibraryItem: Identifiable, Hashable, Sendable {
         kind != .screenshot && url.pathExtension != "gif"
     }
 
-    /// The files that go with it: a recording's telemetry and editor project beside the movie. Moving
+    /// The files that go with it: a recording's telemetry, editor project and camera files beside the movie. Moving
     /// it to the Trash takes them along, so nothing is left orphaned.
     var companions: [URL] {
         guard kind == .recording || kind == .webRecording else { return [] }
-        return [InputTelemetry.sidecarURL(for: url), EditorProject.fileURL(for: url)]
+        return [
+            InputTelemetry.sidecarURL(for: url), EditorProject.fileURL(for: url),
+            CameraFootage.movieURL(for: url), CameraFootage.sidecarURL(for: url)
+        ]
     }
 
     /// What a file in the recordings folder is: movies only, and an export when the editor named it so, which
-    /// may be a GIF too; a web recording by the name renders get.
+    /// may be a GIF too; a web recording by the name renders get. A recording's camera footage is part of it, not a movie
+    /// of its own.
     static func recordingKind(of url: URL, contentType: UTType?) -> Kind? {
         let name = url.deletingPathExtension().lastPathComponent
+        guard !name.hasSuffix(CameraFootage.nameSuffix) else { return nil }
         let isExport = name.hasSuffix(ExportFormat.nameSuffix)
         guard contentType?.conforms(to: .movie) == true || (isExport && contentType?.conforms(to: .gif) == true) else { return nil }
         if isExport {

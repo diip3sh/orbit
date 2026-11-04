@@ -7,7 +7,7 @@
 
 import AVFoundation
 
-/// Loads a recording for the editor, off the main actor: its video's properties and its telemetry.
+/// Loads a recording for the editor, off the main actor: its video's properties, its telemetry and its camera footage.
 nonisolated enum EditorSourceLoader {
 
     /// Throws ``EditorError`` when the video can't be opened. Missing or unreadable telemetry
@@ -20,7 +20,10 @@ nonisolated enum EditorSourceLoader {
                 throw EditorError.noVideoTrack
             }
             let duration = try await asset.load(.duration)
-            let (naturalSize, frameRate, timescale, formats) = try await track.load(.naturalSize, .nominalFrameRate, .naturalTimeScale, .formatDescriptions)
+            let (naturalSize, transform, frameRate, timescale, formats) = try await track.load(
+                .naturalSize, .preferredTransform, .nominalFrameRate, .naturalTimeScale, .formatDescriptions
+            )
+            let orientation = CameraFootage.orientation(of: transform)
             let audioTrackIDs = try await asset.loadTracks(withMediaType: .audio).map(\.trackID)
             let (telemetry, telemetryError) = loadTelemetry(for: videoURL)
 
@@ -29,12 +32,15 @@ nonisolated enum EditorSourceLoader {
                 timeRange: CMTimeRange(start: .zero, duration: duration),
                 videoTrackID: track.trackID,
                 audioTrackIDs: audioTrackIDs,
-                naturalSize: naturalSize,
-                frameRate: Double(frameRate),
+                naturalSize: orientation == .right || orientation == .left ? CGSize(width: naturalSize.height, height: naturalSize.width) : naturalSize,
+                orientation: orientation,
+                // A file may not say; everything timed on frames needs a rate
+                frameRate: frameRate > 0 ? Double(frameRate) : 30,
                 timescale: timescale,
                 dynamicRange: DynamicRange(of: formats.first),
                 telemetry: telemetry,
-                telemetryError: telemetryError
+                telemetryError: telemetryError,
+                camera: await CameraFootageStore.load(for: videoURL)
             )
         } catch let error as EditorError {
             throw error

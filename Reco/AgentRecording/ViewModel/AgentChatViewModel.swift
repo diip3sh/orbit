@@ -108,7 +108,7 @@ final class AgentChatViewModel {
     /// What the run is doing, while it runs.
     var status: String? {
         guard isRunning, case .running(let agent) = runner.phase else { return nil }
-        return runner.activity ?? "\(agent.displayName) is \(isMotion ? "working on the video" : "writing the steps")…"
+        return runner.activity ?? (isMotion ? String(localized: "\(agent.displayName) is working on the video…") : String(localized: "\(agent.displayName) is writing the steps…"))
     }
 
     var canSend: Bool {
